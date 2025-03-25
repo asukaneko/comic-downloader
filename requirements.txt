@@ -2,3 +2,4 @@ ncatbot
 openai
 jmcomic
 configparser
+img2pdf
