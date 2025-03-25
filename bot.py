@@ -120,7 +120,20 @@ async def handle_agree(msg, is_group=True):
         await bot.api.set_friend_add_request(flag=msg.user_id, approve=True,remark=msg.user_id)
         await msg.reply(text="已同意好友请求喵~")
 
-
+@register_command("/help")
+@register_command("/h")
+async def handle_help(msg, is_group=True):
+    help_text = ("欢迎使用喵~~\n"
+                 "/jm xxxxxx 下载漫画\n"
+                 "/set_prompt 设置提示词\n"
+                 "/del_prompt 删除提示词\n"
+                 "/agree 同意好友请求\n"
+                 "/help 查看帮助"
+    )
+    if is_group:
+        await msg.reply(text=help_text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=help_text)
 
 
 @bot.group_event()
