@@ -20,7 +20,7 @@ def register_command(command):
 
 @register_command("测试")
 async def handle_test(msg, is_group=True):
-    reply_text = "NcatBot 测试成功喵~"
+    reply_text = "测试成功喵~\n/jm xxxxxx 下载漫画\n/set_prompt 设置提示词\n/del_prompt 删除提示词"
     if is_group:
         await msg.reply(text=reply_text)
     else:
