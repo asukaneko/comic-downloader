@@ -1,5 +1,5 @@
-ncatbot
-openai
-jmcomic
-configparser
-img2pdf
+ncatbot == 3.5.9
+openai == 1.60.1
+jmcomic == 2.5.32
+configparser == 7.2.0
+img2pdf == 0.6.0

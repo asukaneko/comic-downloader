@@ -79,7 +79,7 @@ def chat(content, user_id=None, group_id=None):
     client = OpenAI(api_key=api_key,
                     base_url=base_url)
     response = client.chat.completions.create(
-        model="deepseek-ai/DeepSeek-V3",
+        model=model,
         messages=messages,
         stream=False
     )
