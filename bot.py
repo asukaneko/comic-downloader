@@ -145,6 +145,37 @@ async def handle_random_image(msg, is_group=True):
     else:
         await bot.api.post_private_file(msg.user_id, image=image_path)
 
+@register_command("/random_words")
+@register_command("/rw")
+async def handle_random_words(msg, is_group=True):
+    words = requests.get("https://uapis.cn/api/say").text
+    if is_group:
+        await msg.reply(text=words)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=words)
+
+
+@register_command("/weather")
+@register_command("/w")
+async def handle_weather(msg, is_group=True):
+    location = None
+    if msg.raw_message.startswith("/weather"):
+        location = msg.raw_message[len("/weather"):].strip()
+    elif msg.raw_message.startswith("/w"):
+        location = msg.raw_message[len("/w"):].strip()
+    if not location:
+        reply_text = "格式错误喵~ 请输入 /weather 城市名"
+    else:
+        # 调用天气 API 获取数据
+        res = requests.get(f"https://uapis.cn/api/weather?name={location}")
+        weather = res.json().get("weather")
+        weather_info = f"{location}的天气是 {weather} 喵~"
+        reply_text = weather_info
+    if is_group:
+        await msg.reply(text=reply_text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply_text)
+
 
 @register_command("/help")
 @register_command("/h")
@@ -156,6 +187,8 @@ async def handle_help(msg, is_group=True):
                  "/agree 同意好友请求\n"
                  "/restart 重启Bot\n"
                  "/random_image 或 /ri 发送随机图片\n"
+                 "/random_words 或 /rw 发送随机一言\n"
+                 "/weather 城市名 或 /w 城市名 发送天气\n"
                  "/help 或 /h 查看帮助"
     )
     if is_group:
