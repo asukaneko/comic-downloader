@@ -1,0 +1,18 @@
+download:
+  image:
+    suffix: .png # 该配置用于把下载的图片转为png格式
+
+dir_rule:
+  # base_dir: 根目录。
+  # 此配置也支持引用环境变量，例如
+  # base_dir: ${JM_DIR}/下载文件夹/
+  base_dir: F:/cache/comic/
+
+plugins:
+  after_photo:
+    # 把章节的所有图片合并为一个pdf的插件
+    # 使用前需要安装依赖库: [pip install img2pdf]
+    - plugin: img2pdf
+      kwargs:
+        pdf_dir: F:/cache/pdf/ # pdf存放文件夹
+        filename_rule: Pid

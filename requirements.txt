@@ -1,0 +1,4 @@
+ncatbot
+openai
+jmcomic
+configparser
