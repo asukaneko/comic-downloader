@@ -111,6 +111,18 @@ async def handle_del_prompt(msg, is_group=True):
             except FileNotFoundError:
                 await bot.api.post_private_msg(msg.user_id, text="没有可以删除的提示词喵~")
 
+@register_command("/agree") # 同意好友请求
+async def handle_agree(msg, is_group=True):
+    if not is_group:
+        await bot.api.set_friend_add_request(flag=msg.user_id, approve=True,remark=msg.user_id)
+        await bot.api.post_private_msg(msg.user_id, text="已同意好友请求喵~")
+    else:
+        await bot.api.set_friend_add_request(flag=msg.user_id, approve=True,remark=msg.user_id)
+        await msg.reply(text="已同意好友请求喵~")
+
+
+
+
 @bot.group_event()
 async def on_group_message(msg: GroupMessage):
     _log.info(msg)
@@ -131,7 +143,6 @@ async def on_private_message(msg: PrivateMessage):
             return
     content = chat(msg.raw_message, user_id=msg.user_id)
     await bot.api.post_private_msg(msg.user_id, text=content)
-    #await bot.api.post_private_msg(msg.user_id, text=str(command_handlers))
 
 if __name__ == "__main__":
     bot.run(reload=False)
