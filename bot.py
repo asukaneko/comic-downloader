@@ -2,7 +2,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import chat,group_messages,user_messages # 导入 chat 函数
-import re, jmcomic, os
+import re, jmcomic, os,sys
 
 _log = get_log()
 
@@ -22,7 +22,7 @@ def register_command(command):
 async def handle_test(msg, is_group=True):
     if not msg.raw_message == "测试":
         return
-    reply_text = "测试成功喵~\n/jm xxxxxx 下载漫画\n/set_prompt 设置提示词\n/del_prompt 删除提示词"
+    reply_text = "测试成功喵~\n输入 /help 查看帮助喵~"
     if is_group:
         await msg.reply(text=reply_text)
     else:
@@ -120,6 +120,18 @@ async def handle_agree(msg, is_group=True):
         await bot.api.set_friend_add_request(flag=msg.user_id, approve=True,remark=msg.user_id)
         await msg.reply(text="已同意好友请求喵~")
 
+
+@register_command("/restart")
+async def handle_restart(msg, is_group=True):
+    reply_text = "正在重启喵~"
+    if is_group:
+        await msg.reply(text=reply_text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply_text)
+    # 重启逻辑
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
 @register_command("/help")
 @register_command("/h")
 async def handle_help(msg, is_group=True):
@@ -128,7 +140,8 @@ async def handle_help(msg, is_group=True):
                  "/set_prompt 设置提示词\n"
                  "/del_prompt 删除提示词\n"
                  "/agree 同意好友请求\n"
-                 "/help 查看帮助"
+                 "/restart 重启Bot\n"
+                 "/help或/h 查看帮助"
     )
     if is_group:
         await msg.reply(text=help_text)
