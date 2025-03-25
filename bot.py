@@ -1,3 +1,4 @@
+import requests
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
@@ -29,6 +30,7 @@ async def handle_test(msg, is_group=True):
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
 @register_command("/set_prompt")
+@register_command("/sp")
 async def handle_set_prompt(msg, is_group=True):
     prompt_content = msg.raw_message[len("/set_prompt"):].strip()
     id_str = str(msg.group_id if is_group else msg.user_id)
@@ -85,6 +87,7 @@ async def handle_jmcomic(msg, is_group=True):
             await bot.api.post_private_msg(msg.user_id, text=error_msg)
 
 @register_command("/del_prompt")
+@register_command("/dp")
 async def handle_del_prompt(msg, is_group=True):
     id_str = str(msg.group_id if is_group else msg.user_id)
     if is_group:
@@ -132,16 +135,28 @@ async def handle_restart(msg, is_group=True):
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
+@register_command("/random_image")
+@register_command("/ri")
+async def handle_random_image(msg, is_group=True):
+    # 从 API 获取随机图片
+    image_path = "https://uapis.cn/api/imgapi/acg/pc.php"
+    if is_group:
+        await bot.api.post_group_file(msg.group_id, image=image_path)
+    else:
+        await bot.api.post_private_file(msg.user_id, image=image_path)
+
+
 @register_command("/help")
 @register_command("/h")
 async def handle_help(msg, is_group=True):
     help_text = ("欢迎使用喵~~\n"
                  "/jm xxxxxx 下载漫画\n"
-                 "/set_prompt 设置提示词\n"
-                 "/del_prompt 删除提示词\n"
+                 "/set_prompt 或 /sp 设置提示词\n"
+                 "/del_prompt 或 /dp 删除提示词\n"
                  "/agree 同意好友请求\n"
                  "/restart 重启Bot\n"
-                 "/help或/h 查看帮助"
+                 "/random_image 或 /ri 发送随机图片\n"
+                 "/help 或 /h 查看帮助"
     )
     if is_group:
         await msg.reply(text=help_text)
