@@ -12,6 +12,7 @@ pip install -r requirements.txt
 ```
 config.ini：修改账号、api等
 option.yml: 修改下载目录、下载方式等
+urls.ini: 修改api地址, 如不修改则使用默认地址
 ```
 三、运行
 ```
