@@ -2,7 +2,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import chat,group_messages,user_messages # 导入 chat 函数
-import re,jmcomic,os,sys,requests,random
+import re,jmcomic,os,sys,requests,random,configparser,json
 
 _log = get_log()
 
@@ -162,12 +162,11 @@ async def handle_restart(msg, is_group=True):
 @register_command("/random_image")
 @register_command("/ri")
 async def handle_random_image(msg, is_group=True):
-    # 从 API 获取随机图片
-    urls = ["https://uapis.cn/api/imgapi/acg/mb.php",
-            "https://uapis.cn/api/imgapi/acg/pc.php",
-            "https://app.zichen.zone/api/acg/api.php",
-            "https://www.dmoe.cc/random.php",
-    ]
+    # 在urls.ini中获取图片的url列表
+    config = configparser.ConfigParser()
+    config.read('urls.ini')
+    urls = json.loads(config['ri']['urls'])
+
     random_number = random.randint(0, len(urls)-1)
     image_path = urls[random_number]
     if is_group:
@@ -209,11 +208,12 @@ async def handle_weather(msg, is_group=True):
 @register_command("/random_emoticons")
 @register_command("/re")
 async def handle_random_emoticons(msg, is_group=True):
-    urls =  ["https://uapis.cn/api/imgapi/bq/youshou.php",
-            "https://uapis.cn/api/imgapi/bq/maomao.php",
-            "https://uapis.cn/api/imgapi/bq/eciyuan.php"
-    ]
-    random_number = random.randint(0, 2)
+    #在urls.ini中获取表情包的url列表
+    config = configparser.ConfigParser()
+    config.read('urls.ini')
+    urls = json.loads(config['re']['urls'])
+
+    random_number = random.randint(0, len(urls)-1)
     if is_group:
         await bot.api.post_group_file(msg.group_id,image=urls[random_number])
     else:
@@ -242,7 +242,7 @@ async def handle_help(msg, is_group=True):
                  "/random_words 或 /rw 发送随机一言\n"
                  "/weather 城市名 或 /w 城市名 发送天气\n"
                  "/random_emoticons 或 /re 发送随机表情包\n"
-                 "/st 标签名 发送随机涩图\n"
+                 "/st 标签名 发送随机涩图,标签支持与或(& |)\n"
                  "/help 或 /h 查看帮助"
     )
     if is_group:
