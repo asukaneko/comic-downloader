@@ -113,6 +113,25 @@ async def handle_del_prompt(msg, is_group=True):
             except FileNotFoundError:
                 await bot.api.post_private_msg(msg.user_id, text="没有可以删除的提示词喵~")
 
+@register_command("/get_prompt")
+async def handle_get_prompt(msg, is_group=True):
+    id_str = str(msg.group_id if is_group else msg.user_id)
+    if is_group:
+        try:
+            with open(f"prompts/group/group_{id_str}.txt", "r", encoding="utf-8") as file:
+                prompt = file.read()
+                await msg.reply(text=prompt)
+        except FileNotFoundError:
+            await msg.reply(text="没有找到提示词喵~")
+    else:
+        try:
+            with open(f"prompts/user/user_{id_str}.txt", "r", encoding="utf-8") as file:
+                prompt = file.read()
+                await bot.api.post_private_msg(msg.user_id, text=prompt)
+        except FileNotFoundError:
+            await bot.api.post_private_msg(msg.user_id, text="没有找到提示词喵~")
+
+
 @register_command("/agree") # 同意好友请求
 async def handle_agree(msg, is_group=True):
     if not is_group:
@@ -175,6 +194,20 @@ async def handle_weather(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
+@register_command("/random_emoticons")
+@register_command("/re")
+async def handle_random_emoticons(msg, is_group=True):
+    urls =  ["https://uapis.cn/api/imgapi/bq/youshou.php",
+            "https://uapis.cn/api/imgapi/bq/maomao.php",
+            "https://uapis.cn/api/imgapi/bq/eciyuan.php"
+    ]
+    import random
+    random_number = random.randint(0, 2)
+    if is_group:
+        await bot.api.post_group_file(msg.group_id,image=urls[random_number])
+    else:
+        await bot.api.post_private_file(msg.user_id, image=urls[random_number])
+
 
 @register_command("/help")
 @register_command("/h")
@@ -183,11 +216,13 @@ async def handle_help(msg, is_group=True):
                  "/jm xxxxxx 下载漫画\n"
                  "/set_prompt 或 /sp 设置提示词\n"
                  "/del_prompt 或 /dp 删除提示词\n"
+                 "/get_prompt 或 /gp 获取提示词\n"
                  "/agree 同意好友请求\n"
                  "/restart 重启Bot\n"
                  "/random_image 或 /ri 发送随机图片\n"
                  "/random_words 或 /rw 发送随机一言\n"
                  "/weather 城市名 或 /w 城市名 发送天气\n"
+                 "/random_emoticons 或 /re 发送随机表情包\n"
                  "/help 或 /h 查看帮助"
     )
     if is_group:
