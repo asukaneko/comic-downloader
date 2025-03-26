@@ -31,6 +31,7 @@ python bot.py
 /random_image 或 /ri 发送随机图片  
 /random_words 或 /rw 发送随机一言  
 /weather 城市名 或 /w 城市名 发送天气  
+……  
 /help 或 /h 查看帮助___
 
 

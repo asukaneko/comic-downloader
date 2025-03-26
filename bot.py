@@ -2,7 +2,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import chat,group_messages,user_messages # 导入 chat 函数
-import re,jmcomic,os,sys,requests
+import re,jmcomic,os,sys,requests,random
 
 _log = get_log()
 
@@ -163,7 +163,13 @@ async def handle_restart(msg, is_group=True):
 @register_command("/ri")
 async def handle_random_image(msg, is_group=True):
     # 从 API 获取随机图片
-    image_path = "https://uapis.cn/api/imgapi/acg/pc.php"
+    urls = ["https://uapis.cn/api/imgapi/acg/mb.php",
+            "https://uapis.cn/api/imgapi/acg/pc.php",
+            "https://app.zichen.zone/api/acg/api.php",
+            "https://www.dmoe.cc/random.php",
+    ]
+    random_number = random.randint(0, len(urls)-1)
+    image_path = urls[random_number]
     if is_group:
         await bot.api.post_group_file(msg.group_id, image=image_path)
     else:
@@ -207,13 +213,20 @@ async def handle_random_emoticons(msg, is_group=True):
             "https://uapis.cn/api/imgapi/bq/maomao.php",
             "https://uapis.cn/api/imgapi/bq/eciyuan.php"
     ]
-    import random
     random_number = random.randint(0, 2)
     if is_group:
         await bot.api.post_group_file(msg.group_id,image=urls[random_number])
     else:
         await bot.api.post_private_file(msg.user_id, image=urls[random_number])
 
+@register_command("/st")
+async def handle_st(msg, is_group=True):
+    tags = msg.raw_message[len("/st"):].strip()
+    res = requests.get(f"https://api.lolicon.app/setu/v2?tag={tags}").json().get("data")[0].get("urls").get("original")
+    if is_group:
+        await bot.api.post_group_file(msg.group_id,image=res)
+    else:
+        await bot.api.post_private_file(msg.user_id, image=res)
 
 @register_command("/help")
 @register_command("/h")
@@ -229,6 +242,7 @@ async def handle_help(msg, is_group=True):
                  "/random_words 或 /rw 发送随机一言\n"
                  "/weather 城市名 或 /w 城市名 发送天气\n"
                  "/random_emoticons 或 /re 发送随机表情包\n"
+                 "/st 标签名 发送随机涩图\n"
                  "/help 或 /h 查看帮助"
     )
     if is_group:
