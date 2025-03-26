@@ -215,8 +215,9 @@ async def on_private_message(msg: PrivateMessage):
         if msg.raw_message.startswith(command):
             await handler(msg, is_group=False)
             return
-    content = chat(msg.raw_message, user_id=msg.user_id)
-    await bot.api.post_private_msg(msg.user_id, text=content)
+    if msg.raw_message: # 检查消息是否为空,避免接受文件后的空消息被回复
+        content = chat(msg.raw_message, user_id=msg.user_id)
+        await bot.api.post_private_msg(msg.user_id, text=content)
 
 if __name__ == "__main__":
     bot.run(reload=False)
