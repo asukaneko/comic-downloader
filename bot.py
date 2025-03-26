@@ -1,9 +1,8 @@
-import requests
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import chat,group_messages,user_messages # 导入 chat 函数
-import re, jmcomic, os,sys
+import re,jmcomic,os,sys,requests
 
 _log = get_log()
 
