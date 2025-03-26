@@ -3,14 +3,13 @@ import configparser
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini')
 
-MAX_HISTORY_LENGTH = 20
-
 user_messages = {}
 group_messages = {}
 
 api_key = config_parser.get('ApiKey', 'api_key')
 base_url = config_parser.get('ApiKey', 'base_url')
 model = config_parser.get('ApiKey', 'model')
+MAX_HISTORY_LENGTH = config_parser.getint('chat', 'MAX_HISTORY_LENGTH')
 
 def load_prompt(user_id=None, group_id=None):
     prompt_file = None
