@@ -28,28 +28,6 @@ async def handle_test(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
-@register_command("/set_prompt")
-@register_command("/sp")
-async def handle_set_prompt(msg, is_group=True):
-    prompt_content = msg.raw_message[len("/set_prompt"):].strip()
-    id_str = str(msg.group_id if is_group else msg.user_id)
-    os.makedirs("prompts", exist_ok=True)
-
-    prefix = "group" if is_group else "user"
-    with open(f"prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
-        file.write(prompt_content)
-
-    messages = group_messages if is_group else user_messages
-    if id_str in messages:
-        del messages[id_str]
-    messages[id_str] = [{"role": "system", "content": prompt_content}]
-
-    reply_text = "群组提示词已更新，对话记录已清除喵~" if is_group else "个人提示词已更新，对话记录已清除喵~"
-    if is_group:
-        await msg.reply(text=reply_text)
-    else:
-        await bot.api.post_private_msg(msg.user_id, text=reply_text)
-
 @register_command("/jm")
 async def handle_jmcomic(msg, is_group=True):
     match = re.match(r'^/jm\s+(\d+)$', msg.raw_message)
@@ -85,6 +63,33 @@ async def handle_jmcomic(msg, is_group=True):
         else:
             await bot.api.post_private_msg(msg.user_id, text=error_msg)
 
+@register_command("/set_prompt")
+@register_command("/sp")
+async def handle_set_prompt(msg, is_group=True):
+    prompt_content = ""
+    if msg.raw_message.startswith("/set_prompt"):
+        prompt_content = msg.raw_message[len("/set_prompt"):].strip()
+    elif msg.raw_message.startswith("/sp"):
+        prompt_content = msg.raw_message[len("/sp"):].strip()
+    id_str = str(msg.group_id if is_group else msg.user_id)
+    os.makedirs("prompts", exist_ok=True)
+
+    prefix = "group" if is_group else "user"
+    with open(f"prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
+        file.write(prompt_content)
+
+    messages = group_messages if is_group else user_messages
+    if id_str in messages:
+        del messages[id_str]
+    messages[id_str] = [{"role": "system", "content": prompt_content}]
+
+    reply_text = "群组提示词已更新，对话记录已清除喵~" if is_group else "个人提示词已更新，对话记录已清除喵~"
+    if is_group:
+        await msg.reply(text=reply_text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply_text)
+
+
 @register_command("/del_prompt")
 @register_command("/dp")
 async def handle_del_prompt(msg, is_group=True):
@@ -114,6 +119,7 @@ async def handle_del_prompt(msg, is_group=True):
                 await bot.api.post_private_msg(msg.user_id, text="没有可以删除的提示词喵~")
 
 @register_command("/get_prompt")
+@register_command("/gp")
 async def handle_get_prompt(msg, is_group=True):
     id_str = str(msg.group_id if is_group else msg.user_id)
     if is_group:
