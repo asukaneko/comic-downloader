@@ -41,7 +41,7 @@ python bot.py
 ### 五、更多  
 + 群聊使用 _/chat_ 命令或 _@机器人_ 即可聊天，私聊默认处理所有非命令消息为聊天  
 + _大模型默认使用硅基流动的，免费赠送15元_
-+ 支持图片识别，需去https://platform.moonshot.cn/console/account 获取api，填入config.ini中（第二个api）
++ 支持图片识别，免费赠送15元api，需去https://platform.moonshot.cn/console/account 获取api，填入config.ini中（第二个api）
 + 支持多群聊以及用户自定义提示词
 + 支持保存对话记录
 + 快速添加命令

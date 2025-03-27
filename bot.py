@@ -238,6 +238,24 @@ async def handle_st(msg, is_group=True):
     else:
         await bot.api.post_private_file(msg.user_id, image=res)
 
+
+@register_command("/random_dice")
+@register_command("/rd")
+async def handle_random_dice(msg, is_group=True):
+
+    if is_group:
+        await bot.api.post_group_msg(msg.group_id,dice=True)
+    else:
+        await bot.api.post_private_msg(msg.user_id,dice=True)
+
+@register_command("/random_rps")
+@register_command("/rps")
+async def handle_random_rps(msg, is_group=True):
+    if is_group:
+        await bot.api.post_group_msg(msg.group_id,rps=True)
+    else:
+        await bot.api.post_private_msg(msg.user_id,rps=True)
+
 @register_command("/help")
 @register_command("/h")
 async def handle_help(msg, is_group=True):
@@ -252,6 +270,8 @@ async def handle_help(msg, is_group=True):
                  "/random_words 或 /rw 发送随机一言\n"
                  "/weather 城市名 或 /w 城市名 发送天气\n"
                  "/random_emoticons 或 /re 发送随机表情包\n"
+                 "/random_dice 或 /rd 发送随机骰子\n"
+                 "/random_rps 或 /rps 发送随机石头剪刀布\n"
                  "/st 标签名 发送随机涩图,标签支持与或(& |)\n"
                  "/help 或 /h 查看帮助"
     )
