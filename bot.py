@@ -11,7 +11,6 @@ load_config() # 加载配置
 bot = BotClient()
 
 command_handlers = {}
-command_helps = []
 
 def register_command(command):
     def decorator(func):
