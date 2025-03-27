@@ -1,4 +1,4 @@
-<h2 style = "text-align:center;">基于NapCat和jmcomic的本子下载和聊天的猫娘机器人</h2> 
+<h2 style = "text-align:center;">基于NcatBot和jmcomic的本子下载和聊天的猫娘机器人</h2> 
 
 ---
 >环境为 <u>___windows___</u>  
