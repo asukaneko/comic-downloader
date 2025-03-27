@@ -6,7 +6,7 @@ dir_rule:
   # base_dir: 根目录。
   # 此配置也支持引用环境变量，例如
   # base_dir: ${JM_DIR}/下载文件夹/
-  base_dir: F:/cache/comic/
+  base_dir: ./cache/comic/
 
 plugins:
   after_photo:
@@ -14,5 +14,5 @@ plugins:
     # 使用前需要安装依赖库: [pip install img2pdf]
     - plugin: img2pdf
       kwargs:
-        pdf_dir: F:/cache/pdf/ # pdf存放文件夹
+        pdf_dir: ./cache/pdf/ # pdf存放文件夹
         filename_rule: Pid
