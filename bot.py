@@ -2,7 +2,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import chat,group_messages,user_messages # 导入 chat 函数
-import re,jmcomic,os,sys,requests,random,configparser,json
+import re,jmcomic,os,sys,requests,random,configparser,json,yaml
 
 _log = get_log()
 
@@ -43,7 +43,11 @@ async def handle_jmcomic(msg, is_group=True):
         try:
             option = jmcomic.create_option_by_file('./option.yml')
             jmcomic.download_album(comic_id, option)
-            file_path = f"F:/cache/pdf/{comic_id}.pdf"
+
+            with open("option.yml","r",encoding="utf-8") as f:
+                conf = yaml.safe_load(f)
+                dirn = conf["plugins"]["after_photo"]["kwargs"]["pdf_dir"]
+            file_path = dirn + f"{comic_id}.pdf"
 
             if is_group:
                 await bot.api.post_group_file(msg.group_id, file=file_path)
