@@ -1,4 +1,4 @@
-import configparser,requests,os,base64,time
+import configparser,requests,os,base64,time,json
 
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini')
@@ -6,6 +6,14 @@ config_parser.read('config.ini')
 user_messages = {}
 group_messages = {}
 
+try:
+    with open("saved_message/user_messages.json","r",encoding="utf-8") as f:
+        user_messages = json.load(f)
+    with open("saved_message/group_messages.json","r",encoding="utf-8") as f:
+        group_messages = json.load(f) 
+except FileNotFoundError:
+    os.mkdir("saved_message",exist_ok = True)
+    
 api_key = config_parser.get('ApiKey', 'api_key')
 base_url = config_parser.get('ApiKey', 'base_url')
 model = config_parser.get('ApiKey', 'model')
@@ -13,6 +21,7 @@ MAX_HISTORY_LENGTH = config_parser.getint('chat', 'MAX_HISTORY_LENGTH')
 #用于图片识别
 MOONSHOT_API_KEY = config_parser.get('pic', 'MOONSHOT_API_KEY')
 MOONSHOT_MODEL = config_parser.get('pic', 'MOONSHOT_MODEL')
+cache_address = config_parser.get('pic','cache_address')
 
 def load_prompt(user_id=None, group_id=None):
     prompt_file = None
@@ -55,14 +64,15 @@ def chat(content, user_id=None, group_id=None,image=False):
         response = requests.get(content)
         if response.status_code == 200:
             # 保存图片到本地
-            os.makedirs("saved_images", exist_ok=True)
+            dirs = cache_adress+"saved_images"
+            os.makedirs(dirs, exist_ok=True)
             name = int(time.time())
-            file_name = f"saved_images/{name}.jpg"
+            file_name = dirs + f"/{name}.jpg"
             if not os.path.exists(file_name):
                 with open(file_name, "wb") as file:
                     file.write(response.content)
 
-        with open(f"saved_images/{name}.jpg", 'rb') as f: #读取图片
+        with open(file_name, 'rb') as f: #读取图片
             img_base = base64.b64encode(f.read()).decode('utf-8')
 
         client = OpenAI(
@@ -107,4 +117,11 @@ def chat(content, user_id=None, group_id=None,image=False):
     )
     assistant_response = response.choices[0].message.content
     messages.append({"role": "assistant", "content": assistant_response})
+
+    #保存数据
+    with open("saved_message/user_messages.json","w",encoding="utf-8") as f:
+        json.dump(user_message,f,ensure_ascii=False,indent = 4)
+    with open("saved_message/group_messages.json","w",encoding="utf-8") as f:
+        json.dump(group_message,f,ensure_ascii=False,indent = 4)
+
     return assistant_response
