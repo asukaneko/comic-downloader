@@ -33,7 +33,7 @@ python bot.py
 /random_image 或 /ri 发送随机图片  
 /random_words 或 /rw 发送随机一言  
 /random_emoticons 或 /re 发送随机表情包
-/st 标签名 发送随机涩图,标签支持与或(& |)
+/st 标签名 发送随机涩图,标签支持与或(& |)  
 /weather 城市名 或 /w 城市名 发送天气  
 ……  
 /help 或 /h 查看帮助___
