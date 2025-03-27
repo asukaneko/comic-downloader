@@ -6,7 +6,7 @@ import re,jmcomic,os,sys,requests,random,configparser,json,yaml
 
 _log = get_log()
 
-load_config() # 加载配置
+bot_id = load_config() # 加载配置,返回机器人qq号
 
 bot = BotClient()
 
@@ -272,8 +272,22 @@ async def on_group_message(msg: GroupMessage):
         content = chat(msg.raw_message, group_id=msg.group_id,group_user_id=msg.user_id)
         await msg.reply(text=content)
 
-    if msg.message[0].get("type") == "at":
-        content = chat(msg.message[1].get("data").get("text"), group_id=msg.group_id,group_user_id=msg.user_id)
+    if msg.message[0].get("type") == "at" and msg.message[0].get("data").get("qq") == bot_id:
+    #如果是at机器人
+        try:
+            ori_content = msg.message[1].get("data").get("text") #避免@的消息为空
+        except IndexError:
+            ori_content = "有人@了你"
+        content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
+        await msg.reply(text=content)
+
+    if msg.message[0].get("type") == "reply" and msg.message[1].get("type") == "at" and msg.message[1].get("data").get("qq") == bot_id:
+        #如果是回复机器人的消息
+        try:
+            ori_content = msg.message[2].get("data").get("text")
+        except IndexError:
+            ori_content = "有人回复了你"
+        content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
         await msg.reply(text=content)
 
     """

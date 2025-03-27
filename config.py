@@ -1,6 +1,7 @@
 import configparser
 from ncatbot.utils.config import config
 
+
 def load_config():
     config_parser = configparser.ConfigParser()
     config_parser.read('config.ini')
@@ -14,3 +15,5 @@ def load_config():
     config.set_root(root)
     config.set_ws_uri(ws_uri)
     config.set_token(token)
+
+    return bot_uin
