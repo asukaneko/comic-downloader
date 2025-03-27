@@ -18,7 +18,7 @@ try:
     with open("saved_message/group_messages.json","r",encoding="utf-8") as f:
         group_messages = json.load(f) 
 except FileNotFoundError:
-    os.mkdir("saved_message",exist_ok = True)
+    os.makedirs("saved_message",exist_ok = True)
     
 api_key = config_parser.get('ApiKey', 'api_key')
 base_url = config_parser.get('ApiKey', 'base_url')
@@ -48,7 +48,8 @@ def load_prompt(user_id=None, group_id=None):
         except FileNotFoundError:
             return ""
 
-def chat(content, user_id=None, group_id=None,image=False):
+def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
+    #如果是图片，则content为图片的url
     from openai import OpenAI
 
     if user_id:
@@ -66,11 +67,16 @@ def chat(content, user_id=None, group_id=None,image=False):
     else:
         messages = []
 
+    if group_user_id:
+        pre_text = f"用户{group_user_id}说："
+    else:
+        pre_text = ""
+
     if image:
         response = requests.get(content)
         if response.status_code == 200:
             # 保存图片到本地
-            dirs = cache_adress+"saved_images"
+            dirs = cache_address+"saved_images"
             os.makedirs(dirs, exist_ok=True)
             name = int(time.time())
             file_name = dirs + f"/{name}.jpg"
@@ -105,10 +111,10 @@ def chat(content, user_id=None, group_id=None,image=False):
                 }
             ]
         )
-        messages.append({"role": "user", "content":"这是一张图片的描述："+response.choices[0].message.content })
+        messages.append({"role": "user", "content":f"{pre_text}"+"这是一张图片的描述："+response.choices[0].message.content})
 
     else:
-        messages.append({"role": "user", "content": content})
+        messages.append({"role": "user", "content":f"{pre_text}"+ content})
 
     #保留最大历史记录
     if len(messages) > MAX_HISTORY_LENGTH:
@@ -126,8 +132,8 @@ def chat(content, user_id=None, group_id=None,image=False):
 
     #保存数据
     with open("saved_message/user_messages.json","w",encoding="utf-8") as f:
-        json.dump(user_message,f,ensure_ascii=False,indent = 4)
+        json.dump(user_messages,f,ensure_ascii=False,indent = 4)
     with open("saved_message/group_messages.json","w",encoding="utf-8") as f:
-        json.dump(group_message,f,ensure_ascii=False,indent = 4)
+        json.dump(group_messages,f,ensure_ascii=False,indent = 4)
 
     return assistant_response

@@ -43,10 +43,16 @@ async def handle_jmcomic(msg, is_group=True):
             option = jmcomic.create_option_by_file('./option.yml')
             jmcomic.download_album(comic_id, option)
 
-            with open("option.yml","r",encoding="utf-8") as f:
+            with open("option.yml", "r", encoding="utf-8") as f:
                 conf = yaml.safe_load(f)
-                dirn = conf["plugins"]["after_photo"]["kwargs"]["pdf_dir"]
-            file_path = dirn + f"{comic_id}.pdf"
+                after_photo_list = conf.get("plugins", {}).get("after_photo", [])
+                if after_photo_list and isinstance(after_photo_list, list):
+                    pdf_dir = after_photo_list[0].get("kwargs", {}).get("pdf_dir", "./cache/pdf/")
+                else:
+                    pdf_dir = "./cache/pdf/"
+                if not pdf_dir.endswith(os.path.sep):
+                    pdf_dir += os.path.sep
+                file_path = os.path.join(pdf_dir, f"{comic_id}.pdf")
 
             if is_group:
                 await bot.api.post_group_file(msg.group_id, file=file_path)
@@ -263,8 +269,13 @@ async def on_group_message(msg: GroupMessage):
             await handler(msg, is_group=True)
             return
     if msg.raw_message.startswith("/chat"):
-        content = chat(msg.raw_message, group_id=msg.group_id)
+        content = chat(msg.raw_message, group_id=msg.group_id,group_user_id=msg.user_id)
         await msg.reply(text=content)
+
+    if msg.message[0].get("type") == "at":
+        content = chat(msg.message[1].get("data").get("text"), group_id=msg.group_id,group_user_id=msg.user_id)
+        await msg.reply(text=content)
+
     """
     if msg.message[0].get("type") == "image" and msg.raw_message.startswith("/chat"):
         url = msg.message[0].get("data").get("url")
