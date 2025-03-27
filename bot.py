@@ -261,6 +261,12 @@ async def on_group_message(msg: GroupMessage):
     if msg.raw_message.startswith("/chat"):
         content = chat(msg.raw_message, group_id=msg.group_id)
         await msg.reply(text=content)
+    """
+    if msg.message[0].get("type") == "image" and msg.raw_message.startswith("/chat"):
+        url = msg.message[0].get("data").get("url")
+        content = chat(url, group_id=msg.group_id,image=True)
+        await msg.reply(text=content)
+    """
 
 @bot.private_event()
 async def on_private_message(msg: PrivateMessage):
@@ -269,6 +275,12 @@ async def on_private_message(msg: PrivateMessage):
         if msg.raw_message.startswith(command):
             await handler(msg, is_group=False)
             return
+    if msg.message[0].get("type") == "image":
+        url = msg.message[0].get("data").get("url")
+        content = chat(url, user_id=msg.user_id,image=True)
+        await bot.api.post_private_msg(msg.user_id, text=content)
+        return
+
     if msg.raw_message: # 检查消息是否为空,避免接受文件后的空消息被回复
         content = chat(msg.raw_message, user_id=msg.user_id)
         await bot.api.post_private_msg(msg.user_id, text=content)
