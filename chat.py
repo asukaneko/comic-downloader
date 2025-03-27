@@ -1,3 +1,9 @@
+# 提示词和聊天记录保存在项目目录下，保存的图片可以在配置文件中配置
+#  .saved_message
+#   |--- ...
+#  .prompts
+#   |---... 
+
 import configparser,requests,os,base64,time,json
 
 config_parser = configparser.ConfigParser()
@@ -104,7 +110,7 @@ def chat(content, user_id=None, group_id=None,image=False):
     else:
         messages.append({"role": "user", "content": content})
 
-
+    #保留最大历史记录
     if len(messages) > MAX_HISTORY_LENGTH:
         messages = messages[-MAX_HISTORY_LENGTH:]
 
