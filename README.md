@@ -4,6 +4,37 @@
 >环境为 <u>___windows___</u>  
 >强烈建议用 ___小号___ 登录
 
+```
+目录结构：
+.
+│  bot.py
+│  chat.py
+│  config.ini
+│  config.py
+│  LICENSE
+│  neko.txt
+│  number.txt
+│  option.yml
+│  README.md
+│  requirements.txt
+│  urls.ini
+│  
+├─logs
+│      
+├─napcat
+│  ├─...... 
+│  └─......
+├─plugins
+│
+├─prompts
+│  ├─group
+│  └─user
+├─saved_images
+│      
+├─saved_message
+```        
+
+
 ### 一、安装依赖
 ```
 pip install -r requirements.txt
