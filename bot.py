@@ -297,7 +297,7 @@ async def on_group_message(msg: GroupMessage):
         try:
             ori_content = msg.message[1].get("data").get("text") #避免@的消息为空
         except IndexError:
-            ori_content = "有人@了你"
+            ori_content = f"用户{msg.user_id}@了你"
         content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
         await msg.reply(text=content)
 
