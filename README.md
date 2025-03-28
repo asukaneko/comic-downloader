@@ -75,6 +75,7 @@ python bot.py
 + _大模型默认使用硅基流动的，免费赠送15元_
 + 支持图片识别，免费赠送15元api，需去https://platform.moonshot.cn/console/account 获取api，填入config.ini中（第二个api）
 + 支持多群聊以及用户自定义提示词
++ 群聊支持用户感知，聊天支持时间感知
 + 支持保存对话记录
 + 快速添加命令
 + 配置要求低，轻量，占用内存小
