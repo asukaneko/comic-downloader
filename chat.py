@@ -4,7 +4,8 @@
 #  .prompts
 #   |---... 
 
-import configparser,requests,os,base64,time,json
+import configparser,requests,os,base64,time,json,datetime
+from openai import OpenAI
 
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini')
@@ -50,7 +51,8 @@ def load_prompt(user_id=None, group_id=None):
 
 def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
     #如果是图片，则content为图片的url
-    from openai import OpenAI
+    
+    now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if user_id:
         user_id = str(user_id)
@@ -111,9 +113,11 @@ def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
                 }
             ]
         )
+        messages.append({"role": "system", "content":f"当前时间：{now_time}"})
         messages.append({"role": "user", "content":f"{pre_text}"+"这是一张图片的描述："+response.choices[0].message.content})
 
     else:
+        messages.append({"role": "system", "content":f"当前时间：{now_time}"})
         messages.append({"role": "user", "content":f"{pre_text}"+ content})
 
     #保留最大历史记录
