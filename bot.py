@@ -3,6 +3,7 @@ from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import chat,group_messages,user_messages # 导入 chat 函数
 import re,jmcomic,os,sys,requests,random,configparser,json,yaml
+from jmcomic import *
 
 _log = get_log()
 
@@ -28,6 +29,43 @@ async def handle_test(msg, is_group=True):
         await msg.reply(text=reply_text)
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
+
+@register_command("/jmrank")
+async def handle_jmrank(msg, is_group=True):
+    select = msg.raw_message[len("/jmrank"):].strip()
+    # 创建客户端
+    op = JmOption.default()
+    cl = op.new_jm_client()
+
+    page: JmCategoryPage = cl.categories_filter(
+        page=1,
+        time=JmMagicConstants.TIME_ALL,  # 时间选择全部，具体可以写什么请见JmMagicConstants
+        category=JmMagicConstants.CATEGORY_ALL,  # 分类选择全部，具体可以写什么请见JmMagicConstants
+        order_by=JmMagicConstants.ORDER_BY_LATEST,  # 按照观看数排序，具体可以写什么请见JmMagicConstants
+    )
+
+    content = ""
+    if select == "月排行":
+        page: JmCategoryPage = cl.month_ranking(1)
+        content += "月排行:\n"
+    elif select == "周排行":
+        page: JmCategoryPage = cl.week_ranking(1)
+        content += "周排行:\n"
+
+    for page in cl.categories_filter_gen(page=1,  # 起始页码
+                                         # 下面是分类参数
+                                         time=JmMagicConstants.TIME_WEEK,
+                                         category=JmMagicConstants.CATEGORY_ALL,
+                                         order_by=JmMagicConstants.ORDER_BY_VIEW,
+                                         ):
+        for aid, atitle in page:
+            content += f"ID: {aid}\n"
+            #print(aid, atitle)
+
+    if is_group:
+        await msg.reply(text=content)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=content)
 
 @register_command("/jm")
 async def handle_jmcomic(msg, is_group=True):
@@ -272,6 +310,7 @@ async def handle_del_message(msg, is_group=True):
 async def handle_help(msg, is_group=True):
     help_text = ("欢迎使用喵~~\n"
                  "/jm xxxxxx 下载漫画\n"
+                 "/jmrank 月排行/周排行  获取月排行/周排行\n"
                  "/set_prompt 或 /sp 设置提示词\n"
                  "/del_prompt 或 /dp 删除提示词\n"
                  "/get_prompt 或 /gp 获取提示词\n"
