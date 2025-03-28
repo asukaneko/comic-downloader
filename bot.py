@@ -20,6 +20,18 @@ def register_command(command):
         return func
     return decorator
 
+def load_address():
+    with open("option.yml", "r", encoding="utf-8") as f:
+        conf = yaml.safe_load(f)
+        after_photo_list = conf.get("plugins", {}).get("after_photo", [])
+        if after_photo_list and isinstance(after_photo_list, list):
+            pdf_dir = after_photo_list[0].get("kwargs", {}).get("pdf_dir", "./cache/pdf/")
+        else:
+            pdf_dir = "./cache/pdf/"
+        if not pdf_dir.endswith(os.path.sep):
+            pdf_dir += os.path.sep
+        return pdf_dir
+
 @register_command("测试")
 async def handle_test(msg, is_group=True):
     if not msg.raw_message == "测试":
@@ -52,6 +64,11 @@ async def handle_jmrank(msg, is_group=True):
         page: JmCategoryPage = cl.week_ranking(1)
         content += "周排行:\n"
 
+    cache_dir = load_address()
+    cache_dir += "rank/"
+    os.makedirs(cache_dir,exist_ok = True)
+
+    name = time.time()
     for page in cl.categories_filter_gen(page=1,  # 起始页码
                                          # 下面是分类参数
                                          time=JmMagicConstants.TIME_WEEK,
@@ -59,13 +76,14 @@ async def handle_jmrank(msg, is_group=True):
                                          order_by=JmMagicConstants.ORDER_BY_VIEW,
                                          ):
         for aid, atitle in page:
-            content += f"ID: {aid}\n"
-            #print(aid, atitle)
+            #content += f"ID: {aid}\n"
+            with open(cache_dir + f"{select}_{name}.txt", "a", encoding="utf-8") as f:
+                f.write(f"ID: {aid} Name: {atitle}\n")
 
     if is_group:
-        await msg.reply(text=content)
+        await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{select}_{name}.txt")
     else:
-        await bot.api.post_private_msg(msg.user_id, text=content)
+        await bot.api.upload_private_file(msg.user_id, cache_dir + f"{select}_{name}.txt", f"{select}_{name}.txt")
 
 @register_command("/jm")
 async def handle_jmcomic(msg, is_group=True):
@@ -82,16 +100,8 @@ async def handle_jmcomic(msg, is_group=True):
             option = jmcomic.create_option_by_file('./option.yml')
             jmcomic.download_album(comic_id, option)
 
-            with open("option.yml", "r", encoding="utf-8") as f:
-                conf = yaml.safe_load(f)
-                after_photo_list = conf.get("plugins", {}).get("after_photo", [])
-                if after_photo_list and isinstance(after_photo_list, list):
-                    pdf_dir = after_photo_list[0].get("kwargs", {}).get("pdf_dir", "./cache/pdf/")
-                else:
-                    pdf_dir = "./cache/pdf/"
-                if not pdf_dir.endswith(os.path.sep):
-                    pdf_dir += os.path.sep
-                file_path = os.path.join(pdf_dir, f"{comic_id}.pdf")
+            pdf_dir = load_address()
+            file_path = os.path.join(pdf_dir, f"{comic_id}.pdf")
 
             if is_group:
                 await bot.api.post_group_file(msg.group_id, file=file_path)
