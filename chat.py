@@ -52,7 +52,7 @@ def load_prompt(user_id=None, group_id=None):
 def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
     #如果是图片，则content为图片的url
     
-    now_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if user_id:
         user_id = str(user_id)
