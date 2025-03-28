@@ -11,6 +11,7 @@ bot_id = load_config() # 加载配置,返回机器人qq号
 bot = BotClient()
 
 command_handlers = {}
+group_imgs = {} # 用于存储图片信息
 
 def register_command(command):
     def decorator(func):
@@ -299,9 +300,16 @@ async def on_group_message(msg: GroupMessage):
         if msg.raw_message.startswith(command):
             await handler(msg, is_group=True)
             return
+
     if msg.raw_message.startswith("/chat"):
         content = chat(msg.raw_message, group_id=msg.group_id,group_user_id=msg.user_id)
         await msg.reply(text=content)
+
+    if msg.message[0].get("type") == "image": #提取保存所有图片的信息
+        url = msg.message[0].get("data").get("url")
+        if str(msg.group_id) not in group_imgs:  # 添加检查并初始化
+            group_imgs[str(msg.group_id)] = []
+        group_imgs[str(msg.group_id)].append({str(msg.message_id):url})
 
     if msg.message[0].get("type") == "at" and msg.message[0].get("data").get("qq") == bot_id:
     #如果是at机器人
@@ -314,6 +322,15 @@ async def on_group_message(msg: GroupMessage):
 
     if msg.message[0].get("type") == "reply" and msg.message[1].get("type") == "at" and msg.message[1].get("data").get("qq") == bot_id:
         #如果是回复机器人的消息
+        get_id = msg.message[0].get("data").get("id") #判断是不是图片
+        dirs = group_imgs[str(msg.group_id)]
+        #_log.info(dirs)
+        for ldir in dirs:
+            if ldir.get(get_id):
+                url = ldir.get(get_id)
+                content = chat(url, group_id=msg.group_id,group_user_id=msg.user_id,image=True)
+                await msg.reply(text=content)
+                return
         try:
             ori_content = msg.message[2].get("data").get("text")
         except IndexError:
@@ -321,12 +338,6 @@ async def on_group_message(msg: GroupMessage):
         content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
         await msg.reply(text=content)
 
-    """
-    if msg.message[0].get("type") == "image" and msg.raw_message.startswith("/chat"):
-        url = msg.message[0].get("data").get("url")
-        content = chat(url, group_id=msg.group_id,image=True)
-        await msg.reply(text=content)
-    """
 
 @bot.private_event()
 async def on_private_message(msg: PrivateMessage):
