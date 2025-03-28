@@ -113,7 +113,7 @@ async def handle_del_prompt(msg, is_group=True):
                 with open("neko.txt", "r", encoding="utf-8") as file:
                     prompt = file.read()
                     group_messages[id_str] = [{"role": "system", "content": prompt}]
-                await msg.reply(text="提示词已删除喵~neko回来了喵~")
+                await msg.reply(text="提示词已删除喵~本子娘回来了喵~")
             except FileNotFoundError:
                 await msg.reply(text="没有可以删除的提示词喵~")
 
@@ -125,7 +125,7 @@ async def handle_del_prompt(msg, is_group=True):
                 with open("neko.txt", "r", encoding="utf-8") as file:
                     prompt = file.read()
                     user_messages[id_str] = [{"role": "system", "content": prompt}]
-                await bot.api.post_private_msg(msg.user_id, text="提示词已删除喵~neko回来了喵~")
+                await bot.api.post_private_msg(msg.user_id, text="提示词已删除喵~本子娘回来了喵~")
             except FileNotFoundError:
                 await bot.api.post_private_msg(msg.user_id, text="没有可以删除的提示词喵~")
 
