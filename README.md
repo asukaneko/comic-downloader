@@ -32,6 +32,11 @@
 ├─saved_images
 │      
 ├─saved_message
+│
+└─cache
+    ├─comic
+    ├─saved_images
+    └─pdf
 ```        
 
 
