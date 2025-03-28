@@ -1,9 +1,11 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
-from chat import chat,group_messages,user_messages # 导入 chat 函数
-import re,jmcomic,os,sys,requests,random,configparser,json,yaml
+from chat import chat,group_messages,user_messages,tts # 导入 chat 函数
+import jmcomic,os,sys,requests,random,configparser,json,yaml
 from jmcomic import *
+
+if_tts = False #判断是否开启TTS
 
 _log = get_log()
 
@@ -14,13 +16,13 @@ bot = BotClient()
 command_handlers = {}
 group_imgs = {} # 用于存储图片信息
 
-def register_command(command):
+def register_command(command): # 注册命令
     def decorator(func):
         command_handlers[command] = func
         return func
     return decorator
 
-def load_address():
+def load_address(): # 加载配置文件，返回图片保存地址
     with open("option.yml", "r", encoding="utf-8") as f:
         conf = yaml.safe_load(f)
         after_photo_list = conf.get("plugins", {}).get("after_photo", [])
@@ -42,6 +44,16 @@ async def handle_test(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
+@register_command("/tts")
+async def handle_tts(msg, is_group=True):
+    global if_tts
+    if_tts = not if_tts
+    text = "已开启TTS喵~" if if_tts else "已关闭TTS喵~"
+    if is_group:
+        await msg.reply(text=text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=text)
+
 @register_command("/jmrank")
 async def handle_jmrank(msg, is_group=True):
     select = msg.raw_message[len("/jmrank"):].strip()
@@ -51,18 +63,15 @@ async def handle_jmrank(msg, is_group=True):
 
     page: JmCategoryPage = cl.categories_filter(
         page=1,
-        time=JmMagicConstants.TIME_ALL,  # 时间选择全部，具体可以写什么请见JmMagicConstants
-        category=JmMagicConstants.CATEGORY_ALL,  # 分类选择全部，具体可以写什么请见JmMagicConstants
-        order_by=JmMagicConstants.ORDER_BY_LATEST,  # 按照观看数排序，具体可以写什么请见JmMagicConstants
+        time=JmMagicConstants.TIME_ALL,
+        category=JmMagicConstants.CATEGORY_ALL,
+        order_by=JmMagicConstants.ORDER_BY_LATEST,
     )
 
-    content = ""
     if select == "月排行":
         page: JmCategoryPage = cl.month_ranking(1)
-        content += "月排行:\n"
     elif select == "周排行":
         page: JmCategoryPage = cl.week_ranking(1)
-        content += "周排行:\n"
 
     cache_dir = load_address()
     cache_dir += "rank/"
@@ -334,6 +343,7 @@ async def handle_help(msg, is_group=True):
                  "/random_rps 或 /rps 发送随机石头剪刀布\n"
                  "/st 标签名 发送随机涩图,标签支持与或(& |)\n"
                  "/del_message 或 /dm 删除对话记录\n"
+                 "/tts 开启或关闭TTS\n"
                  "/help 或 /h 查看帮助"
     )
     if is_group:
@@ -367,7 +377,11 @@ async def on_group_message(msg: GroupMessage):
         except IndexError:
             ori_content = f"用户{msg.user_id}@了你"
         content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
-        await msg.reply(text=content)
+        if if_tts:
+            rtf = tts(content)
+            await bot.api.post_group_msg(msg.group_id, rtf=rtf)
+        else:
+            await msg.reply(text=content)
 
     if msg.message[0].get("type") == "reply" and msg.message[1].get("type") == "at" and msg.message[1].get("data").get("qq") == bot_id:
         #如果是回复机器人的消息
@@ -378,14 +392,22 @@ async def on_group_message(msg: GroupMessage):
             if ldir.get(get_id):
                 url = ldir.get(get_id)
                 content = chat(url, group_id=msg.group_id,group_user_id=msg.user_id,image=True)
-                await msg.reply(text=content)
+                if if_tts:
+                    rtf = tts(content)
+                    await bot.api.post_group_msg(msg.group_id, rtf=rtf)
+                else:
+                    await msg.reply(text=content)
                 return
         try:
             ori_content = msg.message[2].get("data").get("text")
         except IndexError:
             ori_content = "有人回复了你"
         content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
-        await msg.reply(text=content)
+        if if_tts:
+            rtf = tts(content)
+            await bot.api.post_group_msg(msg.group_id, rtf=rtf)
+        else:
+            await msg.reply(text=content)
 
 
 @bot.private_event()
@@ -398,12 +420,20 @@ async def on_private_message(msg: PrivateMessage):
     if msg.message[0].get("type") == "image":
         url = msg.message[0].get("data").get("url")
         content = chat(url, user_id=msg.user_id,image=True)
-        await bot.api.post_private_msg(msg.user_id, text=content)
+        if if_tts:
+            rtf = tts(content)
+            await bot.api.post_private_msg(msg.user_id, rtf=rtf)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=content)
         return
 
     if msg.raw_message: # 检查消息是否为空,避免接受文件后的空消息被回复
         content = chat(msg.raw_message, user_id=msg.user_id)
-        await bot.api.post_private_msg(msg.user_id, text=content)
+        if if_tts:
+            rtf = tts(content)
+            await bot.api.post_private_msg(msg.user_id, rtf=rtf)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=content)
 
 if __name__ == "__main__":
     bot.run(reload=False)

@@ -4,8 +4,9 @@
 #  .prompts
 #   |---... 
 
-import configparser,requests,os,base64,time,json,datetime
+import configparser,requests,os,base64,time,json,datetime,re
 from openai import OpenAI
+from ncatbot.core.element import Record,MessageChain
 
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini')
@@ -28,7 +29,22 @@ MAX_HISTORY_LENGTH = config_parser.getint('chat', 'MAX_HISTORY_LENGTH')
 #用于图片识别
 MOONSHOT_API_KEY = config_parser.get('pic', 'MOONSHOT_API_KEY')
 MOONSHOT_MODEL = config_parser.get('pic', 'MOONSHOT_MODEL')
-cache_address = config_parser.get('pic','cache_address')
+cache_address = config_parser.get('cache','cache_address')
+
+def remove_brackets_content(text) -> str:
+    """
+    删除字符串中所有括号及其内容，包括：
+    - 中文括号：（）【】
+    - 英文括号：()
+    - 花括号：{}
+    """
+    text = re.sub(r'（.*?）', '', text)
+    text = re.sub(r'【.*?】', '', text)
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'\{.*?\}', '', text)
+    text = re.sub(r'\「.*?\」', '', text)
+    text = text.replace('\n', ' ').replace('\r', ' ')
+    return text.strip()
 
 def load_prompt(user_id=None, group_id=None):
     prompt_file = None
@@ -142,3 +158,29 @@ def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
         json.dump(group_messages,f,ensure_ascii=False,indent = 4)
 
     return assistant_response
+
+def tts(content) -> MessageChain:
+    file_path = cache_address+ "tts/"
+    os.makedirs(file_path, exist_ok=True)
+    name = int(time.time())
+
+    speech_file_path = file_path + f"{name}.mp3"
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.siliconflow.cn/v1"
+    )
+
+    with client.audio.speech.with_streaming_response.create(
+            model="FunAudioLLM/CosyVoice2-0.5B",
+            voice="FunAudioLLM/CosyVoice2-0.5B:diana",  # 系统预置音色
+            # 用户输入信息
+            input="你能用猫娘一样的活跃以及可爱的语气说吗？<|endofprompt|>"+remove_brackets_content(content),
+            response_format="mp3"
+    ) as response:
+        response.stream_to_file(speech_file_path)
+
+    message = MessageChain([
+        Record(speech_file_path)
+    ])
+    return message
