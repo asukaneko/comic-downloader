@@ -256,6 +256,16 @@ async def handle_random_rps(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id,rps=True)
 
+@register_command("/del_message")
+@register_command("/dm")
+async def handle_del_message(msg, is_group=True):
+    if is_group:
+        del group_messages[str(msg.group_id)]
+        await msg.reply(text="主人要离我而去了吗？呜呜呜……好吧，那我们以后再见喵~")
+    else:
+        del user_messages[str(msg.user_id)]
+        await bot.api.post_private_msg(msg.user_id, text="主人要离我而去了吗？呜呜呜……好吧，那我们以后再见喵~")
+
 @register_command("/help")
 @register_command("/h")
 async def handle_help(msg, is_group=True):
@@ -273,6 +283,7 @@ async def handle_help(msg, is_group=True):
                  "/random_dice 或 /rd 发送随机骰子\n"
                  "/random_rps 或 /rps 发送随机石头剪刀布\n"
                  "/st 标签名 发送随机涩图,标签支持与或(& |)\n"
+                 "/del_message 或 /dm 删除对话记录\n"
                  "/help 或 /h 查看帮助"
     )
     if is_group:
