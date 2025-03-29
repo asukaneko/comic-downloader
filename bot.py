@@ -34,6 +34,7 @@ async def on_group_message(msg: GroupMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
+            await msg.reply(text=content)
         else:
             await msg.reply(text=content)
 
@@ -49,6 +50,7 @@ async def on_group_message(msg: GroupMessage):
                 if if_tts:
                     rtf = tts(content)
                     await bot.api.post_group_msg(msg.group_id, rtf=rtf)
+                    await msg.reply(text=content)
                 else:
                     await msg.reply(text=content)
                 return
@@ -60,6 +62,7 @@ async def on_group_message(msg: GroupMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
+            await msg.reply(text=content)
         else:
             await msg.reply(text=content)
 
@@ -77,6 +80,7 @@ async def on_private_message(msg: PrivateMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_private_msg(msg.user_id, rtf=rtf)
+            await bot.api.post_private_msg(msg.user_id, text=content)
         else:
             await bot.api.post_private_msg(msg.user_id, text=content)
         return
@@ -86,6 +90,7 @@ async def on_private_message(msg: PrivateMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_private_msg(msg.user_id, rtf=rtf)
+            await bot.api.post_private_msg(msg.user_id, text=content)
         else:
             await bot.api.post_private_msg(msg.user_id, text=content)
 
