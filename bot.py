@@ -1,13 +1,17 @@
 from ncatbot.utils.logger import get_log
 
+import commands
+from chat import chat,tts
 from commands import *
-
-if_tts = False #判断是否开启TTS
 
 _log = get_log()
 
+if_tts = commands.if_tts
+
 @bot.group_event()
 async def on_group_message(msg: GroupMessage):
+    global if_tts
+    if_tts = commands.if_tts
     _log.info(msg)
     for command, handler in command_handlers.items(): #优先处理命令
         if msg.raw_message.startswith(command): #注意这里是startswith，也就是说命令尽量不要有重叠部分
@@ -34,7 +38,7 @@ async def on_group_message(msg: GroupMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
-            await msg.reply(text=content)
+            #await msg.reply(text=content)
         else:
             await msg.reply(text=content)
 
@@ -50,7 +54,7 @@ async def on_group_message(msg: GroupMessage):
                 if if_tts:
                     rtf = tts(content)
                     await bot.api.post_group_msg(msg.group_id, rtf=rtf)
-                    await msg.reply(text=content)
+                    #await msg.reply(text=content)
                 else:
                     await msg.reply(text=content)
                 return
@@ -62,13 +66,15 @@ async def on_group_message(msg: GroupMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
-            await msg.reply(text=content)
+            #await msg.reply(text=content)
         else:
             await msg.reply(text=content)
 
 
 @bot.private_event()
 async def on_private_message(msg: PrivateMessage):
+    global if_tts
+    if_tts = commands.if_tts
     _log.info(msg)
     for command, handler in command_handlers.items():
         if msg.raw_message.startswith(command):
@@ -80,7 +86,7 @@ async def on_private_message(msg: PrivateMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_private_msg(msg.user_id, rtf=rtf)
-            await bot.api.post_private_msg(msg.user_id, text=content)
+            #await bot.api.post_private_msg(msg.user_id, text=content)
         else:
             await bot.api.post_private_msg(msg.user_id, text=content)
         return
@@ -90,7 +96,7 @@ async def on_private_message(msg: PrivateMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_private_msg(msg.user_id, rtf=rtf)
-            await bot.api.post_private_msg(msg.user_id, text=content)
+            #await bot.api.post_private_msg(msg.user_id, text=content)
         else:
             await bot.api.post_private_msg(msg.user_id, text=content)
 

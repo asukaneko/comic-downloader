@@ -1,8 +1,10 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from config import load_config
-from chat import chat,group_messages,user_messages,tts # 导入 chat 函数
+from chat import group_messages,user_messages # 导入 chat 函数
 import jmcomic,os,sys,requests,random,configparser,json,yaml
 from jmcomic import *
+
+if_tts = False #判断是否开启TTS
 
 bot_id = load_config() # 加载配置,返回机器人qq号
 

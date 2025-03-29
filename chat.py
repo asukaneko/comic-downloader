@@ -173,7 +173,7 @@ def tts(content) -> MessageChain:
 
     with client.audio.speech.with_streaming_response.create(
             model="FunAudioLLM/CosyVoice2-0.5B",
-            voice="FunAudioLLM/CosyVoice2-0.5B:diana",  # 系统预置音色
+            voice="speech:Azuma:5fkbut6tps:ovokgdylsvobehikwrui", #自定义音色
             # 用户输入信息
             input="你能用猫娘一样的活跃以及可爱的语气说吗？<|endofprompt|>"+remove_brackets_content(content),
             response_format="mp3"
