@@ -31,6 +31,8 @@ MOONSHOT_API_KEY = config_parser.get('pic', 'MOONSHOT_API_KEY')
 MOONSHOT_MODEL = config_parser.get('pic', 'MOONSHOT_MODEL')
 cache_address = config_parser.get('cache','cache_address')
 
+voice = config_parser.get('voice','voice')
+
 def remove_brackets_content(text) -> str:
     """
     删除字符串中所有括号及其内容，包括：
@@ -168,14 +170,14 @@ def tts(content) -> MessageChain:
 
     client = OpenAI(
         api_key=api_key,
-        base_url="https://api.siliconflow.cn/v1"
+        base_url="https://api.siliconflow.cn/v1"  #这也是硅基流动的模型，用同一个api
     )
 
     with client.audio.speech.with_streaming_response.create(
             model="FunAudioLLM/CosyVoice2-0.5B",
-            voice="speech:Azuma:5fkbut6tps:ovokgdylsvobehikwrui", #自定义音色
+            voice=voice, #自定义音色
             # 用户输入信息
-            input="你能用猫娘一样的活跃以及可爱的语气说吗？<|endofprompt|>"+remove_brackets_content(content),
+            input="你能用可爱的语气说吗？<|endofprompt|>"+remove_brackets_content(content),
             response_format="mp3"
     ) as response:
         response.stream_to_file(speech_file_path)
@@ -184,3 +186,29 @@ def tts(content) -> MessageChain:
         Record(speech_file_path)
     ])
     return message
+
+def upload_voice(file_path,name,text):
+    url = "https://api.siliconflow.cn/v1/uploads/audio/voice"
+    headers = {
+        "Authorization": f"Bearer {api_key}"
+        # 从 https://cloud.siliconflow.cn/account/ak 获取
+    }
+    files = {
+        "file": open(fr"{file_path}", "rb")  # 参考音频文件
+    }
+    data = {
+        "model": "FunAudioLLM/CosyVoice2-0.5B",  # 模型名称
+        "customName": name,  # 参考音频名称
+        "text": text  # 参考音频的文字内容
+    }
+
+    response = requests.post(url, headers=headers, files=files, data=data)
+
+    print(response.status_code)
+    print(response.json())  # 打印响应内容（如果是JSON格式）
+
+if __name__ == "__main__":
+    file_path = str(input("输入文件路径："))
+    name = str(input("输入名称："))
+    text = str(input("输入文字："))
+    upload_voice(file_path,name,text)
