@@ -12,6 +12,7 @@
 │  chat.py
 │  config.ini
 │  config.py
+│  commands.py
 │  LICENSE
 │  neko.txt
 │  number.txt

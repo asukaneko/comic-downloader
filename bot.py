@@ -9,8 +9,8 @@ _log = get_log()
 @bot.group_event()
 async def on_group_message(msg: GroupMessage):
     _log.info(msg)
-    for command, handler in command_handlers.items():
-        if msg.raw_message.startswith(command):
+    for command, handler in command_handlers.items(): #优先处理命令
+        if msg.raw_message.startswith(command): #注意这里是startswith，也就是说命令尽量不要有重叠部分
             await handler(msg, is_group=True)
             return
 
