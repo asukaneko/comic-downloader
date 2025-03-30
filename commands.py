@@ -13,9 +13,11 @@ bot = BotClient()
 command_handlers = {}
 group_imgs = {} # 用于存储图片信息
 
-def register_command(command): # 注册命令
+def register_command(*command,help_text = None): # 注册命令
     def decorator(func):
         command_handlers[command] = func
+        if help_text is not None:
+            func.help_text = help_text
         return func
     return decorator
 
@@ -41,7 +43,7 @@ async def handle_test(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
-@register_command("/tts")
+@register_command("/tts",help_text = "/tts 开启或关闭TTS")
 async def handle_tts(msg, is_group=True):
     global if_tts
     if_tts = not if_tts
@@ -52,7 +54,7 @@ async def handle_tts(msg, is_group=True):
         await bot.api.post_private_msg(msg.user_id, text=text)
 
 @register_command("/jmrank")
-async def handle_jmrank(msg, is_group=True):
+async def handle_jmrank(msg, is_group=True,help_text = "/jmrank 月排行/周排行"):
     select = msg.raw_message[len("/jmrank"):].strip()
     # 创建客户端
     op = JmOption.default()
@@ -92,7 +94,7 @@ async def handle_jmrank(msg, is_group=True):
         await bot.api.upload_private_file(msg.user_id, cache_dir + f"{select}_{name}.txt", f"{select}_{name}.txt")
 
 @register_command("/jm")
-async def handle_jmcomic(msg, is_group=True):
+async def handle_jmcomic(msg, is_group=True,help_text = "/jm 漫画ID 下载漫画"):
     match = re.match(r'^/jm\s+(\d+)$', msg.raw_message)
     if match:
         comic_id = match.group(1)
@@ -128,8 +130,7 @@ async def handle_jmcomic(msg, is_group=True):
         else:
             await bot.api.post_private_msg(msg.user_id, text=error_msg)
 
-@register_command("/set_prompt")
-@register_command("/sp")
+@register_command("/set_prompt","/sp",help_text = "/set_prompt 或者 /sp 提示词")
 async def handle_set_prompt(msg, is_group=True):
     prompt_content = ""
     if msg.raw_message.startswith("/set_prompt"):
@@ -155,8 +156,7 @@ async def handle_set_prompt(msg, is_group=True):
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
 
-@register_command("/del_prompt")
-@register_command("/dp")
+@register_command("/del_prompt","/dp",help_text = "/del_prompt 或者 /dp 删除提示词")
 async def handle_del_prompt(msg, is_group=True):
     id_str = str(msg.group_id if is_group else msg.user_id)
     if is_group:
@@ -183,8 +183,7 @@ async def handle_del_prompt(msg, is_group=True):
             except FileNotFoundError:
                 await bot.api.post_private_msg(msg.user_id, text="没有可以删除的提示词喵~")
 
-@register_command("/get_prompt")
-@register_command("/gp")
+@register_command("/get_prompt","/gp",help_text = "/get_prompt 或者 /gp 获取提示词")
 async def handle_get_prompt(msg, is_group=True):
     id_str = str(msg.group_id if is_group else msg.user_id)
     if is_group:
@@ -203,7 +202,7 @@ async def handle_get_prompt(msg, is_group=True):
             await bot.api.post_private_msg(msg.user_id, text="没有找到提示词喵~")
 
 
-@register_command("/agree") # 同意好友请求
+@register_command("/agree","/agree 同意好友请求") # 同意好友请求
 async def handle_agree(msg, is_group=True):
     if not is_group:
         await bot.api.set_friend_add_request(flag=msg.user_id, approve=True,remark=msg.user_id)
@@ -213,7 +212,7 @@ async def handle_agree(msg, is_group=True):
         await msg.reply(text="已同意好友请求喵~")
 
 
-@register_command("/restart")
+@register_command("/restart","/restart 重启机器人")
 async def handle_restart(msg, is_group=True):
     reply_text = "正在重启喵~"
     if is_group:
@@ -224,8 +223,7 @@ async def handle_restart(msg, is_group=True):
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
-@register_command("/random_image")
-@register_command("/ri")
+@register_command("/random_image","/ri",help_text = "/random_image 或者 /ri 随机图片")
 async def handle_random_image(msg, is_group=True):
     # 在urls.ini中获取图片的url列表
     config = configparser.ConfigParser()
@@ -239,8 +237,7 @@ async def handle_random_image(msg, is_group=True):
     else:
         await bot.api.post_private_file(msg.user_id, image=image_path)
 
-@register_command("/random_words")
-@register_command("/rw")
+@register_command("/random_words","/rw",help_text = "/random_words 或者 /rw 随机一言")
 async def handle_random_words(msg, is_group=True):
     words = requests.get("https://uapis.cn/api/say").text
     if is_group:
@@ -249,8 +246,7 @@ async def handle_random_words(msg, is_group=True):
         await bot.api.post_private_msg(msg.user_id, text=words)
 
 
-@register_command("/weather")
-@register_command("/w")
+@register_command("/weather","/w",help_text = "/weather 或者 /w 城市名")
 async def handle_weather(msg, is_group=True):
     location = None
     if msg.raw_message.startswith("/weather"):
@@ -270,8 +266,7 @@ async def handle_weather(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
-@register_command("/random_emoticons")
-@register_command("/re")
+@register_command("/random_emoticons","/re",help_text = "/random_emoticons 或者 /re 随机表情包")
 async def handle_random_emoticons(msg, is_group=True):
     #在urls.ini中获取表情包的url列表
     config = configparser.ConfigParser()
@@ -284,7 +279,7 @@ async def handle_random_emoticons(msg, is_group=True):
     else:
         await bot.api.post_private_file(msg.user_id, image=urls[random_number])
 
-@register_command("/st")
+@register_command("/st",help_text = "/st 标签名 发送随机涩图,标签支持与或(& |)")
 async def handle_st(msg, is_group=True):
     tags = msg.raw_message[len("/st"):].strip()
     res = requests.get(f"https://api.lolicon.app/setu/v2?tag={tags}").json().get("data")[0].get("urls").get("original")
@@ -294,25 +289,21 @@ async def handle_st(msg, is_group=True):
         await bot.api.post_private_file(msg.user_id, image=res)
 
 
-@register_command("/random_dice")
-@register_command("/rd")
+@register_command("/random_dice","/rd",help_text = "/random_dice 或者 /rd 发送随机骰子")
 async def handle_random_dice(msg, is_group=True):
-
     if is_group:
         await bot.api.post_group_msg(msg.group_id,dice=True)
     else:
         await bot.api.post_private_msg(msg.user_id,dice=True)
 
-@register_command("/random_rps")
-@register_command("/rps")
+@register_command("/random_rps","/rps",help_text = "/random_rps 或者 /rps 发送随机石头剪刀布")
 async def handle_random_rps(msg, is_group=True):
     if is_group:
         await bot.api.post_group_msg(msg.group_id,rps=True)
     else:
         await bot.api.post_private_msg(msg.user_id,rps=True)
 
-@register_command("/del_message")
-@register_command("/dm")
+@register_command("/del_message","/dm",help_text = "/del_message 或者 /dm 删除对话记录")
 async def handle_del_message(msg, is_group=True):
     if is_group:
         del group_messages[str(msg.group_id)]
@@ -321,28 +312,59 @@ async def handle_del_message(msg, is_group=True):
         del user_messages[str(msg.user_id)]
         await bot.api.post_private_msg(msg.user_id, text="主人要离我而去了吗？呜呜呜……好吧，那我们以后再见喵~")
 
-@register_command("/help")
-@register_command("/h")
+
+@register_command("/set_ids",help_text = "/set_ids 昵称 个性签名 性别")
+async def handle_set(msg, is_group=True):
+    """
+            :param nickname: 昵称
+            :param personal_note: 个性签名
+            :param sex: 性别
+            :return: 设置账号信息
+    """
+    msgs = msg.raw_message[len("/set_ids"):].split(" ")
+    if len(msgs) < 3:
+        text = "格式错误喵~ 请输入 /set 昵称 个性签名 性别"
+        if is_group:
+            await msg.reply(text=text)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=text)
+        return
+    try:
+        nickname = msgs[0]
+        personal_note = msgs[1]
+        sex = msgs[2]
+        await bot.api.set_qq_profile(nickname=nickname, personal_note=personal_note, sex=sex)
+        text = "设置成功喵~"
+        if is_group:
+            await msg.reply(text=text)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=text)
+    except Exception as e:
+        text = "设置失败喵~"
+        if is_group:
+            await msg.reply(text=text)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=text)
+
+@register_command("/set_online_status",help_text = "/set_online_status 在线状态")
+async def handle_set_online_status(msg, is_group=True):
+    msgs = msg.raw_message[len("/set_online_status"):].split(" ")[0]
+    await bot.api.set_online_status(msgs)
+    text = "设置成功喵~"
+    if is_group:
+        await msg.reply(text=text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=text)
+
+
+#将help命令放在最后
+@register_command("/help","/h",help_text = "/help 或者 /h 查看帮助")
 async def handle_help(msg, is_group=True):
-    help_text = ("欢迎使用喵~~\n"
-                 "/jm xxxxxx 下载漫画\n"
-                 "/jmrank 月排行/周排行  获取月排行/周排行\n"
-                 "/set_prompt 或 /sp 设置提示词\n"
-                 "/del_prompt 或 /dp 删除提示词\n"
-                 "/get_prompt 或 /gp 获取提示词\n"
-                 "/agree 同意好友请求\n"
-                 "/restart 重启Bot\n"
-                 "/random_image 或 /ri 发送随机图片\n"
-                 "/random_words 或 /rw 发送随机一言\n"
-                 "/weather 城市名 或 /w 城市名 发送天气\n"
-                 "/random_emoticons 或 /re 发送随机表情包\n"
-                 "/random_dice 或 /rd 发送随机骰子\n"
-                 "/random_rps 或 /rps 发送随机石头剪刀布\n"
-                 "/st 标签名 发送随机涩图,标签支持与或(& |)\n"
-                 "/del_message 或 /dm 删除对话记录\n"
-                 "/tts 开启或关闭TTS\n"
-                 "/help 或 /h 查看帮助"
-    )
+    help_text = "欢迎使用喵~~\n"
+    # 收集所有命令的帮助信息
+    for cmd, handler in command_handlers.items():
+        if hasattr(handler, 'help_text'):
+            help_text += handler.help_text + "\n"
     if is_group:
         await msg.reply(text=help_text)
     else:
