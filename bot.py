@@ -91,7 +91,7 @@ async def on_private_message(msg: PrivateMessage):
             await bot.api.post_private_msg(msg.user_id, text=content)
         return
 
-    if msg.raw_message: # 检查消息是否为空,避免接受文件后的空消息被回复
+    if msg.raw_message and not msg.raw_message.startswith("/"): # 检查消息是否为空,避免接受文件后的空消息被回复
         content = chat(msg.raw_message, user_id=msg.user_id)
         if if_tts:
             rtf = tts(content)

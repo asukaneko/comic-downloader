@@ -1,7 +1,7 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from config import load_config
 from chat import group_messages,user_messages # 导入 chat 函数
-import jmcomic,os,sys,requests,random,configparser,json,yaml
+import jmcomic,requests,random,configparser,json,yaml
 from jmcomic import *
 
 if_tts = False #判断是否开启TTS
@@ -316,9 +316,9 @@ async def handle_del_message(msg, is_group=True):
 @register_command("/set_ids",help_text = "/set_ids 昵称 个性签名 性别")
 async def handle_set(msg, is_group=True):
     """
-            :param nickname: 昵称
-            :param personal_note: 个性签名
-            :param sex: 性别
+            nickname: 昵称
+            personal_note: 个性签名
+            sex: 性别
             :return: 设置账号信息
     """
     msgs = msg.raw_message[len("/set_ids"):].split(" ")
@@ -356,6 +356,41 @@ async def handle_set_online_status(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=text)
 
+@register_command("/get_friends",help_text = "/get_friends 获取好友列表")
+async def handle_get_friends(msg, is_group=True):
+    friends = await bot.api.get_friend_list(False)
+    if is_group:
+        await msg.reply(text=friends)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=friends)
+
+@register_command("/set_qq_avatar",help_text = "/set_qq_avatar 地址 更改头像")
+async def handle_set_qq_avatar(msg, is_group=True):
+    msgs = msg.raw_message[len("/set_qq_avatar"):]
+    await bot.api.set_qq_avatar(msgs)
+    text = "设置成功喵~"
+    if is_group:
+        await msg.reply(text=text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=text)
+
+@register_command("/send_like",help_text = "/send_like 发送点赞")
+async def handle_send_like(msg, is_group=True):
+    msgs = msg.raw_message[len("/send_like"):].split(" ")
+    if len(msgs) < 2:
+        text = "格式错误喵~ 请输入 /send_like 目标QQ号 次数"
+        if is_group:
+            await msg.reply(text=text)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=text)
+    target_qq = msgs[0]
+    times = msgs[1]
+    await bot.api.send_like(target_qq, times)
+    text = "发送成功喵~"
+    if is_group:
+        await msg.reply(text=text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=text)
 
 #将help命令放在最后
 @register_command("/help","/h",help_text = "/help 或者 /h 查看帮助")
