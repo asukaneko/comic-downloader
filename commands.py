@@ -404,3 +404,14 @@ async def handle_help(msg, is_group=True):
         await msg.reply(text=help_text)
     else:
         await bot.api.post_private_msg(msg.user_id, text=help_text)
+
+    system_help = ("[内置命令]\n",
+                   "/cfg <plugin_name>.<cfg_name> <value> 更改插件配置\n",
+                   "/plg 查看已安装插件\n",
+                   "/sm <user_id> 设置管理员\n",
+                   "/acs [-g] [ban]/[grant] <number> <path> 管理权限\n"
+                   )
+    if is_group:
+        await msg.reply(text=system_help)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=system_help)

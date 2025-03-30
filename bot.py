@@ -1,5 +1,4 @@
 from ncatbot.utils.logger import get_log
-
 import commands
 from chat import chat,tts
 from commands import *
