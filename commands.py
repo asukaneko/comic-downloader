@@ -53,8 +53,8 @@ async def handle_tts(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=text)
 
-@register_command("/jmrank")
-async def handle_jmrank(msg, is_group=True,help_text = "/jmrank 月排行/周排行"):
+@register_command("/jmrank",help_text = "/jmrank 月排行/周排行")
+async def handle_jmrank(msg, is_group=True):
     select = msg.raw_message[len("/jmrank"):].strip()
     # 创建客户端
     op = JmOption.default()
@@ -93,8 +93,8 @@ async def handle_jmrank(msg, is_group=True,help_text = "/jmrank 月排行/周排
     else:
         await bot.api.upload_private_file(msg.user_id, cache_dir + f"{select}_{name}.txt", f"{select}_{name}.txt")
 
-@register_command("/jm")
-async def handle_jmcomic(msg, is_group=True,help_text = "/jm 漫画ID 下载漫画"):
+@register_command("/jm",help_text = "/jm 漫画ID 下载漫画")
+async def handle_jmcomic(msg, is_group=True):
     match = re.match(r'^/jm\s+(\d+)$', msg.raw_message)
     if match:
         comic_id = match.group(1)
@@ -405,10 +405,10 @@ async def handle_help(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=help_text)
 
-    system_help = ("[内置命令]\n",
-                   "/cfg <plugin_name>.<cfg_name> <value> 更改插件配置\n",
-                   "/plg 查看已安装插件\n",
-                   "/sm <user_id> 设置管理员\n",
+    system_help = ("[内置命令]\n"
+                   "/cfg <plugin_name>.<cfg_name> <value> 更改插件配置\n"
+                   "/plg 查看已安装插件\n"
+                   "/sm <user_id> 设置管理员\n"
                    "/acs [-g] [ban]/[grant] <number> <path> 管理权限\n"
                    )
     if is_group:
