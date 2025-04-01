@@ -49,7 +49,12 @@ async def on_group_message(msg: GroupMessage):
         for ldir in dirs:
             if ldir.get(get_id):
                 url = ldir.get(get_id)
-                content = chat(url, group_id=msg.group_id,group_user_id=msg.user_id,image=True)
+                ori_content = ""
+                try:
+                    ori_content = msg.message[2].get("data").get("text")
+                except IndexError:
+                    pass
+                content = chat(ori_content,group_id=msg.group_id,group_user_id=msg.user_id,image=True,url=url)
                 if if_tts:
                     rtf = tts(content)
                     await bot.api.post_group_msg(msg.group_id, rtf=rtf)
@@ -79,16 +84,19 @@ async def on_private_message(msg: PrivateMessage):
         if msg.raw_message.startswith(command):
             await handler(msg, is_group=False)
             return
-    if msg.message[0].get("type") == "image":
-        url = msg.message[0].get("data").get("url")
-        content = chat(url, user_id=msg.user_id,image=True)
-        if if_tts:
-            rtf = tts(content)
-            await bot.api.post_private_msg(msg.user_id, rtf=rtf)
-            #await bot.api.post_private_msg(msg.user_id, text=content)
-        else:
-            await bot.api.post_private_msg(msg.user_id, text=content)
-        return
+    try:
+        if msg.message[0].get("type") == "image": #处理图片
+            url = msg.message[0].get("data").get("url")
+            content = chat(user_id=msg.user_id,image=True,url=url)
+            if if_tts:
+                rtf = tts(content)
+                await bot.api.post_private_msg(msg.user_id, rtf=rtf)
+                #await bot.api.post_private_msg(msg.user_id, text=content)
+            else:
+                await bot.api.post_private_msg(msg.user_id, text=content)
+            return
+    except IndexError:
+        pass
 
     if msg.raw_message and not msg.raw_message.startswith("/"): # 检查消息是否为空,避免接受文件后的空消息被回复
         content = chat(msg.raw_message, user_id=msg.user_id)

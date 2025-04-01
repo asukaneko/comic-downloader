@@ -67,9 +67,7 @@ def load_prompt(user_id=None, group_id=None):
         except FileNotFoundError:
             return ""
 
-def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
-    #如果是图片，则content为图片的url
-    
+def chat(content="", user_id=None, group_id=None, group_user_id=None,image=False,url=None):
     now_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if user_id:
@@ -93,7 +91,8 @@ def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
         pre_text = ""
 
     if image:
-        response = requests.get(content)
+        response = requests.get(url)
+        file_name = ""
         if response.status_code == 200:
             # 保存图片到本地
             dirs = cache_address+"saved_images"
@@ -132,7 +131,7 @@ def chat(content, user_id=None, group_id=None, group_user_id=None,image=False):
             ]
         )
         messages.append({"role": "system", "content":f"当前时间：{now_time}"})
-        messages.append({"role": "user", "content":f"{pre_text}"+"这是一张图片的描述："+response.choices[0].message.content})
+        messages.append({"role": "user", "content":f"{pre_text}"+"这是一张图片的描述："+response.choices[0].message.content+" "+content})
 
     else:
         messages.append({"role": "system", "content":f"当前时间：{now_time}"})
