@@ -37,7 +37,7 @@ async def on_group_message(msg: GroupMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
-            #await msg.reply(text=content)
+            await msg.reply(text=content)
         else:
             await msg.reply(text=content)
 
@@ -45,7 +45,6 @@ async def on_group_message(msg: GroupMessage):
         #如果是回复机器人的消息
         get_id = msg.message[0].get("data").get("id") #判断是不是图片
         dirs = group_imgs[str(msg.group_id)]
-        #_log.info(dirs)
         for ldir in dirs:
             if ldir.get(get_id):
                 url = ldir.get(get_id)
@@ -58,7 +57,7 @@ async def on_group_message(msg: GroupMessage):
                 if if_tts:
                     rtf = tts(content)
                     await bot.api.post_group_msg(msg.group_id, rtf=rtf)
-                    #await msg.reply(text=content)
+                    await msg.reply(text=content)
                 else:
                     await msg.reply(text=content)
                 return
@@ -70,7 +69,7 @@ async def on_group_message(msg: GroupMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
-            #await msg.reply(text=content)
+            await msg.reply(text=content)
         else:
             await msg.reply(text=content)
 
@@ -91,7 +90,7 @@ async def on_private_message(msg: PrivateMessage):
             if if_tts:
                 rtf = tts(content)
                 await bot.api.post_private_msg(msg.user_id, rtf=rtf)
-                #await bot.api.post_private_msg(msg.user_id, text=content)
+                await bot.api.post_private_msg(msg.user_id, text=content)
             else:
                 await bot.api.post_private_msg(msg.user_id, text=content)
             return
@@ -103,7 +102,7 @@ async def on_private_message(msg: PrivateMessage):
         if if_tts:
             rtf = tts(content)
             await bot.api.post_private_msg(msg.user_id, rtf=rtf)
-            #await bot.api.post_private_msg(msg.user_id, text=content)
+            await bot.api.post_private_msg(msg.user_id, text=content)
         else:
             await bot.api.post_private_msg(msg.user_id, text=content)
 
