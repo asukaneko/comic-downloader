@@ -285,6 +285,10 @@ async def handle_random_emoticons(msg, is_group=True):
 
 @register_command("/st",help_text = "/st 标签名 -> 发送随机涩图,标签支持与或(& |)")
 async def handle_st(msg, is_group=True):
+    if is_group:
+        await msg.reply(text="正在获取喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
     tags = msg.raw_message[len("/st"):].strip()
     res = requests.get(f"https://api.lolicon.app/setu/v2?tag={tags}").json().get("data")[0].get("urls").get("original")
     if is_group:
