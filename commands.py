@@ -240,10 +240,40 @@ async def handle_random_image(msg, is_group=True):
 
     random_number = random.randint(0, len(urls)-1)
     image_path = urls[random_number]
+
+    # 检查URL是否有效,针对那些会重新定向的网址
+    try:
+        response = requests.get(image_path, allow_redirects=True)
+        final_url = response.url
+    except:
+        final_url = image_path
+
     if is_group:
-        await bot.api.post_group_file(msg.group_id, image=image_path)
+        await bot.api.post_group_file(msg.group_id, image=final_url)
     else:
-        await bot.api.post_private_file(msg.user_id, image=image_path)
+        await bot.api.post_private_file(msg.user_id, image=final_url)
+
+@register_command("/random_video","/rv",help_text = "/random_video 或者 /rv -> 随机二次元视频")
+async def handle_random_video(msg, is_group=True):
+    if is_group:
+        await msg.reply(text="正在获取喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
+    #在urls.ini中获取视频的url列表
+    config = configparser.ConfigParser()
+    config.read('urls.ini')
+    urls = json.loads(config['rv']['urls'])
+    random_number = random.randint(0, len(urls)-1)
+    video_path = urls[random_number]
+    try:
+        response = requests.get(video_path, allow_redirects=True)
+        final_url = response.url
+    except:
+        final_url = video_path
+    if is_group:
+        await bot.api.post_group_file(msg.group_id, video=final_url)
+    else:
+        await bot.api.post_private_file(msg.user_id, video=final_url)
 
 @register_command("/random_words","/rw",help_text = "/random_words 或者 /rw -> 随机一言")
 async def handle_random_words(msg, is_group=True):
