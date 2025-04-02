@@ -229,6 +229,10 @@ async def handle_restart(msg, is_group=True):
 
 @register_command("/random_image","/ri",help_text = "/random_image 或者 /ri -> 随机图片")
 async def handle_random_image(msg, is_group=True):
+    if is_group:
+        await msg.reply(text="正在获取喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
     # 在urls.ini中获取图片的url列表
     config = configparser.ConfigParser()
     config.read('urls.ini')
@@ -272,6 +276,10 @@ async def handle_weather(msg, is_group=True):
 
 @register_command("/random_emoticons","/re",help_text = "/random_emoticons 或者 /re -> 随机表情包")
 async def handle_random_emoticons(msg, is_group=True):
+    if is_group:
+        await msg.reply(text="正在获取喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
     #在urls.ini中获取表情包的url列表
     config = configparser.ConfigParser()
     config.read('urls.ini')
