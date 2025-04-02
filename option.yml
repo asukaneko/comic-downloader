@@ -16,3 +16,4 @@ plugins:
       kwargs:
         pdf_dir: ./cache/pdf/ # pdf存放文件夹
         filename_rule: Pid
+        delete_original_file: true # 是否删除原图
