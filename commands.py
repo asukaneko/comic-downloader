@@ -261,7 +261,7 @@ async def async_send_file(send_method, target_id, file_type, url):
 async def handle_generic_file(msg, is_group: bool, section: str, file_type: str, custom_url: str = None):
     """通用文件处理函数（修复版）"""
     # 立即回复用户
-    initial_text = "正在获取喵~" if file_type != 'st' else None
+    initial_text = "正在获取喵~"
     if initial_text:
         if is_group:
             await msg.reply(text=initial_text)
