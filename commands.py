@@ -3,6 +3,7 @@ from config import load_config
 from chat import group_messages,user_messages # 导入 chat 函数
 import jmcomic,requests,random,configparser,json,yaml
 from jmcomic import *
+import asyncio
 
 if_tts = False #判断是否开启TTS
 
@@ -102,35 +103,51 @@ async def handle_jmcomic(msg, is_group=True):
     match = re.match(r'^/jm\s+(\d+)$', msg.raw_message)
     if match:
         comic_id = match.group(1)
-        reply_text = f"成功获取漫画ID了喵~: {comic_id}"
+        # 立即回复用户，不等待下载完成
+        reply_text = f"已开始下载漫画ID：{comic_id}，下载完成后会自动通知喵~"
         if is_group:
             await msg.reply(text=reply_text)
         else:
             await bot.api.post_private_msg(msg.user_id, text=reply_text)
 
-        try:
-            option = jmcomic.create_option_by_file('./option.yml')
-            jmcomic.download_album(comic_id, option)
-
-            pdf_dir = load_address()
-            file_path = os.path.join(pdf_dir, f"{comic_id}.pdf")
-
-            if is_group:
-                await bot.api.post_group_file(msg.group_id, file=file_path)
-                await msg.reply(text="漫画下好了喵~")
-            else:
-                await bot.api.upload_private_file(msg.user_id, file_path, f"{comic_id}.pdf")
-                await bot.api.post_private_msg(msg.user_id, text=f"漫画下好了喵~")
-        except Exception as e:
-            error_msg = f"出错了喵~: {e}"
-            if is_group:
-                await msg.reply(text=error_msg)
-            else:
-                await bot.api.post_private_msg(msg.user_id, text=error_msg)
+        # 创建后台任务
+        asyncio.create_task(download_and_send_comic(comic_id, msg, is_group))
     else:
         error_msg = "格式错误了喵~，请输入 /jm 后跟漫画ID"
+        if not is_group:
+            await bot.api.post_private_msg(msg.user_id, text=error_msg)
+
+# 新增后台任务函数
+async def download_and_send_comic(comic_id, msg, is_group):
+    try:
+        # 在线程池中执行阻塞操作
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, lambda:
+            jmcomic.download_album(
+                comic_id,
+                jmcomic.create_option_by_file('./option.yml')
+            )
+        )
+
+        pdf_dir = load_address()
+        file_path = os.path.join(pdf_dir, f"{comic_id}.pdf")
+
+        # 检查文件是否真正生成
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"PDF文件未生成：{file_path}")
+
+        success_text = f"漫画 {comic_id} 下载完成喵~"
         if is_group:
-            pass
+            await bot.api.post_group_file(msg.group_id, file=file_path)
+            await msg.reply(text=success_text)
+        else:
+            await bot.api.upload_private_file(msg.user_id, file_path, f"{comic_id}.pdf")
+            await bot.api.post_private_msg(msg.user_id, text=success_text)
+
+    except Exception as e:
+        error_msg = f"下载失败喵~: {str(e)}"
+        if is_group:
+            await msg.reply(text=error_msg)
         else:
             await bot.api.post_private_msg(msg.user_id, text=error_msg)
 
@@ -226,114 +243,86 @@ async def handle_restart(msg, is_group=True):
     # 重启逻辑
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
+#------以下为调用api发送文件的命令，采用异步方式发送文件------
+# 新增后台任务函数
+async def async_send_file(send_method, target_id, file_type, url):
+    try:
+        # 处理可能的重定向
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: requests.get(url, allow_redirects=True, timeout=10))
+        final_url = response.url
 
+        # 异步发送文件
+        await send_method(target_id, **{file_type: final_url})
+    except Exception as e:
+        pass
+
+# 修改通用处理函数
+async def handle_generic_file(msg, is_group: bool, section: str, file_type: str, custom_url: str = None):
+    """通用文件处理函数（修复版）"""
+    # 立即回复用户
+    initial_text = "正在获取喵~" if file_type != 'st' else None
+    if initial_text:
+        if is_group:
+            await msg.reply(text=initial_text)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=initial_text)
+
+    try:
+        # 修复配置读取逻辑
+        if section:  # 仅当需要读取配置文件时
+            loop = asyncio.get_event_loop()
+            # 正确读取配置的方式
+            def read_config():
+                cfg = configparser.ConfigParser()
+                cfg.read('urls.ini')
+                if not cfg.has_section(section):
+                    raise Exception(f"配置文件中缺少 [{section}] 段落")
+                return cfg
+
+            config = await loop.run_in_executor(None, read_config)
+            urls = json.loads(config.get(section, 'urls'))
+            selected_url = random.choice(urls)
+        else:  # 使用自定义URL
+            selected_url = custom_url
+
+        # 创建后台任务
+        send_method = bot.api.post_group_file if is_group else bot.api.post_private_file
+        target_id = msg.group_id if is_group else msg.user_id
+
+
+        # 创建后台任务不等待
+        asyncio.create_task(
+            async_send_file(send_method, target_id, file_type, selected_url)
+        )
+
+    except Exception as e:
+        error_msg = f"配置错误喵~: {str(e)}" if '配置' in str(e) else f"获取失败喵~: {str(e)}"
+        if is_group:
+            await msg.reply(text=error_msg)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=error_msg)
+
+# 修改现有命令
 @register_command("/random_image","/ri",help_text = "/random_image 或者 /ri -> 随机图片")
 async def handle_random_image(msg, is_group=True):
-    if is_group:
-        await msg.reply(text="正在获取喵~")
-    else:
-        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
-    # 在urls.ini中获取图片的url列表
-    config = configparser.ConfigParser()
-    config.read('urls.ini')
-    urls = json.loads(config['ri']['urls'])
-
-    random_number = random.randint(0, len(urls)-1)
-    image_path = urls[random_number]
-
-    # 检查URL是否有效,针对那些会重新定向的网址
-    try:
-        response = requests.get(image_path, allow_redirects=True)
-        final_url = response.url
-    except:
-        final_url = image_path
-
-    if is_group:
-        await bot.api.post_group_file(msg.group_id, image=final_url)
-    else:
-        await bot.api.post_private_file(msg.user_id, image=final_url)
-
-@register_command("/random_video","/rv",help_text = "/random_video 或者 /rv -> 随机二次元视频")
-async def handle_random_video(msg, is_group=True):
-    if is_group:
-        await msg.reply(text="正在获取喵~")
-    else:
-        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
-    #在urls.ini中获取视频的url列表
-    config = configparser.ConfigParser()
-    config.read('urls.ini')
-    urls = json.loads(config['rv']['urls'])
-    random_number = random.randint(0, len(urls)-1)
-    video_path = urls[random_number]
-    try:
-        response = requests.get(video_path, allow_redirects=True)
-        final_url = response.url
-    except:
-        final_url = video_path
-    if is_group:
-        await bot.api.post_group_file(msg.group_id, video=final_url)
-    else:
-        await bot.api.post_private_file(msg.user_id, video=final_url)
-
-@register_command("/random_words","/rw",help_text = "/random_words 或者 /rw -> 随机一言")
-async def handle_random_words(msg, is_group=True):
-    words = requests.get("https://uapis.cn/api/say").text
-    if is_group:
-        await msg.reply(text=words)
-    else:
-        await bot.api.post_private_msg(msg.user_id, text=words)
-
-
-@register_command("/weather","/w",help_text = "/weather 或者 /w 城市名 -> 获取天气信息")
-async def handle_weather(msg, is_group=True):
-    location = None
-    if msg.raw_message.startswith("/weather"):
-        location = msg.raw_message[len("/weather"):].strip()
-    elif msg.raw_message.startswith("/w"):
-        location = msg.raw_message[len("/w"):].strip()
-    if not location:
-        reply_text = "格式错误喵~ 请输入 /weather 城市名"
-    else:
-        # 调用天气 API 获取数据
-        res = requests.get(f"https://uapis.cn/api/weather?name={location}")
-        weather = res.json().get("weather")
-        weather_info = f"{location}的天气是 {weather} 喵~"
-        reply_text = weather_info
-    if is_group:
-        await msg.reply(text=reply_text)
-    else:
-        await bot.api.post_private_msg(msg.user_id, text=reply_text)
+    await handle_generic_file(msg, is_group, 'ri', 'image')
 
 @register_command("/random_emoticons","/re",help_text = "/random_emoticons 或者 /re -> 随机表情包")
 async def handle_random_emoticons(msg, is_group=True):
-    if is_group:
-        await msg.reply(text="正在获取喵~")
-    else:
-        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
-    #在urls.ini中获取表情包的url列表
-    config = configparser.ConfigParser()
-    config.read('urls.ini')
-    urls = json.loads(config['re']['urls'])
-
-    random_number = random.randint(0, len(urls)-1)
-    if is_group:
-        await bot.api.post_group_file(msg.group_id,image=urls[random_number])
-    else:
-        await bot.api.post_private_file(msg.user_id, image=urls[random_number])
+    await handle_generic_file(msg, is_group, 're', 'image')
 
 @register_command("/st",help_text = "/st 标签名 -> 发送随机涩图,标签支持与或(& |)")
 async def handle_st(msg, is_group=True):
-    if is_group:
-        await msg.reply(text="正在获取喵~")
-    else:
-        await bot.api.post_private_msg(msg.user_id, text="正在获取喵~")
     tags = msg.raw_message[len("/st"):].strip()
     res = requests.get(f"https://api.lolicon.app/setu/v2?tag={tags}").json().get("data")[0].get("urls").get("original")
-    if is_group:
-        await bot.api.post_group_file(msg.group_id,image=res)
-    else:
-        await bot.api.post_private_file(msg.user_id, image=res)
+    await handle_generic_file(msg, is_group,"","",custom_url=res)  # 特殊处理API调用
 
+@register_command("/random_video","/rv",help_text = "/random_video 或者 /rv -> 随机二次元视频")
+async def handle_random_video(msg, is_group=True):
+    await handle_generic_file(msg, is_group, 'rv', 'video')
+
+#---------------------------------------------
 
 @register_command("/random_dice","/rd",help_text = "/random_dice 或者 /rd -> 发送随机骰子")
 async def handle_random_dice(msg, is_group=True):
