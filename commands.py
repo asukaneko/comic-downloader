@@ -289,9 +289,6 @@ async def handle_generic_file(msg, is_group: bool, section: str, file_type: str,
         # 创建后台任务
         send_method = bot.api.post_group_file if is_group else bot.api.post_private_file
         target_id = msg.group_id if is_group else msg.user_id
-
-
-        # 创建后台任务不等待
         asyncio.create_task(
             async_send_file(send_method, target_id, file_type, selected_url)
         )
