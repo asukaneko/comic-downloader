@@ -18,7 +18,7 @@ async def on_group_message(msg: GroupMessage):
             return
 
     if msg.raw_message.startswith("/chat"):
-        content = chat(msg.raw_message, group_id=msg.group_id,group_user_id=msg.user_id)
+        content = chat(msg.raw_message, group_id=msg.group_id,group_user_id=msg.sender.nickname)
         await msg.reply(text=content)
 
     if msg.message[0].get("type") == "image": #提取保存所有图片的信息
@@ -33,7 +33,7 @@ async def on_group_message(msg: GroupMessage):
             ori_content = msg.message[1].get("data").get("text") #避免@的消息为空
         except IndexError:
             ori_content = f"用户{msg.user_id}@了你"
-        content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
+        content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.sender.nickname)
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
@@ -53,7 +53,7 @@ async def on_group_message(msg: GroupMessage):
                     ori_content = msg.message[2].get("data").get("text")
                 except IndexError:
                     pass
-                content = chat(ori_content,group_id=msg.group_id,group_user_id=msg.user_id,image=True,url=url)
+                content = chat(ori_content,group_id=msg.group_id,group_user_id=msg.sender.nickname,image=True,url=url)
                 if if_tts:
                     rtf = tts(content)
                     await bot.api.post_group_msg(msg.group_id, rtf=rtf)
@@ -65,7 +65,7 @@ async def on_group_message(msg: GroupMessage):
             ori_content = msg.message[2].get("data").get("text")
         except IndexError:
             ori_content = "有人回复了你"
-        content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.user_id)
+        content = chat(ori_content, group_id=msg.group_id,group_user_id=msg.sender.nickname)
         if if_tts:
             rtf = tts(content)
             await bot.api.post_group_msg(msg.group_id, rtf=rtf)
