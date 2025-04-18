@@ -113,19 +113,19 @@ async def handle_search(msg, is_group=True):
     os.makedirs(cache_dir,exist_ok = True)
 
     content = msg.raw_message[len("/search"):].strip()
-
+    name = content + str(time.time()).replace(".", "")
     client = JmOption.default().new_jm_client()
     page: JmSearchPage = client.search_site(search_query=content+'+MANA +无修正', page=1)
     # page默认的迭代方式是page.iter_id_title()，每次迭代返回 albun_id, title
-    with open(cache_dir + f"{content}.txt", "w", encoding="utf-8") as f:
+    with open(cache_dir + f"{name}.txt", "w", encoding="utf-8") as f:
         f.write(f"搜索结果：{content}\n")
     for album_id, title in page:
-        with open(cache_dir + f"{content}.txt", "a", encoding="utf-8") as f:
+        with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
             f.write(f"ID: {album_id} Name: {title}\n")
     if is_group:
-        await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{content}.txt")
+        await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{name}.txt")
     else:
-        await bot.api.upload_private_file(msg.user_id, cache_dir + f"{content}.txt", f"{content}.txt")
+        await bot.api.upload_private_file(msg.user_id, cache_dir + f"{name}.txt", f"{content}.txt")
 
     '''
     # 直接搜索禁漫车号
