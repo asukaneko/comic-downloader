@@ -2,7 +2,7 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import group_messages,user_messages # 导入 chat 函数
-import jmcomic,requests,random,configparser,json,yaml
+import jmcomic,requests,random,configparser,json,yaml,re
 from jmcomic import *
 import asyncio
 
@@ -165,6 +165,57 @@ async def handle_search(msg, is_group=True):
         await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{name}.txt")
     else:
         await bot.api.upload_private_file(msg.user_id, cache_dir + f"{name}.txt", f"{content}.txt")
+
+@register_command("/get_fav",help_text = "/get_fav 用户名 密码 -> 获取收藏夹")
+async def handle_get_fav(msg, is_group=True):
+    match = re.match(r'^/get_fav\s+(\S+)\s+(\S+)$', msg.raw_message)
+    if not match:
+        error_msg = "格式错误喵~ 请输入 /get_fav 用户名 密码"
+        if is_group:
+            await msg.reply(text=error_msg)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=error_msg)
+        return
+
+    username = match.group(1)
+    password = match.group(2)
+
+    # 使用提取的用户名和密码进行后续操作
+    if is_group:
+        await msg.reply(text="正在获取收藏夹喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在获取收藏夹喵~")
+
+    cache_dir = load_address()[:-4]
+    cache_dir += "fav/"
+    os.makedirs(cache_dir, exist_ok=True)
+
+    print(username,password)
+
+    name = username + str(time.time()).replace(".", "")
+
+    option = JmOption.default()
+    cl = option.new_jm_client()
+    try:
+        cl.login(username, password)# 也可以使用login插件/配置cookies
+    except Exception as e:
+        if is_group:
+            await msg.reply(text=f"登录失败喵~：{e}")
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=f"登录失败喵~：{e}")
+        return
+
+    # 遍历全部收藏的所有页
+    for page in cl.favorite_folder_gen():  # 如果你只想获取特定收藏夹，需要添加folder_id参数
+        # 遍历每页结果
+        for aid, atitle in page.iter_id_title():
+            with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
+                f.write(f"{aid}  {atitle}\n\n")
+
+    if is_group:
+        await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{name}.txt")
+    else:
+        await bot.api.upload_private_file(msg.user_id, cache_dir + f"{name}.txt", f"{username}.txt")
 
 
 @register_command("/jm",help_text = "/jm 漫画ID -> 下载漫画")
