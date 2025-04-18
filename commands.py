@@ -86,6 +86,7 @@ async def handle_jmrank(msg, is_group=True):
     os.makedirs(cache_dir,exist_ok = True)
 
     name = time.time()
+    tot = 0
     for page in cl.categories_filter_gen(page=1,  # 起始页码
                                          # 下面是分类参数
                                          time=JmMagicConstants.TIME_WEEK,
@@ -93,9 +94,9 @@ async def handle_jmrank(msg, is_group=True):
                                          order_by=JmMagicConstants.ORDER_BY_VIEW,
                                          ):
         for aid, atitle in page:
-            #content += f"ID: {aid}\n"
+            tot += 1
             with open(cache_dir + f"{select}_{name}.txt", "a", encoding="utf-8") as f:
-                f.write(f"ID: {aid} Name: {atitle}\n\n")
+                f.write(f"{tot}: {aid}  {atitle}\n\n")
 
     if is_group:
         await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{select}_{name}.txt")
@@ -118,11 +119,13 @@ async def handle_search(msg, is_group=True):
     client = JmOption.default().new_jm_client()
     with open(cache_dir + f"{name}.txt", "w", encoding="utf-8") as f:
         f.write(f"搜索结果：{content}\n")
+    tot = 0
     for i in range(5):# 搜索5页，可以自己修改
         page: JmSearchPage = client.search_site(search_query=content, page=i+1,order_by=JmMagicConstants.ORDER_BY_VIEW)
         for album_id, title in page:
+            tot += 1
             with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
-                f.write(f"ID: {album_id} Name: {title}\n\n")
+                f.write(f"{tot}: {album_id}  {title}\n\n")
     if is_group:
         await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{name}.txt")
     else:
@@ -134,6 +137,35 @@ async def handle_search(msg, is_group=True):
     album: JmAlbumDetail = page.single_album
     print(album.tags)
     '''
+
+@register_command("/tag",help_text = "/tag -> 搜索漫画标签")
+async def handle_search(msg, is_group=True):
+    if is_group:
+        await msg.reply(text="正在搜索喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在搜索喵~")
+
+    cache_dir = load_address()[:-4]
+    cache_dir += "search/"
+    os.makedirs(cache_dir,exist_ok = True)
+
+    content = msg.raw_message[len("/tag"):].strip()
+    name = content + str(time.time()).replace(".", "")
+    client = JmOption.default().new_jm_client()
+    with open(cache_dir + f"{name}.txt", "w", encoding="utf-8") as f:
+        f.write(f"搜索标签结果：{content}\n")
+    tot = 0
+    for i in range(5):# 搜索5页，可以自己修改
+        page: JmSearchPage = client.search_tag(search_query=content, page=i+1,order_by=JmMagicConstants.ORDER_BY_VIEW)
+        for album_id, title in page:
+            tot += 1
+            with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
+                f.write(f"{tot}: {album_id}  {title}\n\n")
+    if is_group:
+        await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{name}.txt")
+    else:
+        await bot.api.upload_private_file(msg.user_id, cache_dir + f"{name}.txt", f"{content}.txt")
+
 
 @register_command("/jm",help_text = "/jm 漫画ID -> 下载漫画")
 async def handle_jmcomic(msg, is_group=True):
