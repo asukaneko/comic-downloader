@@ -95,7 +95,7 @@ async def handle_jmrank(msg, is_group=True):
         for aid, atitle in page:
             #content += f"ID: {aid}\n"
             with open(cache_dir + f"{select}_{name}.txt", "a", encoding="utf-8") as f:
-                f.write(f"ID: {aid} Name: {atitle}\n")
+                f.write(f"ID: {aid} Name: {atitle}\n\n")
 
     if is_group:
         await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{select}_{name}.txt")
@@ -116,13 +116,13 @@ async def handle_search(msg, is_group=True):
     content = msg.raw_message[len("/search"):].strip()
     name = content + str(time.time()).replace(".", "")
     client = JmOption.default().new_jm_client()
-    page: JmSearchPage = client.search_site(search_query=content, page=1)
-    # page默认的迭代方式是page.iter_id_title()，每次迭代返回 albun_id, title
     with open(cache_dir + f"{name}.txt", "w", encoding="utf-8") as f:
         f.write(f"搜索结果：{content}\n")
-    for album_id, title in page:
-        with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
-            f.write(f"ID: {album_id} Name: {title}\n")
+    for i in range(5):# 搜索5页，可以自己修改
+        page: JmSearchPage = client.search_site(search_query=content, page=i+1)
+        for album_id, title in page:
+            with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
+                f.write(f"ID: {album_id} Name: {title}\n\n")
     if is_group:
         await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{name}.txt")
     else:
