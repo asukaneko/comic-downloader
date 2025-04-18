@@ -62,19 +62,20 @@ python bot.py
 ---
 >命令列表：  
 >___/jm xxxxxx 下载漫画  
+/search xxx 搜索漫画  
+/get_fav 获取收藏夹  
+/jmrank 获取排行榜  
 /set_prompt 或 /sp 设置提示词  
 /del_prompt 或 /dp 删除提示词  
-//get_prompt 或 /gp 获取提示词
+//get_prompt 或 /gp 获取提示词  
 /agree   同意好友请求  
 /restart   重启Bot  
 /random_image 或 /ri 发送随机图片  
-/random_words 或 /rw 发送随机一言  
-/random_emoticons 或 /re 发送随机表情包
+/random_emoticons 或 /re 发送随机表情包  
 /st 标签名 发送随机涩图,标签支持与或(& |)  
 /weather 城市名 或 /w 城市名 发送天气  
+/help 或 /h 查看帮助___  
 ……  
-/help 或 /h 查看帮助___
-
 ### 五、提示
 + 登录以后可在napcat\logs文件夹下找到webui的登录地址
 + 群聊使用 _/chat_ 命令或 _@机器人_ 即可聊天，私聊默认处理所有非命令消息为聊天 
