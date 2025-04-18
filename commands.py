@@ -119,7 +119,7 @@ async def handle_search(msg, is_group=True):
     with open(cache_dir + f"{name}.txt", "w", encoding="utf-8") as f:
         f.write(f"搜索结果：{content}\n")
     for i in range(5):# 搜索5页，可以自己修改
-        page: JmSearchPage = client.search_site(search_query=content, page=i+1)
+        page: JmSearchPage = client.search_site(search_query=content, page=i+1,order_by=JmMagicConstants.ORDER_BY_VIEW)
         for album_id, title in page:
             with open(cache_dir + f"{name}.txt", "a", encoding="utf-8") as f:
                 f.write(f"ID: {album_id} Name: {title}\n\n")
