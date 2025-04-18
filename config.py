@@ -1,7 +1,6 @@
 import configparser
 from ncatbot.utils.config import config
 
-
 def load_config():
     config_parser = configparser.ConfigParser()
     config_parser.read('config.ini')
