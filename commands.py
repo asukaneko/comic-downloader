@@ -1,9 +1,12 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
+from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import group_messages,user_messages # 导入 chat 函数
 import jmcomic,requests,random,configparser,json,yaml
 from jmcomic import *
 import asyncio
+
+_log = get_log()
 
 if_tts = False #判断是否开启TTS
 
@@ -77,7 +80,7 @@ async def handle_jmrank(msg, is_group=True):
     elif select == "周排行":
         page: JmCategoryPage = cl.week_ranking(1)
 
-    cache_dir = load_address()
+    cache_dir = load_address()[:-4]
     cache_dir += "rank/"
     os.makedirs(cache_dir,exist_ok = True)
 
@@ -97,6 +100,39 @@ async def handle_jmrank(msg, is_group=True):
         await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{select}_{name}.txt")
     else:
         await bot.api.upload_private_file(msg.user_id, cache_dir + f"{select}_{name}.txt", f"{select}_{name}.txt")
+
+@register_command("/search",help_text = "/search -> 搜索漫画")
+async def handle_search(msg, is_group=True):
+    if is_group:
+        await msg.reply(text="正在搜索喵~")
+    else:
+        await bot.api.post_private_msg(msg.user_id, text="正在搜索喵~")
+
+    cache_dir = load_address()[:-4]
+    cache_dir += "search/"
+    os.makedirs(cache_dir,exist_ok = True)
+
+    content = msg.raw_message[len("/search"):].strip()
+
+    client = JmOption.default().new_jm_client()
+    page: JmSearchPage = client.search_site(search_query=content+'+MANA +无修正', page=1)
+    # page默认的迭代方式是page.iter_id_title()，每次迭代返回 albun_id, title
+    with open(cache_dir + f"{content}.txt", "w", encoding="utf-8") as f:
+        f.write(f"搜索结果：{content}\n")
+    for album_id, title in page:
+        with open(cache_dir + f"{content}.txt", "a", encoding="utf-8") as f:
+            f.write(f"ID: {album_id} Name: {title}\n")
+    if is_group:
+        await bot.api.post_group_file(msg.group_id, file=cache_dir + f"{content}.txt")
+    else:
+        await bot.api.upload_private_file(msg.user_id, cache_dir + f"{content}.txt", f"{content}.txt")
+
+    '''
+    # 直接搜索禁漫车号
+    page = client.search_site(search_query='427413')
+    album: JmAlbumDetail = page.single_album
+    print(album.tags)
+    '''
 
 @register_command("/jm",help_text = "/jm 漫画ID -> 下载漫画")
 async def handle_jmcomic(msg, is_group=True):
