@@ -65,6 +65,7 @@ python bot.py
 /search xxx 搜索漫画  
 /get_fav 获取收藏夹  
 /jmrank 获取排行榜  
+/add_fav xxx 添加收藏夹
 /set_prompt 或 /sp 设置提示词  
 /del_prompt 或 /dp 删除提示词  
 //get_prompt 或 /gp 获取提示词  
