@@ -1,5 +1,6 @@
-<h2 style = "text-align:center;">基于NcatBot和jmcomic的本子下载和聊天的猫娘机器人</h2> 
-
+<div align="center">
+<h1 style = "text-align:center;">基于NcatBot和jmcomic的本子下载和聊天的猫娘机器人</h1> 
+</div>
 ---
 >环境为 <u>___windows___</u>  
 >强烈建议使用 ___小号___ 登录

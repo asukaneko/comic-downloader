@@ -1,7 +1,7 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
-from chat import group_messages,user_messages # 导入 chat 函数
+from chat import group_messages,user_messages
 import jmcomic,requests,random,configparser,json,yaml,re,os,asyncio
 from jmcomic import *
 from typing import Dict, List

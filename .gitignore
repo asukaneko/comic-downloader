@@ -12,3 +12,5 @@ dist-ssr
 __pycache__/chat.cpython-312.pyc
 /all-guides-for-ai.pdf
 /.idea/jsonSchemas.xml
+__pycache__/config.cpython-312.pyc
+.gitignore
