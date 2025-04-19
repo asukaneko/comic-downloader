@@ -68,27 +68,33 @@
     └─......
 ```        
 
-
-### 一、安装依赖
+### 下载源码
 ```
+git clone https://github.com/asukaneko/NapCat-jmcomic_download-bot.git
+```
+
+
+### 安装依赖
+```
+cd NapCat-jmcomic_download-bot
 pip install -r requirements.txt
 ```
-### 二、更改配置
+### 更改配置
 ```
 config.ini：修改账号、大模型api、图片保存等
 option.yml: 修改漫画下载目录、下载方式等
 urls.ini: 修改图片获取api地址, 如不修改则使用默认地址
 ```
-### 三、运行
+### 运行
 ```
 python bot.py
 ```
 命令行会提示下载napcat，然后扫码登录即可
 
-### 四、命令相关
->commands.py 中 设置了 ___命令注册装饰器___ ，可以自行添加命令    
+### 命令相关
+__commands.py 中 设置了 ___命令注册装饰器___ ，可以自行添加命令__
 ---
->命令列表：  
+命令列表：  
 >___/jm xxxxxx 下载漫画  
 /search xxx 搜索漫画  
 /get_fav 获取收藏夹  
@@ -102,18 +108,18 @@ python bot.py
 /random_image 或 /ri 发送随机图片  
 /random_emoticons 或 /re 发送随机表情包  
 /st 标签名 发送随机涩图,标签支持与或(& |)  
-/weather 城市名 或 /w 城市名 发送天气  
 /help 或 /h 查看帮助___  
 ……  
-### 五、提示
+### 提示
 + 登录以后可在napcat\logs文件夹下找到webui的登录地址
++ ___如果你发现没有正常配置napcat，则打开网址：http://localhost:6099，token默认为napcat，然后登录，在网络配置那里新建一个websocket服务端，端口为默认的3001，然后保存即可___
 + 群聊使用 _/chat_ 命令或 _@机器人_ 即可聊天，私聊默认处理所有非命令消息为聊天 
 + _大模型默认使用硅基流动的，新用户免费赠送15元_
 + 群聊想要ai处理图片，则先发图片，再回复自己的信息，回复内容必须要先@机器人
 + tts可以自己上传音色，详情看chat.py中注释
-+ ___如果你发现没有正常配置napcat，则打开网址：127.0.0.1:6099，token默认为napcat，然后登录，在网络配置那里新建一个websocket服务端，端口为默认的3001，然后保存即可___
 
-### 六、更多  
+
+### 更多  
 
 + 支持图片识别，需去https://platform.moonshot.cn/console/account 获取api，免费赠送15元。填入config.ini中（第二个api）
 + 支持多群聊以及用户自定义提示词
