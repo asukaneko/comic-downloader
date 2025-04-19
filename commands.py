@@ -2,9 +2,9 @@ from ncatbot.core import BotClient, GroupMessage, PrivateMessage
 from ncatbot.utils.logger import get_log
 from config import load_config
 from chat import group_messages,user_messages # 导入 chat 函数
-import jmcomic,requests,random,configparser,json,yaml,re
+import jmcomic,requests,random,configparser,json,yaml,re,os,asyncio
 from jmcomic import *
-import asyncio
+from typing import Dict, List
 
 _log = get_log()
 
@@ -17,6 +17,10 @@ bot = BotClient()
 command_handlers = {}
 group_imgs = {} # 用于存储图片信息
 
+user_favorites: Dict[str, List[str]] = {}  # 用户收藏夹 {user_id: [comic_ids]}
+group_favorites: Dict[str, Dict[str, List[str]]] = {}  # 群组收藏夹 {group_id: {user_id: [comic_ids]}}
+
+#通用函数如下----------
 def register_command(*command,help_text = None): # 注册命令
     def decorator(func):
         command_handlers[command] = func
@@ -36,6 +40,40 @@ def load_address(): # 加载配置文件，返回图片保存地址
         if not pdf_dir.endswith(os.path.sep):
             pdf_dir += os.path.sep
         return pdf_dir
+
+def load_favorites():
+    """加载收藏夹数据"""
+    cache_dir = load_address()[:-4] + "list/"
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    # 加载用户收藏
+    user_file = os.path.join(cache_dir, "user_favorites.json")
+    if os.path.exists(user_file):
+        with open(user_file, 'r', encoding='utf-8') as f:
+            user_favorites.update(json.load(f))
+    
+    # 加载群组收藏
+    group_file = os.path.join(cache_dir, "group_favorites.json")
+    if os.path.exists(group_file):
+        with open(group_file, 'r', encoding='utf-8') as f:
+            group_favorites.update(json.load(f))
+
+def save_favorites():
+    """保存收藏夹数据"""
+    cache_dir = load_address()[:-4] + "list/"
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    # 保存用户收藏
+    with open(os.path.join(cache_dir, "user_favorites.json"), 'w', encoding='utf-8') as f:
+        json.dump(user_favorites, f, ensure_ascii=False, indent=2)
+    
+    # 保存群组收藏
+    with open(os.path.join(cache_dir, "group_favorites.json"), 'w', encoding='utf-8') as f:
+        json.dump(group_favorites, f, ensure_ascii=False, indent=2)
+
+#----------------
+
+load_favorites()
 
 @register_command("测试")
 async def handle_test(msg, is_group=True):
@@ -57,6 +95,7 @@ async def handle_tts(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text=text)
 
+#漫画类命令----------------
 @register_command("/jmrank",help_text = "/jmrank 月排行/周排行 -> ")
 async def handle_jmrank(msg, is_group=True):
     if is_group:
@@ -270,6 +309,93 @@ async def download_and_send_comic(comic_id, msg, is_group):
             await msg.reply(text=error_msg)
         else:
             await bot.api.post_private_msg(msg.user_id, text=error_msg)
+
+@register_command("/add_fav", help_text="/add_fav <漫画ID> -> 添加收藏")
+async def handle_add_favorite(msg, is_group=True):
+    comic_id = msg.raw_message[len("/add_fav"):].strip()
+    if not comic_id.isdigit():
+        reply = "请输入有效的漫画ID喵~"
+    else:
+        user_id = str(msg.user_id)
+        if is_group:
+            group_id = str(msg.group_id)
+            if group_id not in group_favorites:
+                group_favorites[group_id] = {}
+            if user_id not in group_favorites[group_id]:
+                group_favorites[group_id][user_id] = []
+            if comic_id not in group_favorites[group_id][user_id]:
+                group_favorites[group_id][user_id].append(comic_id)
+                reply = f"已在群组收藏中添加漫画 {comic_id} 喵~"
+            else:
+                reply = f"漫画 {comic_id} 已在群组收藏中喵~"
+        else:
+            if user_id not in user_favorites:
+                user_favorites[user_id] = []
+            if comic_id not in user_favorites[user_id]:
+                user_favorites[user_id].append(comic_id)
+                reply = f"已在个人收藏中添加漫画 {comic_id} 喵~"
+            else:
+                reply = f"漫画 {comic_id} 已在个人收藏中喵~"
+        save_favorites()
+    
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+@register_command("/list_fav", help_text="/list_fav -> 查看收藏列表")
+async def handle_list_favorites(msg, is_group=True):
+    user_id = str(msg.user_id)
+    if is_group:
+        group_id = str(msg.group_id)
+        if group_id in group_favorites and user_id in group_favorites[group_id]:
+            comics = group_favorites[group_id][user_id]
+        else:
+            comics = []
+    else:
+        comics = user_favorites.get(user_id, [])
+    
+    if comics:
+        reply = "收藏的漫画ID:\n" + "\n".join(comics)
+    else:
+        reply = "收藏夹是空的喵~"
+    
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+@register_command("/del_fav", help_text="/del_fav <漫画ID> -> 删除收藏")
+async def handle_del_favorite(msg, is_group=True):
+    comic_id = msg.raw_message[len("/del_fav"):].strip()
+    user_id = str(msg.user_id)
+    if is_group:
+        group_id = str(msg.group_id)
+        if group_id in group_favorites and user_id in group_favorites[group_id]:
+            if comic_id in group_favorites[group_id][user_id]:
+                group_favorites[group_id][user_id].remove(comic_id)
+                reply = f"已从群组收藏中删除漫画 {comic_id} 喵~"
+            else:
+                reply = f"漫画 {comic_id} 不在群组收藏中喵~"
+        else:
+            reply = "群组收藏夹是空的喵~"
+    else:
+        if user_id in user_favorites:
+            if comic_id in user_favorites[user_id]:
+                user_favorites[user_id].remove(comic_id)
+                reply = f"已从个人收藏中删除漫画 {comic_id} 喵~"
+            else:
+                reply = f"漫画 {comic_id} 不在个人收藏中喵~"
+        else:
+            reply = "个人收藏夹是空的喵~"
+    
+    save_favorites()
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+#------------------------
 
 @register_command("/set_prompt","/sp",help_text = "/set_prompt 或者 /sp 提示词 -> 设定提示词")
 async def handle_set_prompt(msg, is_group=True):
