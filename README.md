@@ -1,16 +1,33 @@
 <div align="center">
-<h1 style = "text-align:center;">基于NcatBot和jmcomic的本子下载和聊天的猫娘机器人</h1> 
+<h1 style = "text-align:center;">🚀可以下载本子下载和聊天的猫娘机器人</h1> 
+
+![cover](https://img.picui.cn/free/2025/04/19/6803c76d2bbf9.png)
+
+> _a bot for downloading comics and chatting with ai_  
+
+
 </div>
 
-### 零、开始之前
->环境为 <u>___windows___</u>  
->建议使用 ___小号___ 登录  
+---
 
- + 相关文档 
- - [![](https://img.shields.io/badge/jmcomic-on_Github-blue)](https://github.com/hect0x7/JMComic-Crawler-Python)  
- - [![](https://img.shields.io/badge/napcat-on_Github-blue)](https://github.com/NapNeko/NapCatQQ)
- - [![](https://img.shields.io/badge/jmcomic-Readthedocs.io-orange)](https://jmcomic.readthedocs.io/zh-cn/latest/)
- - [![](https://img.shields.io/badge/napcat-Github.IO-orange)](https://napneko.github.io)  
+### 开始之前
+>环境为 <u>___windows___</u>  
+>建议使用 __小号__ 登录  
+>基于jmcomic和ncatbot开发
+
+ + **相关文档** 
+
+| jmcomic | [![](https://img.shields.io/badge/jmcomic-on_Github-blue)](https://github.com/hect0x7/JMComic-Crawler-Python) | [![](https://img.shields.io/badge/jmcomic-Readthedocs.io-orange)](https://jmcomic.readthedocs.io/zh-cn/latest/) |
+|:-:|:-:|:-:|
+
+| napcat |[![](https://img.shields.io/badge/napcat-on_Github-blue)](https://github.com/NapNeko/NapCatQQ) | [![](https://img.shields.io/badge/napcat-Github.IO-orange)](https://napneko.github.io)
+ |:-:|:-:|:-:|
+
+  | ncatbot  | [![](https://img.shields.io/badge/ncatbot-on_Github-blue)](https://github.com/liyihao1110/ncatbot) | [![](https://img.shields.io/badge/Python_Sdk-Ncatbot-8A2BE2)](https://docs.ncatbot.xyz/) |
+  |:-:|:-:|:-:|
+
+
+
 
 ```
 目录结构：
@@ -45,7 +62,10 @@
 └─cache
     ├─comic
     ├─saved_images
-    └─pdf
+    ├─list
+    ├─fav
+    ├─pdf
+    └─......
 ```        
 
 
