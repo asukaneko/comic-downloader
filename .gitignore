@@ -9,3 +9,6 @@ dist
 dist-ssr
 *.local
 1.txt
+__pycache__/chat.cpython-312.pyc
+/all-guides-for-ai.pdf
+/.idea/jsonSchemas.xml
