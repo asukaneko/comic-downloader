@@ -1,9 +1,16 @@
 <div align="center">
 <h1 style = "text-align:center;">基于NcatBot和jmcomic的本子下载和聊天的猫娘机器人</h1> 
 </div>
----
+
+### 零、开始之前
 >环境为 <u>___windows___</u>  
->强烈建议使用 ___小号___ 登录
+>建议使用 ___小号___ 登录  
+
+ + 相关文档 
+ - [![](https://img.shields.io/badge/jmcomic-on_Github-blue)](https://github.com/hect0x7/JMComic-Crawler-Python)  
+ - [![](https://img.shields.io/badge/napcat-on_Github-blue)](https://github.com/NapNeko/NapCatQQ)
+ - [![](https://img.shields.io/badge/jmcomic-Readthedocs.io-orange)](https://jmcomic.readthedocs.io/zh-cn/latest/)
+ - [![](https://img.shields.io/badge/napcat-Github.IO-orange)](https://napneko.github.io)  
 
 ```
 目录结构：
