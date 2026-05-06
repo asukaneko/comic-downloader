@@ -4073,7 +4073,14 @@ def main(params):
                         }
                     });
                 },
-                
+
+                // 关闭当前会话（不删除，只是取消选择）
+                closeCurrentSession() {
+                    this.currentSession = null;
+                    this.currentMessages = [];
+                    this.showToast('会话已关闭', 'info');
+                },
+
                 // QQ 会话管理方法
                 async viewQqSessionDetails(type, session) {
                     try {
@@ -6108,28 +6115,33 @@ def main(params):
                         title: '加载人格预设',
                         message: `确定要加载预设人格 "${preset.name}" 吗？`,
                         onConfirm: () => {
-                            this.personality = {
-                                name: preset.name || '',
-                                description: preset.description || '',
-                                avatar: preset.avatar || preset.icon || '',
-                                portrait: preset.portrait || '',
-                                tags: preset.tags || [],
-                                systemPrompt: preset.systemPrompt || preset.prompt || '',
-                                basicInfo: preset.basicInfo || '',
-                                personality: preset.personality || '',
-                                scenario: preset.scenario || '',
-                                firstMessage: preset.firstMessage || '',
-                                exampleDialogues: preset.exampleDialogues || '',
-                                responseFormat: preset.responseFormat || '',
-                                rules: preset.rules || [],
-                                state: preset.state || { affection: 50, mood: '开心' }
-                            };
-                            this.personalityTagsInput = (this.personality.tags || []).join(' ');
-                            this._manualSystemPrompt = false;
-                            this.personalityHasUnsavedChanges = true;
-                            this.showToast('已加载预设人格，请保存以应用', 'success');
+                            this.loadPersonalityToEditor(preset);
                         }
                     });
+                },
+
+                // 加载角色到编辑器（不显示确认对话框）
+                loadPersonalityToEditor(preset) {
+                    this.personality = {
+                        name: preset.name || '',
+                        description: preset.description || '',
+                        avatar: preset.avatar || preset.icon || '',
+                        portrait: preset.portrait || '',
+                        tags: preset.tags || [],
+                        systemPrompt: preset.systemPrompt || preset.prompt || '',
+                        basicInfo: preset.basicInfo || '',
+                        personality: preset.personality || '',
+                        scenario: preset.scenario || '',
+                        firstMessage: preset.firstMessage || '',
+                        exampleDialogues: preset.exampleDialogues || '',
+                        responseFormat: preset.responseFormat || '',
+                        rules: preset.rules || [],
+                        state: preset.state || { affection: 50, mood: '开心' }
+                    };
+                    this.personalityTagsInput = (this.personality.tags || []).join(' ');
+                    this._manualSystemPrompt = false;
+                    this.personalityHasUnsavedChanges = true;
+                    this.showToast('已加载角色到编辑器', 'success');
                 },
 
                 previewCompiledPrompt() {

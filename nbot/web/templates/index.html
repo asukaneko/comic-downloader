@@ -303,6 +303,36 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- 角色卡快速选择区域 -->
+                        <div class="dashboard-character-section" v-if="customPersonalityPresets.length > 0">
+                            <div class="dashboard-section-header">
+                                <div class="dashboard-section-copy">
+                                    <div class="chart-title"><i class="fas fa-users" style="color: var(--accent-primary);"></i> 我的角色卡</div>
+                                    <div class="chart-subtitle">快速选择角色开始对话</div>
+                                </div>
+                                <button class="btn btn-sm btn-secondary" @click="navigateTo('personality')">
+                                    <i class="fas fa-cog"></i> 管理角色
+                                </button>
+                            </div>
+                            <div class="dashboard-character-grid">
+                                <div v-for="preset in customPersonalityPresets.slice(0, 8)" :key="preset.id"
+                                     class="dashboard-character-item"
+                                     @click="startSessionWithPreset(preset)">
+                                    <div class="dashboard-character-portrait">
+                                        <img v-if="preset.portrait" :src="preset.portrait">
+                                        <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                                    </div>
+                                    <div class="dashboard-character-name">{{ preset.name }}</div>
+                                </div>
+                                <div v-if="customPersonalityPresets.length > 8" class="dashboard-character-more" @click="navigateTo('personality')">
+                                    <div class="dashboard-character-more-icon">
+                                        <i class="fas fa-ellipsis-h"></i>
+                                    </div>
+                                    <div class="dashboard-character-name">更多角色</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="dashboard-panel-grid">
                             <div class="dashboard-stack">
                                 <div class="dashboard-section-card">
@@ -696,23 +726,58 @@
                                 </button>
                             </div>
                             <!-- Web 会话为空 -->
-                            <div v-if="(chatTab === 'web' || chatTab === 'cli') && !currentSession" class="empty-state chat-empty-state">
-                                <div class="chat-empty-state-title">{{ $t('chat.empty_title') }}</div>
-                                <div class="chat-empty-state-desc">{{ $t('chat.empty_desc') }}</div>
-                                <div class="chat-home-toolbar">
+                            <div v-if="(chatTab === 'web' || chatTab === 'cli') && !currentSession" class="chat-home-container">
+                                <!-- 默认提示文字 -->
+                                <div class="empty-state chat-empty-state" style="margin-bottom: 24px;">
+                                    <div class="chat-empty-state-title">{{ $t('chat.empty_title') }}</div>
+                                    <div class="chat-empty-state-desc">{{ $t('chat.empty_desc') }}</div>
+                                    <div class="empty-state-icon">💬</div>
+                                    <div class="empty-state-title">选择一个会话开始聊天</div>
+                                    <div class="empty-state-desc">或创建一个新的会话</div>
+                                </div>
+
+                                <!-- 快捷操作按钮 -->
+                                <div class="chat-home-toolbar" style="margin-bottom: 24px;">
                                     <button class="btn btn-primary" @click="createNewSession" :disabled="isLoading">
                                         <i class="fas fa-plus"></i> {{ $t('chat.new_session') }}
                                     </button>
                                     <button class="btn btn-secondary" @click="openLatestChat" :disabled="isLoading">
                                         <i class="fas fa-clock-rotate-left"></i> {{ $t('chat.latest') }}
                                     </button>
-                                    <button class="admin-entry-button" @click="goDashboard()">
+                                    <button class="btn btn-secondary" @click="goDashboard()">
                                         <i class="fas fa-chart-line"></i> {{ $t('nav.dashboard') }}
                                     </button>
                                 </div>
-                                <div class="empty-state-icon">💬</div>
-                                <div class="empty-state-title">选择一个会话开始聊天</div>
-                                <div class="empty-state-desc">或创建一个新的会话</div>
+
+                                <!-- 角色卡快速选择 -->
+                                <div class="chat-home-character-section" v-if="customPersonalityPresets.length > 0">
+                                    <div class="chat-home-character-header">
+                                        <span class="chat-home-character-title">
+                                            <i class="fas fa-users" style="color: var(--accent-primary);"></i>
+                                            选择角色开始对话
+                                        </span>
+                                        <button class="btn btn-sm btn-secondary" @click="navigateTo('personality')">
+                                            <i class="fas fa-cog"></i> 管理角色
+                                        </button>
+                                    </div>
+                                    <div class="chat-home-character-grid">
+                                        <div v-for="preset in customPersonalityPresets.slice(0, 12)" :key="preset.id"
+                                             class="chat-home-character-item"
+                                             @click="startSessionWithPreset(preset)">
+                                            <div class="chat-home-character-portrait">
+                                                <img v-if="preset.portrait" :src="preset.portrait">
+                                                <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                                            </div>
+                                            <div class="chat-home-character-name">{{ preset.name }}</div>
+                                        </div>
+                                        <div v-if="customPersonalityPresets.length > 12" class="chat-home-character-more" @click="navigateTo('personality')">
+                                            <div class="chat-home-character-more-icon">
+                                                <i class="fas fa-ellipsis-h"></i>
+                                            </div>
+                                            <div class="chat-home-character-name">更多</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             
                             <!-- QQ 会话为空 -->
@@ -828,7 +893,7 @@
                                         <button class="btn-icon" @click="clearSession" title="清空" :disabled="isLoading">
                                             <i class="fas fa-trash-alt"></i>
                                         </button>
-                                        <button class="btn-icon" @click="deleteSession" title="删除" :disabled="isLoading">
+                                        <button class="btn-icon" @click="closeCurrentSession" title="关闭会话" :disabled="isLoading">
                                             <i class="fas fa-times"></i>
                                         </button>
                                     </div>
@@ -2038,67 +2103,130 @@
                             <!-- 右侧：角色卡列表 -->
                             <div style="display: flex; flex-direction: column; gap: 20px;">
                                 <!-- 当前角色卡预览 -->
-                                <div class="card" v-if="activePersonality.name">
-                                    <div class="card-header">
-                                        <span class="card-title">当前角色卡</span>
+                                <div class="character-card-glass" v-if="activePersonality.name">
+                                    <!-- 背景光斑装饰 -->
+                                    <div class="glass-bg-effects">
+                                        <div class="glass-blob glass-blob-cyan"></div>
+                                        <div class="glass-blob glass-blob-blue"></div>
+                                        <div class="glass-blob glass-blob-purple"></div>
                                     </div>
-                                    <div class="card-body" style="padding: 16px;">
-                                        <!-- 左右排布：左侧立绘，右侧信息 -->
-                                        <div style="display: flex; gap: 16px; align-items: flex-start;">
-                                            <!-- 左侧：立绘或头像 -->
-                                            <div style="flex-shrink: 0;">
-                                                <div v-if="activePersonality.portrait" style="width: 100px; height: 133px; border-radius: 12px; overflow: hidden; background: var(--bg-tertiary);">
-                                                    <img :src="activePersonality.portrait" style="width: 100%; height: 100%; object-fit: cover;">
+                                    
+                                    <!-- 状态徽章 -->
+                                    <div class="glass-status-badge">
+                                        <span class="glass-status-dot"></span>
+                                        使用中
+                                    </div>
+                                    
+                                    <!-- 主内容区 -->
+                                    <div class="glass-content">
+                                        <!-- 左侧：角色封面 -->
+                                        <div class="glass-avatar-wrapper">
+                                            <div class="glass-avatar-card">
+                                                <img v-if="activePersonality.portrait" :src="activePersonality.portrait" :alt="activePersonality.name" class="glass-avatar-img">
+                                                <i v-else :class="activePersonality.avatar || 'fas fa-user-circle'" class="glass-avatar-fallback"></i>
+                                                <div class="glass-avatar-overlay"></div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- 右侧：角色信息 -->
+                                        <div class="glass-info">
+                                            <!-- 角色名和副标题 -->
+                                            <div class="glass-header">
+                                                <h3 class="glass-name">{{ activePersonality.name }}</h3>
+                                                <span class="glass-subtitle">当前角色</span>
+                                            </div>
+                                            
+                                            <!-- 简介 -->
+                                            <p class="glass-desc">{{ activePersonality.description || '暂无描述' }}</p>
+                                            
+                                            <!-- 标签 -->
+                                            <div v-if="activePersonality.tags && activePersonality.tags.length > 0" class="glass-tags">
+                                                <span v-for="tag in activePersonality.tags.slice(0, 6)" :key="tag" class="glass-tag">{{ tag }}</span>
+                                            </div>
+                                            
+                                            <!-- 状态面板 -->
+                                            <div class="glass-stats-panel">
+                                                <div class="glass-stat">
+                                                    <span class="glass-stat-icon">❤️</span>
+                                                    <span class="glass-stat-label">好感度</span>
+                                                    <span class="glass-stat-value">{{ activePersonality.state?.affection || 50 }}</span>
+                                                    <div class="glass-progress-bar">
+                                                        <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, (activePersonality.state?.affection || 50) + 50)) + '%' }"></div>
+                                                    </div>
                                                 </div>
-                                                <div v-else style="width: 64px; height: 64px; background: linear-gradient(135deg, var(--primary), var(--accent)); border-radius: 16px; display: flex; align-items: center; justify-content: center;">
-                                                    <i :class="activePersonality.avatar || 'fas fa-user-circle'" style="font-size: 36px; color: white;"></i>
+                                                <div class="glass-stat-divider"></div>
+                                                <div class="glass-stat">
+                                                    <span class="glass-stat-icon">🙂</span>
+                                                    <span class="glass-stat-label">心情</span>
+                                                    <span class="glass-stat-value">{{ activePersonality.state?.mood || '开心' }}</span>
                                                 </div>
                                             </div>
-                                            <!-- 右侧：角色信息 -->
-                                            <div style="flex: 1; min-width: 0;">
-                                                <div style="font-weight: 600; font-size: 18px; margin-bottom: 4px;">{{ activePersonality.name }}</div>
-                                                <div style="font-size: 13px; color: var(--text-muted); line-height: 1.4; margin-bottom: 8px;">{{ activePersonality.description || '暂无描述' }}</div>
-                                                <div v-if="activePersonality.tags && activePersonality.tags.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px;">
-                                                    <span v-for="tag in activePersonality.tags.slice(0, 5)" :key="tag" class="badge badge-secondary" style="font-size: 11px;">{{ tag }}</span>
-                                                </div>
-                                                <div style="display: flex; gap: 12px; font-size: 12px; color: var(--text-muted);">
-                                                    <span><i class="fas fa-heart" style="color: var(--danger);"></i> 好感度: {{ activePersonality.state.affection }}</span>
-                                                    <span><i class="fas fa-smile" style="color: var(--warning);"></i> 心情: {{ activePersonality.state.mood }}</span>
-                                                </div>
+                                            
+                                            <!-- 操作按钮 -->
+                                            <div class="glass-actions">
+                                                <button class="glass-btn glass-btn-primary" @click="currentPage = 'chat'">
+                                                    <i class="fas fa-comments"></i>
+                                                    <span>开始对话</span>
+                                                </button>
+                                                <button class="glass-btn glass-btn-secondary" @click="loadPersonalityToEditor(activePersonality)">
+                                                    <i class="fas fa-edit"></i>
+                                                    <span>编辑角色</span>
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <!-- 预设人格 -->
-                                <div class="card">
-                                    <div class="card-header">
-                                        <span class="card-title">预设角色卡</span>
+                                <div class="preset-personality-section">
+                                    <div class="preset-personality-header">
+                                        <span class="preset-personality-title">
+                                            <i class="fas fa-masks-theater" style="color: var(--accent-primary);"></i>
+                                            预设角色卡
+                                        </span>
                                     </div>
-                                    <div class="card-body" style="padding: 12px;">
-                                        <div v-if="personalityPresets.length === 0" class="empty-state" style="padding: 20px;">
-                                            <div class="empty-state-icon">🎭</div>
-                                            <div class="empty-state-title">加载中...</div>
+                                    <div class="preset-personality-list">
+                                        <div v-if="personalityPresets.length === 0" class="preset-empty-state">
+                                            <div class="preset-empty-icon">🎭</div>
+                                            <div class="preset-empty-text">加载中...</div>
                                         </div>
-                                        <div style="display: flex; flex-direction: column; gap: 10px;">
-                                            <div v-for="preset in personalityPresets" :key="preset.id"
-                                                 class="character-card"
-                                                 @click="loadPersonalityPreset(preset)">
-                                                <!-- 立绘或头像 -->
-                                                <div class="character-card-avatar" style="width: 60px; height: 80px; border-radius: 8px; overflow: hidden; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">
-                                                    <img v-if="preset.portrait" :src="preset.portrait" style="width: 100%; height: 100%; object-fit: cover;">
-                                                    <i v-else :class="preset.avatar || preset.icon || 'fas fa-user-circle'" style="font-size: 28px;"></i>
+                                        <div v-for="preset in personalityPresets" :key="preset.id"
+                                             class="preset-glass-card"
+                                             @click="loadPersonalityPreset(preset)">
+                                            <!-- 背景光斑 -->
+                                            <div class="preset-glass-blob preset-glass-blob-1"></div>
+                                            <div class="preset-glass-blob preset-glass-blob-2"></div>
+                                            <!-- 内容布局 -->
+                                            <div class="preset-glass-layout">
+                                                <!-- 左侧头像 -->
+                                                <div class="preset-glass-avatar">
+                                                    <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
+                                                    <i v-else :class="preset.avatar || preset.icon || 'fas fa-user-circle'"></i>
                                                 </div>
-                                                <div class="character-card-info">
-                                                    <div class="character-card-name">{{ preset.name }}</div>
-                                                    <div class="character-card-desc">{{ preset.description }}</div>
-                                                    <div v-if="preset.tags && preset.tags.length" class="character-card-tags">
-                                                        <span v-for="tag in preset.tags.slice(0, 3)" :key="tag" class="tag">{{ tag }}</span>
+                                                <!-- 右侧信息 -->
+                                                <div class="preset-glass-content">
+                                                    <div class="preset-glass-header">
+                                                        <h4 class="preset-glass-name">{{ preset.name }}</h4>
+                                                        <span class="preset-glass-badge">预设</span>
                                                     </div>
-                                                </div>
-                                                <div class="character-card-stats" v-if="preset.state">
-                                                    <span class="stat"><i class="fas fa-heart"></i> {{ preset.state.affection || 50 }}</span>
-                                                    <span class="stat"><i class="fas fa-smile"></i> {{ preset.state.mood || '开心' }}</span>
+                                                    <p class="preset-glass-desc">{{ preset.description }}</p>
+                                                    <div v-if="preset.tags && preset.tags.length" class="preset-glass-tags">
+                                                        <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="preset-glass-tag">{{ tag }}</span>
+                                                    </div>
+                                                    <!-- 状态栏 -->
+                                                    <div class="preset-glass-stats" v-if="preset.state">
+                                                        <div class="preset-stat">
+                                                            <span class="preset-stat-icon">❤️</span>
+                                                            <span class="preset-stat-label">好感度</span>
+                                                            <span class="preset-stat-value">{{ preset.state.affection || 50 }}</span>
+                                                        </div>
+                                                        <div class="preset-stat-divider"></div>
+                                                        <div class="preset-stat">
+                                                            <span class="preset-stat-icon">🙂</span>
+                                                            <span class="preset-stat-label">心情</span>
+                                                            <span class="preset-stat-value">{{ preset.state.mood || '开心' }}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2175,27 +2303,31 @@
                                             <div class="empty-state-desc">点击上方按钮创建你的角色卡</div>
                                         </div>
                                         <!-- 网格视图 -->
-                                        <div v-else-if="characterCardViewMode === 'grid'" class="character-grid">
+                                        <div v-else-if="characterCardViewMode === 'grid'" class="character-grid-glass">
                                             <div v-for="(preset, index) in paginatedCustomPersonalityPresets" :key="preset.id"
-                                                 class="character-card character-card-grid"
+                                                 class="glass-card-grid"
                                                  @click="loadPersonalityPreset(preset)">
-                                                <!-- 立绘区域 - 占卡片大部分空间 -->
-                                                <div class="character-card-portrait">
-                                                    <img v-if="preset.portrait" :src="preset.portrait">
+                                                <!-- 背景光斑 -->
+                                                <div class="glass-card-blob glass-card-blob-1"></div>
+                                                <div class="glass-card-blob glass-card-blob-2"></div>
+                                                <!-- 立绘区域 -->
+                                                <div class="glass-card-portrait">
+                                                    <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
                                                     <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                                                    <div class="glass-card-portrait-overlay"></div>
                                                 </div>
-                                                <!-- 下方信息区域 -->
-                                                <div class="character-card-grid-info">
-                                                    <div class="character-card-grid-name">{{ preset.name }}</div>
-                                                    <div class="character-card-grid-desc">{{ preset.description || '自定义角色卡' }}</div>
-                                                    <div v-if="preset.tags && preset.tags.length" class="character-card-grid-tags">
-                                                        <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+                                                <!-- 信息区域 -->
+                                                <div class="glass-card-info">
+                                                    <div class="glass-card-name">{{ preset.name }}</div>
+                                                    <div class="glass-card-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                                    <div v-if="preset.tags && preset.tags.length" class="glass-card-tags">
+                                                        <span v-for="tag in preset.tags.slice(0, 3)" :key="tag" class="glass-card-tag">{{ tag }}</span>
                                                     </div>
-                                                    <div class="character-card-grid-actions">
-                                                        <button class="btn btn-sm btn-primary" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话">
-                                                            <i class="fas fa-comment-dots"></i> 对话
+                                                    <div class="glass-card-actions">
+                                                        <button class="glass-btn glass-btn-small glass-btn-primary" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话">
+                                                            <i class="fas fa-comment-dots"></i>
                                                         </button>
-                                                        <button class="btn btn-sm btn-secondary" @click.stop="deleteCustomPersonalityPreset(preset)" title="删除角色">
+                                                        <button class="glass-btn glass-btn-small glass-btn-secondary" @click.stop="deleteCustomPersonalityPreset(preset)" title="删除角色">
                                                             <i class="fas fa-trash"></i>
                                                         </button>
                                                     </div>
@@ -2203,26 +2335,31 @@
                                             </div>
                                         </div>
                                         <!-- 列表视图 -->
-                                        <div v-else class="character-list">
+                                        <div v-else class="character-list-glass">
                                             <div v-for="(preset, index) in paginatedCustomPersonalityPresets" :key="preset.id"
-                                                 class="character-card character-card-list"
+                                                 class="glass-card-list"
                                                  @click="loadPersonalityPreset(preset)">
-                                                <!-- 立绘或头像 - 增大尺寸 -->
-                                                <div class="character-card-list-portrait">
-                                                    <img v-if="preset.portrait" :src="preset.portrait">
+                                                <!-- 背景光斑 -->
+                                                <div class="glass-card-blob glass-card-blob-1"></div>
+                                                <!-- 立绘 -->
+                                                <div class="glass-card-list-portrait">
+                                                    <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
                                                     <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
                                                 </div>
-                                                <div class="character-card-info" style="flex: 1; min-width: 0;">
-                                                    <div class="character-card-name">{{ preset.name }}</div>
-                                                    <div class="character-card-desc">{{ preset.description || '自定义角色卡' }}</div>
-                                                    <div v-if="preset.tags && preset.tags.length" class="character-card-tags">
-                                                        <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+                                                <!-- 信息 -->
+                                                <div class="glass-card-list-info">
+                                                    <div class="glass-card-list-name">{{ preset.name }}</div>
+                                                    <div class="glass-card-list-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                                    <div v-if="preset.tags && preset.tags.length" class="glass-card-list-tags">
+                                                        <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="glass-card-tag">{{ tag }}</span>
                                                     </div>
                                                 </div>
-                                                <div class="character-card-actions" style="display: flex; gap: 6px; flex-shrink: 0;">
-                                                    <button class="btn btn-sm" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话" style="color: var(--accent-primary);">
+                                                <!-- 操作 -->
+                                                <div class="glass-card-list-actions">
+                                                    <button class="glass-btn glass-btn-small glass-btn-primary" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话">
                                                         <i class="fas fa-comment-dots"></i>
-                                                    </button>                                                    <button class="btn btn-sm" @click.stop="deleteCustomPersonalityPreset(preset)" style="color: var(--danger);">
+                                                    </button>
+                                                    <button class="glass-btn glass-btn-small glass-btn-secondary" @click.stop="deleteCustomPersonalityPreset(preset)" title="删除角色">
                                                         <i class="fas fa-trash"></i>
                                                     </button>
                                                 </div>
@@ -6189,53 +6326,65 @@
                         <div class="empty-state-desc">尝试使用其他关键词搜索</div>
                     </div>
                     <!-- 网格视图 -->
-                    <div v-else-if="characterCardViewMode === 'grid'" class="character-fullscreen-grid">
+                    <div v-else-if="characterCardViewMode === 'grid'" class="fullscreen-glass-grid">
                         <div v-for="preset in filteredFullscreenCharacters" :key="preset.id"
-                             class="character-fullscreen-card"
+                             class="fullscreen-glass-card"
                              @click="loadPersonalityPresetFromFullscreen(preset)">
-                            <div class="character-fullscreen-card-portrait">
-                                <img v-if="preset.portrait" :src="preset.portrait">
+                            <!-- 背景光斑 -->
+                            <div class="fullscreen-glass-blob fullscreen-glass-blob-1"></div>
+                            <div class="fullscreen-glass-blob fullscreen-glass-blob-2"></div>
+                            <!-- 立绘 -->
+                            <div class="fullscreen-glass-portrait">
+                                <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
                                 <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                                <div class="fullscreen-glass-portrait-overlay"></div>
                             </div>
-                            <div class="character-fullscreen-card-content">
-                                <div class="character-fullscreen-card-name">{{ preset.name }}</div>
-                                <div class="character-fullscreen-card-desc">{{ preset.description || '自定义角色卡' }}</div>
-                                <div v-if="preset.tags && preset.tags.length" class="character-fullscreen-card-tags">
-                                    <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+                            <!-- 信息 -->
+                            <div class="fullscreen-glass-info">
+                                <div class="fullscreen-glass-name">{{ preset.name }}</div>
+                                <div class="fullscreen-glass-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                <div v-if="preset.tags && preset.tags.length" class="fullscreen-glass-tags">
+                                    <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="fullscreen-glass-tag">{{ tag }}</span>
                                 </div>
                             </div>
-                            <!-- 按钮固定在卡片底部 -->
-                            <div class="character-fullscreen-card-buttons" @click.stop>
-                                <button class="btn btn-sm btn-primary" @click="startSessionWithPreset(preset)" title="开始对话">
-                                    <i class="fas fa-comment-dots"></i> 对话
+                            <!-- 按钮固定在底部 -->
+                            <div class="fullscreen-glass-buttons" @click.stop>
+                                <button class="glass-btn glass-btn-primary" @click="startSessionWithPreset(preset)" title="开始对话">
+                                    <i class="fas fa-comment-dots"></i>
+                                    <span>对话</span>
                                 </button>
-                                <button class="btn btn-sm btn-secondary" @click="deleteCustomPersonalityPreset(preset)" title="删除角色">
+                                <button class="glass-btn glass-btn-secondary" @click="deleteCustomPersonalityPreset(preset)" title="删除角色">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
                         </div>
                     </div>
                     <!-- 列表视图 -->
-                    <div v-else class="character-fullscreen-list">
+                    <div v-else class="fullscreen-glass-list">
                         <div v-for="preset in filteredFullscreenCharacters" :key="preset.id"
-                             class="character-fullscreen-list-item"
+                             class="fullscreen-glass-list-item"
                              @click="loadPersonalityPresetFromFullscreen(preset)">
-                            <div class="character-fullscreen-list-avatar">
-                                <img v-if="preset.portrait" :src="preset.portrait">
+                            <!-- 背景光斑 -->
+                            <div class="fullscreen-glass-blob fullscreen-glass-blob-1"></div>
+                            <!-- 立绘 -->
+                            <div class="fullscreen-glass-list-portrait">
+                                <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
                                 <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
                             </div>
-                            <div class="character-fullscreen-list-info">
-                                <div class="character-fullscreen-list-name">{{ preset.name }}</div>
-                                <div class="character-fullscreen-list-desc">{{ preset.description || '自定义角色卡' }}</div>
-                                <div v-if="preset.tags && preset.tags.length" class="character-fullscreen-list-tags">
-                                    <span v-for="tag in preset.tags.slice(0, 5)" :key="tag" class="tag">{{ tag }}</span>
+                            <!-- 信息 -->
+                            <div class="fullscreen-glass-list-info">
+                                <div class="fullscreen-glass-list-name">{{ preset.name }}</div>
+                                <div class="fullscreen-glass-list-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                <div v-if="preset.tags && preset.tags.length" class="fullscreen-glass-list-tags">
+                                    <span v-for="tag in preset.tags.slice(0, 5)" :key="tag" class="fullscreen-glass-tag">{{ tag }}</span>
                                 </div>
                             </div>
-                            <div class="character-fullscreen-list-actions" @click.stop>
-                                <button class="btn btn-sm" @click="startSessionWithPreset(preset)" title="开始对话" style="color: var(--accent-primary);">
+                            <!-- 操作 -->
+                            <div class="fullscreen-glass-list-actions" @click.stop>
+                                <button class="glass-btn glass-btn-small glass-btn-primary" @click="startSessionWithPreset(preset)" title="开始对话">
                                     <i class="fas fa-comment-dots"></i>
                                 </button>
-                                <button class="btn btn-sm" @click="deleteCustomPersonalityPreset(preset)" style="color: var(--danger);">
+                                <button class="glass-btn glass-btn-small glass-btn-secondary" @click="deleteCustomPersonalityPreset(preset)" title="删除角色">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>

@@ -1748,6 +1748,134 @@
             margin-top: 8px;
         }
 
+        /* 聊天首页角色卡选择区域 */
+        .chat-home-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        .chat-home-character-section {
+            width: 100%;
+            max-width: 800px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 24px 32px;
+        }
+
+        .chat-home-character-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .chat-home-character-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chat-home-character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            gap: 20px;
+        }
+
+        .chat-home-character-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 16px;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .chat-home-character-item:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-primary);
+            transform: translateY(-4px);
+        }
+
+        .chat-home-character-portrait {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .chat-home-character-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .chat-home-character-portrait i {
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .chat-home-character-name {
+            font-size: 13px;
+            color: var(--text-primary);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            font-weight: 500;
+        }
+
+        .chat-home-character-more {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            padding: 12px;
+            border-radius: 16px;
+            transition: all 0.2s ease;
+            border: 2px dashed var(--border-color);
+        }
+
+        .chat-home-character-more:hover {
+            border-color: var(--accent-primary);
+            background: var(--bg-hover);
+        }
+
+        .chat-home-character-more-icon {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .chat-home-character-more-icon i {
+            font-size: 28px;
+            color: var(--text-secondary);
+        }
+
         .admin-entry-button {
             display: inline-flex;
             align-items: center;
@@ -1782,6 +1910,112 @@
 
         .ai-unconfigured-banner .admin-entry-button {
             margin-left: auto;
+        }
+
+        /* 首页角色卡快速选择区域 */
+        .dashboard-character-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .dashboard-character-section .dashboard-section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .dashboard-character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 16px;
+        }
+
+        .dashboard-character-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .dashboard-character-item:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+        }
+
+        .dashboard-character-portrait {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .dashboard-character-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .dashboard-character-portrait i {
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .dashboard-character-name {
+            font-size: 12px;
+            color: var(--text-primary);
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+        }
+
+        .dashboard-character-more {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 12px;
+            transition: all 0.2s ease;
+            border: 2px dashed var(--border-color);
+        }
+
+        .dashboard-character-more:hover {
+            border-color: var(--accent-primary);
+            background: var(--bg-hover);
+        }
+
+        .dashboard-character-more-icon {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .dashboard-character-more-icon i {
+            font-size: 24px;
+            color: var(--text-secondary);
         }
 
         .dashboard-panel-grid {
@@ -6422,6 +6656,1283 @@
 
         .character-card-stats .stat i {
             width: 12px;
+        }
+
+        /* 当前角色卡样式 */
+        .active-personality-card {
+            overflow: hidden;
+            border: 2px solid var(--accent-primary);
+            box-shadow: 0 0 20px rgba(var(--accent-primary-rgb, 88, 166, 255), 0.15);
+        }
+
+        .active-personality-card .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+        }
+
+        .active-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: linear-gradient(135deg, var(--success), #2ea043);
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .active-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: white;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ============================================
+           玻璃拟态角色卡 - Character Card Glassmorphism
+           ============================================ */
+
+        .character-card-glass {
+            position: relative;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+            border: 1px solid rgba(96, 165, 250, 0.25);
+            border-radius: 20px;
+            padding: 24px;
+            overflow: hidden;
+            box-shadow: 
+                0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(59, 130, 246, 0.08);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .character-card-glass:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+            box-shadow: 
+                0 25px 50px -12px rgba(0, 0, 0, 0.6),
+                0 0 60px rgba(59, 130, 246, 0.12);
+            transform: translateY(-2px);
+        }
+
+        /* 背景光斑效果 */
+        .glass-bg-effects {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .glass-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.15;
+        }
+
+        .glass-blob-cyan {
+            width: 150px;
+            height: 150px;
+            background: #06b6d4;
+            top: -50px;
+            right: -30px;
+        }
+
+        .glass-blob-blue {
+            width: 120px;
+            height: 120px;
+            background: #3b82f6;
+            bottom: -40px;
+            left: 20%;
+        }
+
+        .glass-blob-purple {
+            width: 100px;
+            height: 100px;
+            background: #8b5cf6;
+            top: 40%;
+            right: 10%;
+        }
+
+        /* 状态徽章 */
+        .glass-status-badge {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            font-size: 11px;
+            font-weight: 600;
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            border-radius: 20px;
+            z-index: 10;
+            backdrop-filter: blur(8px);
+        }
+
+        .glass-status-dot {
+            width: 6px;
+            height: 6px;
+            background: #34d399;
+            border-radius: 50%;
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        /* 主内容区 */
+        .glass-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+        }
+
+        /* 头像区域 */
+        .glass-avatar-wrapper {
+            flex-shrink: 0;
+        }
+
+        .glass-avatar-card {
+            position: relative;
+            width: 110px;
+            height: 145px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 
+                0 10px 30px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        .glass-avatar-fallback {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: rgba(255, 255, 255, 0.7);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.3));
+        }
+
+        .glass-avatar-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(15, 23, 42, 0.6) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* 信息区域 */
+        .glass-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .glass-header {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .glass-name {
+            font-size: 22px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin: 0;
+            letter-spacing: -0.02em;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-subtitle {
+            font-size: 11px;
+            color: #94a3b8;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .glass-desc {
+            font-size: 13px;
+            color: #cbd5e1;
+            line-height: 1.5;
+            margin: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* 标签 */
+        .glass-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .glass-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            font-size: 11px;
+            color: #e2e8f0;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .glass-tag:hover {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+
+        /* 状态面板 */
+        .glass-stats-panel {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            margin-top: 4px;
+        }
+
+        .glass-stat {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+        }
+
+        .glass-stat-icon {
+            font-size: 14px;
+        }
+
+        .glass-stat-label {
+            font-size: 11px;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+        .glass-stat-value {
+            font-size: 12px;
+            color: #f1f5f9;
+            font-weight: 600;
+        }
+
+        .glass-stat-divider {
+            width: 1px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 好感度进度条 */
+        .glass-progress-bar {
+            width: 60px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-left: auto;
+        }
+
+        .glass-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ec4899, #ef4444);
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        /* 操作按钮 */
+        .glass-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 8px;
+        }
+
+        .glass-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            flex: 1;
+        }
+
+        .glass-btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.35);
+        }
+
+        .glass-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.45);
+        }
+
+        .glass-btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .glass-btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
+        }
+
+        /* 响应式布局 */
+        @media (max-width: 480px) {
+            .character-card-glass {
+                padding: 20px;
+            }
+
+            .glass-content {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+
+            .glass-avatar-card {
+                width: 100px;
+                height: 130px;
+            }
+
+            .glass-header {
+                justify-content: center;
+            }
+
+            .glass-tags {
+                justify-content: center;
+            }
+
+            .glass-stats-panel {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .glass-stat-divider {
+                display: none;
+            }
+
+            .glass-actions {
+                flex-direction: column;
+            }
+        }
+
+        /* ============================================
+           玻璃拟态角色卡列表 - Glass Character Cards Grid/List
+           ============================================ */
+
+        /* 网格视图 */
+        .character-grid-glass {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 20px;
+        }
+
+        .glass-card-grid {
+            position: relative;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .glass-card-grid:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5), 0 0 30px rgba(59, 130, 246, 0.1);
+        }
+
+        /* 光斑装饰 */
+        .glass-card-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(40px);
+            opacity: 0.12;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .glass-card-blob-1 {
+            width: 100px;
+            height: 100px;
+            background: #06b6d4;
+            top: -30px;
+            right: -30px;
+        }
+
+        .glass-card-blob-2 {
+            width: 80px;
+            height: 80px;
+            background: #8b5cf6;
+            bottom: 60px;
+            left: -20px;
+        }
+
+        /* 立绘区域 */
+        .glass-card-portrait {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3/4;
+            overflow: hidden;
+            flex-shrink: 0;
+            margin-bottom: -30px;
+        }
+
+        .glass-card-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+            transition: transform 0.4s ease;
+        }
+
+        .glass-card-grid:hover .glass-card-portrait img {
+            transform: scale(1.05);
+        }
+
+        .glass-card-portrait i {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            color: rgba(255, 255, 255, 0.6);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
+        }
+
+        .glass-card-portrait-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(15, 23, 42, 1) 0%, rgba(15, 23, 42, 0.95) 20%, transparent 60%);
+            pointer-events: none;
+        }
+
+        /* 信息区域 */
+        .glass-card-info {
+            position: relative;
+            z-index: 2;
+            padding: 16px;
+            padding-top: 0;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            background: linear-gradient(to bottom, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.95) 100%);
+        }
+
+        .glass-card-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: #f8fafc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 6px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-card-desc {
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 10px;
+            flex: 1;
+        }
+
+        .glass-card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 12px;
+        }
+
+        .glass-card-tag {
+            padding: 3px 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            font-size: 10px;
+            color: #cbd5e1;
+        }
+
+        .glass-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: auto;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* 列表视图 */
+        .character-list-glass {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .glass-card-list {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 1px solid rgba(96, 165, 250, 0.15);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .glass-card-list:hover {
+            border-color: rgba(96, 165, 250, 0.35);
+            transform: translateX(4px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-card-list .glass-card-blob-1 {
+            width: 60px;
+            height: 60px;
+            top: -15px;
+            right: 20px;
+        }
+
+        .glass-card-list-portrait {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .glass-card-list-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .glass-card-list-portrait i {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: rgba(255, 255, 255, 0.6);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.3));
+        }
+
+        .glass-card-list-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .glass-card-list-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .glass-card-list-desc {
+            font-size: 11px;
+            color: #94a3b8;
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 5px;
+        }
+
+        .glass-card-list-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .glass-card-list-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+        }
+
+        /* 小按钮 */
+        .glass-btn-small {
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 8px;
+        }
+
+        .glass-btn-small i {
+            font-size: 12px;
+        }
+
+        /* ============================================
+           全屏模式玻璃拟态角色卡
+           ============================================ */
+
+        /* 网格视图 */
+        .fullscreen-glass-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 24px;
+        }
+
+        .fullscreen-glass-card {
+            position: relative;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            border-radius: 20px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .fullscreen-glass-card:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+            transform: translateY(-6px);
+            box-shadow: 0 25px 50px -10px rgba(0, 0, 0, 0.6), 0 0 40px rgba(59, 130, 246, 0.15);
+        }
+
+        .fullscreen-glass-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(50px);
+            opacity: 0.15;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .fullscreen-glass-blob-1 {
+            width: 120px;
+            height: 120px;
+            background: #06b6d4;
+            top: -40px;
+            right: -40px;
+        }
+
+        .fullscreen-glass-blob-2 {
+            width: 100px;
+            height: 100px;
+            background: #8b5cf6;
+            bottom: 80px;
+            left: -30px;
+        }
+
+        .fullscreen-glass-portrait {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 3/4;
+            overflow: hidden;
+            flex-shrink: 0;
+            margin-bottom: -40px;
+        }
+
+        .fullscreen-glass-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+            transition: transform 0.5s ease;
+        }
+
+        .fullscreen-glass-card:hover .fullscreen-glass-portrait img {
+            transform: scale(1.05);
+        }
+
+        .fullscreen-glass-portrait i {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 56px;
+            color: rgba(255, 255, 255, 0.6);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(147, 51, 234, 0.25));
+        }
+
+        .fullscreen-glass-portrait-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(15, 23, 42, 1) 0%, rgba(15, 23, 42, 0.95) 20%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .fullscreen-glass-info {
+            position: relative;
+            z-index: 2;
+            padding: 20px;
+            padding-top: 0;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            background: linear-gradient(to bottom, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.95) 100%);
+        }
+
+        .fullscreen-glass-name {
+            font-size: 17px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .fullscreen-glass-desc {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 12px;
+            flex: 1;
+        }
+
+        .fullscreen-glass-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .fullscreen-glass-tag {
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            font-size: 11px;
+            color: #e2e8f0;
+        }
+
+        .fullscreen-glass-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* 列表视图 */
+        .fullscreen-glass-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .fullscreen-glass-list-item {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+            border: 1px solid rgba(96, 165, 250, 0.15);
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .fullscreen-glass-list-item:hover {
+            border-color: rgba(96, 165, 250, 0.35);
+            transform: translateX(6px);
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .fullscreen-glass-list-item .fullscreen-glass-blob-1 {
+            width: 80px;
+            height: 80px;
+            top: -20px;
+            right: 100px;
+        }
+
+        .fullscreen-glass-list-portrait {
+            width: 64px;
+            height: 64px;
+            border-radius: 14px;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .fullscreen-glass-list-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .fullscreen-glass-list-portrait i {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.6);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(147, 51, 234, 0.3));
+        }
+
+        .fullscreen-glass-list-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .fullscreen-glass-list-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fullscreen-glass-list-desc {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 6px;
+        }
+
+        .fullscreen-glass-list-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .fullscreen-glass-list-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        /* ============================================
+           预设角色卡玻璃拟态风格
+           ============================================ */
+
+        .preset-personality-section {
+            margin-bottom: 20px;
+        }
+
+        .preset-personality-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            padding: 0 4px;
+        }
+
+        .preset-personality-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preset-personality-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .preset-empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            color: var(--text-muted);
+        }
+
+        .preset-empty-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .preset-empty-text {
+            font-size: 14px;
+        }
+
+        .preset-glass-card {
+            position: relative;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+            border: 1px solid rgba(96, 165, 250, 0.2);
+            border-radius: 16px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4);
+        }
+
+        .preset-glass-card:hover {
+            border-color: rgba(96, 165, 250, 0.4);
+            transform: translateX(4px);
+            box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.5), 0 0 30px rgba(59, 130, 246, 0.1);
+        }
+
+        .preset-glass-blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(40px);
+            opacity: 0.12;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .preset-glass-blob-1 {
+            width: 80px;
+            height: 80px;
+            background: #06b6d4;
+            top: -30px;
+            right: 20px;
+        }
+
+        .preset-glass-blob-2 {
+            width: 60px;
+            height: 60px;
+            background: #8b5cf6;
+            bottom: -10px;
+            left: 30%;
+        }
+
+        .preset-glass-layout {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            gap: 16px;
+        }
+
+        .preset-glass-avatar {
+            width: 80px;
+            height: 100px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
+        }
+
+        .preset-glass-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        .preset-glass-avatar i {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .preset-glass-content {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .preset-glass-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .preset-glass-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f8fafc;
+            margin: 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .preset-glass-badge {
+            padding: 2px 8px;
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 10px;
+            font-size: 10px;
+            color: #60a5fa;
+            font-weight: 600;
+        }
+
+        .preset-glass-desc {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.4;
+            margin: 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .preset-glass-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+
+        .preset-glass-tag {
+            padding: 3px 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            font-size: 10px;
+            color: #cbd5e1;
+        }
+
+        .preset-glass-stats {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-top: auto;
+        }
+
+        .preset-stat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }
+
+        .preset-stat-icon {
+            font-size: 13px;
+        }
+
+        .preset-stat-label {
+            color: #94a3b8;
+        }
+
+        .preset-stat-value {
+            color: #f1f5f9;
+            font-weight: 600;
+        }
+
+        .preset-stat-divider {
+            width: 1px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* 保留旧样式兼容 */
+        /* 左右排布布局 */
+        .active-personality-layout {
+            display: flex;
+            flex-direction: row;
+            min-height: 140px;
+        }
+
+        .active-personality-portrait-side {
+            width: 120px;
+            min-height: 140px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .active-personality-portrait-side img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        .active-personality-portrait-side i {
+            font-size: 40px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .active-personality-info-side {
+            flex: 1;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        /* 旧的上下布局样式保留 */
+        .active-personality-portrait {
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .active-personality-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center top;
+        }
+
+        .active-personality-portrait i {
+            font-size: 64px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .active-personality-info {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .active-personality-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            text-align: center;
+        }
+
+        .active-personality-desc {
+            font-size: 11px;
+            color: var(--text-secondary);
+            line-height: 1.3;
+            text-align: center;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .active-personality-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3px;
+            justify-content: center;
+        }
+
+        .active-personality-tags .tag {
+            font-size: 9px;
+            padding: 1px 5px;
+        }
+
+        .active-personality-stats {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            padding: 6px 8px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 11px;
+        }
+
+        .stat-item i {
+            font-size: 10px;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+        }
+
+        .stat-value {
+            color: var(--text-primary);
+            font-weight: 500;
+            font-size: 11px;
+        }
+
+        .active-personality-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 2px;
+        }
+
+        .active-personality-actions .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 5px 10px;
+            font-size: 11px;
         }
 
         /* 角色卡网格和列表布局 */
