@@ -6635,6 +6635,71 @@ def main(params):
                     }
                 },
 
+                // 触发批量导入文件选择
+                triggerBulkImportPersonalities() {
+                    this.showBulkImportExportMenu = false;
+                    this.$refs.bulkImportPersonalitiesFile.click();
+                },
+
+                // 批量导入角色卡
+                async bulkImportPersonalities(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    this.isLoading = true;
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const res = await api.post('/api/personality/import-all', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        if (res.data.success) {
+                            await this.loadCustomPersonalityPresets();
+                            let message = res.data.message;
+                            if (res.data.failed_count > 0 && res.data.failed_names.length > 0) {
+                                console.error('导入失败的角色:', res.data.failed_names);
+                            }
+                            this.showToast(message, 'success');
+                        } else {
+                            this.showToast(res.data.error || '导入失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('批量导入角色卡失败:', e);
+                        this.showToast('导入失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                        event.target.value = '';
+                    }
+                },
+
+                // 导出全部角色卡
+                async exportAllPersonalities() {
+                    this.showBulkImportExportMenu = false;
+                    this.isLoading = true;
+                    try {
+                        const res = await api.get('/api/personality/export-all', {
+                            responseType: 'blob'
+                        });
+
+                        // 创建下载链接
+                        const blob = new Blob([res.data], { type: 'application/zip' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+                        a.download = `全部角色卡_${timestamp}.zip`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+
+                        this.showToast('全部角色卡已导出', 'success');
+                    } catch (e) {
+                        console.error('导出全部角色卡失败:', e);
+                        this.showToast('导出失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
                 // AI随机生成开场白
                 async aiGenerateFirstMessage() {
                     if (!this.personality.name) {

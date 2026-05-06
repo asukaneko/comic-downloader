@@ -2117,12 +2117,34 @@
                                             <button class="btn btn-secondary btn-sm" @click="loadCustomPersonalityPresets" title="刷新列表">
                                                 <i class="fas fa-sync-alt"></i>
                                             </button>
-                                            <button class="btn btn-accent btn-sm" @click="showAiCreateModal = true" style="background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none;">
-                                                <i class="fas fa-magic"></i> AI创建
-                                            </button>
-                                            <button class="btn btn-primary btn-sm" @click="createNewPersonality">
-                                                <i class="fas fa-plus"></i> 新建
-                                            </button>
+                                            <!-- 导入导出全部角色卡按钮 -->
+                                            <div class="dropdown-menu-container" style="position: relative;">
+                                                <button class="btn btn-secondary btn-sm" @click="showBulkImportExportMenu = !showBulkImportExportMenu" title="批量导入导出">
+                                                    <i class="fas fa-archive"></i>
+                                                </button>
+                                                <div v-if="showBulkImportExportMenu" class="dropdown-menu" style="position: absolute; right: 0; top: 100%; margin-top: 4px; min-width: 140px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;">
+                                                    <button class="btn btn-sm" @click="triggerBulkImportPersonalities" style="width: 100%; text-align: left; padding: 8px 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; background: transparent; border: none; color: var(--text-primary);">
+                                                        <i class="fas fa-upload" style="color: var(--accent-primary);"></i> 导入全部
+                                                    </button>
+                                                    <button class="btn btn-sm" @click="exportAllPersonalities" style="width: 100%; text-align: left; padding: 8px 12px; display: flex; align-items: center; gap: 8px; background: transparent; border: none; color: var(--text-primary);">
+                                                        <i class="fas fa-download" style="color: var(--success);"></i> 导出全部
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <!-- 新建角色下拉菜单 -->
+                                            <div class="dropdown-menu-container" style="position: relative;">
+                                                <button class="btn btn-primary btn-sm" @click="showCreateCharacterMenu = !showCreateCharacterMenu">
+                                                    <i class="fas fa-plus"></i>
+                                                </button>
+                                                <div v-if="showCreateCharacterMenu" class="dropdown-menu" style="position: absolute; right: 0; top: 100%; margin-top: 4px; min-width: 140px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 100;">
+                                                    <button class="btn btn-sm" @click="createNewPersonality(); showCreateCharacterMenu = false" style="width: 100%; text-align: left; padding: 8px 12px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; background: transparent; border: none; color: var(--text-primary);">
+                                                        <i class="fas fa-file" style="color: var(--accent-primary);"></i> 新建角色
+                                                    </button>
+                                                    <button class="btn btn-sm" @click="showAiCreateModal = true; showCreateCharacterMenu = false" style="width: 100%; text-align: left; padding: 8px 12px; display: flex; align-items: center; gap: 8px; background: transparent; border: none; color: var(--text-primary);">
+                                                        <i class="fas fa-magic" style="color: #8b5cf6;"></i> AI创建
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="card-body" style="padding: 12px;">
@@ -4399,6 +4421,9 @@
         <!-- 隐藏的文件导入input -->
         <input type="file" ref="importPersonalityFile" accept=".json,.zip" style="display: none;" @change="importPersonality"></input>
 
+        <!-- 批量导入角色卡文件input -->
+        <input type="file" ref="bulkImportPersonalitiesFile" accept=".zip" style="display: none;" @change="bulkImportPersonalities"></input>
+
         <!-- 添加自定义人格预设模态框 -->
         <div v-if="showAddPersonalityPresetModal" class="modal-overlay" @click.self="closeAddPersonalityPresetModal">
             <div class="modal" style="max-width: 500px; max-height: 90vh;">
@@ -6332,6 +6357,8 @@
                     showAiCreateModal: false, // AI创建角色模态框
                     aiCreateDescription: '', // AI创建角色的用户描述
                     aiGeneratedCharacter: null, // AI生成的角色卡结果
+                    showCreateCharacterMenu: false, // 新建角色下拉菜单
+                    showBulkImportExportMenu: false, // 批量导入导出菜单
                     avatarPresets: [ // 预设头像图标
                         'fas fa-cat', 'fas fa-dog', 'fas fa-dragon', 'fas fa-robot',
                         'fas fa-ghost', 'fas fa-otter', 'fas fa-paw', 'fas fa-feather',
@@ -7337,6 +7364,22 @@
                 document.addEventListener('click', this._modalOverlayClickCaptureHandler, true);
                 this._visibilityHandler = () => this.updateWebVisibility();
                 document.addEventListener('visibilitychange', this._visibilityHandler);
+
+                // 点击外部关闭下拉菜单
+                this._dropdownClickHandler = (event) => {
+                    const dropdownContainers = document.querySelectorAll('.dropdown-menu-container');
+                    let clickedInside = false;
+                    dropdownContainers.forEach(container => {
+                        if (container.contains(event.target)) {
+                            clickedInside = true;
+                        }
+                    });
+                    if (!clickedInside) {
+                        this.showCreateCharacterMenu = false;
+                        this.showBulkImportExportMenu = false;
+                    }
+                };
+                document.addEventListener('click', this._dropdownClickHandler);
                 
                 // 定时刷新会话列表（每 5 秒，减少频率）
                 this.sessionRefreshTimer = setInterval(() => {
@@ -7351,6 +7394,10 @@
                 if (this._modalOverlayClickCaptureHandler) {
                     document.removeEventListener('click', this._modalOverlayClickCaptureHandler, true);
                     this._modalOverlayClickCaptureHandler = null;
+                }
+                if (this._dropdownClickHandler) {
+                    document.removeEventListener('click', this._dropdownClickHandler);
+                    this._dropdownClickHandler = null;
                 }
                 if (this._visibilityHandler) {
                     document.removeEventListener('visibilitychange', this._visibilityHandler);

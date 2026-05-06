@@ -601,3 +601,228 @@ def register_personality_routes(app, server):
         except Exception as e:
             _log.error(f"导出角色卡失败: {e}")
             return jsonify({"success": False, "error": f"导出失败: {str(e)}"}), 500
+
+    @app.route("/api/personality/export-all", methods=["GET"])
+    def export_all_personalities():
+        """导出所有自定义角色卡为 ZIP 文件"""
+        try:
+            # 从文件加载自定义角色预设
+            presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
+            if os.path.exists(presets_file):
+                try:
+                    with open(presets_file, "r", encoding="utf-8") as f:
+                        presets = json.load(f)
+                except Exception as e:
+                    _log.error(f"加载自定义角色卡预设文件失败: {e}")
+                    presets = []
+            else:
+                presets = []
+
+            if not presets:
+                return jsonify({"success": False, "error": "没有可导出的角色卡"}), 400
+
+            # 创建内存中的 ZIP 文件
+            memory_file = io.BytesIO()
+
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for preset in presets:
+                    # 构建角色卡数据
+                    character = {
+                        "name": preset.get("name", ""),
+                        "description": preset.get("description", ""),
+                        "avatar": preset.get("avatar", "fas fa-user-circle"),
+                        "tags": preset.get("tags", []),
+                        "systemPrompt": preset.get("systemPrompt", ""),
+                        "basicInfo": preset.get("basicInfo", ""),
+                        "personality": preset.get("personality", ""),
+                        "scenario": preset.get("scenario", ""),
+                        "firstMessage": preset.get("firstMessage", ""),
+                        "exampleDialogues": preset.get("exampleDialogues", ""),
+                        "responseFormat": preset.get("responseFormat", ""),
+                        "rules": preset.get("rules", []),
+                        "state": preset.get("state", {"affection": 50, "mood": "开心"})
+                    }
+
+                    # 创建角色专属文件夹名称（安全化文件名）
+                    preset_id = preset.get("id", str(uuid.uuid4()))
+                    safe_name = re.sub(r'[^\w\s-]', '', preset.get("name", "character")).strip() or f"character_{preset_id}"
+                    folder_name = f"{safe_name}_{preset_id}"
+
+                    # 添加 JSON 文件
+                    character_json = json.dumps(character, ensure_ascii=False, indent=2)
+                    zf.writestr(f'{folder_name}/character.json', character_json)
+
+                    # 如果有立绘图片，添加到 ZIP
+                    portrait = preset.get("portrait", "")
+                    if portrait and portrait.startswith('/static/'):
+                        portrait_path = portrait.replace('/static/', '')
+                        full_path = os.path.join(server.base_dir, 'nbot', 'web', 'static', portrait_path.replace('static/', ''))
+
+                        if os.path.exists(full_path):
+                            _, ext = os.path.splitext(full_path)
+                            zf.write(full_path, f'{folder_name}/portrait{ext}')
+
+            # 准备响应
+            memory_file.seek(0)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+            return send_file(
+                memory_file,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=f'全部角色卡_{timestamp}.zip'
+            )
+
+        except Exception as e:
+            _log.error(f"导出全部角色卡失败: {e}")
+            return jsonify({"success": False, "error": f"导出失败: {str(e)}"}), 500
+
+    @app.route("/api/personality/import-all", methods=["POST"])
+    def import_all_personalities():
+        """批量导入角色卡，支持包含多个角色卡文件夹的 ZIP 文件"""
+        if "file" not in request.files:
+            return jsonify({"success": False, "error": "请上传文件"}), 400
+
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"success": False, "error": "文件名为空"}), 400
+
+        try:
+            filename = file.filename.lower()
+            if not filename.endswith('.zip'):
+                return jsonify({"success": False, "error": "请上传 ZIP 格式的文件"}), 400
+
+            # 读取 ZIP 文件
+            zip_data = io.BytesIO(file.read())
+            imported_count = 0
+            failed_count = 0
+            failed_names = []
+
+            # 加载现有角色卡
+            presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
+            if os.path.exists(presets_file):
+                try:
+                    with open(presets_file, "r", encoding="utf-8") as f:
+                        existing_presets = json.load(f)
+                except Exception as e:
+                    _log.error(f"加载自定义角色卡预设文件失败: {e}")
+                    existing_presets = []
+            else:
+                existing_presets = []
+
+            with zipfile.ZipFile(zip_data, 'r') as zf:
+                # 查找所有 character.json 文件
+                character_folders = {}
+                for name in zf.namelist():
+                    if name.endswith('character.json'):
+                        # 获取文件夹名称
+                        folder = name.rsplit('/', 1)[0] if '/' in name else ''
+                        character_folders[folder] = {'json': name, 'portrait': None}
+
+                # 查找对应的立绘文件
+                for name in zf.namelist():
+                    if 'portrait.' in name.lower():
+                        folder = name.rsplit('/', 1)[0] if '/' in name else ''
+                        if folder in character_folders:
+                            character_folders[folder]['portrait'] = name
+
+                for folder, files in character_folders.items():
+                    try:
+                        # 读取 JSON
+                        character = json.loads(zf.read(files['json']).decode('utf-8'))
+
+                        # 验证基本字段
+                        if not character.get("name"):
+                            failed_count += 1
+                            failed_names.append(f"{folder}: 缺少角色名称")
+                            continue
+
+                        # 处理立绘图片
+                        portrait_url = ''
+                        if files['portrait']:
+                            try:
+                                portrait_data = zf.read(files['portrait'])
+                                portrait_ext = os.path.splitext(files['portrait'])[1]
+
+                                # 创建上传目录
+                                upload_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
+                                os.makedirs(upload_dir, exist_ok=True)
+
+                                # 生成唯一文件名
+                                new_filename = f"portrait_{uuid.uuid4().hex[:16]}{portrait_ext}"
+                                filepath = os.path.join(upload_dir, new_filename)
+
+                                # 保存文件
+                                with open(filepath, 'wb') as f:
+                                    f.write(portrait_data)
+
+                                portrait_url = f"/static/uploads/portraits/{new_filename}"
+                                _log.info(f"立绘导入成功: {filepath}")
+                            except Exception as e:
+                                _log.error(f"立绘导入失败: {e}")
+
+                        # 检查是否已存在同名角色
+                        existing_preset = None
+                        for i, p in enumerate(existing_presets):
+                            if p.get("name") == character.get("name"):
+                                existing_preset = i
+                                break
+
+                        # 构建角色卡数据
+                        new_preset_data = {
+                            "id": str(uuid.uuid4()),
+                            "name": character.get("name"),
+                            "description": character.get("description", ""),
+                            "avatar": character.get("avatar", "fas fa-user-circle"),
+                            "tags": character.get("tags", []),
+                            "basicInfo": character.get("basicInfo", ""),
+                            "personality": character.get("personality", ""),
+                            "scenario": character.get("scenario", ""),
+                            "firstMessage": character.get("firstMessage", ""),
+                            "exampleDialogues": character.get("exampleDialogues", ""),
+                            "responseFormat": character.get("responseFormat", ""),
+                            "rules": character.get("rules", []),
+                            "state": character.get("state", {"affection": 50, "mood": "开心"}),
+                            "created_at": datetime.now().isoformat(),
+                        }
+                        if portrait_url:
+                            new_preset_data["portrait"] = portrait_url
+                        new_preset_data["systemPrompt"] = compile_personality_prompt(new_preset_data)
+
+                        if existing_preset is not None:
+                            # 更新现有角色（保留id和created_at）
+                            new_preset_data["id"] = existing_presets[existing_preset].get("id", new_preset_data["id"])
+                            new_preset_data["created_at"] = existing_presets[existing_preset].get("created_at", new_preset_data["created_at"])
+                            existing_presets[existing_preset] = new_preset_data
+                        else:
+                            # 创建新角色
+                            existing_presets.append(new_preset_data)
+
+                        imported_count += 1
+
+                    except Exception as e:
+                        failed_count += 1
+                        failed_names.append(f"{folder}: {str(e)}")
+                        _log.error(f"导入角色卡失败 {folder}: {e}")
+
+            # 保存到文件
+            server.custom_personality_presets = existing_presets
+            server._save_data("custom_personality_presets")
+
+            result_message = f"成功导入 {imported_count} 个角色卡"
+            if failed_count > 0:
+                result_message += f"，失败 {failed_count} 个"
+
+            return jsonify({
+                "success": True,
+                "message": result_message,
+                "imported_count": imported_count,
+                "failed_count": failed_count,
+                "failed_names": failed_names
+            })
+
+        except zipfile.BadZipFile:
+            return jsonify({"success": False, "error": "ZIP 文件损坏或格式不正确"}), 400
+        except Exception as e:
+            _log.error(f"批量导入角色卡失败: {e}")
+            return jsonify({"success": False, "error": f"导入失败: {str(e)}"}), 500
