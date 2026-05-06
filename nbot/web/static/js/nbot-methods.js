@@ -2069,7 +2069,7 @@ const NbotMethods = {
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/skills/${id}`);
@@ -2298,7 +2298,7 @@ def main(params):
                             icon: 'fa-trash',
                             iconColor: 'var(--danger)',
                             danger: true,
-                            action: async () => {
+                            onConfirm: async () => {
                                 this.isLoading = true;
                                 try {
                                     await api.delete(`/api/skills/storage/${encodeURIComponent(skillName)}`);
@@ -2434,7 +2434,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/tools/${id}`);
@@ -2627,7 +2627,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/channels/${channel.id}`);
@@ -4006,7 +4006,7 @@ def main(params):
                         icon: 'fa-trash-alt',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/sessions/${this.currentSession.id}/messages`);
@@ -4036,7 +4036,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             const sessionId = this.currentSession.id;
                             const deletedSession = this.currentSession;
                             const sessionIndex = this.sessions.findIndex(s => s.id === sessionId);
@@ -4454,9 +4454,12 @@ def main(params):
                         title: config.title || '确认操作',
                         message: config.message || '确定要执行这个操作吗？',
                         confirmText: config.confirmText || '确认',
+                        cancelText: config.cancelText || '取消',
                         icon: config.icon || 'fa-exclamation-circle',
                         iconColor: config.iconColor || 'var(--warning)',
                         danger: config.danger || false,
+                        onConfirm: config.onConfirm,
+                        onCancel: config.onCancel,
                         action: config.action,
                         data: config.data || null
                     };
@@ -4464,14 +4467,23 @@ def main(params):
                 },
                 
                 confirmAction() {
-                    if (this.confirmModalConfig.action) {
+                    if (this.confirmModalConfig.onConfirm) {
+                        this.confirmModalConfig.onConfirm();
+                    } else if (this.confirmModalConfig.action) {
+                        // 兼容旧版
                         this.confirmModalConfig.action('confirm');
                     }
                     this.showConfirmModal = false;
                 },
 
                 cancelConfirmAction() {
-                    // 取消时不执行 action，直接关闭对话框
+                    // 如果有取消回调，执行它
+                    if (this.confirmModalConfig.onCancel) {
+                        this.confirmModalConfig.onCancel();
+                    } else if (this.confirmModalConfig.action) {
+                        // 兼容旧版，调用 action 并传入 'cancel'
+                        this.confirmModalConfig.action('cancel');
+                    }
                     this.showConfirmModal = false;
                 },
 
