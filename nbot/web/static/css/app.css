@@ -441,14 +441,39 @@
         }
 
         .top-bar {
-            height: 56px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
+            position: relative;
+            height: auto;
+            margin: 12px 16px 0;
+            padding: 10px 20px;
+            background: rgba(30, 41, 59, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 0 20px;
             flex-shrink: 0;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        /* 顶部高光 */
+        .top-bar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 15%;
+            right: 15%;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.2) 20%,
+                rgba(255, 255, 255, 0.2) 80%,
+                transparent 100%
+            );
+            border-radius: 1px;
         }
 
         .page-title {
@@ -3769,11 +3794,37 @@
         }
 
         .chat-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border-color);
+            position: relative;
+            margin: 12px 16px;
+            padding: 12px 20px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        /* 顶部高光 */
+        .chat-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 10%;
+            right: 10%;
+            height: 1px;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.2) 20%,
+                rgba(255, 255, 255, 0.2) 80%,
+                transparent 100%
+            );
+            border-radius: 1px;
         }
 
         .chat-header-info { display: flex; align-items: center; gap: 12px; }
@@ -3925,39 +3976,82 @@
             opacity: 0;
         }
 
-        /* 背景设定卡片样式 */
+        /* ============================================
+           背景设定卡片 - Glassmorphism Scenario Card
+           ============================================ */
+
         .scenario-card {
-            margin-bottom: 20px;
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95), rgba(15, 23, 42, 0.95));
-            border: 1px solid rgba(88, 166, 255, 0.5);
-            border-radius: 12px;
+            position: relative;
+            margin-bottom: 24px;
+            background: linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.7) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 20px;
+            padding: 20px;
             overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
         }
 
-        .scenario-header {
-            display: flex;
+        /* 背景光斑装饰 */
+        .scenario-card::before {
+            content: '';
+            position: absolute;
+            top: -40px;
+            right: -40px;
+            width: 120px;
+            height: 120px;
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.12) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        .scenario-card::after {
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: -20px;
+            width: 80px;
+            height: 80px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        /* 圆角标签 */
+        .scenario-badge {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
             align-items: center;
-            gap: 10px;
-            padding: 12px 16px;
-            background: rgba(88, 166, 255, 0.25);
+            gap: 6px;
+            padding: 6px 12px;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(59, 130, 246, 0.2) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.35);
+            border-radius: 20px;
             font-weight: 600;
-            color: var(--accent-primary);
-            font-size: 14px;
+            color: #c4b5fd;
+            font-size: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
         }
 
-        .scenario-header i {
-            font-size: 16px;
+        .scenario-badge i {
+            font-size: 12px;
+            color: #ddd6fe;
         }
 
         .scenario-content {
-            padding: 14px 16px;
-            font-size: 13px;
-            line-height: 1.7;
-            color: var(--text-primary);
+            position: relative;
+            z-index: 1;
+            font-size: 14px;
+            line-height: 1.9;
+            color: rgba(255, 255, 255, 0.9);
             white-space: pre-wrap;
             word-break: break-word;
-            background: rgba(15, 23, 42, 0.6);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         /* 历史记录总结样式 */
@@ -4089,6 +4183,10 @@
             font-size: 16px;
             flex-shrink: 0;
             overflow: hidden;
+            box-shadow: 
+                0 4px 15px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.08);
         }
 
         .message-avatar img {
@@ -4111,23 +4209,102 @@
             box-shadow: 0 0 0 3px var(--accent-primary-transparent, rgba(88, 166, 255, 0.4));
         }
 
+        /* ============================================
+           玻璃拟态聊天气泡 - Glass Message Bubbles
+           ============================================ */
+
         .message-content {
+            position: relative;
             max-width: 70%;
             min-width: 0;
-            background: var(--bg-tertiary);
-            padding: 12px 16px;
-            border-radius: 12px;
+            background: rgba(20, 30, 45, 0.55);
+            padding: 14px 18px;
+            border-radius: 20px;
             font-size: 14px;
-            line-height: 1.6;
+            line-height: 1.85;
             word-break: break-word;
             overflow-wrap: break-word;
             word-wrap: break-word;
             hyphens: auto;
+            color: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+            overflow: hidden;
         }
 
+        /* 顶部高光效果 */
+        .message-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.15) 20%, 
+                rgba(255, 255, 255, 0.15) 80%, 
+                transparent 100%
+            );
+            pointer-events: none;
+        }
+
+        /* 内部高光 */
+        .message-content::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 10%;
+            right: 10%;
+            height: 40%;
+            background: linear-gradient(180deg, 
+                rgba(255, 255, 255, 0.06) 0%, 
+                transparent 100%
+            );
+            border-radius: 50%;
+            pointer-events: none;
+            filter: blur(8px);
+        }
+
+        /* 用户消息气泡 - 右侧渐变 */
         .message.user .message-content {
-            background: var(--accent-primary);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.5) 0%, rgba(37, 99, 235, 0.55) 100%);
             color: white;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 
+                0 8px 32px rgba(37, 99, 235, 0.25),
+                inset 0 1px 0 rgba(255, 255, 255, 0.12);
+        }
+
+        .message.user .message-content::before {
+            background: linear-gradient(90deg, 
+                transparent 0%, 
+                rgba(255, 255, 255, 0.2) 20%, 
+                rgba(255, 255, 255, 0.2) 80%, 
+                transparent 100%
+            );
+        }
+
+        /* AI 助手消息气泡 - 左侧 更透明偏白 */
+        .message.assistant .message-content {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .message.assistant .message-content::before {
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.25) 20%,
+                rgba(255, 255, 255, 0.25) 80%,
+                transparent 100%
+            );
         }
 
         /* Markdown 样式 */
@@ -4514,6 +4691,14 @@
                 max-width: 100vw;
                 overflow-x: hidden;
                 padding: 16px;
+            }
+
+            /* 移动端顶部栏保持玻璃圆角 */
+            .top-bar {
+                height: auto;
+                margin: 10px 14px 0;
+                padding: 10px 18px;
+                border-radius: 14px;
             }
 
             /* 移动端聊天界面优化 */
@@ -12102,8 +12287,10 @@
             }
 
             .top-bar {
-                height: 50px;
-                padding: 0 12px;
+                height: auto;
+                margin: 8px 12px 0;
+                padding: 8px 16px;
+                border-radius: 12px;
             }
 
             .chat-layout {
@@ -12211,20 +12398,21 @@
         /* 移动端背景设定卡片适配 */
         @media (max-width: 768px) {
             .scenario-card {
-                margin-bottom: 16px;
-                margin-left: 10px;
-                margin-right: 10px;
+                margin-bottom: 20px;
+                margin-left: 12px;
+                margin-right: 12px;
+                border-radius: 16px;
             }
 
             .scenario-header {
-                padding: 10px 12px;
+                padding: 12px 16px;
                 font-size: 13px;
             }
 
             .scenario-content {
-                padding: 12px;
-                font-size: 12px;
-                line-height: 1.6;
+                padding: 16px;
+                font-size: 13px;
+                line-height: 1.8;
             }
         }
 
