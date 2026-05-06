@@ -4471,9 +4471,7 @@ def main(params):
                 },
 
                 cancelConfirmAction() {
-                    if (this.confirmModalConfig.action) {
-                        this.confirmModalConfig.action('cancel');
-                    }
+                    // 取消时不执行 action，直接关闭对话框
                     this.showConfirmModal = false;
                 },
 
