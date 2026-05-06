@@ -8,13 +8,15 @@ def register_memory_routes(app, server):
     def get_memory():
         mem_type = request.args.get("type", "all")
         target_id = request.args.get("target_id", "")
+        character_name = request.args.get("character_name", "")
 
         if getattr(server, "PROMPT_MANAGER_AVAILABLE", False) and getattr(
             server, "prompt_manager", None
         ):
             try:
                 memories = server.prompt_manager.get_memories(
-                    target_id, mem_type if mem_type != "all" else None
+                    target_id, mem_type if mem_type != "all" else None,
+                    character_name if character_name else None
                 )
             except Exception:
                 memories = server.memories
@@ -25,6 +27,8 @@ def register_memory_routes(app, server):
             memories = [m for m in memories if m.get("type", "long") == mem_type]
         if target_id:
             memories = [m for m in memories if m.get("target_id", "") == target_id]
+        if character_name:
+            memories = [m for m in memories if m.get("character_name", "") == character_name]
 
         long_term = [m for m in memories if m.get("type", "long") == "long"]
         short_term = [m for m in memories if m.get("type", "long") == "short"]
@@ -41,6 +45,7 @@ def register_memory_routes(app, server):
         summary = data.get("summary")
         mem_type = data.get("type", "long")
         expire_days = data.get("expire_days", 7)
+        character_name = data.get("character_name", "")
 
         if not title or not content:
             return jsonify({"success": False, "error": "title and content are required"}), 400
@@ -50,7 +55,8 @@ def register_memory_routes(app, server):
             return jsonify({"success": False, "error": "Prompt manager not available"}), 503
 
         success = prompt_manager.add_memory(
-            title, content, target_id, summary, mem_type, expire_days
+            title, content, target_id, summary, mem_type, expire_days,
+            character_name if character_name else None
         )
         if success:
             server.memories = prompt_manager.get_memories()

@@ -146,7 +146,10 @@ class QQCallbacks(PipelineCallbacks):
         self.qq_store.save()
 
     def get_workspace_context(self, ctx: PipelineContext) -> Dict[str, Any]:
-        return get_workspace_context(self.user_id, self.group_id, self.group_user_id)
+        # 从系统获取当前角色名
+        from nbot.web.server import server as web_server
+        character_name = getattr(web_server, "personality", {}).get("name", "")
+        return get_workspace_context(self.user_id, self.group_id, self.group_user_id, character_name)
 
     def check_confirmation(
         self, ctx: PipelineContext, user_input: str
@@ -275,7 +278,7 @@ def get_qq_session_id(user_id=None, group_id=None, group_user_id=None) -> str:
     return build_qq_session_id(user_id, group_id, group_user_id)
 
 
-def get_workspace_context(user_id=None, group_id=None, group_user_id=None) -> dict:
+def get_workspace_context(user_id=None, group_id=None, group_user_id=None, character_name=None) -> dict:
     """获取工作区上下文信息，用于传递给工具调用"""
     session_id = get_qq_session_id(user_id, group_id, group_user_id)
     if not session_id:
@@ -287,10 +290,16 @@ def get_workspace_context(user_id=None, group_id=None, group_user_id=None) -> di
     if WORKSPACE_AVAILABLE:
         workspace_manager.get_or_create(session_id, session_type)
 
-    return {
+    context = {
         'session_id': session_id,
         'session_type': session_type
     }
+
+    # 添加角色名（如果提供）
+    if character_name:
+        context['character_name'] = character_name
+
+    return context
 
 
 def ensure_workspace(user_id=None, group_id=None, group_user_id=None) -> str:

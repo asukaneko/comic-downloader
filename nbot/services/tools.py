@@ -1359,7 +1359,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "save_to_memory",
-            "description": "将重要信息保存到记忆管理系统。当用户要求记住某些信息、保存重要内容、记录关键事项时使用此工具。可以保存为长期记忆（永久保存）或短期记忆（自动过期）。记忆包含标题（简短概括）、摘要（内容要点）和完整内容。",
+            "description": "将重要信息保存到记忆管理系统。当用户要求记住某些信息、保存重要内容、记录关键事项时使用此工具。可以保存为长期记忆（永久保存）或短期记忆（自动过期）。记忆会自动关联到当前角色，不同角色的记忆相互隔离。记忆包含标题（简短概括）、摘要（内容要点）和完整内容。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1395,13 +1395,13 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "read_memory",
-            "description": "读取已保存的记忆内容。当用户询问之前记住的内容、查询保存的信息、确认记忆中的内容时使用此工具。返回的记忆包含标题、摘要和完整内容。",
+            "description": "读取已保存的记忆内容。当用户询问之前记住的内容、查询保存的信息、确认记忆中的内容时使用此工具。只返回当前角色的记忆，不同角色的记忆相互隔离。返回的记忆包含标题、摘要和完整内容。",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "mem_type": {
                         "type": "string",
-                        "description": "记忆类型筛选：'long'表示长期记忆，'short'表示短期记忆，不填则返回所有记忆",
+                        "description": "记忆类型筛选：'long'表示长期记忆，'short'表示短期记忆，不填则返回当前角色的所有记忆",
                         "enum": ["long", "short"]
                     }
                 }
@@ -2263,40 +2263,47 @@ def _execute_save_to_memory(arguments: Dict[str, Any], context: Dict = None) -> 
     """执行保存到记忆工具"""
     try:
         from nbot.core.prompt import prompt_manager
-        
+
         if not prompt_manager:
             return {"success": False, "error": "记忆管理系统不可用"}
-        
+
         title = arguments.get('title', '')
         content = arguments.get('content', '')
         summary = arguments.get('summary', '')  # 可选，如果为空会让 prompt_manager 自动生成
         mem_type = arguments.get('mem_type', 'long')
         expire_days = arguments.get('expire_days', 7)
-        
+
         if not title or not content:
             return {"success": False, "error": "缺少必需的参数: title 和 content"}
-        
+
         # 从 context 获取目标ID（用户ID或群ID）
         target_id = ''
         if context:
             # 优先使用 user_id，然后是 group_id
             target_id = context.get('user_id', '') or context.get('group_id', '')
-        
+
+        # 从 context 获取角色名
+        character_name = ''
+        if context:
+            character_name = context.get('character_name', '')
+
         # 添加记忆（使用新格式：title, summary, content）
-        # 参数顺序：title, content, target_id, summary, mem_type, expire_days
-        success = prompt_manager.add_memory(title, content, target_id, summary, mem_type, expire_days)
-        
+        # 参数顺序：title, content, target_id, summary, mem_type, expire_days, character_name
+        success = prompt_manager.add_memory(title, content, target_id, summary, mem_type, expire_days, character_name)
+
         if success:
             mem_type_desc = "长期记忆" if mem_type == "long" else f"短期记忆（{expire_days}天）"
+            char_desc = f" [{character_name}]" if character_name else ""
             return {
                 "success": True,
-                "message": f"已成功保存到{mem_type_desc}",
+                "message": f"已成功保存到{mem_type_desc}{char_desc}",
                 "title": title,
-                "type": mem_type
+                "type": mem_type,
+                "character_name": character_name
             }
         else:
             return {"success": False, "error": "保存记忆失败"}
-            
+
     except Exception as e:
         _log.error(f"Save to memory error: {e}")
         return {"success": False, "error": f"保存记忆时出错: {str(e)}"}
@@ -2306,31 +2313,40 @@ def _execute_read_memory(arguments: Dict[str, Any], context: Dict = None) -> Dic
     """执行读取记忆工具"""
     try:
         from nbot.core.prompt import prompt_manager
-        
+
         if not prompt_manager:
             return {"success": False, "error": "记忆管理系统不可用"}
-        
+
         # 可选参数
         mem_type = arguments.get('mem_type', None)  # 'long', 'short', 或 None（全部）
-        
+
         # 从 context 获取目标ID（用户ID或群ID）
         target_id = None
         if context:
             target_id = context.get('user_id', '') or context.get('group_id', '')
             if not target_id:
                 target_id = None
-        
-        # 获取记忆（按 target_id 过滤）
-        memories = prompt_manager.get_memories(target_id, mem_type)
-        
+
+        # 从 context 获取角色名
+        character_name = None
+        if context:
+            character_name = context.get('character_name', '')
+            if not character_name:
+                character_name = None
+
+        # 获取记忆（按 target_id 和 character_name 过滤）
+        memories = prompt_manager.get_memories(target_id, mem_type, character_name)
+
         if not memories:
+            char_desc = f" [{character_name}]" if character_name else ""
             return {
                 "success": True,
-                "message": "没有找到任何记忆",
+                "message": f"没有找到任何记忆{char_desc}",
                 "count": 0,
-                "memories": []
+                "memories": [],
+                "character_name": character_name
             }
-        
+
         # 格式化返回（新格式：title, summary, content）
         formatted_memories = []
         for mem in memories:
@@ -2342,16 +2358,19 @@ def _execute_read_memory(arguments: Dict[str, Any], context: Dict = None) -> Dic
                 "summary": mem.get('summary', ''),
                 "content": mem.get('content', ''),
                 "type": mem_type_desc,
-                "created_at": created_at
+                "created_at": created_at,
+                "character_name": mem.get('character_name', '')
             })
-        
+
+        char_desc = f" [{character_name}]" if character_name else ""
         return {
             "success": True,
-            "message": f"共找到 {len(memories)} 条记忆",
+            "message": f"共找到 {len(memories)} 条记忆{char_desc}",
             "count": len(memories),
-            "memories": formatted_memories
+            "memories": formatted_memories,
+            "character_name": character_name
         }
-        
+
     except Exception as e:
         _log.error(f"Read memory error: {e}")
         return {"success": False, "error": f"读取记忆时出错: {str(e)}"}

@@ -140,37 +140,43 @@ class PromptManager:
 
         return ""
     
-    def load_memories(self, user_id: str = None, group_id: str = None) -> str:
+    def load_memories(self, user_id: str = None, group_id: str = None, character_name: str = None) -> str:
         """加载相关记忆
-        
+
         Args:
             user_id: 用户ID
             group_id: 群组ID
-            
+            character_name: 角色名称，用于筛选特定角色的记忆
+
         Returns:
             记忆内容字符串（包含标题和摘要）
         """
         self._load_memories()
-        
+
         target_id = user_id or group_id
         if not target_id:
             return ""
-        
+
         memories = []
         now = datetime.now()
-        
+
         for mem in self._memories_cache:
             mem_target = mem.get('target_id', '')
             if mem_target and mem_target != target_id:
                 continue
-            
+
+            # 按角色名筛选记忆（如果指定了角色名）
+            mem_character = mem.get('character_name', '')
+            if character_name and mem_character and mem_character != character_name:
+                continue
+
             mem_type = mem.get('type', 'long')
-            
+
             # 检查是否过期
             if mem_type == 'short':
                 created_at = mem.get('created_at', '')
                 expire_days = mem.get('expire_days', 7)
-                
+
                 if created_at:
                     try:
                         created = datetime.fromisoformat(created_at)
@@ -179,17 +185,17 @@ class PromptManager:
                             continue
                     except:
                         pass
-            
+
             # 新格式：包含标题、摘要、内容
             title = mem.get('title', '')
             summary = mem.get('summary', '')
             content = mem.get('content', '')
-            
+
             if title or content:
                 # 优先使用摘要，如果没有摘要则使用内容的前100字
                 display_text = summary if summary else (content[:100] + '...' if len(content) > 100 else content)
                 memories.append(f"【{title}】{display_text}")
-        
+
         if memories:
             return "\n".join(["【重要记忆】"] + memories)
         return ""
@@ -304,11 +310,11 @@ class PromptManager:
             print(f"保存提示词失败: {e}")
             return False
     
-    def add_memory(self, title: str, content: str, target_id: str, 
-                   summary: str = None, mem_type: str = 'long', 
-                   expire_days: int = 7) -> bool:
+    def add_memory(self, title: str, content: str, target_id: str,
+                   summary: str = None, mem_type: str = 'long',
+                   expire_days: int = 7, character_name: str = None) -> bool:
         """添加记忆
-        
+
         Args:
             title: 记忆标题
             content: 记忆内容
@@ -316,14 +322,15 @@ class PromptManager:
             summary: 记忆摘要（可选，默认从 content 提取）
             mem_type: 记忆类型 ('long' 长期, 'short' 短期)
             expire_days: 短期记忆过期天数
-            
+            character_name: 角色名称，用于区分不同角色的记忆
+
         Returns:
             是否添加成功
         """
         # 如果没有提供摘要，从内容中提取
         if not summary:
             summary = content[:100] + '...' if len(content) > 100 else content
-        
+
         memory = {
             'id': f"mem_{datetime.now().timestamp()}",
             'title': title,
@@ -334,31 +341,40 @@ class PromptManager:
             'expire_days': expire_days,
             'created_at': datetime.now().isoformat()
         }
-        
+
+        # 添加角色名（如果提供）
+        if character_name:
+            memory['character_name'] = character_name
+
         self._memories_cache.append(memory)
         self._save_memories()
         return True
     
-    def get_memories(self, target_id: str = None, mem_type: str = None) -> List[Dict]:
+    def get_memories(self, target_id: str = None, mem_type: str = None, character_name: str = None) -> List[Dict]:
         """获取记忆列表
-        
+
         Args:
             target_id: 目标ID（可选）
             mem_type: 记忆类型（可选）
-            
+            character_name: 角色名称（可选），用于筛选特定角色的记忆
+
         Returns:
             记忆列表
         """
         self._load_memories()
-        
+
         result = self._memories_cache
-        
+
         if target_id:
             result = [m for m in result if m.get('target_id') == target_id]
-        
+
         if mem_type:
             result = [m for m in result if m.get('type') == mem_type]
-        
+
+        # 按角色名筛选（如果指定）
+        if character_name:
+            result = [m for m in result if m.get('character_name') == character_name]
+
         return result
     
     def delete_memory(self, memory_id: str) -> bool:

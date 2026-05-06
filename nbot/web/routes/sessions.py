@@ -101,12 +101,15 @@ def register_session_routes(app, server):
         if char_name:
             system_prompt = system_prompt.replace('{{char}}', char_name)
     
-        # 获取所有记忆（标题+摘要）并加入系统提示词
+        # 获取角色信息（提前获取用于筛选记忆）
+        sender_name = data.get("sender_name") or server.personality.get("name", "AI")
+
+        # 获取当前角色的记忆（按角色名筛选）并加入系统提示词
         memory_items = []
         try:
             if server.PROMPT_MANAGER_AVAILABLE and server.prompt_manager:
-                # 从 server.prompt_manager 获取所有记忆
-                all_memories = server.prompt_manager.get_memories()
+                # 从 server.prompt_manager 获取当前角色的记忆
+                all_memories = server.prompt_manager.get_memories(character_name=sender_name)
                 for mem in all_memories:
                     # 兼容新旧格式：获取标题和摘要
                     title = mem.get("title", mem.get("key", ""))
@@ -125,8 +128,12 @@ def register_session_routes(app, server):
                         )
                         memory_items.append({"title": title, "summary": display})
             elif server.memories:
-                # 从 server.memories 获取
+                # 从 server.memories 获取当前角色的记忆
                 for mem in server.memories:
+                    # 只获取当前角色的记忆（或无角色标记的通用记忆）
+                    mem_character = mem.get("character_name", "")
+                    if mem_character and mem_character != sender_name:
+                        continue
                     title = mem.get("title", mem.get("key", ""))
                     summary = mem.get("summary", "")
                     content = mem.get("content", mem.get("value", ""))
@@ -153,9 +160,8 @@ def register_session_routes(app, server):
         enabled_skills = [s for s in server.skills_config if s.get("enabled", True)]
         system_prompt += format_skills_prompt(server.skills_config)
         _log.info(f"已添加 {len(enabled_skills)} 个技能到会话 {session_id[:8]}")
-    
-        # 获取角色信息
-        sender_name = data.get("sender_name") or server.personality.get("name", "AI")
+
+        # 获取角色其他信息（sender_name 已在前面定义）
         sender_avatar = data.get("sender_avatar") or server.personality.get("avatar", "")
         sender_portrait = data.get("sender_portrait") or server.personality.get("portrait", "")
 

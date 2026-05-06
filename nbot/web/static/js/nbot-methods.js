@@ -6829,7 +6829,8 @@ def main(params):
                         content: mem.content || mem.value || '',
                         priority: mem.priority || 'normal',
                         expire_days: mem.expire_days || 7,
-                        target_id: mem.target_id || ''
+                        target_id: mem.target_id || '',
+                        character_name: mem.character_name || ''
                     };
                     this.showAddMemoryModal = true;
                 },
@@ -6841,6 +6842,12 @@ def main(params):
                         this.editingMemory.target_id = this.username;
                     } else if (this.currentSession) {
                         this.editingMemory.target_id = this.currentSession.qq_id || this.currentSession.id;
+                    }
+                    // 默认选择当前角色（从当前会话或全局personality获取）
+                    if (this.currentSession && this.currentSession.sender_name) {
+                        this.editingMemory.character_name = this.currentSession.sender_name;
+                    } else if (this.personality && this.personality.name) {
+                        this.editingMemory.character_name = this.personality.name;
                     }
                     this.showAddMemoryModal = true;
                 },
@@ -6886,7 +6893,8 @@ def main(params):
                         content: '',
                         priority: 'normal',
                         expire_days: 7,
-                        target_id: ''
+                        target_id: '',
+                        character_name: ''
                     };
                 },
 

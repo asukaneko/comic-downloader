@@ -448,7 +448,19 @@ class WebCallbacks(PipelineCallbacks):
         return ""
 
     def get_workspace_context(self, ctx: PipelineContext) -> Dict:
-        return {"session_id": self.session_id, "session_type": "web"}
+        # 从会话中获取角色名
+        character_name = ""
+        session = self.session_store.get_session(self.session_id)
+        if session:
+            character_name = session.get("sender_name", "")
+        # 如果会话中没有角色名，使用当前全局角色名
+        if not character_name:
+            character_name = getattr(self.server, "personality", {}).get("name", "")
+
+        context = {"session_id": self.session_id, "session_type": "web"}
+        if character_name:
+            context["character_name"] = character_name
+        return context
 
     # ---- 响应完成 ----
 

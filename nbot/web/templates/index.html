@@ -2323,6 +2323,9 @@
                                                 <span class="memory-priority" :class="mem.priority || 'normal'">
                                                     {{ getPriorityLabel(mem.priority) }}
                                                 </span>
+                                                <span v-if="mem.character_name" class="memory-character" style="background: var(--accent-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                                                    <i class="fas fa-user-circle"></i> {{ mem.character_name }}
+                                                </span>
                                                 <span v-if="mem.target_id" class="memory-target">
                                                     <i class="fas fa-link"></i> {{ getSessionNameById(mem.target_id) }}
                                                 </span>
@@ -2375,6 +2378,9 @@
                                                 <span><i class="fas fa-calendar"></i> {{ formatFullTime(mem.created_at) }}</span>
                                                 <span><i class="fas fa-hourglass-half"></i> 有效期: {{ mem.expire_days || 7 }}天</span>
                                                 <span v-if="isMemoryExpired(mem)" class="memory-expired-badge">已过期</span>
+                                                <span v-if="mem.character_name" class="memory-character" style="background: var(--accent-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+                                                    <i class="fas fa-user-circle"></i> {{ mem.character_name }}
+                                                </span>
                                                 <span v-if="mem.target_id" class="memory-target">
                                                     <i class="fas fa-link"></i> {{ getSessionNameById(mem.target_id) }}
                                                 </span>
@@ -4730,6 +4736,18 @@
                         </div>
                     </div>
                     <div class="form-group">
+                        <label class="form-label">所属角色</label>
+                        <select v-model="editingMemory.character_name" class="form-select">
+                            <option value="">通用记忆（所有角色共享）</option>
+                            <optgroup label="我的角色卡">
+                                <option v-for="preset in customPersonalityPresets" :key="preset.id" :value="preset.name">
+                                    {{ preset.name }}
+                                </option>
+                            </optgroup>
+                        </select>
+                        <div class="form-hint">选择角色后，该记忆只会在对应角色对话时加载</div>
+                    </div>
+                    <div class="form-group">
                         <label class="form-label">关联对象（可选）</label>
                         <select v-model="editingMemory.target_id" class="form-select">
                             <option value="">全局记忆（对所有用户生效）</option>
@@ -6409,7 +6427,8 @@
                         value: '',
                         priority: 'normal',
                         expire_days: 7,
-                        target_id: ''
+                        target_id: '',
+                        character_name: ''
                     },
 
                     // Knowledge
