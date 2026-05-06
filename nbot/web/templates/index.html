@@ -2110,6 +2110,31 @@
                                     <div class="card-header">
                                         <span class="card-title">我的角色卡</span>
                                         <div style="display: flex; gap: 8px;">
+                                            <!-- 视图切换按钮 -->
+                                            <div class="view-toggle-group" style="display: flex; background: var(--bg-tertiary); border-radius: 6px; padding: 2px; gap: 2px;">
+                                                <button 
+                                                    class="btn btn-sm" 
+                                                    :class="{ 'btn-secondary': characterCardViewMode !== 'grid', 'btn-primary': characterCardViewMode === 'grid' }"
+                                                    @click="setCharacterCardViewMode('grid')"
+                                                    title="网格视图"
+                                                    style="padding: 4px 8px;"
+                                                >
+                                                    <i class="fas fa-th-large"></i>
+                                                </button>
+                                                <button 
+                                                    class="btn btn-sm" 
+                                                    :class="{ 'btn-secondary': characterCardViewMode !== 'list', 'btn-primary': characterCardViewMode === 'list' }"
+                                                    @click="setCharacterCardViewMode('list')"
+                                                    title="列表视图"
+                                                    style="padding: 4px 8px;"
+                                                >
+                                                    <i class="fas fa-list"></i>
+                                                </button>
+                                            </div>
+                                            <!-- 全屏按钮 -->
+                                            <button class="btn btn-secondary btn-sm" @click="openCharacterCardFullscreen" title="全屏展示">
+                                                <i class="fas fa-expand"></i>
+                                            </button>
                                             <button class="btn btn-secondary btn-sm" @click="loadCustomPersonalityPresets" title="刷新列表">
                                                 <i class="fas fa-sync-alt"></i>
                                             </button>
@@ -2149,51 +2174,84 @@
                                             <div class="empty-state-title">暂无自定义角色</div>
                                             <div class="empty-state-desc">点击上方按钮创建你的角色卡</div>
                                         </div>
-                                        <div v-else style="display: flex; flex-direction: column; gap: 10px;">
+                                        <!-- 网格视图 -->
+                                        <div v-else-if="characterCardViewMode === 'grid'" class="character-grid">
                                             <div v-for="(preset, index) in paginatedCustomPersonalityPresets" :key="preset.id"
-                                                 class="character-card"
+                                                 class="character-card character-card-grid"
                                                  @click="loadPersonalityPreset(preset)">
-                                                <!-- 立绘或头像 -->
-                                                <div class="character-card-avatar" style="width: 60px; height: 80px; border-radius: 8px; overflow: hidden; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">
-                                                    <img v-if="preset.portrait" :src="preset.portrait" style="width: 100%; height: 100%; object-fit: cover;">
-                                                    <i v-else :class="preset.avatar || 'fas fa-user-circle'" style="font-size: 28px;"></i>
+                                                <!-- 立绘区域 - 占卡片大部分空间 -->
+                                                <div class="character-card-portrait">
+                                                    <img v-if="preset.portrait" :src="preset.portrait">
+                                                    <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
                                                 </div>
-                                                <div class="character-card-info">
+                                                <!-- 下方信息区域 -->
+                                                <div class="character-card-grid-info">
+                                                    <div class="character-card-grid-name">{{ preset.name }}</div>
+                                                    <div class="character-card-grid-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                                    <div v-if="preset.tags && preset.tags.length" class="character-card-grid-tags">
+                                                        <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+                                                    </div>
+                                                    <div class="character-card-grid-actions">
+                                                        <button class="btn btn-sm btn-primary" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话">
+                                                            <i class="fas fa-comment-dots"></i> 对话
+                                                        </button>
+                                                        <button class="btn btn-sm btn-secondary" @click.stop="deleteCustomPersonalityPreset(preset)" title="删除角色">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- 列表视图 -->
+                                        <div v-else class="character-list">
+                                            <div v-for="(preset, index) in paginatedCustomPersonalityPresets" :key="preset.id"
+                                                 class="character-card character-card-list"
+                                                 @click="loadPersonalityPreset(preset)">
+                                                <!-- 立绘或头像 - 增大尺寸 -->
+                                                <div class="character-card-list-portrait">
+                                                    <img v-if="preset.portrait" :src="preset.portrait">
+                                                    <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                                                </div>
+                                                <div class="character-card-info" style="flex: 1; min-width: 0;">
                                                     <div class="character-card-name">{{ preset.name }}</div>
                                                     <div class="character-card-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                                    <div v-if="preset.tags && preset.tags.length" class="character-card-tags">
+                                                        <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+                                                    </div>
                                                 </div>
-                                                <button class="btn btn-sm" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话" style="color: var(--accent-primary);">
-                                                    <i class="fas fa-comment-dots"></i>
-                                                </button>
-                                                <button class="btn btn-sm" @click.stop="deleteCustomPersonalityPreset(preset, index)" style="color: var(--danger);">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
+                                                <div class="character-card-actions" style="display: flex; gap: 6px; flex-shrink: 0;">
+                                                    <button class="btn btn-sm" @click.stop="startSessionWithPreset(preset)" title="用此角色开始新对话" style="color: var(--accent-primary);">
+                                                        <i class="fas fa-comment-dots"></i>
+                                                    </button>                                                    <button class="btn btn-sm" @click.stop="deleteCustomPersonalityPreset(preset)" style="color: var(--danger);">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <!-- 分页控件 -->
-                                            <div v-if="customPersonalityTotalPages > 1" class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
-                                                <button 
-                                                    class="btn btn-sm btn-secondary" 
-                                                    :disabled="customPersonalityPage <= 1"
-                                                    @click="customPersonalityPage--"
-                                                    style="padding: 4px 12px;"
-                                                >
-                                                    <i class="fas fa-chevron-left"></i> 上一页
-                                                </button>
-                                                <span style="color: var(--text-secondary); font-size: 13px; min-width: 80px; text-align: center;">
-                                                    {{ customPersonalityPage }} / {{ customPersonalityTotalPages }}
-                                                </span>
-                                                <button 
-                                                    class="btn btn-sm btn-secondary" 
-                                                    :disabled="customPersonalityPage >= customPersonalityTotalPages"
-                                                    @click="customPersonalityPage++"
-                                                    style="padding: 4px 12px;"
-                                                >
-                                                    下一页 <i class="fas fa-chevron-right"></i>
-                                                </button>
-                                            </div>
-                                            <div v-if="customPersonalityTotalPages > 1" style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 4px;">
-                                                共 {{ customPersonalityPresets.length }} 个角色
-                                            </div>
+                                        </div>
+                                        <!-- 分页控件 -->
+                                        <div v-if="customPersonalityTotalPages > 1" class="pagination-controls" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+                                            <button 
+                                                class="btn btn-sm btn-secondary" 
+                                                :disabled="customPersonalityPage <= 1"
+                                                @click="customPersonalityPage--"
+                                                style="padding: 4px 12px;"
+                                            >
+                                                <i class="fas fa-chevron-left"></i> 上一页
+                                            </button>
+                                            <span style="color: var(--text-secondary); font-size: 13px; min-width: 80px; text-align: center;">
+                                                {{ customPersonalityPage }} / {{ customPersonalityTotalPages }}
+                                            </span>
+                                            <button 
+                                                class="btn btn-sm btn-secondary" 
+                                                :disabled="customPersonalityPage >= customPersonalityTotalPages"
+                                                @click="customPersonalityPage++"
+                                                style="padding: 4px 12px;"
+                                            >
+                                                下一页 <i class="fas fa-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                        <div v-if="customPersonalityTotalPages > 1" style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 4px;">
+                                            共 {{ customPersonalityPresets.length }} 个角色
                                         </div>
                                     </div>
                                 </div>
@@ -6076,6 +6134,116 @@
                 </div>
             </div>
         </div>
+
+        <!-- 角色卡全屏展示模态框 -->
+        <div v-if="showCharacterCardFullscreen" class="modal-overlay character-fullscreen-overlay" @click.self="closeCharacterCardFullscreen">
+            <div class="character-fullscreen-modal">
+                <div class="character-fullscreen-header">
+                    <div style="display: flex; align-items: center; gap: 16px;">
+                        <span class="modal-title" style="font-size: 20px;">
+                            <i class="fas fa-users" style="color: var(--accent-primary);"></i>
+                            我的角色卡
+                        </span>
+                        <span style="color: var(--text-secondary); font-size: 14px;">
+                            共 {{ customPersonalityPresets.length }} 个角色
+                        </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <!-- 搜索框 -->
+                        <div class="fullscreen-search">
+                            <i class="fas fa-search"></i>
+                            <input 
+                                v-model="fullscreenCharacterFilter" 
+                                type="text" 
+                                placeholder="搜索角色..."
+                            >
+                        </div>
+                        <!-- 视图切换 -->
+                        <div class="view-toggle-group" style="display: flex; background: var(--bg-tertiary); border-radius: 6px; padding: 2px; gap: 2px;">
+                            <button 
+                                class="btn btn-sm" 
+                                :class="{ 'btn-secondary': characterCardViewMode !== 'grid', 'btn-primary': characterCardViewMode === 'grid' }"
+                                @click="setCharacterCardViewMode('grid')"
+                                title="网格视图"
+                                style="padding: 6px 10px;"
+                            >
+                                <i class="fas fa-th-large"></i>
+                            </button>
+                            <button 
+                                class="btn btn-sm" 
+                                :class="{ 'btn-secondary': characterCardViewMode !== 'list', 'btn-primary': characterCardViewMode === 'list' }"
+                                @click="setCharacterCardViewMode('list')"
+                                title="列表视图"
+                                style="padding: 6px 10px;"
+                            >
+                                <i class="fas fa-list"></i>
+                            </button>
+                        </div>
+                        <button class="modal-close" @click="closeCharacterCardFullscreen" style="font-size: 28px;">&times;</button>
+                    </div>
+                </div>
+                <div class="character-fullscreen-body">
+                    <div v-if="filteredFullscreenCharacters.length === 0" class="empty-state" style="padding: 60px 20px;">
+                        <div class="empty-state-icon" style="font-size: 48px;">🔍</div>
+                        <div class="empty-state-title">未找到匹配的角色</div>
+                        <div class="empty-state-desc">尝试使用其他关键词搜索</div>
+                    </div>
+                    <!-- 网格视图 -->
+                    <div v-else-if="characterCardViewMode === 'grid'" class="character-fullscreen-grid">
+                        <div v-for="preset in filteredFullscreenCharacters" :key="preset.id"
+                             class="character-fullscreen-card"
+                             @click="loadPersonalityPresetFromFullscreen(preset)">
+                            <div class="character-fullscreen-card-portrait">
+                                <img v-if="preset.portrait" :src="preset.portrait">
+                                <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                            </div>
+                            <div class="character-fullscreen-card-content">
+                                <div class="character-fullscreen-card-name">{{ preset.name }}</div>
+                                <div class="character-fullscreen-card-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                <div v-if="preset.tags && preset.tags.length" class="character-fullscreen-card-tags">
+                                    <span v-for="tag in preset.tags.slice(0, 4)" :key="tag" class="tag">{{ tag }}</span>
+                                </div>
+                            </div>
+                            <!-- 按钮固定在卡片底部 -->
+                            <div class="character-fullscreen-card-buttons" @click.stop>
+                                <button class="btn btn-sm btn-primary" @click="startSessionWithPreset(preset)" title="开始对话">
+                                    <i class="fas fa-comment-dots"></i> 对话
+                                </button>
+                                <button class="btn btn-sm btn-secondary" @click="deleteCustomPersonalityPreset(preset)" title="删除角色">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 列表视图 -->
+                    <div v-else class="character-fullscreen-list">
+                        <div v-for="preset in filteredFullscreenCharacters" :key="preset.id"
+                             class="character-fullscreen-list-item"
+                             @click="loadPersonalityPresetFromFullscreen(preset)">
+                            <div class="character-fullscreen-list-avatar">
+                                <img v-if="preset.portrait" :src="preset.portrait">
+                                <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                            </div>
+                            <div class="character-fullscreen-list-info">
+                                <div class="character-fullscreen-list-name">{{ preset.name }}</div>
+                                <div class="character-fullscreen-list-desc">{{ preset.description || '自定义角色卡' }}</div>
+                                <div v-if="preset.tags && preset.tags.length" class="character-fullscreen-list-tags">
+                                    <span v-for="tag in preset.tags.slice(0, 5)" :key="tag" class="tag">{{ tag }}</span>
+                                </div>
+                            </div>
+                            <div class="character-fullscreen-list-actions" @click.stop>
+                                <button class="btn btn-sm" @click="startSessionWithPreset(preset)" title="开始对话" style="color: var(--accent-primary);">
+                                    <i class="fas fa-comment-dots"></i>
+                                </button>
+                                <button class="btn btn-sm" @click="deleteCustomPersonalityPreset(preset)" style="color: var(--danger);">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/js/nbot-shared.js"></script>
@@ -6403,6 +6571,9 @@
                     showCreateCharacterMenu: false, // 新建角色下拉菜单
                     showBulkImportExportMenu: false, // 批量导入导出菜单
                     isGeneratingPortrait: false, // 是否正在AI生成立绘
+                    characterCardViewMode: localStorage.getItem('characterCardViewMode') || 'grid', // 角色卡视图模式: grid/list
+                    showCharacterCardFullscreen: false, // 是否显示角色卡全屏界面
+                    fullscreenCharacterFilter: '', // 全屏角色卡筛选
                     avatarPresets: [ // 预设头像图标
                         'fas fa-cat', 'fas fa-dog', 'fas fa-dragon', 'fas fa-robot',
                         'fas fa-ghost', 'fas fa-otter', 'fas fa-paw', 'fas fa-feather',
@@ -7179,16 +7350,54 @@
                     }).filter(s => !s.archived);
                 },
 
+                // 计算非全屏模式下每页显示的角色数量
+                // 网格模式：确保最后一排排满，且不少于10个
+                // 列表模式：固定10个
+                effectivePageSize() {
+                    if (this.characterCardViewMode === 'list' || this.showCharacterCardFullscreen) {
+                        return 10;
+                    }
+                    // 网格模式：根据容器宽度计算每行个数
+                    // 网格卡片最小宽度160px，gap 16px，padding 24px
+                    // 右侧区域宽度约为 400-700px（根据屏幕尺寸）
+                    // 使用更准确的估算：最小宽度下能放几张
+                    const cardMinWidth = 160;
+                    const gap = 16;
+                    // 根据实际观察，右侧区域宽度大约在 380-720px 之间
+                    // 我们计算各种可能的列数对应的最小行数
+                    // 2列 -> 6行 = 12个
+                    // 3列 -> 4行 = 12个
+                    // 4列 -> 3行 = 12个
+                    // 统一使用12作为每页数量，确保在各种列数下都能排满
+                    return 12;
+                },
+
                 // 分页后的角色卡列表
                 paginatedCustomPersonalityPresets() {
-                    const start = (this.customPersonalityPage - 1) * this.customPersonalityPageSize;
-                    const end = start + this.customPersonalityPageSize;
+                    const pageSize = this.effectivePageSize;
+                    const start = (this.customPersonalityPage - 1) * pageSize;
+                    const end = start + pageSize;
                     return this.customPersonalityPresets.slice(start, end);
                 },
 
                 // 角色卡总页数
                 customPersonalityTotalPages() {
-                    return Math.ceil(this.customPersonalityPresets.length / this.customPersonalityPageSize);
+                    const pageSize = this.effectivePageSize;
+                    return Math.ceil(this.customPersonalityPresets.length / pageSize);
+                },
+
+                // 全屏角色卡筛选结果
+                filteredFullscreenCharacters() {
+                    if (!this.fullscreenCharacterFilter) {
+                        return this.customPersonalityPresets;
+                    }
+                    const filter = this.fullscreenCharacterFilter.toLowerCase();
+                    return this.customPersonalityPresets.filter(preset => {
+                        const nameMatch = (preset.name || '').toLowerCase().includes(filter);
+                        const descMatch = (preset.description || '').toLowerCase().includes(filter);
+                        const tagMatch = (preset.tags || []).some(tag => tag.toLowerCase().includes(filter));
+                        return nameMatch || descMatch || tagMatch;
+                    });
                 },
 
                 commandQuery() {

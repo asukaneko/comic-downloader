@@ -6424,6 +6424,443 @@
             width: 12px;
         }
 
+        /* 角色卡网格和列表布局 */
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+        }
+
+        .character-card-grid {
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .character-card-grid:hover {
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 网格视图立绘区域 - 占卡片大部分空间 */
+        .character-card-portrait {
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .character-card-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .character-card-portrait i {
+            font-size: 48px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* 网格视图下方信息区域 */
+        .character-card-grid-info {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .character-card-grid-name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+        }
+
+        .character-card-grid-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-align: center;
+            min-height: 30px;
+        }
+
+        .character-card-grid-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            justify-content: center;
+            margin-top: 2px;
+        }
+
+        .character-card-grid-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            justify-content: center;
+        }
+
+        .character-card-grid-actions .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        /* 列表视图 */
+        .character-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .character-card-list {
+            flex-direction: row;
+            align-items: center;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .character-card-list:hover {
+            border-color: var(--accent-primary);
+            background: var(--bg-hover);
+        }
+
+        /* 列表视图立绘 - 增大尺寸 */
+        .character-card-list-portrait {
+            width: 70px;
+            height: 90px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .character-card-list-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .character-card-list-portrait i {
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* 角色卡全屏展示 */
+        .character-fullscreen-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+        }
+
+        .character-fullscreen-modal {
+            width: 95vw;
+            height: 90vh;
+            background: var(--bg-primary);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .character-fullscreen-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+        }
+
+        .character-fullscreen-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .fullscreen-search {
+            position: relative;
+            width: 240px;
+        }
+
+        .fullscreen-search i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .fullscreen-search input {
+            width: 100%;
+            padding: 8px 12px 8px 36px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .fullscreen-search input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .character-fullscreen-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .character-fullscreen-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .character-fullscreen-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent-primary);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .character-fullscreen-card-portrait {
+            width: 100%;
+            height: 240px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .character-fullscreen-card-portrait img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .character-fullscreen-card-portrait i {
+            font-size: 64px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .character-fullscreen-card-content {
+            padding: 16px;
+        }
+
+        .character-fullscreen-card-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .character-fullscreen-card-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .character-fullscreen-card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        /* 全屏网格视图按钮区域 - 固定在卡片底部 */
+        .character-fullscreen-card-buttons {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border-color);
+            margin-top: auto;
+        }
+
+        .character-fullscreen-card-buttons .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 8px 12px;
+            font-size: 13px;
+        }
+
+        .character-fullscreen-card-content {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* 全屏列表视图 */
+        .character-fullscreen-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .character-fullscreen-list-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid transparent;
+        }
+
+        .character-fullscreen-list-item:hover {
+            border-color: var(--accent-primary);
+            background: var(--bg-hover);
+        }
+
+        .character-fullscreen-list-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .character-fullscreen-list-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .character-fullscreen-list-avatar i {
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .character-fullscreen-list-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .character-fullscreen-list-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .character-fullscreen-list-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+
+        .character-fullscreen-list-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .character-fullscreen-list-actions {
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        /* 视图切换按钮组 */
+        .view-toggle-group {
+            display: flex;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            padding: 2px;
+            gap: 2px;
+        }
+
+        .view-toggle-group .btn {
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            transition: all 0.2s ease;
+        }
+
+        .view-toggle-group .btn-primary {
+            background: var(--accent-primary);
+            color: white;
+        }
+
+        .view-toggle-group .btn:hover:not(.btn-primary) {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+
+        @media (max-width: 768px) {
+            .character-fullscreen-modal {
+                width: 100vw;
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .character-fullscreen-grid {
+                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+                gap: 12px;
+            }
+
+            .character-fullscreen-card-portrait {
+                height: 150px;
+            }
+
+            .fullscreen-search {
+                width: 160px;
+            }
+
+            .character-fullscreen-header {
+                flex-wrap: wrap;
+                gap: 12px;
+            }
+        }
+
         .tag {
             display: inline-flex;
             align-items: center;

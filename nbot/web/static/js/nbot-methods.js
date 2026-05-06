@@ -6446,7 +6446,9 @@ def main(params):
                         const res = await api.post('/api/personality/custom-presets', presetData);
                         this.customPersonalityPresets.push(res.data);
                         // 添加后跳转到最后一页
-                        const totalPages = Math.ceil(this.customPersonalityPresets.length / this.customPersonalityPageSize);
+                        // 网格模式每页12个，列表模式每页10个
+                        const pageSize = this.characterCardViewMode === 'grid' ? 12 : 10;
+                        const totalPages = Math.ceil(this.customPersonalityPresets.length / pageSize);
                         this.customPersonalityPage = totalPages;
                         this.showToast('自定义角色卡已添加', 'success');
                         this.closeAddPersonalityPresetModal();
@@ -6456,16 +6458,22 @@ def main(params):
                     }
                 },
 
-                async deleteCustomPersonalityPreset(preset, index) {
+                async deleteCustomPersonalityPreset(preset) {
                     this.showConfirmDialogFn({
                         title: '删除角色预设',
                         message: `确定要删除自定义角色预设 "${preset.name}" 吗？`,
                         onConfirm: async () => {
                             try {
                                 await api.delete(`/api/personality/custom-presets/${preset.id}`);
-                                this.customPersonalityPresets.splice(index, 1);
+                                // 通过 preset.id 找到实际的全局索引
+                                const globalIndex = this.customPersonalityPresets.findIndex(p => p.id === preset.id);
+                                if (globalIndex !== -1) {
+                                    this.customPersonalityPresets.splice(globalIndex, 1);
+                                }
                                 // 删除后检查页码是否超出范围
-                                const totalPages = Math.ceil(this.customPersonalityPresets.length / this.customPersonalityPageSize);
+                                // 网格模式每页12个，列表模式每页10个
+                                const pageSize = this.characterCardViewMode === 'grid' ? 12 : 10;
+                                const totalPages = Math.ceil(this.customPersonalityPresets.length / pageSize);
                                 if (this.customPersonalityPage > totalPages && totalPages > 0) {
                                     this.customPersonalityPage = totalPages;
                                 }
@@ -6483,7 +6491,9 @@ def main(params):
                         const res = await api.get('/api/personality/custom-presets');
                         this.customPersonalityPresets = res.data;
                         // 加载后检查页码是否超出范围
-                        const totalPages = Math.ceil(this.customPersonalityPresets.length / this.customPersonalityPageSize);
+                        // 网格模式每页12个，列表模式每页10个
+                        const pageSize = this.characterCardViewMode === 'grid' ? 12 : 10;
+                        const totalPages = Math.ceil(this.customPersonalityPresets.length / pageSize);
                         if (this.customPersonalityPage > totalPages && totalPages > 0) {
                             this.customPersonalityPage = totalPages;
                         } else if (totalPages === 0) {
@@ -6584,6 +6594,36 @@ def main(params):
                     this.showAiCreateModal = false;
                     this.aiCreateDescription = '';
                     this.aiGeneratedCharacter = null;
+                },
+
+                // 设置角色卡视图模式
+                setCharacterCardViewMode(mode) {
+                    this.characterCardViewMode = mode;
+                    localStorage.setItem('characterCardViewMode', mode);
+                    // 切换视图时重置到第一页，避免页码超出范围
+                    this.customPersonalityPage = 1;
+                },
+
+                // 打开角色卡全屏展示
+                openCharacterCardFullscreen() {
+                    this.showCharacterCardFullscreen = true;
+                    this.fullscreenCharacterFilter = '';
+                    // 禁止背景滚动
+                    document.body.style.overflow = 'hidden';
+                },
+
+                // 关闭角色卡全屏展示
+                closeCharacterCardFullscreen() {
+                    this.showCharacterCardFullscreen = false;
+                    this.fullscreenCharacterFilter = '';
+                    // 恢复背景滚动
+                    document.body.style.overflow = '';
+                },
+
+                // 从全屏界面加载角色预设
+                loadPersonalityPresetFromFullscreen(preset) {
+                    this.loadPersonalityPreset(preset);
+                    this.closeCharacterCardFullscreen();
                 },
 
                 // 导出当前角色卡（ZIP 格式，包含 JSON 和立绘图片）
