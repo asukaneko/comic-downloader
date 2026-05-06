@@ -3730,13 +3730,41 @@ def main(params):
                         this.processPendingQueue(stoppedSessionId);
                     } catch (e) {
                         console.error('停止生成失败:', e);
-                        this.showToast('停止失败: ' + (e.response?.data?.error || e.message), 'error');
-                        // 如果停止失败，恢复 loading 状态
-                        this.isLoading = true;
-                        this.loadingSessionId = this.currentSession?.id;
-                        this.loadingStartTime = Date.now();
-                        localStorage.setItem('nbot_loading_session_id', this.currentSession?.id || '');
-                        localStorage.setItem('nbot_loading_start_time', Date.now().toString());
+                        const errorMsg = e.response?.data?.error || e.message;
+                        
+                        // 如果是 "No active generation for this session" 错误，自动重置所有状态
+                        if (errorMsg.includes('No active generation')) {
+                            this.showToast('当前没有正在生成的内容，已重置状态', 'info');
+                            this.resetAllLoadingState();
+                            this.processPendingQueue(stoppedSessionId);
+                        } else {
+                            this.showToast('停止失败: ' + errorMsg, 'error');
+                            // 其他错误恢复 loading 状态
+                            this.isLoading = true;
+                            this.loadingSessionId = this.currentSession?.id;
+                            this.loadingStartTime = Date.now();
+                            localStorage.setItem('nbot_loading_session_id', this.currentSession?.id || '');
+                            localStorage.setItem('nbot_loading_start_time', Date.now().toString());
+                        }
+                    }
+                },
+
+                // 重置所有加载状态
+                resetAllLoadingState() {
+                    this.isLoading = false;
+                    this.loadingSessionId = null;
+                    this.loadingStartTime = null;
+                    this.isTyping = false;
+                    localStorage.removeItem('nbot_loading_session_id');
+                    localStorage.removeItem('nbot_loading_start_time');
+                    
+                    // 清理可能卡住的消息状态
+                    if (this.currentMessages && this.currentMessages.length > 0) {
+                        const lastMsg = this.currentMessages[this.currentMessages.length - 1];
+                        if (lastMsg && lastMsg.role === 'assistant' && lastMsg.isProgress) {
+                            // 移除卡住的进度消息
+                            this.currentMessages.pop();
+                        }
                     }
                 },
 
