@@ -7254,10 +7254,11 @@
                     let memories = this.longTermMemories;
                     if (this.memorySearch) {
                         const search = this.memorySearch.toLowerCase();
-                        memories = memories.filter(m =>
-                            m.key.toLowerCase().includes(search) ||
-                            m.value.toLowerCase().includes(search)
-                        );
+                        memories = memories.filter(m => {
+                            const title = (m.title || m.key || '').toLowerCase();
+                            const content = (m.content || m.value || '').toLowerCase();
+                            return title.includes(search) || content.includes(search);
+                        });
                     }
                     return memories;
                 },
@@ -7266,10 +7267,11 @@
                     let memories = this.shortTermMemories;
                     if (this.memorySearch) {
                         const search = this.memorySearch.toLowerCase();
-                        memories = memories.filter(m =>
-                            m.key.toLowerCase().includes(search) ||
-                            m.value.toLowerCase().includes(search)
-                        );
+                        memories = memories.filter(m => {
+                            const title = (m.title || m.key || '').toLowerCase();
+                            const content = (m.content || m.value || '').toLowerCase();
+                            return title.includes(search) || content.includes(search);
+                        });
                     }
                     return memories;
                 },

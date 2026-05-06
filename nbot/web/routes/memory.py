@@ -30,8 +30,19 @@ def register_memory_routes(app, server):
         if character_name:
             memories = [m for m in memories if m.get("character_name", "") == character_name]
 
-        long_term = [m for m in memories if m.get("type", "long") == "long"]
-        short_term = [m for m in memories if m.get("type", "long") == "short"]
+        # 处理 type 字段，确保只有 "long" 或 "short" 两种值
+        long_term = []
+        short_term = []
+        for m in memories:
+            mem_type = m.get("type", "long")
+            # 如果 type 不是 "long" 或 "short"，默认为 "long"
+            if mem_type not in ("long", "short"):
+                mem_type = "long"
+            if mem_type == "long":
+                long_term.append(m)
+            else:
+                short_term.append(m)
+
         return jsonify(
             {"memories": memories, "long_term": long_term, "short_term": short_term}
         )
