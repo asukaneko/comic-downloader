@@ -3,6 +3,7 @@ from ncatbot.utils.logger import get_log
 from nbot.core.heartbeat import HeartbeatCore
 
 from nbot.web.utils.config_loader import load_config
+from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.services.chat_service import group_messages, user_messages, chat, generate_today_summary, summarize_group_text
 from nbot.services.chat_service import delete_session_workspace, get_qq_session_id, WORKSPACE_AVAILABLE
 from nbot.services.ai import ai_client
@@ -4743,8 +4744,11 @@ async def handle_model_switch(msg, is_group=True):
         return
 
     try:
-        with open(models_file, "r", encoding="utf-8") as f:
-            models_data = json.load(f)
+        models_data, was_plaintext = read_secure_json(models_file, data_dir, {})
+        if was_plaintext:
+            write_secure_json(models_file, data_dir, models_data)
+        if not isinstance(models_data, dict):
+            models_data = {}
     except Exception:
         reply = "读取模型配置失败喵~"
         if is_group:
@@ -4798,8 +4802,7 @@ async def handle_model_switch(msg, is_group=True):
             target = chat_models[idx - 1]
             target_id = target.get("id")
             models_data["active_model_id"] = target_id
-            with open(models_file, "w", encoding="utf-8") as f:
-                json.dump(models_data, f, ensure_ascii=False, indent=2)
+            write_secure_json(models_file, data_dir, models_data)
             # 刷新运行时配置
             from nbot.services.ai import refresh_runtime_ai_config
             refresh_runtime_ai_config()

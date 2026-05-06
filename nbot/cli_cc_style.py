@@ -25,6 +25,7 @@ from rich.align import Align
 from rich import box
 from rich.syntax import Syntax
 from rich.live import Live
+from nbot.web.secure_store import read_secure_json, write_secure_json
 
 try:
     from nbot.core import build_cli_session_id
@@ -238,13 +239,17 @@ class CCStyleCLI:
         models_file = os.path.join("data", "web", "ai_models.json")
         if os.path.exists(models_file):
             try:
-                with open(models_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.available_models = [
-                        m for m in data.get("models", [])
-                        if m.get("enabled", True)
-                    ]
-                    self.current_model_id = data.get("active_model_id")
+                data_dir = os.path.join("data", "web")
+                data, was_plaintext = read_secure_json(models_file, data_dir, {})
+                if was_plaintext:
+                    write_secure_json(models_file, data_dir, data)
+                if not isinstance(data, dict):
+                    data = {}
+                self.available_models = [
+                    m for m in data.get("models", [])
+                    if m.get("enabled", True)
+                ]
+                self.current_model_id = data.get("active_model_id")
             except Exception:
                 pass
 
@@ -262,11 +267,12 @@ class CCStyleCLI:
         self.current_model_id = model_id
         models_file = os.path.join("data", "web", "ai_models.json")
         try:
-            with open(models_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data_dir = os.path.join("data", "web")
+            data, was_plaintext = read_secure_json(models_file, data_dir, {})
+            if not isinstance(data, dict):
+                data = {}
             data["active_model_id"] = model_id
-            with open(models_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_secure_json(models_file, data_dir, data)
         except Exception as e:
             self.console.print(f"[red]保存模型配置失败: {e}[/red]")
 

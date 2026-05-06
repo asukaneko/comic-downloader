@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from nbot.web.sessions_db import load_sessions as load_sessions_from_db
 from nbot.web.sessions_db import save_sessions as save_sessions_to_db
+from nbot.web.secure_store import read_secure_json, write_secure_json
 
 _log = logging.getLogger(__name__)
 
@@ -573,8 +574,12 @@ def load_all_data(server):
         # 加载 AI 配置
         ai_config_file = os.path.join(server.data_dir, "ai_config.json")
         if os.path.exists(ai_config_file):
-            with open(ai_config_file, "r", encoding="utf-8") as f:
-                saved_config = json.load(f)
+            saved_config, was_plaintext = read_secure_json(
+                ai_config_file, server.data_dir, {}
+            )
+            if was_plaintext:
+                write_secure_json(ai_config_file, server.data_dir, saved_config)
+            if isinstance(saved_config, dict):
                 server.ai_config.update(saved_config)
 
         # 加载 Token 统计——委托给 TokenStatsManager（自动合并重复条目）
@@ -596,18 +601,23 @@ def load_all_data(server):
         login_tokens_file = os.path.join(server.data_dir, "login_tokens.json")
         if os.path.exists(login_tokens_file):
             try:
-                with open(login_tokens_file, "r", encoding="utf-8") as f:
-                    loaded_tokens = json.load(f)
+                loaded_tokens, was_plaintext = read_secure_json(
+                    login_tokens_file, server.data_dir, {}
+                )
+                if not isinstance(loaded_tokens, dict):
+                    loaded_tokens = {}
 
                 # 迁移旧格式：旧版 key 为明文 token，新版 key 为 SHA-256 hash
                 # 旧格式 key 长度为 43（token_urlsafe(32)），新格式为 64（hex sha256）
                 migrated = {}
-                needs_save = False
+                needs_save = was_plaintext
                 for key, value in loaded_tokens.items():
                     if len(key) != 64:
-                        # 旧格式明文 token，无法转换为 hash（用户需重新登录）
+                        # 旧格式明文 token，转换为 hash 后继续可用
+                        migrated[server._hash_token(key)] = value
                         needs_save = True
-                        _log.info(f"[Auth] 丢弃旧格式 Token: username={value.get('username', '?')}")
+                        username = value.get("username", "?") if isinstance(value, dict) else "?"
+                        _log.info(f"[Auth] 迁移旧格式 Token: username={username}")
                     else:
                         migrated[key] = value
 
@@ -726,10 +736,11 @@ def save_data(server, data_type: str):
         elif data_type == "knowledge":
             pass  # 知识库由 knowledge_manager 管理，无需保存
         elif data_type == "ai_config":
-            with open(
-                os.path.join(server.data_dir, "ai_config.json"), "w", encoding="utf-8"
-            ) as f:
-                json.dump(server.ai_config, f, ensure_ascii=False, indent=2)
+            write_secure_json(
+                os.path.join(server.data_dir, "ai_config.json"),
+                server.data_dir,
+                server.ai_config,
+            )
         elif data_type == "token_stats":
             # TokenStatsManager 自行管理持久化，此处仅同步 in-memory 引用
             from nbot.core.token_stats import get_token_stats_manager
@@ -755,19 +766,17 @@ def save_data(server, data_type: str):
             ) as f:
                 json.dump(server.scheduled_tasks, f, ensure_ascii=False, indent=2)
         elif data_type == "ai_models":
-            with open(
-                os.path.join(server.data_dir, "ai_models.json"), "w", encoding="utf-8"
-            ) as f:
-                json.dump(
-                    {
-                        "models": server.ai_models,
-                        "active_model_id": server.active_model_id,
-                        "active_models_by_purpose": getattr(server, "active_models_by_purpose", {}),
-                    },
-                    f,
-                    ensure_ascii=False,
-                    indent=2,
-                )
+            write_secure_json(
+                os.path.join(server.data_dir, "ai_models.json"),
+                server.data_dir,
+                {
+                    "models": server.ai_models,
+                    "active_model_id": server.active_model_id,
+                    "active_models_by_purpose": getattr(
+                        server, "active_models_by_purpose", {}
+                    ),
+                },
+            )
         elif data_type == "skills":
             with open(
                 os.path.join(server.data_dir, "skills.json"), "w", encoding="utf-8"

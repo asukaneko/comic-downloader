@@ -20,6 +20,7 @@ from rich.box import ROUNDED, HEAVY
 from rich.prompt import Prompt
 from rich.align import Align
 from rich.markdown import Markdown
+from nbot.web.secure_store import read_secure_json, write_secure_json
 
 # 尝试导入pyfiglet用于ASCII艺术字
 try:
@@ -98,13 +99,17 @@ class SimpleCLI:
         models_file = os.path.join("data", "web", "ai_models.json")
         if os.path.exists(models_file):
             try:
-                with open(models_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.available_models = [
-                        m for m in data.get("models", [])
-                        if m.get("enabled", True)
-                    ]
-                    self.current_model_id = data.get("active_model_id")
+                data_dir = os.path.join("data", "web")
+                data, was_plaintext = read_secure_json(models_file, data_dir, {})
+                if was_plaintext:
+                    write_secure_json(models_file, data_dir, data)
+                if not isinstance(data, dict):
+                    data = {}
+                self.available_models = [
+                    m for m in data.get("models", [])
+                    if m.get("enabled", True)
+                ]
+                self.current_model_id = data.get("active_model_id")
             except Exception as e:
                 self.console.print(f"[dim]加载模型配置失败: {e}[/dim]")
 
@@ -122,11 +127,12 @@ class SimpleCLI:
         self.current_model_id = model_id
         models_file = os.path.join("data", "web", "ai_models.json")
         try:
-            with open(models_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            data_dir = os.path.join("data", "web")
+            data, was_plaintext = read_secure_json(models_file, data_dir, {})
+            if not isinstance(data, dict):
+                data = {}
             data["active_model_id"] = model_id
-            with open(models_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            write_secure_json(models_file, data_dir, data)
         except Exception as e:
             self.console.print(f"[red]保存模型配置失败: {e}[/red]")
 
@@ -769,8 +775,11 @@ class SimpleCLI:
         ai_config_file = os.path.join("data", "web", "ai_config.json")
         if os.path.exists(ai_config_file):
             try:
-                with open(ai_config_file, 'r', encoding='utf-8') as f:
-                    configs["AI配置"] = json.load(f)
+                data_dir = os.path.join("data", "web")
+                ai_config, was_plaintext = read_secure_json(ai_config_file, data_dir, {})
+                if was_plaintext:
+                    write_secure_json(ai_config_file, data_dir, ai_config)
+                configs["AI配置"] = ai_config if isinstance(ai_config, dict) else {}
             except:
                 pass
 

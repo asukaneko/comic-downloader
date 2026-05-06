@@ -11,6 +11,7 @@ from nbot.core import (
     normalize_chat_completion_data,
     resolve_chat_completion_url,
 )
+from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.web.utils.config_loader import (
     get_vision_model_config,
     get_video_model_config,
@@ -77,8 +78,9 @@ def _load_shared_web_ai_config() -> dict:
 
     try:
         if os.path.exists(models_file):
-            with open(models_file, "r", encoding="utf-8") as f:
-                models_data = json.load(f)
+            models_data, was_plaintext = read_secure_json(models_file, data_dir, {})
+            if was_plaintext:
+                write_secure_json(models_file, data_dir, models_data)
             active_model_id = models_data.get("active_model_id")
             for item in models_data.get("models", []):
                 if item.get("id") == active_model_id and item.get("enabled", True):
@@ -88,8 +90,10 @@ def _load_shared_web_ai_config() -> dict:
 
     try:
         if os.path.exists(config_file):
-            with open(config_file, "r", encoding="utf-8") as f:
-                return json.load(f) or {}
+            config, was_plaintext = read_secure_json(config_file, data_dir, {})
+            if was_plaintext:
+                write_secure_json(config_file, data_dir, config)
+            return config if isinstance(config, dict) else {}
     except Exception:
         pass
 

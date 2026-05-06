@@ -61,6 +61,7 @@ from nbot.web.routes import (
     register_workspace_shared_routes,
     register_workspace_misc_routes,
 )
+from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.web.socket_events import register_socket_events
 
 _log = logging.getLogger(__name__)
@@ -672,9 +673,7 @@ class WebChatServer:
         """保存登录 Token 到文件（仅存储 hash，不含明文 token）"""
         try:
             login_tokens_file = os.path.join(self.data_dir, "login_tokens.json")
-            os.makedirs(os.path.dirname(login_tokens_file), exist_ok=True)
-            with open(login_tokens_file, "w", encoding="utf-8") as f:
-                json.dump(self.login_tokens, f, ensure_ascii=False, indent=2)
+            write_secure_json(login_tokens_file, self.data_dir, self.login_tokens)
         except Exception as e:
             _log.error(f"[Auth] 保存登录 Token 失败: {e}")
 
@@ -1205,8 +1204,10 @@ class WebChatServer:
         try:
             models_file = os.path.join(self.data_dir, "ai_models.json")
             if os.path.exists(models_file):
-                with open(models_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                data, was_plaintext = read_secure_json(models_file, self.data_dir, {})
+                if was_plaintext:
+                    write_secure_json(models_file, self.data_dir, data)
+                if isinstance(data, dict):
                     self.ai_models = data.get("models", [])
                     self.active_model_id = data.get("active_model_id")
                     self.active_models_by_purpose = data.get("active_models_by_purpose", {})

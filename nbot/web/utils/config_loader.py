@@ -1,7 +1,8 @@
-import configparser
+﻿import configparser
 import os
 
 from dotenv import load_dotenv
+from nbot.web.secure_store import read_secure_json, write_secure_json
 
 
 _ENV_PATH = os.path.join(
@@ -221,38 +222,37 @@ def get_pdf_config():
     return {"api_key": api_key}
 
 
-# ========== 按用途获取模型配置（新架构） ==========
+# ========== 鎸夌敤閫旇幏鍙栨ā鍨嬮厤缃紙鏂版灦鏋勶級 ==========
 
-# 数据目录路径
+# 鏁版嵁鐩綍璺緞
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "data", "web")
 
 
 def _load_ai_models_from_file():
-    """从文件加载AI模型配置列表"""
-    import json
+    """浠庢枃浠跺姞杞紸I妯″瀷閰嶇疆鍒楄〃"""
     ai_models_path = os.path.join(DATA_DIR, "ai_models.json")
     if os.path.exists(ai_models_path):
         try:
-            with open(ai_models_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # 返回模型列表，如果是字典格式则取"models"字段
-                if isinstance(data, dict):
-                    return data.get("models", [])
-                elif isinstance(data, list):
-                    return data
+            data, was_plaintext = read_secure_json(ai_models_path, DATA_DIR, {})
+            if was_plaintext:
+                write_secure_json(ai_models_path, DATA_DIR, data)
+            if isinstance(data, dict):
+                return data.get("models", [])
+            if isinstance(data, list):
+                return data
         except Exception:
             pass
     return []
 
 
 def get_model_config_by_purpose(purpose: str) -> dict:
-    """根据用途获取对应的活跃模型配置
+    """鏍规嵁鐢ㄩ€旇幏鍙栧搴旂殑娲昏穬妯″瀷閰嶇疆
     
     Args:
-        purpose: 模型用途 (chat, vision, video, tts, stt, embedding)
+        purpose: 妯″瀷鐢ㄩ€?(chat, vision, video, tts, stt, embedding)
     
     Returns:
-        模型配置字典，如果没有找到则返回None
+        妯″瀷閰嶇疆瀛楀吀锛屽鏋滄病鏈夋壘鍒板垯杩斿洖None
     """
     ai_models = _load_ai_models_from_file()
     
@@ -276,7 +276,7 @@ def get_model_config_by_purpose(purpose: str) -> dict:
                 "supports_stream": model.get("supports_stream", True),
             }
             
-            # 根据用途添加特有配置
+            # Add purpose-specific config.
             if purpose == "tts":
                 config.update({
                     "voice": model.get("voice", "default"),
@@ -299,20 +299,19 @@ def get_model_config_by_purpose(purpose: str) -> dict:
 
 
 def get_chat_model_config() -> dict:
-    """获取对话模型配置"""
+    """鑾峰彇瀵硅瘽妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("chat")
     if config:
         return config
-    # 回退到传统配置
-    return get_api_config()
+    # 鍥為€€鍒颁紶缁熼厤缃?    return get_api_config()
 
 
 def get_vision_model_config() -> dict:
-    """获取图片理解模型配置"""
+    """鑾峰彇鍥剧墖鐞嗚В妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("vision")
     if config:
         return config
-    # 回退到pic配置
+    # 鍥為€€鍒皃ic閰嶇疆
     pic_config = get_pic_config()
     api_config = get_api_config()
     return {
@@ -324,11 +323,11 @@ def get_vision_model_config() -> dict:
 
 
 def get_video_model_config() -> dict:
-    """获取视频理解模型配置"""
+    """鑾峰彇瑙嗛鐞嗚В妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("video")
     if config:
         return config
-    # 回退到video配置
+    # 鍥為€€鍒皏ideo閰嶇疆
     video_config = get_video_config()
     api_config = get_api_config()
     return {
@@ -340,11 +339,11 @@ def get_video_model_config() -> dict:
 
 
 def get_tts_model_config() -> dict:
-    """获取TTS语音合成模型配置"""
+    """鑾峰彇TTS璇煶鍚堟垚妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("tts")
     if config:
         return config
-    # 回退到voice配置
+    # 鍥為€€鍒皏oice閰嶇疆
     voice_config = get_voice_config()
     api_config = get_api_config()
     voice = voice_config.get("voice", "fnlp/MOSS-TTSD-v0.5:diana")
@@ -360,13 +359,13 @@ def get_tts_model_config() -> dict:
 
 def get_stt_model_config() -> dict:
     local_config = get_stt_local_config()
-    """获取STT语音识别模型配置"""
+    """鑾峰彇STT璇煶璇嗗埆妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("stt")
     if config:
         for key, value in local_config.items():
             config.setdefault(key, value)
         return config
-    # 默认配置
+    # 榛樿閰嶇疆
     api_config = get_api_config()
     return {
         "api_key": api_config.get("api_key", ""),
@@ -382,11 +381,11 @@ def get_stt_model_config() -> dict:
 
 
 def get_embedding_model_config() -> dict:
-    """获取向量嵌入模型配置"""
+    """鑾峰彇鍚戦噺宓屽叆妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("embedding")
     if config:
         return config
-    # 回退到api_config中的embedding配置
+    # 鍥為€€鍒癮pi_config涓殑embedding閰嶇疆
     api_config = get_api_config()
     return {
         "api_key": api_config.get("api_key", ""),

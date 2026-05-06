@@ -6,6 +6,7 @@ import os
 import json
 from abc import ABC, abstractmethod
 from typing import Dict, TYPE_CHECKING
+from nbot.web.secure_store import read_secure_json, write_secure_json
 
 if TYPE_CHECKING:
     from .app import CLIApp
@@ -608,8 +609,11 @@ class ConfigScreen(BaseScreen):
         ai_config_file = os.path.join("data", "web", "ai_config.json")
         if os.path.exists(ai_config_file):
             try:
-                with open(ai_config_file, 'r', encoding='utf-8') as f:
-                    configs["AI"] = json.load(f)
+                data_dir = os.path.join("data", "web")
+                ai_config, was_plaintext = read_secure_json(ai_config_file, data_dir, {})
+                if was_plaintext:
+                    write_secure_json(ai_config_file, data_dir, ai_config)
+                configs["AI"] = ai_config if isinstance(ai_config, dict) else {}
             except:
                 pass
                 
