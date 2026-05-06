@@ -248,6 +248,42 @@ def register_personality_routes(app, server):
         server._save_data("custom_personality_presets")
         return jsonify({"success": True})
 
+    @app.route("/api/personality/custom-presets/<preset_id>", methods=["PUT"])
+    def update_custom_personality_preset(preset_id):
+        data = request.json or {}
+
+        # 查找要更新的预设
+        preset = None
+        for p in server.custom_personality_presets:
+            if p["id"] == preset_id:
+                preset = p
+                break
+
+        if not preset:
+            return jsonify({"success": False, "error": "角色预设不存在"}), 404
+
+        # 更新字段
+        preset["name"] = data.get("name", preset.get("name", ""))
+        preset["description"] = data.get("description", preset.get("description", ""))
+        preset["avatar"] = data.get("avatar", preset.get("avatar", ""))
+        preset["portrait"] = data.get("portrait", preset.get("portrait", ""))
+        preset["tags"] = data.get("tags", preset.get("tags", []))
+        preset["basicInfo"] = data.get("basicInfo", preset.get("basicInfo", ""))
+        preset["personality"] = data.get("personality", preset.get("personality", ""))
+        preset["scenario"] = data.get("scenario", preset.get("scenario", ""))
+        preset["firstMessage"] = data.get("firstMessage", preset.get("firstMessage", ""))
+        preset["exampleDialogues"] = data.get("exampleDialogues", preset.get("exampleDialogues", ""))
+        preset["responseFormat"] = data.get("responseFormat", preset.get("responseFormat", ""))
+        preset["rules"] = data.get("rules", preset.get("rules", []))
+        preset["state"] = data.get("state", preset.get("state", {"affection": 50, "mood": "开心"}))
+        preset["updated_at"] = datetime.now().isoformat()
+
+        # 重新编译系统提示词
+        preset["systemPrompt"] = compile_personality_prompt(preset)
+
+        server._save_data("custom_personality_presets")
+        return jsonify({"success": True, "data": preset})
+
     @app.route("/api/personality/ai-generate", methods=["POST"])
     def ai_generate_personality():
         """AI 根据用户描述生成角色卡"""
@@ -826,3 +862,196 @@ def register_personality_routes(app, server):
         except Exception as e:
             _log.error(f"批量导入角色卡失败: {e}")
             return jsonify({"success": False, "error": f"导入失败: {str(e)}"}), 500
+
+    @app.route("/api/personality/generate-portrait", methods=["POST"])
+    def generate_portrait():
+        """使用AI生成角色立绘"""
+        data = request.json or {}
+        character_name = data.get("character_name", "").strip()
+        description = data.get("description", "").strip()
+        basic_info = data.get("basic_info", "").strip()
+        personality = data.get("personality", "").strip()
+
+        if not character_name:
+            return jsonify({"success": False, "error": "请提供角色名称"}), 400
+
+        # 检查是否配置了图片生成模型
+        image_gen_config = None
+        if hasattr(server, 'active_models_by_purpose'):
+            image_gen_model_id = server.active_models_by_purpose.get('image_generation')
+            if image_gen_model_id and hasattr(server, 'ai_models'):
+                for model in server.ai_models:
+                    if model.get('id') == image_gen_model_id:
+                        image_gen_config = model
+                        break
+
+        if not image_gen_config:
+            return jsonify({
+                "success": False,
+                "need_config": True,
+                "error": "未配置图片生成模型，请先在AI配置中添加图片生成模型"
+            }), 400
+
+        try:
+            # 构建图片生成提示词
+            prompt_parts = [f"Create an anime-style character portrait of {character_name}."]
+
+            if basic_info:
+                prompt_parts.append(f"Appearance: {basic_info}")
+            if personality:
+                prompt_parts.append(f"Personality: {personality}")
+            if description:
+                prompt_parts.append(f"Description: {description}")
+
+            # 添加风格和质量要求
+            prompt_parts.append("Style: High-quality anime illustration, detailed, vibrant colors, professional character art.")
+            prompt_parts.append("Format: Portrait orientation, upper body or bust shot, clean background or simple gradient.")
+
+            image_prompt = " ".join(prompt_parts)
+
+            # 调用图片生成API
+            import requests
+            import os
+
+            api_key = image_gen_config.get('api_key', '')
+            # 使用用户输入的完整URL（包含路径后缀）
+            full_url = image_gen_config.get('base_url', '')
+            model = image_gen_config.get('model', 'dall-e-3')
+            # 获取配置的图片尺寸，默认为 1024x1024
+            image_size = image_gen_config.get('size', '1024x1024')
+            # 火山引擎等需要至少 3686400 像素（约 1920x1920），如果配置的是小尺寸则使用兼容尺寸
+            if 'volces' in full_url.lower() or 'ark' in full_url.lower():
+                # 火山引擎需要大图片尺寸
+                width, height = image_size.split('x')
+                pixels = int(width) * int(height)
+                if pixels < 3686400:
+                    image_size = '1920x1920'  # 使用兼容的最小尺寸
+
+            if not full_url:
+                return jsonify({"success": False, "error": "未配置图片生成API地址"}), 400
+
+            # 根据不同provider调用不同的API格式
+            provider_type = image_gen_config.get('provider_type', 'openai_compatible')
+
+            if provider_type in ['openai_compatible', 'openai'] or 'openai' in full_url.lower():
+                # OpenAI DALL-E API 格式
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+
+                payload = {
+                    "model": model,
+                    "prompt": image_prompt,
+                    "n": 1,
+                    "size": image_size,
+                    "quality": "standard",
+                    "response_format": "url"
+                }
+
+                response = requests.post(
+                    full_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=120
+                )
+
+                if response.status_code != 200:
+                    _log.error(f"图片生成API错误: {response.text}")
+                    return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
+
+                result = response.json()
+                image_url = result.get("data", [{}])[0].get("url")
+
+            elif provider_type == 'siliconflow' or 'siliconflow' in full_url.lower():
+                # SiliconFlow API 格式
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+
+                payload = {
+                    "model": model,
+                    "prompt": image_prompt,
+                    "image_size": image_size,
+                    "batch_size": 1
+                }
+
+                response = requests.post(
+                    full_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=120
+                )
+
+                if response.status_code != 200:
+                    _log.error(f"图片生成API错误: {response.text}")
+                    return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
+
+                result = response.json()
+                image_url = result.get("images", [{}])[0].get("url")
+
+            else:
+                # 通用OpenAI兼容格式
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+
+                payload = {
+                    "model": model,
+                    "prompt": image_prompt,
+                    "n": 1,
+                    "size": image_size
+                }
+
+                response = requests.post(
+                    full_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=120
+                )
+
+                if response.status_code != 200:
+                    _log.error(f"图片生成API错误: {response.text}")
+                    return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
+
+                result = response.json()
+                # 尝试多种可能的响应格式
+                image_url = result.get("data", [{}])[0].get("url") or result.get("images", [{}])[0].get("url")
+
+            if not image_url:
+                return jsonify({"success": False, "error": "未能获取生成的图片URL"}), 500
+
+            # 下载图片并保存到本地
+            image_response = requests.get(image_url, timeout=60)
+            if image_response.status_code != 200:
+                return jsonify({"success": False, "error": "下载生成的图片失败"}), 500
+
+            # 创建上传目录
+            upload_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
+            os.makedirs(upload_dir, exist_ok=True)
+
+            # 生成唯一文件名
+            new_filename = f"portrait_ai_{uuid.uuid4().hex[:16]}.png"
+            filepath = os.path.join(upload_dir, new_filename)
+
+            # 保存文件
+            with open(filepath, 'wb') as f:
+                f.write(image_response.content)
+
+            portrait_url = f"/static/uploads/portraits/{new_filename}"
+            _log.info(f"AI立绘生成成功: {character_name} -> {portrait_url}")
+
+            return jsonify({
+                "success": True,
+                "portrait_url": portrait_url,
+                "message": "立绘生成成功"
+            })
+
+        except requests.exceptions.Timeout:
+            _log.error("图片生成请求超时")
+            return jsonify({"success": False, "error": "图片生成请求超时，请稍后重试"}), 504
+        except Exception as e:
+            _log.error(f"AI生成立绘失败: {e}")
+            return jsonify({"success": False, "error": f"生成失败: {str(e)}"}), 500

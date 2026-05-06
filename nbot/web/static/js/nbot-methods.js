@@ -4458,11 +4458,18 @@ def main(params):
                 
                 confirmAction() {
                     if (this.confirmModalConfig.action) {
-                        this.confirmModalConfig.action(this.confirmModalConfig.data);
+                        this.confirmModalConfig.action('confirm');
                     }
                     this.showConfirmModal = false;
                 },
-                
+
+                cancelConfirmAction() {
+                    if (this.confirmModalConfig.action) {
+                        this.confirmModalConfig.action('cancel');
+                    }
+                    this.showConfirmModal = false;
+                },
+
                 cancelConfirm() {
                     this.showConfirmModal = false;
                 },
@@ -6315,6 +6322,42 @@ def main(params):
                         return;
                     }
 
+                    // 检查是否已存在同名角色
+                    const existingPreset = this.customPersonalityPresets.find(
+                        p => p.name === this.personality.name
+                    );
+
+                    if (existingPreset) {
+                        // 使用自定义弹窗询问用户
+                        this.confirmModalConfig = {
+                            title: '角色已存在',
+                            message: `角色库中已存在名为 "${this.personality.name}" 的角色。\n\n您想要：`,
+                            confirmText: '修改已有角色',
+                            cancelText: '创建同名新角色',
+                            icon: 'fa-info-circle',
+                            iconColor: 'var(--info)',
+                            danger: false,
+                            showCancel: true,
+                            action: async (choice) => {
+                                if (choice === 'confirm') {
+                                    // 修改已有角色
+                                    await this.updateExistingPreset(existingPreset.id);
+                                } else {
+                                    // 创建同名新角色
+                                    await this.createNewPreset();
+                                }
+                            }
+                        };
+                        this.showConfirmModal = true;
+                        return;
+                    }
+
+                    // 没有同名角色，直接创建
+                    await this.createNewPreset();
+                },
+
+                // 创建新角色预设
+                async createNewPreset() {
                     try {
                         const presetData = {
                             name: this.personality.name,
@@ -6337,6 +6380,46 @@ def main(params):
                     } catch (e) {
                         console.error('保存角色卡失败:', e);
                         this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                // 更新已有角色预设
+                async updateExistingPreset(presetId) {
+                    try {
+                        // 调试日志
+                        console.log('更新角色预设，当前 personality 数据:', this.personality);
+
+                        const presetData = {
+                            name: this.personality.name,
+                            description: this.personality.description || '',
+                            avatar: this.personality.avatar || '',
+                            portrait: this.personality.portrait || '',
+                            tags: this.personality.tags || [],
+                            basicInfo: this.personality.basicInfo || '',
+                            personality: this.personality.personality || '',
+                            scenario: this.personality.scenario || '',
+                            firstMessage: this.personality.firstMessage || '',
+                            exampleDialogues: this.personality.exampleDialogues || '',
+                            responseFormat: this.personality.responseFormat || '',
+                            rules: this.personality.rules || [],
+                            state: this.personality.state || { affection: 50, mood: '开心' }
+                        };
+
+                        console.log('发送的 presetData:', presetData);
+
+                        const res = await api.put(`/api/personality/custom-presets/${presetId}`, presetData);
+
+                        console.log('服务器返回:', res.data);
+
+                        // 更新本地列表
+                        const index = this.customPersonalityPresets.findIndex(p => p.id === presetId);
+                        if (index !== -1) {
+                            this.customPersonalityPresets.splice(index, 1, res.data.data);
+                        }
+                        this.showToast('角色卡已更新', 'success');
+                    } catch (e) {
+                        console.error('更新角色卡失败:', e);
+                        this.showToast('更新失败: ' + (e.response?.data?.error || e.message), 'error');
                     }
                 },
 
@@ -6598,6 +6681,47 @@ def main(params):
                     this.personality.portrait = '';
                     this.personalityHasUnsavedChanges = true;
                     this.showToast('立绘已删除，请点击"应用"保存', 'info');
+                },
+
+                // AI生成立绘
+                async generatePortraitWithAI() {
+                    if (!this.personality.name) {
+                        this.showToast('请先填写角色名称', 'error');
+                        return;
+                    }
+
+                    this.isGeneratingPortrait = true;
+                    try {
+                        const res = await api.post('/api/personality/generate-portrait', {
+                            character_name: this.personality.name,
+                            description: this.personality.description || '',
+                            basic_info: this.personality.basicInfo || '',
+                            personality: this.personality.personality || ''
+                        });
+
+                        if (res.data.success) {
+                            this.personality.portrait = res.data.portrait_url;
+                            this.personalityHasUnsavedChanges = true;
+                            this.showToast('立绘生成成功！请点击"应用"保存', 'success');
+                        } else {
+                            if (res.data.need_config) {
+                                this.showToast('请先配置图片生成模型', 'error');
+                                // 可以在这里打开AI配置页面
+                                setTimeout(() => {
+                                    if (confirm('是否跳转到AI配置页面配置图片生成模型？')) {
+                                        this.currentPage = 'ai-config';
+                                    }
+                                }, 500);
+                            } else {
+                                this.showToast(res.data.error || '生成失败', 'error');
+                            }
+                        }
+                    } catch (e) {
+                        console.error('AI生成立绘失败:', e);
+                        this.showToast('生成失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isGeneratingPortrait = false;
+                    }
                 },
 
                 // 触发导入文件选择
@@ -7481,14 +7605,22 @@ def main(params):
                             supports_reasoning: false,
                             supports_stream: false,
                             dimensions: 1536
+                        },
+                        image_generation: {
+                            supports_tools: false,
+                            supports_reasoning: false,
+                            supports_stream: false,
+                            model: 'dall-e-3',
+                            size: '1024x1024',
+                            quality: 'standard'
                         }
                     };
-                    
+
                     const defaults = purposeDefaults[this.modelForm.purpose];
                     if (defaults) {
                         Object.assign(this.modelForm, defaults);
                     }
-                    
+
                     // 更新配置名称
                     if (!this.editingModel) {
                         const purposeNames = {
@@ -7497,7 +7629,8 @@ def main(params):
                             video: '视频理解模型',
                             tts: 'TTS语音合成',
                             stt: 'STT语音识别',
-                            embedding: '向量嵌入模型'
+                            embedding: '向量嵌入模型',
+                            image_generation: '图片生成模型'
                         };
                         this.modelForm.name = `新${purposeNames[this.modelForm.purpose]}配置`;
                     }
@@ -7728,7 +7861,8 @@ def main(params):
                             video: '视频理解模型',
                             tts: 'TTS语音合成',
                             stt: 'STT语音识别',
-                            embedding: '向量嵌入模型'
+                            embedding: '向量嵌入模型',
+                            image_generation: '图片生成模型'
                         };
                         this.modelForm = {
                             id: null,

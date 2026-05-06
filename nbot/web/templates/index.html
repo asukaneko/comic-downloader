@@ -1917,24 +1917,27 @@
                                             <label class="form-label">角色立绘</label>
                                             <div style="display: flex; gap: 12px; align-items: flex-start;">
                                                 <!-- 立绘预览 -->
-                                                <div style="position: relative; width: 120px; height: 160px; background: var(--bg-tertiary); border-radius: 12px; overflow: hidden; border: 2px dashed var(--border-color); display: flex; align-items: center; justify-content: center;">
+                                                <div style="position: relative; width: 120px; height: 160px; background: var(--bg-tertiary); border-radius: 12px; overflow: hidden; border: 2px dashed var(--border-color); display: flex; align-items: center; justify-content: center; cursor: pointer;" @click="personality.portrait ? viewPortrait(personality.portrait) : null">
                                                     <img v-if="personality.portrait" :src="personality.portrait" style="width: 100%; height: 100%; object-fit: cover;">
                                                     <div v-else style="text-align: center; color: var(--text-muted);">
                                                         <i class="fas fa-image" style="font-size: 32px; margin-bottom: 8px;"></i>
                                                         <div style="font-size: 12px;">暂无立绘</div>
                                                     </div>
                                                     <!-- 删除按钮 -->
-                                                    <button v-if="personality.portrait" @click="removePortrait" style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(239, 68, 68, 0.9); border: none; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                                                    <button v-if="personality.portrait" @click.stop="removePortrait" style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(239, 68, 68, 0.9); border: none; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
                                                         <i class="fas fa-times" style="font-size: 12px;"></i>
                                                     </button>
                                                 </div>
-                                                <!-- 上传按钮 -->
+                                                <!-- 上传按钮和AI生成按钮 -->
                                                 <div style="flex: 1;">
                                                     <input type="file" ref="portraitInput" accept="image/*" style="display: none;" @change="handlePortraitUpload">
-                                                    <button class="btn btn-secondary btn-sm" @click="$refs.portraitInput.click()" style="margin-bottom: 8px;">
-                                                        <i class="fas fa-upload"></i> 上传立绘
+                                                    <button class="btn btn-secondary btn-sm" @click="$refs.portraitInput.click()" style="margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px;">
+                                                        <i class="fas fa-upload"></i> 上传
                                                     </button>
-                                                    <div class="form-hint">支持 JPG、PNG、GIF 格式<br>建议尺寸 3:4 比例</div>
+                                                    <button class="btn btn-accent btn-sm" @click="generatePortraitWithAI" :disabled="isGeneratingPortrait || !personality.name" style="margin-top: 8px; margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none;">
+                                                        <i class="fas fa-magic"></i> {{ isGeneratingPortrait ? '生成中' : 'AI生成' }}
+                                                    </button>
+                                                    <div class="form-hint">支持 JPG、PNG、GIF 格式<br>建议尺寸 3:4 比例<br>AI生成需要配置图片生成模型</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2011,14 +2014,7 @@
                                             </div>
                                             <div class="form-group" style="flex: 1;">
                                                 <label class="form-label">心情</label>
-                                                <select v-model="personality.state.mood" class="form-select" @change="personalityHasUnsavedChanges = true">
-                                                    <option value="开心">😊 开心</option>
-                                                    <option value="平静">😌 平静</option>
-                                                    <option value="兴奋">🤩 兴奋</option>
-                                                    <option value="困倦">😴 困倦</option>
-                                                    <option value="难过">😢 难过</option>
-                                                    <option value="生气">😠 生气</option>
-                                                </select>
+                                                <input v-model="personality.state.mood" type="text" class="form-input" placeholder="输入心情，如：开心、紧张、平静" @change="personalityHasUnsavedChanges = true">
                                             </div>
                                         </div>
                                     </div>
@@ -2553,7 +2549,7 @@
                                             </div>
                                             <span class="badge" :class="aiStatus.class">{{ aiStatus.text }}</span>
                                         </div>
-                                        <div class="ai-summary-grid">
+                                        <div class="ai-summary-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
                                             <div class="ai-summary-card">
                                                 <div class="ai-summary-label">{{ $t('ai_config.chat_model') }}</div>
                                                 <div class="ai-summary-value">{{ activeModelsByPurpose.chat?.model?.name || $t('ai_config.not_configured') }}</div>
@@ -2565,14 +2561,14 @@
                                                 <div class="ai-summary-note">{{ activeModelsByPurpose.vision?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
                                             </div>
                                             <div class="ai-summary-card">
-                                                <div class="ai-summary-label">{{ $t('ai_config.video') }}</div>
-                                                <div class="ai-summary-value">{{ activeModelsByPurpose.video?.model?.name || $t('ai_config.not_configured') }}</div>
-                                                <div class="ai-summary-note">{{ activeModelsByPurpose.video?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
-                                            </div>
-                                            <div class="ai-summary-card">
                                                 <div class="ai-summary-label">{{ $t('ai_config.tts') }}</div>
                                                 <div class="ai-summary-value">{{ activeModelsByPurpose.tts?.model?.name || $t('ai_config.not_configured') }}</div>
                                                 <div class="ai-summary-note">{{ activeModelsByPurpose.tts?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
+                                            </div>
+                                            <div class="ai-summary-card">
+                                                <div class="ai-summary-label">{{ $t('ai_config.image_generation') }}</div>
+                                                <div class="ai-summary-value">{{ activeModelsByPurpose.image_generation?.model?.name || $t('ai_config.not_configured') }}</div>
+                                                <div class="ai-summary-note">{{ activeModelsByPurpose.image_generation?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -3179,6 +3175,7 @@
                                             <option value="tts">🔊 TTS语音合成 - 用于文字转语音</option>
                                             <option value="stt">🎤 STT语音识别 - 用于语音转文字</option>
                                             <option value="embedding">📊 向量嵌入模型 - 用于知识库和语义搜索</option>
+                                            <option value="image_generation">🎨 图片生成模型 - 用于AI生成图片，如角色立绘</option>
                                         </select>
                                         <div class="form-hint">选择模型用途后，会自动应用该用途的推荐默认配置</div>
                                     </div>
@@ -3348,6 +3345,28 @@
                                                 <option value="1536">1536 (OpenAI默认)</option>
                                                 <option value="3072">3072 (超高精度)</option>
                                             </select>
+                                        </div>
+                                    </template>
+
+                                    <!-- 图片生成特有配置 -->
+                                    <template v-if="modelForm.purpose === 'image_generation'">
+                                        <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                                            <label class="form-label" style="color: var(--primary-color); font-weight: 600;">🎨 图片生成特有配置</label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">完整 API URL <span class="required">*</span></label>
+                                            <input v-model="modelForm.base_url" type="text" class="form-input" placeholder="https://api.openai.com/v1/images/generations">
+                                            <div class="form-hint">请输入完整的图片生成API地址（包含路径后缀），例如:<br>https://api.openai.com/v1/images/generations<br>https://ark.cn-beijing.volces.com/api/v3/images/generations</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">图片尺寸</label>
+                                            <input v-model="modelForm.size" type="text" class="form-input" placeholder="1024x1024">
+                                            <div class="form-hint">格式: 宽x高，例如: 1024x1024, 1920x1920, 1024x1792<br>注意: 某些API要求最小像素数（如火山引擎要求至少3686400像素，约1920x1920）</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">默认模型</label>
+                                            <input v-model="modelForm.model" type="text" class="form-input" placeholder="dall-e-3">
+                                            <div class="form-hint">例如: dall-e-3, doubao-seedream-4-5, stable-diffusion-xl 等</div>
                                         </div>
                                     </template>
                                 </div>
@@ -4841,7 +4860,13 @@
                     </p>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="cancelConfirm">取消</button>
+                    <button 
+                        class="btn" 
+                        :class="confirmModalConfig.cancelClass || 'btn-secondary'"
+                        @click="cancelConfirmAction"
+                    >
+                        {{ confirmModalConfig.cancelText || '取消' }}
+                    </button>
                     <button 
                         class="btn" 
                         :class="confirmModalConfig.danger ? 'btn-danger' : 'btn-primary'"
@@ -6377,6 +6402,7 @@
                     aiGeneratedCharacter: null, // AI生成的角色卡结果
                     showCreateCharacterMenu: false, // 新建角色下拉菜单
                     showBulkImportExportMenu: false, // 批量导入导出菜单
+                    isGeneratingPortrait: false, // 是否正在AI生成立绘
                     avatarPresets: [ // 预设头像图标
                         'fas fa-cat', 'fas fa-dog', 'fas fa-dragon', 'fas fa-robot',
                         'fas fa-ghost', 'fas fa-otter', 'fas fa-paw', 'fas fa-feather',
@@ -6559,7 +6585,8 @@
                         video: { name: '视频理解模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/><path d="M7 5v14M17 5v14"/></svg>', description: '用于分析视频内容', color: '#ec4899' },
                         tts: { name: 'TTS语音合成', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10H4Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg>', description: '用于文字转语音', color: '#10b981' },
                         stt: { name: 'STT语音识别', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>', description: '用于语音转文字', color: '#f59e0b' },
-                        embedding: { name: '向量嵌入模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V8"/><path d="M2 19h22"/></svg>', description: '用于知识库和语义搜索', color: '#6366f1' }
+                        embedding: { name: '向量嵌入模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V8"/><path d="M2 19h22"/></svg>', description: '用于知识库和语义搜索', color: '#6366f1' },
+                        image_generation: { name: '图片生成模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>', description: '用于AI生成图片，如角色立绘', color: '#ec4899' }
                     },
                     // 各用途的活跃模型
                     activeModelsByPurpose: {
@@ -6568,7 +6595,8 @@
                         video: null,
                         tts: null,
                         stt: null,
-                        embedding: null
+                        embedding: null,
+                        image_generation: null
                     },
                     // 显示用途配置弹窗
                     showPurposeConfigModal: false,
