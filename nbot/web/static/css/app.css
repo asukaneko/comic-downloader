@@ -1218,13 +1218,13 @@
         }
 
         .stat-icon {
-            width: 56px;
-            height: 56px;
-            border-radius: 14px;
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 28px;
             flex-shrink: 0;
         }
 
@@ -1265,20 +1265,20 @@
         }
 
         .stat-label {
-            font-size: 13px;
+            font-size: 14px;
             color: var(--text-secondary);
             margin-bottom: 4px;
         }
 
         .stat-value {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 700;
             color: var(--text-primary);
             line-height: 1.2;
         }
 
         .stat-subtitle {
-            font-size: 11px;
+            font-size: 13px;
             color: var(--text-muted);
             margin-top: 4px;
         }
@@ -2511,7 +2511,7 @@
         }
 
         .overview-value {
-            font-size: 24px;
+            font-size: 32px;
             font-weight: 700;
             color: var(--text-primary);
             line-height: 1.2;
@@ -4052,6 +4052,39 @@
             white-space: pre-wrap;
             word-break: break-word;
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 浅色主题适配 */
+        [data-theme="light"] .scenario-card {
+            background: linear-gradient(145deg, rgba(241, 245, 249, 0.9) 0%, rgba(226, 232, 240, 0.95) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            box-shadow:
+                0 10px 40px rgba(0, 0, 0, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        }
+
+        [data-theme="light"] .scenario-card::before {
+            background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 70%);
+        }
+
+        [data-theme="light"] .scenario-card::after {
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.06) 0%, transparent 70%);
+        }
+
+        [data-theme="light"] .scenario-badge {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(59, 130, 246, 0.12) 100%);
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            color: #7c3aed;
+            box-shadow: 0 2px 8px rgba(139, 92, 246, 0.12);
+        }
+
+        [data-theme="light"] .scenario-badge i {
+            color: #8b5cf6;
+        }
+
+        [data-theme="light"] .scenario-content {
+            color: #334155;
+            text-shadow: none;
         }
 
         /* 历史记录总结样式 */
@@ -8097,11 +8130,11 @@
             font-size: 10px;
         }
 
-        .stat-label {
+        .active-personality-stats .stat-label {
             color: var(--text-muted);
         }
 
-        .stat-value {
+        .active-personality-stats .stat-value {
             color: var(--text-primary);
             font-weight: 500;
             font-size: 11px;
