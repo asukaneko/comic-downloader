@@ -3964,18 +3964,25 @@ def main(params):
                 },
 
                 async deleteApiKey(key) {
-                    if (!confirm(`确定要删除API Key "${key.name}" 吗？`)) {
-                        return;
-                    }
-                    try {
-                        const res = await api.delete(`/api/api-keys/${key.id}`);
-                        if (res.data.success) {
-                            this.showToast('API Key已删除', 'success');
-                            await this.loadApiKeys();
+                    this.showConfirm({
+                        title: '删除 API Key',
+                        message: `确定要删除 API Key "${key.name}" 吗？此操作不可恢复。`,
+                        confirmText: '删除',
+                        icon: 'fa-key',
+                        iconColor: 'var(--error)',
+                        danger: true,
+                        onConfirm: async () => {
+                            try {
+                                const res = await api.delete(`/api/api-keys/${key.id}`);
+                                if (res.data.success) {
+                                    this.showToast('API Key 已删除', 'success');
+                                    await this.loadApiKeys();
+                                }
+                            } catch (e) {
+                                this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
+                            }
                         }
-                    } catch (e) {
-                        this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
-                    }
+                    });
                 },
 
                 async getApiKeyValue(keyId) {
@@ -4176,7 +4183,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             try {
                                 // 删除后端数据
                                 const endpoint = type === 'private' || type === 'current' && this.chatTab === 'qq_private' ? 'private' : 'group';
@@ -4241,7 +4248,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             try {
                                 await api.delete('/api/sessions/' + session.id);
                                 this.sessions = this.sessions.filter(s => s.id !== session.id);
@@ -4303,7 +4310,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             const deletedIds = [...this.selectedSessions];
                             const deletedSessions = this.sessions.filter(s => deletedIds.includes(s.id));
                             
@@ -4802,7 +4809,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--danger)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             try {
                                 const filename = item.path;
                                 let url;
@@ -5898,7 +5905,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/task-center/${item.id}`);
@@ -6004,7 +6011,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/workflows/${id}`);
@@ -6768,11 +6775,17 @@ def main(params):
                         } else {
                             if (res.data.need_config) {
                                 this.showToast('请先配置图片生成模型', 'error');
-                                // 可以在这里打开AI配置页面
                                 setTimeout(() => {
-                                    if (confirm('是否跳转到AI配置页面配置图片生成模型？')) {
-                                        this.currentPage = 'ai-config';
-                                    }
+                                    this.showConfirm({
+                                        title: '配置图片生成模型',
+                                        message: '是否跳转到 AI 配置页面配置图片生成模型？',
+                                        confirmText: '前往配置',
+                                        icon: 'fa-image',
+                                        iconColor: 'var(--accent-primary)',
+                                        onConfirm: () => {
+                                            this.currentPage = 'ai-config';
+                                        }
+                                    });
                                 }, 500);
                             } else {
                                 this.showToast(res.data.error || '生成失败', 'error');
@@ -6940,7 +6953,7 @@ def main(params):
                         icon: 'fa-trash-alt',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete('/api/memory');
@@ -6964,7 +6977,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/memory/${id}`);
@@ -7092,7 +7105,7 @@ def main(params):
                         icon: 'fa-arrow-up',
                         iconColor: 'var(--accent)',
                         danger: false,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.put(`/api/memory/${mem.id}`, {
@@ -7392,7 +7405,7 @@ def main(params):
                         icon: 'fa-trash',
                         iconColor: 'var(--error)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.delete(`/api/knowledge/${doc.id}`);
@@ -7995,30 +8008,6 @@ def main(params):
                     }
                 },
 
-                async deleteModel(model) {
-                    this.showConfirm({
-                        title: '删除模型配置',
-                        message: `确定要删除模型配置"${model.name}"吗？此操作不可恢复。`,
-                        confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
-                        danger: true,
-                        action: async () => {
-                            this.isLoading = true;
-                            try {
-                                await api.delete(`/api/ai-models/${model.id}`);
-                                await this.loadAIModels();
-                                this.showToast('模型配置已删除', 'success');
-                            } catch (e) {
-                                console.error('删除模型配置失败:', e);
-                                this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
-                            } finally {
-                                this.isLoading = false;
-                            }
-                        }
-                    });
-                },
-
                 async cloneModel(model) {
                     this.isLoading = true;
                     try {
@@ -8076,28 +8065,31 @@ def main(params):
                 },
 
                 async deleteModel(model) {
-                    // 确认对话框
-                    if (!confirm(`确定要删除配置 "${model.name}" 吗？此操作不可恢复。`)) {
-                        return;
-                    }
-                    
-                    this.isDeleting = true;
-                    try {
-                        const res = await api.delete(`/api/ai-models/${model.id}`);
-                        if (res.data.success) {
-                            // 从列表中移除
-                            this.aiModels = this.aiModels.filter(m => m.id !== model.id);
-                            this.showToast('配置已删除', 'success');
-                            // 刷新各用途的活跃模型状态
-                            await this.loadActiveModelsByPurpose();
-                        } else {
-                            this.showToast(res.data.error || '删除失败', 'error');
+                    this.showConfirm({
+                        title: '删除模型配置',
+                        message: `确定要删除配置 "${model.name}" 吗？此操作不可恢复。`,
+                        confirmText: '删除',
+                        icon: 'fa-trash',
+                        iconColor: 'var(--error)',
+                        danger: true,
+                        onConfirm: async () => {
+                            this.isDeleting = true;
+                            try {
+                                const res = await api.delete(`/api/ai-models/${model.id}`);
+                                if (res.data.success) {
+                                    this.aiModels = this.aiModels.filter(m => m.id !== model.id);
+                                    this.showToast('配置已删除', 'success');
+                                    await this.loadActiveModelsByPurpose();
+                                } else {
+                                    this.showToast(res.data.error || '删除失败', 'error');
+                                }
+                            } catch (e) {
+                                this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
+                            } finally {
+                                this.isDeleting = false;
+                            }
                         }
-                    } catch (e) {
-                        this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
-                    } finally {
-                        this.isDeleting = false;
-                    }
+                    });
                 },
 
                 getProviderIcon(provider) {
@@ -8276,7 +8268,7 @@ def main(params):
                         icon: 'fa-broom',
                         iconColor: 'var(--warning)',
                         danger: true,
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 await api.post('/api/system/clear-cache');
@@ -8311,7 +8303,7 @@ def main(params):
                         confirmText: '重载',
                         icon: 'fa-code',
                         iconColor: 'var(--warning)',
-                        action: async () => {
+                        onConfirm: async () => {
                             this.isLoading = true;
                             try {
                                 const res = await api.post('/api/system/reload-core');
@@ -8345,7 +8337,7 @@ def main(params):
                         confirmText: '测试',
                         icon: 'fa-plug',
                         iconColor: 'var(--info)',
-                        action: async () => {
+                        onConfirm: async () => {
                             try {
                                 // 发送一个 ping 事件测试连接
                                 socket.emit('ping', { timestamp: Date.now() });

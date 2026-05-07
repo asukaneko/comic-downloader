@@ -2710,8 +2710,18 @@
                                             <span class="ai-hero-glyph">✦</span>
                                         </div>
                                         <div class="ai-hero-copy">
-                                            <h2>{{ $t('ai_config.title') }}</h2>
-                                            <p>{{ $t('ai_config.subtitle') }}</p>
+                                            <h2>AI 控制中心</h2>
+                                            <p>配置模型能力，管理 API 密钥，掌控 AI 服务全局</p>
+                                        </div>
+                                    </div>
+                                    <!-- 配置进度条 -->
+                                    <div class="ai-progress-section">
+                                        <div class="ai-progress-header">
+                                            <span class="ai-progress-label">配置进度</span>
+                                            <span class="ai-progress-count">{{ Object.values(activeModelsByPurpose).filter(m => m && m.has_config).length }}/{{ Object.keys(modelPurposes).length }} 能力已配置</span>
+                                        </div>
+                                        <div class="ai-progress-bar-bg">
+                                            <div class="ai-progress-bar-fill" :style="{ width: (Object.values(activeModelsByPurpose).filter(m => m && m.has_config).length / Object.keys(modelPurposes).length * 100) + '%' }"></div>
                                         </div>
                                     </div>
                                     <div class="ai-toolbar">
@@ -2737,33 +2747,18 @@
                                     <div class="ai-status-panel">
                                         <div class="ai-status-top">
                                             <div>
-                                                <div class="ai-status-title">{{ $t('ai_config.system_status') }}</div>
+                                                <div class="ai-status-title">系统状态</div>
                                                 <div class="ai-status-name">
-                                                    {{ $t('ai_config.status_count', {configured: Object.values(activeModelsByPurpose).filter(m => m && m.has_config).length}) }}
+                                                    {{ Object.values(activeModelsByPurpose).filter(m => m && m.has_config).length }} 项已就绪
                                                 </div>
                                             </div>
                                             <span class="badge" :class="aiStatus.class">{{ aiStatus.text }}</span>
                                         </div>
-                                        <div class="ai-summary-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                                            <div class="ai-summary-card">
-                                                <div class="ai-summary-label">{{ $t('ai_config.chat_model') }}</div>
-                                                <div class="ai-summary-value">{{ activeModelsByPurpose.chat?.model?.name || $t('ai_config.not_configured') }}</div>
-                                                <div class="ai-summary-note">{{ activeModelsByPurpose.chat?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
-                                            </div>
-                                            <div class="ai-summary-card">
-                                                <div class="ai-summary-label">{{ $t('ai_config.vision') }}</div>
-                                                <div class="ai-summary-value">{{ activeModelsByPurpose.vision?.model?.name || $t('ai_config.not_configured') }}</div>
-                                                <div class="ai-summary-note">{{ activeModelsByPurpose.vision?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
-                                            </div>
-                                            <div class="ai-summary-card">
-                                                <div class="ai-summary-label">{{ $t('ai_config.tts') }}</div>
-                                                <div class="ai-summary-value">{{ activeModelsByPurpose.tts?.model?.name || $t('ai_config.not_configured') }}</div>
-                                                <div class="ai-summary-note">{{ activeModelsByPurpose.tts?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
-                                            </div>
-                                            <div class="ai-summary-card">
-                                                <div class="ai-summary-label">{{ $t('ai_config.image_generation') }}</div>
-                                                <div class="ai-summary-value">{{ activeModelsByPurpose.image_generation?.model?.name || $t('ai_config.not_configured') }}</div>
-                                                <div class="ai-summary-note">{{ activeModelsByPurpose.image_generation?.has_config ? $t('ai_config.enabled') : $t('ai_config.click_to_config') }}</div>
+                                        <div class="ai-capability-status-list">
+                                            <div v-for="(info, purpose, index) in modelPurposes" v-show="index < 4" :key="purpose" class="ai-capability-status-item" :class="{ 'is-configured': activeModelsByPurpose[purpose]?.has_config }">
+                                                <div class="capability-dot" :style="{ backgroundColor: info.color }"></div>
+                                                <span class="capability-name">{{ info.name }}</span>
+                                                <span class="capability-state">{{ activeModelsByPurpose[purpose]?.has_config ? '已启用' : '未配置' }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2776,81 +2771,56 @@
                             <div class="ai-pane-header">
                                 <div class="ai-pane-title">
                                     <i class="fas fa-th-large"></i>
-                                    <span>{{ $t('ai_config.purpose_title') }}</span>
+                                    <span>能力模块</span>
                                 </div>
+                                <span class="ai-pane-badge">{{ Object.keys(modelPurposes).length }} 项</span>
                             </div>
-                            <div class="ai-pane-subtitle">{{ $t('ai_config.purpose_subtitle') }}</div>
+                            <div class="ai-pane-subtitle">点击卡片配置各能力对应的模型</div>
                             <div class="ai-pane-body">
-                                <div class="purpose-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+                                <div class="purpose-cards-grid">
                                     <div 
                                         v-for="(info, purpose) in modelPurposes" 
                                         :key="purpose"
                                         class="purpose-card"
                                         :class="{ 'has-config': activeModelsByPurpose[purpose]?.has_config }"
                                         @click="openPurposeConfig(purpose)"
-                                        style="
-                                            background: var(--surface-color);
-                                            border: 2px solid var(--border-color);
-                                            border-radius: 12px;
-                                            padding: 20px;
-                                            cursor: pointer;
-                                            transition: all 0.2s ease;
-                                            position: relative;
-                                            overflow: hidden;
-                                        "
-                                        :style="activeModelsByPurpose[purpose]?.has_config ? { borderColor: info.color } : {}"
                                     >
-                                        <div class="purpose-card-header" style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-                                            <div class="purpose-icon" style="
-                                                width: 48px;
-                                                height: 48px;
-                                                border-radius: 12px;
-                                                display: flex;
-                                                align-items: center;
-                                                justify-content: center;
-                                                font-size: 24px;
-                                                background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
-                                            " :style="{ backgroundColor: info.color + '20', color: info.color }" v-html="info.iconSvg">
-                                            </div>
-                                            <div class="purpose-info">
-                                                <div class="purpose-name" style="font-weight: 600; font-size: 16px; color: var(--text-primary);">
-                                                    {{ info.name }}
+                                        <div class="purpose-card-glow" :style="{ background: info.color }"></div>
+                                        <div class="purpose-card-content">
+                                            <div class="purpose-card-header">
+                                                <div class="purpose-icon" :style="{ background: 'linear-gradient(135deg, ' + info.color + '30, ' + info.color + '15)', color: info.color }" v-html="info.iconSvg">
                                                 </div>
-                                                <div class="purpose-desc" style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
-                                                    {{ info.description }}
+                                                <div class="purpose-info">
+                                                    <div class="purpose-name">{{ info.name }}</div>
+                                                    <div class="purpose-desc">{{ info.description }}</div>
                                                 </div>
                                             </div>
-                                        </div>
-                                        <div class="purpose-status" style="
-                                            display: flex;
-                                            align-items: center;
-                                            justify-content: space-between;
-                                            padding-top: 12px;
-                                            border-top: 1px solid var(--border-color);
-                                        ">
-                                            <div class="status-text" style="font-size: 13px; color: var(--text-secondary);">
-                                                <template v-if="activeModelsByPurpose[purpose]?.has_config">
-                                                    <span style="color: #10b981;">●</span> {{ $t('ai_config.configured') }}: {{ activeModelsByPurpose[purpose].model.name }}
-                                                </template>
-                                                <template v-else>
-                                                    <span style="color: #9ca3af;">○</span> {{ $t('ai_config.not_configured') }}
-                                                </template>
+                                            <div class="purpose-status">
+                                                <div class="status-badge" :class="{ 'is-active': activeModelsByPurpose[purpose]?.has_config }">
+                                                    <span class="status-dot" :style="{ backgroundColor: activeModelsByPurpose[purpose]?.has_config ? '#10b981' : '#9ca3af' }"></span>
+                                                    <span>{{ activeModelsByPurpose[purpose]?.has_config ? '已配置' : '未配置' }}</span>
+                                                </div>
+                                                <div class="purpose-model" v-if="activeModelsByPurpose[purpose]?.has_config">
+                                                    {{ activeModelsByPurpose[purpose].model.name }}
+                                                </div>
+                                                <i class="fas fa-chevron-right purpose-arrow"></i>
                                             </div>
-                                            <i class="fas fa-chevron-right" style="color: var(--text-secondary); font-size: 12px;"></i>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
+                        <!-- 已保存模型配置 -->
                         <div class="ai-pane ai-config-fade">
                             <div class="ai-pane-header">
                                 <div class="ai-pane-title">
                                     <i class="fas fa-layer-group"></i>
-                                    <span>{{ $t('ai_config.saved_title') }}</span>
+                                    <span>配置资产库</span>
                                 </div>
+                                <span class="ai-pane-badge">{{ aiModels.length }} 个</span>
                             </div>
-                            <div class="ai-pane-subtitle">{{ $t('ai_config.saved_subtitle') }}</div>
+                            <div class="ai-pane-subtitle">管理已保存的模型配置方案</div>
                             <div class="ai-pane-body">
                                 <div v-if="aiModels.length === 0" class="empty-state" style="padding: 20px;">
                                     <i class="fas fa-robot" style="font-size: 40px; color: var(--text-secondary); margin-bottom: 12px;"></i>
@@ -2859,16 +2829,18 @@
                                         {{ $t('ai_config.create_first') }}
                                     </button>
                                 </div>
-                                    <div v-else class="ai-saved-grid">
-                                        <div
-                                            v-for="model in aiModels"
-                                            :key="model.id"
-                                            class="ai-saved-card"
-                                            :class="{ active: activeModelId === model.id }"
-                                        >
+                                <div v-else class="ai-saved-grid">
+                                    <div
+                                        v-for="model in aiModels"
+                                        :key="model.id"
+                                        class="ai-saved-card"
+                                        :class="{ active: activeModelId === model.id }"
+                                    >
+                                        <div class="ai-saved-glow"></div>
+                                        <div class="ai-saved-content">
                                             <div class="ai-saved-top">
                                                 <div class="ai-saved-brand">
-                                                    <div class="ai-saved-icon">
+                                                    <div class="ai-saved-icon" :style="{ background: 'linear-gradient(135deg, ' + (modelPurposes.chat?.color || '#3b82f6') + ', ' + (modelPurposes.vision?.color || '#8b5cf6') + ')' }">
                                                         <span class="ai-saved-icon-glyph">{{ getProviderGlyph(model.provider) }}</span>
                                                     </div>
                                                     <div style="min-width: 0;">
@@ -2879,32 +2851,29 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <span class="badge" :class="model.enabled ? (activeModelId === model.id ? 'badge-primary' : 'badge-success') : 'badge-secondary'">
-                                                    {{ activeModelId === model.id ? $t('ai_config.current_use') : (model.enabled ? $t('app.enabled') : $t('app.disabled')) }}
+                                                <span class="ai-saved-status-badge" :class="{ 'is-current': activeModelId === model.id, 'is-enabled': model.enabled && activeModelId !== model.id, 'is-disabled': !model.enabled }">
+                                                    {{ activeModelId === model.id ? '当前使用' : (model.enabled ? '已启用' : '已禁用') }}
                                                 </span>
                                             </div>
-                                        <div class="ai-saved-flags">
-                                            <span class="ai-saved-flag">{{ model.supports_tools ? $t('ai_config.supports_tools') : $t('ai_config.pure_chat') }}</span>
-                                            <span class="ai-saved-flag">{{ model.supports_reasoning ? $t('ai_config.show_reasoning') : $t('ai_config.hide_reasoning') }}</span>
-                                            <span class="ai-saved-flag">{{ model.supports_stream ? $t('ai_config.supports_stream') : $t('ai_config.no_stream') }}</span>
-                                        </div>
-                                        <div class="ai-saved-actions">
-                                            <button class="btn btn-secondary btn-sm" @click="testModel(model)" :disabled="isTesting">
-                                                <i class="fas" :class="isTesting ? 'fa-spinner fa-spin' : 'fa-vial'"></i> {{ $t('ai_config.test') }}
-                                            </button>
-                                            <button class="btn btn-text btn-sm" @click="openModelEditModal(model)">
-                                                <i class="fas fa-edit"></i> {{ $t('ai_config.edit') }}
-                                            </button>
-                                            <button class="btn btn-text btn-sm" @click="cloneModel(model)">
-                                                <i class="fas fa-copy"></i> {{ $t('ai_config.copy') }}
-                                            </button>
-                                            <button class="btn btn-danger btn-sm" @click="deleteModel(model)" :disabled="isDeleting">
-                                                <i class="fas" :class="isDeleting ? 'fa-spinner fa-spin' : 'fa-trash'"></i> {{ $t('ai_config.delete') }}
-                                            </button>
-                                        </div>
-                                        <div class="ai-saved-watermark" aria-hidden="true">
-                                            <span></span>
-                                            <span></span>
+                                            <div class="ai-saved-flags">
+                                                <span class="ai-saved-flag">{{ model.supports_tools ? '工具调用' : '纯对话' }}</span>
+                                                <span class="ai-saved-flag">{{ model.supports_reasoning ? '推理可见' : '推理隐藏' }}</span>
+                                                <span class="ai-saved-flag">{{ model.supports_stream ? '流式输出' : '非流式' }}</span>
+                                            </div>
+                                            <div class="ai-saved-actions">
+                                                <button class="ai-action-btn ai-action-test" @click="testModel(model)" :disabled="isTesting">
+                                                    <i class="fas" :class="isTesting ? 'fa-spinner fa-spin' : 'fa-vial'"></i> 测试
+                                                </button>
+                                                <button class="ai-action-btn ai-action-edit" @click="openModelEditModal(model)">
+                                                    <i class="fas fa-edit"></i> 编辑
+                                                </button>
+                                                <button class="ai-action-btn ai-action-clone" @click="cloneModel(model)">
+                                                    <i class="fas fa-copy"></i> 复制
+                                                </button>
+                                                <button class="ai-action-btn ai-action-delete" @click="deleteModel(model)" :disabled="isDeleting">
+                                                    <i class="fas" :class="isDeleting ? 'fa-spinner fa-spin' : 'fa-trash'"></i> 删除
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
