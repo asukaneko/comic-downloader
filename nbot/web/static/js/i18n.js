@@ -7,7 +7,7 @@ const i18nMessages = {
   zh: {
     // 通用
     'app.title': 'NekoBot Chat',
-    'app.subtitle': '智能 QQ 机器人管理后台',
+    'app.subtitle': 'NekoBot管理后台',
     'app.loading': '加载中...',
     'app.save_success': '保存成功',
     'app.save_failed': '保存失败',
@@ -89,7 +89,7 @@ const i18nMessages = {
     
     // 登录
     'login.title': 'NekoBot Chat',
-    'login.subtitle': '智能 QQ 机器人管理后台',
+    'login.subtitle': 'NekoBot管理后台',
     'login.username': '输入用户名',
     'login.password': '输入密码',
     'login.button': '进入系统',

@@ -8,7 +8,7 @@
 ![Web](https://img.shields.io/badge/Web-Dashboard-ec4899?style=flat)
 ![QQ](https://img.shields.io/badge/QQ-NapCat%20%2B%20ncatbot-58a6ff?style=flat)
 
-一个面向 QQ 与 Web 双频道的 AI 角色扮演项目，集成角色卡系统、聊天、工作区、工具调用、知识库、记忆、工作流与可视化管理后台。
+一个面向 QQ 与 Web 的多频道 AI 角色扮演项目，集成角色卡系统、聊天、工作区、工具调用、知识库、记忆、工作流与可视化管理后台。
 
 </div>
 

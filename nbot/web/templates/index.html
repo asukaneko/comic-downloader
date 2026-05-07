@@ -2006,25 +2006,42 @@
                     <div v-if="currentPage === 'personality'" class="fade-in">
                         <div class="grid-2" style="align-items: start;">
                             <!-- 左侧：角色卡编辑器 -->
-                            <div class="card" style="height: fit-content;">
-                                <div class="card-header">
-                                    <span class="card-title">角色卡编辑器</span>
-                                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                                        <button class="btn btn-secondary btn-sm" @click="previewCompiledPrompt">
+                            <div class="card editor-card" style="height: fit-content;">
+                                <div class="editor-topbar">
+                                    <div class="editor-topbar-left">
+                                        <img v-if="personality.portrait" :src="personality.portrait" class="editor-topbar-avatar" alt="avatar">
+                                        <div v-else class="editor-topbar-avatar-placeholder">
+                                            <i class="fas fa-user"></i>
+                                        </div>
+                                        <nav class="editor-breadcrumb">
+                                            <span class="editor-breadcrumb-root">角色卡编辑器</span>
+                                            <span class="editor-breadcrumb-sep">/</span>
+                                            <span class="editor-breadcrumb-name">{{ personality.name || '未命名角色' }}</span>
+                                        </nav>
+                                    </div>
+                                    <div class="editor-topbar-actions">
+                                        <button class="btn btn-ghost btn-sm" @click="previewCompiledPrompt">
                                             <i class="fas fa-eye"></i> 预览
                                         </button>
-                                        <button class="btn btn-primary" @click="savePersonality" :disabled="isLoading">
+                                        <button class="btn btn-indigo" @click="savePersonality" :disabled="isLoading">
                                             <i class="fas fa-save"></i> 应用
                                         </button>
-                                        <button class="btn btn-success" @click="savePersonalityAsPreset" :disabled="isLoading || !personality.name">
-                                            <i class="fas fa-plus-circle"></i> 保存到角色库
+                                        <button class="btn btn-star" @click="savePersonalityAsPreset" :disabled="isLoading || !personality.name">
+                                            <i class="fas fa-star"></i> 保存到角色库
                                         </button>
-                                        <button class="btn btn-secondary btn-sm" @click="exportPersonality" :disabled="!personality.name" title="导出为 ZIP（包含 JSON 和立绘）">
-                                            <i class="fas fa-download"></i> 导出
-                                        </button>
-                                        <button class="btn btn-secondary btn-sm" @click="triggerImportPersonality" title="支持 .zip 或 .json 格式">
-                                            <i class="fas fa-upload"></i> 导入
-                                        </button>
+                                        <div class="dropdown">
+                                            <button class="btn btn-ghost btn-sm" @click="showExportImportDropdown = !showExportImportDropdown">
+                                                <i class="fas fa-exchange-alt"></i> 导出/导入 <i class="fas fa-chevron-down" style="margin-left:4px;font-size:10px;"></i>
+                                            </button>
+                                            <div v-if="showExportImportDropdown" class="dropdown-menu">
+                                                <button class="dropdown-item" @click="exportPersonality" :disabled="!personality.name">
+                                                    <i class="fas fa-download"></i> 导出为 ZIP
+                                                </button>
+                                                <button class="dropdown-item" @click="triggerImportPersonality">
+                                                    <i class="fas fa-upload"></i> 导入角色卡
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="card-body">
@@ -2034,58 +2051,68 @@
                                     </div>
                                     <!-- 基础信息 -->
                                     <div class="form-section">
-                                        <div class="section-title">
-                                            <i class="fas fa-id-card"></i> 基础信息
+                                        <div class="section-header" @click="toggleSection('basicInfo')">
+                                            <div class="section-header-title">
+                                                <i class="fas fa-id-card"></i> 基础信息
+                                            </div>
+                                            <i class="fas fa-chevron-down section-header-chevron" :class="{ 'is-folded': foldedSections.basicInfo }"></i>
                                         </div>
-                                        <div class="form-group">
-                                            <label class="form-label">角色名称</label>
-                                            <input v-model="personality.name" type="text" class="form-input" placeholder="输入角色名称" @change="personalityHasUnsavedChanges = true">
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">角色描述</label>
-                                            <input v-model="personality.description" type="text" class="form-input" placeholder="简短描述这个角色，会显示在卡片上" @change="personalityHasUnsavedChanges = true">
-                                        </div>
-                                        <div class="form-row">
-                                            <div class="form-group" style="flex: 0 0 80px;">
-                                                <label class="form-label">头像</label>
-                                                <div style="display: flex; align-items: center; gap: 10px;">
-                                                    <div style="width: 48px; height: 48px; background: var(--bg-tertiary); border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px dashed var(--border-color);" @click="showAvatarPicker = true">
-                                                        <i :class="personality.avatar || 'fas fa-user-circle'" style="font-size: 28px; color: var(--accent-primary);"></i>
+                                        <div v-show="!foldedSections.basicInfo" class="section-body">
+                                            <div class="form-group">
+                                                <label class="form-label">角色名称</label>
+                                                <input v-model="personality.name" type="text" class="form-input" placeholder="输入角色名称" @change="personalityHasUnsavedChanges = true">
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">角色描述</label>
+                                                <input v-model="personality.description" type="text" class="form-input" placeholder="简短描述这个角色，会显示在卡片上" @change="personalityHasUnsavedChanges = true">
+                                            </div>
+                                            <div class="form-row">
+                                                <div class="form-group" style="flex: 0 0 80px;">
+                                                    <label class="form-label">头像</label>
+                                                    <div class="avatar-upload-circle" @click="showAvatarPicker = true">
+                                                        <i v-if="!personality.avatar" class="fas fa-camera"></i>
+                                                        <i v-else :class="personality.avatar" style="font-size: 24px; color: rgba(99, 102, 241, 0.9);"></i>
+                                                    </div>
+                                                </div>
+                                                <div class="form-group" style="flex: 1;">
+                                                    <label class="form-label">标签</label>
+                                                    <div class="tag-input">
+                                                        <span v-for="(tag, idx) in personality.tags" :key="idx" class="tag-input-item" :style="{ background: getTagColor(idx) }">
+                                                            {{ tag }}
+                                                            <i class="fas fa-times" @click.stop="removePersonalityTag(idx)"></i>
+                                                        </span>
+                                                        <input v-model="personalityTagDraft" type="text" class="tag-input-field" placeholder="输入标签按回车" @keydown.enter.prevent="addPersonalityTagFromInput">
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div class="form-group" style="flex: 1;">
-                                                <label class="form-label">标签</label>
-                                                <input v-model="personalityTagsInput" type="text" class="form-input" placeholder="用空格分隔标签，如：猫娘 陪伴 可爱" @change="updatePersonalityTags">
-                                            </div>
-                                        </div>
 
-                                        <!-- 角色立绘 -->
-                                        <div class="form-group" style="margin-top: 16px;">
-                                            <label class="form-label">角色立绘</label>
-                                            <div style="display: flex; gap: 12px; align-items: flex-start;">
-                                                <!-- 立绘预览 -->
-                                                <div style="position: relative; width: 120px; height: 160px; background: var(--bg-tertiary); border-radius: 12px; overflow: hidden; border: 2px dashed var(--border-color); display: flex; align-items: center; justify-content: center; cursor: pointer;" @click="personality.portrait ? viewPortrait(personality.portrait) : null">
-                                                    <img v-if="personality.portrait" :src="personality.portrait" style="width: 100%; height: 100%; object-fit: cover;">
-                                                    <div v-else style="text-align: center; color: var(--text-muted);">
-                                                        <i class="fas fa-image" style="font-size: 32px; margin-bottom: 8px;"></i>
-                                                        <div style="font-size: 12px;">暂无立绘</div>
+                                            <!-- 角色立绘 -->
+                                            <div class="form-group" style="margin-top: 16px;">
+                                                <label class="form-label">角色立绘</label>
+                                                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                                                    <!-- 立绘预览 -->
+                                                    <div class="portrait-frame" @click="personality.portrait ? viewPortrait(personality.portrait) : null">
+                                                        <img v-if="personality.portrait" :src="personality.portrait" style="width: 100%; height: 100%; object-fit: cover;">
+                                                        <div v-else style="text-align: center; color: var(--text-muted);">
+                                                            <i class="fas fa-image" style="font-size: 32px; margin-bottom: 8px;"></i>
+                                                            <div style="font-size: 12px;">暂无立绘</div>
+                                                        </div>
+                                                        <!-- 删除按钮 -->
+                                                        <button v-if="personality.portrait" @click.stop="removePortrait" class="portrait-delete-btn">
+                                                            <i class="fas fa-times" style="font-size: 12px;"></i>
+                                                        </button>
                                                     </div>
-                                                    <!-- 删除按钮 -->
-                                                    <button v-if="personality.portrait" @click.stop="removePortrait" style="position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; background: rgba(239, 68, 68, 0.9); border: none; border-radius: 50%; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-                                                        <i class="fas fa-times" style="font-size: 12px;"></i>
-                                                    </button>
-                                                </div>
-                                                <!-- 上传按钮和AI生成按钮 -->
-                                                <div style="flex: 1;">
-                                                    <input type="file" ref="portraitInput" accept="image/*" style="display: none;" @change="handlePortraitUpload">
-                                                    <button class="btn btn-secondary btn-sm" @click="$refs.portraitInput.click()" style="margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px;">
-                                                        <i class="fas fa-upload"></i> 上传
-                                                    </button>
-                                                    <button class="btn btn-accent btn-sm" @click="generatePortraitWithAI" :disabled="isGeneratingPortrait || !personality.name" style="margin-top: 8px; margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none;">
-                                                        <i class="fas fa-magic"></i> {{ isGeneratingPortrait ? '生成中' : 'AI生成' }}
-                                                    </button>
-                                                    <div class="form-hint">支持 JPG、PNG、GIF 格式<br>建议尺寸 3:4 比例<br>AI生成需要配置图片生成模型</div>
+                                                    <!-- 上传按钮和AI生成按钮 -->
+                                                    <div style="flex: 1;">
+                                                        <input type="file" ref="portraitInput" accept="image/*" style="display: none;" @change="handlePortraitUpload">
+                                                        <button class="btn btn-secondary btn-sm" @click="$refs.portraitInput.click()" style="margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px;">
+                                                            <i class="fas fa-upload"></i> 上传
+                                                        </button>
+                                                        <button class="btn btn-accent btn-sm" @click="generatePortraitWithAI" :disabled="isGeneratingPortrait || !personality.name" style="margin-top: 8px; margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none;">
+                                                            <i class="fas fa-magic"></i> {{ isGeneratingPortrait ? '生成中' : 'AI生成' }}
+                                                        </button>
+                                                        <div class="form-hint">支持 JPG、PNG、GIF 格式<br>建议尺寸 3:4 比例<br>AI生成需要配置图片生成模型</div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2093,91 +2120,139 @@
 
                                     <!-- 角色设定 -->
                                     <div class="form-section">
-                                        <div class="section-title">
-                                            <i class="fas fa-user-edit"></i> 角色设定
+                                        <div class="section-header" @click="toggleSection('characterSetting')">
+                                            <div class="section-header-title">
+                                                <i class="fas fa-user-edit"></i> 角色设定
+                                            </div>
+                                            <i class="fas fa-chevron-down section-header-chevron" :class="{ 'is-folded': foldedSections.characterSetting }"></i>
                                         </div>
-                                        <div class="form-group">
-                                            <label class="form-label">基本信息</label>
-                                            <textarea v-model="personality.basicInfo" class="form-textarea" rows="4" placeholder="填写角色的基本信息，如：&#10;身高：160cm&#10;体重：50kg&#10;年龄：18岁&#10;职业：学生&#10;喜好：看书、听音乐..." @change="personalityHasUnsavedChanges = true"></textarea>
-                                            <div class="form-hint">角色的详细基本资料，会用于生成更具体的角色形象</div>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">性格特点</label>
-                                            <textarea v-model="personality.personality" class="form-textarea" rows="3" placeholder="描述角色的性格，如：活泼、粘人、忠诚..." @change="personalityHasUnsavedChanges = true"></textarea>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">背景设定</label>
-                                            <textarea v-model="personality.scenario" class="form-textarea" rows="3" placeholder="描述角色的背景故事、世界观..." @change="personalityHasUnsavedChanges = true"></textarea>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
-                                                开场白 (开始场景)
-                                                <button class="btn btn-sm" @click="aiGenerateFirstMessage" :disabled="isLoading || !personality.name" style="font-size: 11px; padding: 2px 8px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none; border-radius: 4px;">
-                                                    <i class="fas fa-dice"></i> 随机生成
-                                                </button>
-                                            </label>
-                                            <textarea v-model="personality.firstMessage" class="form-textarea" rows="4" placeholder="新建会话时 AI 会自动发送的第一次消息..." @change="personalityHasUnsavedChanges = true"></textarea>
-                                            <div class="form-hint">留空则不自动发送开场消息</div>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">示例对话</label>
-                                            <textarea v-model="personality.exampleDialogues" class="form-textarea" rows="4" placeholder="<user>你好
-<assistant>你好呀！很高兴见到你~" @change="personalityHasUnsavedChanges = true"></textarea>
-                                            <div class="form-hint">用 &lt;user&gt; 和 &lt;assistant&gt; 标记对话角色</div>
+                                        <div v-show="!foldedSections.characterSetting" class="section-body">
+                                            <div class="form-group">
+                                                <label class="form-label">基本信息</label>
+                                                <div class="textarea-wrap">
+                                                    <textarea v-model="personality.basicInfo" class="form-textarea" rows="4" placeholder="描述角色的核心特征，越具体越好…&#10;身高：160cm&#10;体重：50kg&#10;年龄：18岁&#10;职业：学生" @change="personalityHasUnsavedChanges = true"></textarea>
+                                                </div>
+                                                <div class="char-count">{{ (personality.basicInfo || '').length }} 字</div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">性格特点</label>
+                                                <div class="textarea-wrap">
+                                                    <textarea v-model="personality.personality" class="form-textarea" rows="3" placeholder="描述角色的核心性格特征，越具体越好…" @change="personalityHasUnsavedChanges = true"></textarea>
+                                                </div>
+                                                <div class="char-count">{{ (personality.personality || '').length }} 字</div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">背景设定</label>
+                                                <div class="textarea-wrap">
+                                                    <textarea v-model="personality.scenario" class="form-textarea" rows="3" placeholder="描述角色的背景故事、世界观…" @change="personalityHasUnsavedChanges = true"></textarea>
+                                                </div>
+                                                <div class="char-count">{{ (personality.scenario || '').length }} 字</div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">开场白 (开始场景)</label>
+                                                <div class="textarea-wrap">
+                                                    <button class="textarea-generate-btn" :class="{ 'is-loading': isLoading }" @click="aiGenerateFirstMessage" :disabled="isLoading || !personality.name">
+                                                        <i :class="isLoading ? 'fas fa-spinner' : 'fas fa-dice'"></i> 随机生成
+                                                    </button>
+                                                    <textarea v-model="personality.firstMessage" class="form-textarea" rows="4" placeholder="新建会话时 AI 会自动发送的第一次消息…" @change="personalityHasUnsavedChanges = true"></textarea>
+                                                </div>
+                                                <div class="char-count">{{ (personality.firstMessage || '').length }} 字</div>
+                                                <div class="form-hint">留空则不自动发送开场消息</div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">示例对话</label>
+                                                <div class="textarea-wrap">
+                                                    <textarea v-model="personality.exampleDialogues" class="form-textarea" rows="4" placeholder="<user>你好&#10;<assistant>你好呀！很高兴见到你~" @change="personalityHasUnsavedChanges = true"></textarea>
+                                                </div>
+                                                <div class="char-count">{{ (personality.exampleDialogues || '').length }} 字</div>
+                                                <div class="form-hint">用 &lt;user&gt; 和 &lt;assistant&gt; 标记对话角色</div>
+                                            </div>
                                         </div>
                                     </div>
 
                                     <!-- 对话控制 -->
                                     <div class="form-section">
-                                        <div class="section-title">
-                                            <i class="fas fa-sliders-h"></i> 对话控制
+                                        <div class="section-header" @click="toggleSection('dialogControl')">
+                                            <div class="section-header-title">
+                                                <i class="fas fa-sliders-h"></i> 对话控制
+                                            </div>
+                                            <i class="fas fa-chevron-down section-header-chevron" :class="{ 'is-folded': foldedSections.dialogControl }"></i>
                                         </div>
-                                        <div class="form-group">
-                                            <label class="form-label">回复格式</label>
-                                            <textarea v-model="personality.responseFormat" class="form-textarea" rows="2" placeholder="描述期望的回复格式，如：（动作）语言【附加信息】" @change="personalityHasUnsavedChanges = true"></textarea>
-                                        </div>
-                                        <div class="form-group">
-                                            <label class="form-label">规则列表</label>
-                                            <div v-for="(rule, index) in personality.rules" :key="index" style="display: flex; gap: 8px; margin-bottom: 8px;">
-                                                <input v-model="personality.rules[index]" type="text" class="form-input" placeholder="输入规则，如：每段话末尾加喵" @change="personalityHasUnsavedChanges = true">
-                                                <button class="btn btn-sm" @click="removePersonalityRule(index)" style="color: var(--danger);">
-                                                    <i class="fas fa-times"></i>
+                                        <div v-show="!foldedSections.dialogControl" class="section-body">
+                                            <div class="form-group">
+                                                <label class="form-label">回复格式</label>
+                                                <div class="textarea-wrap">
+                                                    <textarea v-model="personality.responseFormat" class="form-textarea" rows="2" placeholder="描述期望的回复格式，如：（动作）语言【附加信息】" @change="personalityHasUnsavedChanges = true"></textarea>
+                                                </div>
+                                                <div class="char-count">{{ (personality.responseFormat || '').length }} 字</div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">规则列表</label>
+                                                <div v-for="(rule, index) in personality.rules" :key="index" class="rule-item">
+                                                    <span class="rule-item-drag" @mousedown="moveRuleUp(index)" title="上移">⋮⋮</span>
+                                                    <span class="rule-item-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                                                    <input v-model="personality.rules[index]" type="text" placeholder="输入规则，如：每段话末尾加喵" @change="personalityHasUnsavedChanges = true">
+                                                    <button class="rule-item-delete" @click="removePersonalityRule(index)" title="删除规则">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                <button class="add-rule-btn" @click="addPersonalityRule">
+                                                    <i class="fas fa-plus"></i> 添加规则
                                                 </button>
                                             </div>
-                                            <button class="btn btn-secondary btn-sm" @click="addPersonalityRule">
-                                                <i class="fas fa-plus"></i> 添加规则
-                                            </button>
                                         </div>
                                     </div>
 
                                     <!-- 状态 -->
                                     <div class="form-section">
-                                        <div class="section-title">
-                                            <i class="fas fa-heart"></i> 角色状态
-                                        </div>
-                                        <div class="form-row">
-                                            <div class="form-group" style="flex: 1;">
-                                                <label class="form-label">好感度 ({{ personality.state.affection }})</label>
-                                                <input v-model.number="personality.state.affection" type="range" min="-100" max="100" class="form-range" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                        <div class="section-header" @click="toggleSection('characterState')">
+                                            <div class="section-header-title">
+                                                <i class="fas fa-heart"></i> 角色状态
                                             </div>
-                                            <div class="form-group" style="flex: 1;">
-                                                <label class="form-label">心情</label>
-                                                <input v-model="personality.state.mood" type="text" class="form-input" placeholder="输入心情，如：开心、紧张、平静" @change="personalityHasUnsavedChanges = true">
+                                            <i class="fas fa-chevron-down section-header-chevron" :class="{ 'is-folded': foldedSections.characterState }"></i>
+                                        </div>
+                                        <div v-show="!foldedSections.characterState" class="section-body">
+                                            <div class="state-card-grid">
+                                                <div class="state-card">
+                                                    <label class="form-label">好感度 <span style="color: #818cf8; font-weight: 600;">{{ personality.state.affection }}</span></label>
+                                                    <div class="affection-slider-wrap">
+                                                        <span class="affection-icon">💔</span>
+                                                        <input v-model.number="personality.state.affection" type="range" min="-100" max="100" class="form-range" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                                        <span class="affection-icon">💜</span>
+                                                    </div>
+                                                </div>
+                                                <div class="state-card">
+                                                    <label class="form-label">心情</label>
+                                                    <div class="mood-selector">
+                                                        <div v-for="m in moodOptions" :key="m.value" class="mood-option" :class="{ active: personality.state.mood === m.value }" @click="personality.state.mood = m.value; personalityHasUnsavedChanges = true">
+                                                            <span class="mood-emoji">{{ m.emoji }}</span>
+                                                            <span>{{ m.label }}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
                                     <!-- 高级系统提示词 -->
                                     <div class="form-section">
-                                        <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
-                                            <span><i class="fas fa-code"></i> 系统提示词（高级）</span>
-                                            <button class="btn btn-sm btn-secondary" @click="regenerateSystemPrompt">
-                                                <i class="fas fa-magic"></i> 重新生成
-                                            </button>
+                                        <div class="section-header" @click="toggleSection('systemPrompt')">
+                                            <div class="section-header-title">
+                                                <i class="fas fa-code"></i> 系统提示词（高级）
+                                            </div>
+                                            <div class="section-header-actions">
+                                                <button class="btn btn-ghost btn-sm" @click.stop="regenerateSystemPrompt" style="font-size: 11px; padding: 3px 8px;">
+                                                    <i class="fas fa-magic"></i> 重新生成
+                                                </button>
+                                                <i class="fas fa-chevron-down section-header-chevron" :class="{ 'is-folded': foldedSections.systemPrompt }"></i>
+                                            </div>
                                         </div>
-                                        <div class="form-group">
-                                            <textarea v-model="personality.systemPrompt" class="form-textarea" rows="8" placeholder="这是最终发送给AI的系统提示词。如果不填写，会自动根据上面的设定生成。" @change="personalityHasUnsavedChanges = true" @input="_manualSystemPrompt = true"></textarea>
-                                            <div class="form-hint">高级用户可以直接编辑，覆盖自动生成的提示词</div>
+                                        <div v-show="!foldedSections.systemPrompt" class="section-body">
+                                            <div class="form-group">
+                                                <textarea v-model="personality.systemPrompt" class="form-textarea code-editor" rows="8" placeholder="这是最终发送给AI的系统提示词。如果不填写，会自动根据上面的设定生成。&#10;&#10;可使用 {{user}} 和 {{char}} 变量&#10;【标签】内的内容会被高亮显示" @change="personalityHasUnsavedChanges = true" @input="_manualSystemPrompt = true"></textarea>
+                                                <div class="char-count">{{ (personality.systemPrompt || '').length }} 字</div>
+                                                <div class="form-hint">高级用户可以直接编辑，覆盖自动生成的提示词</div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -6773,8 +6848,29 @@
                     personalityHasUnsavedChanges: false, // 是否有未保存的修改
                     _manualSystemPrompt: false, // 用户是否手动编辑了系统提示词
                     activePersonality: {}, // 服务器端当前实际应用的角色
-                    personalityTagsInput: '', // 标签输入框的临时值
+                    personalityTagsInput: '', // 标签输入框的临时值（兼容旧逻辑）
+                    personalityTagDraft: '', // 标签输入框当前草稿
                     showAvatarPicker: false, // 头像选择器
+                    showExportImportDropdown: false, // 导出/导入下拉菜单
+                    moodOptions: [
+                        { value: '开心', label: '开心', emoji: '😊' },
+                        { value: '难过', label: '难过', emoji: '😢' },
+                        { value: '生气', label: '生气', emoji: '😤' },
+                        { value: '害羞', label: '害羞', emoji: '😳' },
+                        { value: '兴奋', label: '兴奋', emoji: '🤩' },
+                        { value: '平静', label: '平静', emoji: '😌' },
+                        { value: '紧张', label: '紧张', emoji: '😰' },
+                        { value: '惊讶', label: '惊讶', emoji: '😲' },
+                        { value: '困倦', label: '困倦', emoji: '😴' },
+                        { value: '担忧', label: '担忧', emoji: '😟' }
+                    ],
+                    foldedSections: {
+                        basicInfo: false,
+                        characterSetting: false,
+                        dialogControl: false,
+                        characterState: false,
+                        systemPrompt: true // 默认折叠系统提示词
+                    }, // 角色卡编辑器各区域折叠状态
                     customAvatarInput: '', // 自定义头像输入
                     showPortraitViewer: false, // 立绘查看器
                     portraitViewerUrl: '', // 当前查看的立绘URL

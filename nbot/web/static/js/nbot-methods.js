@@ -6284,6 +6284,62 @@ def main(params):
                     this.personalityHasUnsavedChanges = true;
                 },
 
+                toggleSection(sectionKey) {
+                    if (this.foldedSections.hasOwnProperty(sectionKey)) {
+                        this.foldedSections[sectionKey] = !this.foldedSections[sectionKey];
+                    }
+                },
+
+                addPersonalityTagFromInput() {
+                    const draft = (this.personalityTagDraft || '').trim();
+                    if (!draft) return;
+                    if (!this.personality.tags) this.personality.tags = [];
+                    if (!this.personality.tags.includes(draft)) {
+                        this.personality.tags.push(draft);
+                        this.personalityHasUnsavedChanges = true;
+                    }
+                    this.personalityTagDraft = '';
+                    this.personalityTagsInput = this.personality.tags.join(' ');
+                },
+
+                removePersonalityTag(idx) {
+                    if (this.personality.tags) {
+                        this.personality.tags.splice(idx, 1);
+                        this.personalityTagsInput = this.personality.tags.join(' ');
+                        this.personalityHasUnsavedChanges = true;
+                    }
+                },
+
+                getTagColor(idx) {
+                    const colors = [
+                        'linear-gradient(135deg, #6366f1, #4f46e5)',
+                        'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                        'linear-gradient(135deg, #ec4899, #db2777)',
+                        'linear-gradient(135deg, #f59e0b, #d97706)',
+                        'linear-gradient(135deg, #10b981, #059669)',
+                        'linear-gradient(135deg, #06b6d4, #0891b2)',
+                        'linear-gradient(135deg, #f43f5e, #e11d48)',
+                        'linear-gradient(135deg, #14b8a6, #0d9488)'
+                    ];
+                    return colors[idx % colors.length];
+                },
+
+                moveRuleUp(index) {
+                    if (index <= 0 || !this.personality.rules) return;
+                    const temp = this.personality.rules[index];
+                    this.personality.rules[index] = this.personality.rules[index - 1];
+                    this.personality.rules[index - 1] = temp;
+                    this.personalityHasUnsavedChanges = true;
+                },
+
+                moveRuleDown(index) {
+                    if (!this.personality.rules || index >= this.personality.rules.length - 1) return;
+                    const temp = this.personality.rules[index];
+                    this.personality.rules[index] = this.personality.rules[index + 1];
+                    this.personality.rules[index + 1] = temp;
+                    this.personalityHasUnsavedChanges = true;
+                },
+
                 escapeHtml(text) {
                     const div = document.createElement('div');
                     div.textContent = text;
