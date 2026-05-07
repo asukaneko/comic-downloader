@@ -1171,8 +1171,8 @@ const NbotMethods = {
                         case 'dashboard':
                             await this.loadStats();
                             await this.loadRecentActivities();
-                            // 延迟初始化图表，确保 DOM 已渲染
                             setTimeout(() => this.initCharts(), 100);
+                            this.animateCountUp();
                             break;
                         case 'chat':
                         case 'sessions':
@@ -1230,14 +1230,14 @@ const NbotMethods = {
                 
                 async refreshData() {
                     this.isLoading = true;
+                    if (this.currentPage === 'dashboard') {
+                        this.isDashboardRefreshing = true;
+                    }
                     try {
-                        // 如果在聊天页面且有当前会话，重新加载会话消息
                         if (this.currentPage === 'chat' && this.currentSession) {
-                            // 手动刷新时强制滚动到底部
                             await this.loadMessages(true);
                             this.showToast('会话已刷新', 'success');
                         } else if (this.currentPage === 'chat' && this.currentQqId) {
-                            // 重新加载 QQ 会话消息
                             const type = this.chatTab === 'qq_private' ? 'private' : 'group';
                             const res = await api.get(`/api/qq/messages/${type}/${this.currentQqId}`);
                             this.currentQqMessages = res.data.messages || [];
@@ -1246,10 +1246,14 @@ const NbotMethods = {
                             await this.loadPageData(this.currentPage);
                             this.showToast('数据已刷新', 'success');
                         }
+                        this.lastRefreshTime = Date.now();
                     } catch (e) {
                         this.showToast('刷新失败', 'error');
                     } finally {
                         this.isLoading = false;
+                        if (this.currentPage === 'dashboard') {
+                            setTimeout(() => { this.isDashboardRefreshing = false; }, 500);
+                        }
                     }
                 },
                 
@@ -1342,6 +1346,9 @@ const NbotMethods = {
                         }]
                     };
                     this.trendChart.setOption(option);
+                    this.$nextTick(() => {
+                        if (this.trendChart) this.trendChart.resize();
+                    });
                 },
                 
                 async updatePlatformChart() {
@@ -2064,10 +2071,11 @@ const NbotMethods = {
                 async deleteSkill(id) {
                     this.showConfirm({
                         title: '删除 Skill',
-                        message: '确定要删除这个 Skill 吗？此操作不可恢复。',
+                        messageBefore: '确定要删除 Skill',
+                        highlight: skill.name || id,
+                        messageAfter: '吗？',
+                        impact: '关联的对话将无法继续使用该 Skill',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -2293,10 +2301,11 @@ def main(params):
                     async deleteSkillStorage(skillName) {
                         this.showConfirm({
                             title: '删除存储空间',
-                            message: `确定要删除 Skill "${skillName}" 的存储空间吗？此操作不可恢复！`,
+                            messageBefore: '确定要删除 Skill',
+                            highlight: skillName,
+                            messageAfter: '的存储空间吗？',
+                            impact: '该 Skill 的所有持久化数据将被永久清除',
                             confirmText: '删除',
-                            icon: 'fa-trash',
-                            iconColor: 'var(--danger)',
                             danger: true,
                             onConfirm: async () => {
                                 this.isLoading = true;
@@ -2429,10 +2438,11 @@ def main(params):
                 async deleteTool(id) {
                     this.showConfirm({
                         title: '删除 Tool',
-                        message: '确定要删除这个 Tool 吗？此操作不可恢复。',
+                        messageBefore: '确定要删除 Tool',
+                        highlight: id,
+                        messageAfter: '吗？',
+                        impact: '关联的 Skill 和工作流将无法继续使用该 Tool',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -2622,10 +2632,11 @@ def main(params):
                 async deleteChannel(channel) {
                     this.showConfirm({
                         title: '删除频道',
-                        message: `确定删除频道「${channel.name}」吗？`,
+                        messageBefore: '确定要删除频道',
+                        highlight: channel.name,
+                        messageAfter: '吗？',
+                        impact: '该频道的所有配置和消息记录将被清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -3966,10 +3977,11 @@ def main(params):
                 async deleteApiKey(key) {
                     this.showConfirm({
                         title: '删除 API Key',
-                        message: `确定要删除 API Key "${key.name}" 吗？此操作不可恢复。`,
+                        messageBefore: '确定要删除 API Key',
+                        highlight: key.name,
+                        messageAfter: '吗？',
+                        impact: '使用该 Key 的模型配置将无法继续调用 API',
                         confirmText: '删除',
-                        icon: 'fa-key',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             try {
@@ -4008,10 +4020,9 @@ def main(params):
                 async clearSession() {
                     this.showConfirm({
                         title: '清空会话',
-                        message: '确定要清空当前会话的所有消息吗？此操作不可恢复。',
+                        message: '确定要清空当前会话的所有消息吗？',
+                        impact: '会话中的全部对话记录将被永久清除',
                         confirmText: '清空',
-                        icon: 'fa-trash-alt',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -4038,10 +4049,9 @@ def main(params):
 
                     this.showConfirm({
                         title: '删除会话',
-                        message: '确定要删除这个会话吗？此操作不可恢复。',
+                        message: '确定要删除当前会话吗？',
+                        impact: '该会话的所有消息记录将被永久清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             const sessionId = this.currentSession.id;
@@ -4178,10 +4188,11 @@ def main(params):
                     
                     this.showConfirm({
                         title: '删除 QQ 会话',
-                        message: `确定要删除 ${sessionName} 的所有消息记录吗？此操作不可恢复。`,
+                        messageBefore: '确定要删除',
+                        highlight: sessionName,
+                        messageAfter: '的所有消息记录吗？',
+                        impact: '该会话的全部聊天记录将被永久清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             try {
@@ -4243,10 +4254,11 @@ def main(params):
                 deleteWebSession(session) {
                     this.showConfirm({
                         title: '删除会话',
-                        message: '确定要删除会话 "' + session.name + '" 吗？此操作不可恢复。',
+                        messageBefore: '确定要删除会话',
+                        highlight: session.name,
+                        messageAfter: '吗？',
+                        impact: '该会话的所有消息记录将被永久清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             try {
@@ -4305,10 +4317,11 @@ def main(params):
                     const count = this.selectedSessions.length;
                     this.showConfirm({
                         title: '批量删除会话',
-                        message: `确定要删除选中的 ${count} 个会话吗？此操作不可恢复。`,
-                        confirmText: `删除 ${count} 个会话`,
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
+                        messageBefore: '确定要删除选中的',
+                        highlight: count + ' 个会话',
+                        messageAfter: '吗？',
+                        impact: '这些会话的所有消息记录将被永久清除',
+                        confirmText: '删除',
                         danger: true,
                         onConfirm: async () => {
                             const deletedIds = [...this.selectedSessions];
@@ -4460,10 +4473,15 @@ def main(params):
                     this.confirmModalConfig = {
                         title: config.title || '确认操作',
                         message: config.message || '确定要执行这个操作吗？',
+                        messageBefore: config.messageBefore || '',
+                        highlight: config.highlight || '',
+                        messageAfter: config.messageAfter || '',
+                        impact: config.impact || '',
                         confirmText: config.confirmText || '确认',
                         cancelText: config.cancelText || '取消',
                         icon: config.icon || 'fa-exclamation-circle',
-                        iconColor: config.iconColor || 'var(--warning)',
+                        iconColor: config.iconColor || 'var(--accent-primary)',
+                        iconBg: config.iconBg || '',
                         danger: config.danger || false,
                         onConfirm: config.onConfirm,
                         onCancel: config.onCancel,
@@ -4804,10 +4822,11 @@ def main(params):
                 async deleteWorkspaceItem(item) {
                     this.showConfirm({
                         title: '删除' + (item.type === 'directory' ? '文件夹' : '文件'),
-                        message: `确定要删除 "${item.name}" ${item.type === 'directory' ? '及其所有内容' : ''} 吗？此操作不可恢复。`,
+                        messageBefore: '确定要删除' + (item.type === 'directory' ? '文件夹' : '文件'),
+                        highlight: item.name,
+                        messageAfter: item.type === 'directory' ? '及其所有内容吗？' : '吗？',
+                        impact: item.type === 'directory' ? '文件夹内的所有文件和子文件夹将被永久清除' : '该文件将被永久清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--danger)',
                         danger: true,
                         onConfirm: async () => {
                             try {
@@ -5900,10 +5919,11 @@ def main(params):
                 async deleteTaskCenterItem(item) {
                     this.showConfirm({
                         title: '删除任务',
-                        message: `确定要删除“${item.name}”吗？此操作不可恢复。`,
+                        messageBefore: '确定要删除任务',
+                        highlight: item.name,
+                        messageAfter: '吗？',
+                        impact: '该任务的所有配置和执行记录将被永久清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -6006,10 +6026,9 @@ def main(params):
                 async deleteWorkflow(id) {
                     this.showConfirm({
                         title: '删除工作流',
-                        message: '确定要删除这个工作流吗？此操作不可恢复。',
+                        message: '确定要删除这个工作流吗？',
+                        impact: '关联的会话将无法继续使用该工作流',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -6365,6 +6384,7 @@ def main(params):
                             cancelText: '创建同名新角色',
                             icon: 'fa-info-circle',
                             iconColor: 'var(--info)',
+                            iconBg: 'rgba(59,130,246,0.12)',
                             danger: false,
                             showCancel: true,
                             action: async (choice) => {
@@ -6782,6 +6802,7 @@ def main(params):
                                         confirmText: '前往配置',
                                         icon: 'fa-image',
                                         iconColor: 'var(--accent-primary)',
+                                        iconBg: 'rgba(59,130,246,0.12)',
                                         onConfirm: () => {
                                             this.currentPage = 'ai-config';
                                         }
@@ -6948,10 +6969,9 @@ def main(params):
                 async clearAllMemory() {
                     this.showConfirm({
                         title: '清空所有记忆',
-                        message: '确定要清空所有记忆吗？此操作不可恢复。',
+                        message: '确定要清空所有记忆吗？',
+                        impact: '所有短期和长期记忆将被永久清除',
                         confirmText: '清空',
-                        icon: 'fa-trash-alt',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -6972,10 +6992,9 @@ def main(params):
                 async deleteMemory(id) {
                     this.showConfirm({
                         title: '删除记忆',
-                        message: '确定要删除这条记忆吗？此操作不可恢复。',
+                        message: '确定要删除这条记忆吗？',
+                        impact: '该记忆将被永久清除，无法恢复',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -7104,6 +7123,7 @@ def main(params):
                         confirmText: '转换',
                         icon: 'fa-arrow-up',
                         iconColor: 'var(--accent)',
+                        iconBg: 'rgba(59,130,246,0.12)',
                         danger: false,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -7400,10 +7420,11 @@ def main(params):
                 async deleteKnowledge(doc) {
                     this.showConfirm({
                         title: '删除文档',
-                        message: `确定要删除文档"${doc.name}"吗？此操作不可恢复。`,
+                        messageBefore: '确定要删除文档',
+                        highlight: doc.name,
+                        messageAfter: '吗？',
+                        impact: '文档及其索引数据将被永久清除',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -8067,10 +8088,11 @@ def main(params):
                 async deleteModel(model) {
                     this.showConfirm({
                         title: '删除模型配置',
-                        message: `确定要删除配置 "${model.name}" 吗？此操作不可恢复。`,
+                        messageBefore: '确定要删除配置',
+                        highlight: model.name,
+                        messageAfter: '吗？',
+                        impact: '关联的工作流与对话将无法继续使用该模型',
                         confirmText: '删除',
-                        icon: 'fa-trash',
-                        iconColor: 'var(--error)',
                         danger: true,
                         onConfirm: async () => {
                             this.isDeleting = true;
@@ -8264,9 +8286,11 @@ def main(params):
                     this.showConfirm({
                         title: '清除缓存',
                         message: '确定要清除所有缓存吗？',
+                        impact: '系统缓存将被清除，可能短暂影响性能',
                         confirmText: '清除',
                         icon: 'fa-broom',
                         iconColor: 'var(--warning)',
+                        iconBg: 'rgba(234,179,8,0.12)',
                         danger: true,
                         onConfirm: async () => {
                             this.isLoading = true;
@@ -8303,6 +8327,7 @@ def main(params):
                         confirmText: '重载',
                         icon: 'fa-code',
                         iconColor: 'var(--warning)',
+                        iconBg: 'rgba(234,179,8,0.12)',
                         onConfirm: async () => {
                             this.isLoading = true;
                             try {
@@ -8337,6 +8362,7 @@ def main(params):
                         confirmText: '测试',
                         icon: 'fa-plug',
                         iconColor: 'var(--info)',
+                        iconBg: 'rgba(59,130,246,0.12)',
                         onConfirm: async () => {
                             try {
                                 // 发送一个 ping 事件测试连接
@@ -9490,6 +9516,76 @@ def main(params):
                 formatNumber(num) {
                     if (num === undefined || num === null) return '0';
                     return num.toLocaleString('zh-CN');
+                },
+
+                sparklinePoints(type) {
+                    let data = [];
+                    if (type === 'messages' && this.messageTrendData) {
+                        const vals = this.messageTrendData.values || this.messageTrendData.data || [];
+                        if (Array.isArray(vals) && vals.length > 0) {
+                            data = vals.slice(-7);
+                        }
+                    } else if (type === 'sessions') {
+                        const count = this.sessionCount || 0;
+                        data = Array.from({ length: 7 }, () => Math.max(0, count + Math.floor(Math.random() * 3 - 1)));
+                    }
+                    if (data.length === 0) data = [0, 0, 0, 0, 0, 0, 0];
+                    const max = Math.max(...data, 1);
+                    const min = Math.min(...data, 0);
+                    const range = max - min || 1;
+                    const w = 120;
+                    const h = 32;
+                    const pad = 2;
+                    const step = (w - pad * 2) / (data.length - 1);
+                    const linePoints = data.map((v, i) => `${pad + i * step},${h - pad - ((v - min) / range) * (h - pad * 2)}`).join(' ');
+                    const areaPoints = linePoints + ` ${pad + (data.length - 1) * step},${h} ${pad},${h}`;
+                    return areaPoints;
+                },
+
+                animateCountUp() {
+                    this.$nextTick(() => {
+                        document.querySelectorAll('.countup-value').forEach(el => {
+                            const target = parseInt(el.dataset.target) || 0;
+                            if (isNaN(target) || target === 0) return;
+                            const duration = 1200;
+                            const start = performance.now();
+                            const animate = (now) => {
+                                const elapsed = now - start;
+                                const progress = Math.min(elapsed / duration, 1);
+                                const eased = 1 - Math.pow(1 - progress, 3);
+                                const current = Math.floor(eased * target);
+                                el.textContent = current.toLocaleString('zh-CN');
+                                if (progress < 1) requestAnimationFrame(animate);
+                            };
+                            requestAnimationFrame(animate);
+                        });
+                    });
+                },
+
+                activityIcon(activity) {
+                    const msg = (activity.message || '').toLowerCase();
+                    if (msg.includes('删除') || msg.includes('delete')) return 'fas fa-trash-alt';
+                    if (msg.includes('新增') || msg.includes('创建') || msg.includes('add') || msg.includes('create')) return 'fas fa-plus-circle';
+                    if (msg.includes('修改') || msg.includes('更新') || msg.includes('update') || msg.includes('edit')) return 'fas fa-pen';
+                    if (msg.includes('连接') || msg.includes('connect')) return 'fas fa-link';
+                    if (msg.includes('断开') || msg.includes('disconnect')) return 'fas fa-unlink';
+                    return 'fas fa-info-circle';
+                },
+
+                activityIconColor(activity) {
+                    const msg = (activity.message || '').toLowerCase();
+                    if (msg.includes('删除') || msg.includes('delete')) return '#ef4444';
+                    if (msg.includes('新增') || msg.includes('创建') || msg.includes('add') || msg.includes('create')) return '#22c55e';
+                    if (msg.includes('修改') || msg.includes('更新') || msg.includes('update') || msg.includes('edit')) return '#3b82f6';
+                    return 'var(--text-muted)';
+                },
+
+                formatActivityMessage(msg) {
+                    if (!msg) return '';
+                    return msg.replace(/([a-f0-9]{8,})/gi, (match) => {
+                        const short = match.substring(0, 8) + '...';
+                        return `<span class="activity-id-pill" onclick="navigator.clipboard.writeText('${match}');this.style.background='var(--accent-primary)';this.style.color='white';setTimeout(()=>{this.style.background='';this.style.color=''},800)">${short}</span>`;
+                    });
                 },
                 
                 // 复制消息内容

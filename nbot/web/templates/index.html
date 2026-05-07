@@ -266,7 +266,17 @@
 
                     <!-- Dashboard -->
                     <div v-if="!isChatOnlyMode && currentPage === 'dashboard'" class="fade-in dashboard-shell">
-                        <div class="dashboard-hero">
+                        <div v-if="isDashboardRefreshing" class="dashboard-skeleton">
+                            <div class="skeleton-line w60"></div>
+                            <div class="skeleton-line w40"></div>
+                            <div class="skeleton-card-grid">
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                                <div class="skeleton-card"></div>
+                            </div>
+                        </div>
+                        <div v-else class="dashboard-hero">
                             <div class="dashboard-hero-grid">
                                 <div>
                                     <div class="dashboard-hero-title">
@@ -275,18 +285,25 @@
                                         </div>
                                         <div class="dashboard-hero-copy">
                                             <h2>{{ $t('dashboard.title') }}</h2>
+                                            <div class="dashboard-refresh-info">
+                                                <i class="fas fa-sync-alt" :class="{ 'spin-animation': isDashboardRefreshing }"></i>
+                                                <span>{{ lastRefreshText }} · 自动刷新 30s</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div class="dashboard-pills">
-                                        <div class="dashboard-pill">
+                                        <div class="dashboard-pill" :class="{ 'pill-ok': stats.ai_service_status === 'normal', 'pill-warn': stats.ai_service_status !== 'normal' }">
+                                            <span class="pill-dot"></span>
                                             <i class="fas fa-robot"></i>
                                             AI {{ stats.ai_service_status === 'normal' ? $t('status.normal') : $t('status.pending_config') }}
                                         </div>
-                                        <div class="dashboard-pill">
+                                        <div class="dashboard-pill" :class="{ 'pill-ok': stats.qq_connected, 'pill-warn': !stats.qq_connected }">
+                                            <span class="pill-dot"></span>
                                             <i class="fab fa-qq"></i>
                                             QQ {{ stats.qq_connected ? $t('status.connected') : $t('status.disconnected') }}
                                         </div>
-                                        <div class="dashboard-pill">
+                                        <div class="dashboard-pill" :class="{ 'pill-ok': socketConnected, 'pill-warn': !socketConnected }">
+                                            <span class="pill-dot"></span>
                                             <i class="fas fa-plug"></i>
                                             WebSocket {{ socketConnected ? $t('status.online') : $t('status.disconnected') }}
                                         </div>
@@ -298,8 +315,24 @@
                                     </div>
                                 </div>
                                 <div class="dashboard-hero-side">
-                                    <div class="dashboard-side-card"><div class="dashboard-side-title">{{ $t('dashboard.cumulative_messages') }}</div><div class="dashboard-side-main">{{ formatNumber(stats.total_messages || stats.today_messages || 0) }}</div><div class="dashboard-side-sub">{{ $t('dashboard.cumulative_desc') }}</div></div>
-                                    <div class="dashboard-side-card"><div class="dashboard-side-title">{{ $t('dashboard.active_sessions') }}</div><div class="dashboard-side-main">{{ sessionCount }}</div><div class="dashboard-side-sub">{{ $t('dashboard.active_desc') }}</div></div>
+                                    <div class="dashboard-side-card">
+                                        <div class="dashboard-side-title">{{ $t('dashboard.cumulative_messages') }}</div>
+                                        <div class="dashboard-side-main countup-value" :data-target="stats.total_messages || stats.today_messages || 0">{{ formatNumber(stats.total_messages || stats.today_messages || 0) }}</div>
+                                        <div class="dashboard-side-sub">{{ $t('dashboard.cumulative_desc') }}</div>
+                                        <svg class="mini-sparkline" viewBox="0 0 120 32" preserveAspectRatio="none">
+                                            <polyline class="sparkline-area" :points="sparklinePoints('messages')" />
+                                            <polyline class="sparkline-line" :points="sparklinePoints('messages')" />
+                                        </svg>
+                                    </div>
+                                    <div class="dashboard-side-card">
+                                        <div class="dashboard-side-title">{{ $t('dashboard.active_sessions') }}</div>
+                                        <div class="dashboard-side-main countup-value" :data-target="sessionCount">{{ sessionCount }}</div>
+                                        <div class="dashboard-side-sub">{{ $t('dashboard.active_desc') }}</div>
+                                        <svg class="mini-sparkline" viewBox="0 0 120 32" preserveAspectRatio="none">
+                                            <polyline class="sparkline-area" :points="sparklinePoints('sessions')" />
+                                            <polyline class="sparkline-line" :points="sparklinePoints('sessions')" />
+                                        </svg>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -314,21 +347,27 @@
                                     <i class="fas fa-cog"></i> 管理角色
                                 </button>
                             </div>
-                            <div class="dashboard-character-grid">
-                                <div v-for="preset in customPersonalityPresets.slice(0, 8)" :key="preset.id"
-                                     class="dashboard-character-item"
-                                     @click="startSessionWithPreset(preset)">
-                                    <div class="dashboard-character-portrait">
-                                        <img v-if="preset.portrait" :src="preset.portrait">
-                                        <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                            <div class="dashboard-character-scroll">
+                                <div class="dashboard-character-grid">
+                                    <div v-for="preset in customPersonalityPresets.slice(0, 8)" :key="preset.id"
+                                         class="dashboard-character-item"
+                                         @click="startSessionWithPreset(preset)">
+                                        <div class="dashboard-character-portrait">
+                                            <img v-if="preset.portrait" :src="preset.portrait">
+                                            <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                                        </div>
+                                        <div class="dashboard-character-name">{{ preset.name }}</div>
+                                        <div class="character-bubble">
+                                            <div class="character-bubble-name">{{ preset.name }}</div>
+                                            <button class="character-bubble-btn" @click.stop="startSessionWithPreset(preset)">开始对话</button>
+                                        </div>
                                     </div>
-                                    <div class="dashboard-character-name">{{ preset.name }}</div>
-                                </div>
-                                <div v-if="customPersonalityPresets.length > 8" class="dashboard-character-more" @click="navigateTo('personality')">
-                                    <div class="dashboard-character-more-icon">
-                                        <i class="fas fa-ellipsis-h"></i>
+                                    <div v-if="customPersonalityPresets.length > 8" class="dashboard-character-more" @click="navigateTo('personality')">
+                                        <div class="dashboard-character-more-icon">
+                                            <i class="fas fa-ellipsis-h"></i>
+                                        </div>
+                                        <div class="dashboard-character-name">更多角色</div>
                                     </div>
-                                    <div class="dashboard-character-name">更多角色</div>
                                 </div>
                             </div>
                         </div>
@@ -342,13 +381,41 @@
                                             <button v-for="period in timePeriods" :key="period.value" class="time-filter-btn" :class="{ active: selectedPeriod === period.value }" @click="changeTimePeriod(period.value)">{{ $t(period.labelKey) }}</button>
                                         </div>
                                     </div>
-                                    <div class="dashboard-section-body"><div ref="trendChart" class="chart-container"></div></div>
+                                    <div class="trend-summary">
+                                        <span class="trend-summary-item">今日峰值时段：<strong>{{ trendPeakHour || '无' }}</strong></span>
+                                        <span class="trend-summary-divider">|</span>
+                                        <span class="trend-summary-item">平均消息/小时：<strong>{{ trendAvgPerHour || 0 }}</strong></span>
+                                    </div>
+                                    <div class="dashboard-section-body">
+                                        <div v-show="isTrendEmpty" class="trend-empty-state">
+                                            <svg class="trend-empty-icon" viewBox="0 0 80 80" fill="none">
+                                                <circle cx="40" cy="40" r="36" stroke="var(--border-color)" stroke-width="2" stroke-dasharray="6 4"/>
+                                                <path d="M28 52 L36 44 L44 48 L56 34" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                <circle cx="56" cy="34" r="3" fill="var(--text-muted)"/>
+                                            </svg>
+                                            <div class="trend-empty-text">暂无消息数据</div>
+                                            <div class="trend-empty-sub">发送消息后将显示趋势图</div>
+                                        </div>
+                                        <div v-show="!isTrendEmpty" ref="trendChart" class="chart-container trend-chart-fade"></div>
+                                    </div>
                                 </div>
                                 <div class="stats-grid">
                                     <div class="stat-card"><div class="stat-icon green"><i class="fas fa-clock"></i></div><div class="stat-content"><div class="stat-label">{{ $t('dashboard.total_messages') }}</div><div class="stat-value">{{ stats.total_messages || 0 }}</div><div class="stat-subtitle">{{ $t('dashboard.messages_desc') }}</div></div></div>
-                                    <div class="stat-card"><div class="stat-icon orange"><i class="fas fa-memory"></i></div><div class="stat-content"><div class="stat-label">{{ $t('dashboard.memory_usage') }}</div><div class="stat-value">{{ stats.memory_usage || 42 }} MB</div><div class="stat-subtitle">{{ $t('dashboard.memory_desc') }}</div></div></div>
-                                    <div class="stat-card"><div class="stat-icon yellow"><i class="fas fa-file-arrow-up"></i></div><div class="stat-content"><div class="stat-label">{{ $t('dashboard.file_transfers') }}</div><div class="stat-value">{{ formatNumber(stats.file_transfers || 0) }}</div><div class="stat-subtitle">{{ $t('dashboard.transfers_desc') }}</div></div></div>
-                                    <div class="stat-card"><div class="stat-icon red"><i class="fas fa-bolt"></i></div><div class="stat-content"><div class="stat-label">{{ $t('dashboard.avg_response') }}</div><div class="stat-value">{{ stats.avg_response_time || '1.2' }}s</div><div class="stat-subtitle">{{ $t('dashboard.response_desc') }}</div></div></div>
+                                    <div class="stat-card">
+                                        <div class="stat-icon stat-icon-ring">
+                                            <svg class="stat-icon-ring-svg" viewBox="0 0 64 64">
+                                                <circle class="stat-icon-ring-bg" cx="32" cy="32" r="28" />
+                                                <circle class="stat-icon-ring-fill" cx="32" cy="32" r="28" :style="{ strokeDashoffset: memoryRingOffset, stroke: memoryRingColor }" />
+                                            </svg>
+                                            <i class="fas fa-memory"></i>
+                                        </div>
+                                        <div class="stat-content"><div class="stat-label">{{ $t('dashboard.memory_usage') }}</div><div class="stat-value" :style="{ color: memoryRingColor }">{{ stats.memory_usage || 42 }} MB</div><div class="stat-subtitle">{{ $t('dashboard.memory_desc') }}</div></div>
+                                    </div>
+                                    <div class="stat-card" :class="{ 'stat-muted': (stats.file_transfers || 0) === 0 }"><div class="stat-icon yellow"><i class="fas fa-file-arrow-up"></i></div><div class="stat-content"><div class="stat-label">{{ $t('dashboard.file_transfers') }}</div><div class="stat-value">{{ formatNumber(stats.file_transfers || 0) }}</div><div class="stat-subtitle">{{ $t('dashboard.transfers_desc') }}</div></div></div>
+                                    <div class="stat-card">
+                                        <div class="stat-icon" :class="responseTimeColor"><i class="fas fa-bolt"></i></div>
+                                        <div class="stat-content"><div class="stat-label">{{ $t('dashboard.avg_response') }}</div><div class="stat-value" :style="{ color: responseTimeTextColor }">{{ stats.avg_response_time || '1.2' }}s</div><div class="stat-subtitle">{{ $t('dashboard.response_desc') }}</div></div>
+                                    </div>
                                 </div>
                             </div>
                             <div class="dashboard-stack">
@@ -364,7 +431,23 @@
                                         <div class="dashboard-status-item"><span class="status-label">{{ $t('dashboard.session_manager') }}</span><span class="status-value">{{ sessionCount }}</span></div>
                                     </div></div>
                                 </div>
-                                <div class="dashboard-section-card"><div class="dashboard-section-header"><div class="dashboard-section-copy"><div class="chart-title">{{ $t('dashboard.recent_activity') }}</div><div class="chart-subtitle">{{ $t('dashboard.activity_desc') }}</div></div></div><div class="dashboard-section-body" style="max-height: 260px; overflow-y: auto;"><div v-if="recentActivities && recentActivities.length > 0" class="dashboard-activity-list"><div v-for="(activity, index) in recentActivities" :key="index" class="dashboard-activity-item"><span style="color: var(--text-primary);">{{ activity.message }}</span><span style="color: var(--text-secondary); font-size: 11px; white-space: nowrap;">{{ formatTime(activity.time) }}</span></div></div><div v-else style="text-align: center; color: var(--text-secondary); padding: 20px;">{{ $t('activity.no_records') }}</div></div></div>
+                                <div class="dashboard-section-card">
+                                    <div class="dashboard-section-header"><div class="dashboard-section-copy"><div class="chart-title">{{ $t('dashboard.recent_activity') }}</div><div class="chart-subtitle">{{ $t('dashboard.activity_desc') }}</div></div></div>
+                                    <div class="dashboard-section-body activity-scroll-area">
+                                        <div v-if="recentActivities && recentActivities.length > 0" class="dashboard-activity-list">
+                                            <div v-for="(activity, index) in recentActivities" :key="index" class="dashboard-activity-item">
+                                                <i :class="activityIcon(activity)" class="activity-icon" :style="{ color: activityIconColor(activity) }"></i>
+                                                <div class="activity-content">
+                                                    <span class="activity-message" v-html="formatActivityMessage(activity.message)"></span>
+                                                    <span class="activity-time">{{ formatTime(activity.time) }}</span>
+                                                </div>
+                                                <span v-if="index === 0" class="activity-new-badge">NEW</span>
+                                            </div>
+                                        </div>
+                                        <div v-else style="text-align: center; color: var(--text-secondary); padding: 20px;">{{ $t('activity.no_records') }}</div>
+                                        <div v-if="recentActivities && recentActivities.length > 5" class="activity-view-all" @click="navigateTo('logs')">查看全部活动</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5010,35 +5093,44 @@
 
         <!-- Confirm Modal -->
         <div v-if="showConfirmModal" class="modal-overlay confirm-modal-overlay" @click.self="cancelConfirm">
-            <div class="modal" style="max-width: 400px;">
-                <div class="modal-header">
-                    <span class="modal-title">
-                        <i class="fas" :class="confirmModalConfig.icon || 'fa-exclamation-circle'" :style="{ color: confirmModalConfig.iconColor || 'var(--warning)' }"></i>
-                        {{ confirmModalConfig.title || '确认操作' }}
-                    </span>
-                    <button class="modal-close" @click="cancelConfirm">&times;</button>
+            <div class="modal confirm-modal" :class="{ 'confirm-modal-danger': confirmModalConfig.danger }">
+                <div class="confirm-modal-icon-area" :style="confirmModalConfig.danger && !confirmModalConfig.icon ? {} : { background: confirmModalConfig.iconBg || 'rgba(59,130,246,0.12)' }">
+                    <i class="fas" :class="confirmModalConfig.danger && !confirmModalConfig.icon ? 'fa-trash' : (confirmModalConfig.icon || 'fa-exclamation-circle')" :style="{ color: confirmModalConfig.danger && !confirmModalConfig.icon ? '#e24b4a' : (confirmModalConfig.iconColor || 'var(--accent-primary)') }"></i>
                 </div>
-                <div class="modal-body">
-                    <p style="margin: 0; color: var(--text-secondary); line-height: 1.6;">
+                <div class="confirm-modal-title">{{ confirmModalConfig.title || '确认操作' }}</div>
+                <div class="confirm-modal-body">
+                    <p class="confirm-modal-message" v-if="!confirmModalConfig.highlight">
                         {{ confirmModalConfig.message || '确定要执行这个操作吗？' }}
                     </p>
+                    <p class="confirm-modal-message" v-else>
+                        {{ confirmModalConfig.messageBefore || '确定要删除配置' }}
+                        <span class="confirm-modal-pill">{{ confirmModalConfig.highlight }}</span>
+                        {{ confirmModalConfig.messageAfter || '吗？' }}
+                    </p>
+                    <p class="confirm-modal-impact" v-if="confirmModalConfig.impact">
+                        <i class="fas fa-info-circle"></i>
+                        {{ confirmModalConfig.impact }}
+                    </p>
                 </div>
-                <div class="modal-footer">
-                    <button 
-                        class="btn" 
-                        :class="confirmModalConfig.cancelClass || 'btn-secondary'"
-                        @click="cancelConfirmAction"
-                    >
+                <div class="confirm-modal-warning" v-if="confirmModalConfig.danger">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>此操作不可撤销，删除后无法恢复</span>
+                </div>
+                <div class="confirm-modal-footer">
+                    <button class="btn confirm-btn-cancel" @click="cancelConfirmAction">
                         {{ confirmModalConfig.cancelText || '取消' }}
                     </button>
-                    <button 
-                        class="btn" 
-                        :class="confirmModalConfig.danger ? 'btn-danger' : 'btn-primary'"
+                    <button
+                        class="btn"
+                        :class="confirmModalConfig.danger ? 'confirm-btn-danger' : 'btn-primary confirm-btn-confirm'"
                         @click="confirmAction"
                         :disabled="isLoading"
                     >
                         <span v-if="isLoading"><div class="spinner" style="display: inline-block; margin-right: 8px;"></div>处理中...</span>
-                        <span v-else>{{ confirmModalConfig.confirmText || '确认' }}</span>
+                        <span v-else>
+                            <i v-if="confirmModalConfig.danger && !confirmModalConfig.icon" class="fas fa-trash" style="margin-right: 6px;"></i>
+                            {{ confirmModalConfig.danger && !confirmModalConfig.icon ? ('确认' + (confirmModalConfig.confirmText || '删除')) : (confirmModalConfig.confirmText || '确认') }}
+                        </span>
                     </button>
                 </div>
             </div>
@@ -6482,6 +6574,9 @@
                     // 最近活动
                     recentActivities: [],
 
+                    isDashboardRefreshing: false,
+                    lastRefreshTime: null,
+
                     // Charts
                     trendChart: null,
                     platformChart: null,
@@ -6491,7 +6586,7 @@
                         { value: 'week', labelKey: 'dashboard.last_7d' },
                         { value: 'month', labelKey: 'dashboard.last_30d' }
                     ],
-                    messageTrendData: [],
+                    messageTrendData: null,
                     platformStatsData: [],
                     
                     // Chat
@@ -7072,9 +7167,14 @@
                     confirmModalConfig: {
                         title: '确认操作',
                         message: '确定要执行这个操作吗？',
+                        messageBefore: '',
+                        highlight: '',
+                        messageAfter: '',
+                        impact: '',
                         confirmText: '确认',
                         icon: 'fa-exclamation-circle',
-                        iconColor: 'var(--warning)',
+                        iconColor: 'var(--accent-primary)',
+                        iconBg: '',
                         danger: false,
                         action: null,
                         data: null
@@ -7226,6 +7326,70 @@
 
                 isChatOnlyMode() {
                     return this.appMode === 'chat';
+                },
+
+                isTrendEmpty() {
+                    if (!this.messageTrendData) return true;
+                    const vals = this.messageTrendData.values || this.messageTrendData.data;
+                    if (!Array.isArray(vals) || vals.length === 0) return true;
+                    return vals.every(v => !v || v === 0);
+                },
+
+                trendPeakHour() {
+                    if (this.isTrendEmpty || !this.messageTrendData) return null;
+                    const vals = this.messageTrendData.values || this.messageTrendData.data;
+                    const labels = this.messageTrendData.labels || [];
+                    if (!Array.isArray(vals) || vals.length === 0) return null;
+                    const maxIdx = vals.indexOf(Math.max(...vals));
+                    if (maxIdx < 0 || !vals[maxIdx]) return null;
+                    return labels[maxIdx] || null;
+                },
+
+                trendAvgPerHour() {
+                    if (this.isTrendEmpty || !this.messageTrendData) return 0;
+                    const vals = this.messageTrendData.values || this.messageTrendData.data;
+                    if (!Array.isArray(vals) || vals.length === 0) return 0;
+                    const total = vals.reduce((a, b) => a + (b || 0), 0);
+                    return Math.round(total / vals.length * 10) / 10;
+                },
+
+                memoryRingOffset() {
+                    const usage = this.stats.memory_usage || 42;
+                    const max = 256;
+                    const ratio = Math.min(usage / max, 1);
+                    const circumference = 175.9;
+                    return circumference * (1 - ratio);
+                },
+
+                memoryRingColor() {
+                    const usage = this.stats.memory_usage || 42;
+                    const max = 256;
+                    const ratio = usage / max;
+                    if (ratio < 0.5) return '#22c55e';
+                    if (ratio < 0.8) return '#f59e0b';
+                    return '#ef4444';
+                },
+
+                responseTimeColor() {
+                    const t = parseFloat(this.stats.avg_response_time) || 1.2;
+                    if (t < 1) return 'green';
+                    if (t < 2) return 'orange';
+                    return 'red';
+                },
+
+                responseTimeTextColor() {
+                    const t = parseFloat(this.stats.avg_response_time) || 1.2;
+                    if (t < 1) return '#22c55e';
+                    if (t < 2) return '#f59e0b';
+                    return '#ef4444';
+                },
+
+                lastRefreshText() {
+                    if (!this.lastRefreshTime) return '刚刚更新';
+                    const diff = Math.floor((Date.now() - this.lastRefreshTime) / 1000);
+                    if (diff < 5) return '刚刚更新';
+                    if (diff < 60) return `${diff}秒前更新`;
+                    return `${Math.floor(diff / 60)}分钟前更新`;
                 },
 
                 chatLayoutStyle() {
