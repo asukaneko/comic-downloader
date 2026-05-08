@@ -4203,6 +4203,16 @@
                                                 <div class="toggle-slider"></div>
                                             </label>
                                         </div>
+                                        <!-- 自动记忆 -->
+                                        <div class="feature-switch-item" @click="settings.features.auto_memory = !settings.features.auto_memory">
+                                            <div class="feature-switch-info">
+                                                <i class="fas fa-brain feature-switch-icon"></i>
+                                                <span class="feature-switch-label">自动保存记忆</span>
+                                            </div>
+                                            <label class="toggle-switch" :class="{ active: settings.features.auto_memory }">
+                                                <div class="toggle-slider"></div>
+                                            </label>
+                                        </div>
                                         <!-- 显示进度卡片 -->
                                         <div class="feature-switch-item" @click="toggleThinkingCards()">
                                             <div class="feature-switch-info">
@@ -5177,7 +5187,7 @@
         <!-- Confirm Modal -->
         <div v-if="showConfirmModal" class="modal-overlay confirm-modal-overlay" @click.self="cancelConfirm">
             <div class="modal confirm-modal" :class="{ 'confirm-modal-danger': confirmModalConfig.danger }">
-                <div class="confirm-modal-icon-area" :style="confirmModalConfig.danger && !confirmModalConfig.icon ? {} : { background: confirmModalConfig.iconBg || 'rgba(59,130,246,0.12)' }">
+                <div class="confirm-modal-icon-area" :style="confirmModalConfig.danger && !confirmModalConfig.icon ? { background: 'rgba(226, 75, 74, 0.15)' } : { background: confirmModalConfig.iconBg || 'rgba(59,130,246,0.12)' }">
                     <i class="fas" :class="confirmModalConfig.danger && !confirmModalConfig.icon ? 'fa-trash' : (confirmModalConfig.icon || 'fa-exclamation-circle')" :style="{ color: confirmModalConfig.danger && !confirmModalConfig.icon ? '#e24b4a' : (confirmModalConfig.iconColor || 'var(--accent-primary)') }"></i>
                 </div>
                 <div class="confirm-modal-title">{{ confirmModalConfig.title || '确认操作' }}</div>
@@ -7215,6 +7225,7 @@
                         features: {
                             ai: true,
                             memory: true,
+                            auto_memory: true,
                             knowledge: true,
                             tts: false,
                             workflow: true,

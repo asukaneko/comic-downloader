@@ -340,6 +340,10 @@ class PipelineCallbacks(ABC):
         """返回工作区上下文字典（供工具使用）。"""
         return {}
 
+    def get_memory_context(self, ctx: PipelineContext) -> Dict[str, Any]:
+        """返回自动记忆需要的频道上下文。"""
+        return self.get_workspace_context(ctx)
+
     # ---- 附件解析 ----
 
     def resolve_attachment_data(
@@ -458,6 +462,7 @@ class AIPipeline:
 
         # Phase 5: 结果组装
         result = self._phase_assemble_result(ctx, callbacks)
+        self._phase_auto_memory(ctx, callbacks, result)
         callbacks.on_response_complete(ctx, result)
 
         return result
@@ -553,6 +558,23 @@ class AIPipeline:
                     )
                     break
 
+        # 注入跨会话角色记忆
+        try:
+            from nbot.core.auto_memory import (
+                build_memory_context,
+                inject_memories_into_messages,
+                load_character_memories,
+            )
+
+            memory_context = build_memory_context(ctx, callbacks)
+            memory_text = load_character_memories(
+                memory_context.get("character_name", ""),
+                memory_context.get("target_id", ""),
+            )
+            inject_memories_into_messages(messages_for_ai, memory_text)
+        except Exception:
+            pass
+
         # 调用现有的上下文准备
         prepared = prepare_chat_context(
             messages_for_ai,
@@ -562,6 +584,22 @@ class AIPipeline:
         )
         ctx.messages = prepared.messages
         ctx.tool_call_history = prepared.tool_call_history
+
+    def _phase_auto_memory(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+        result: PipelineResult,
+    ) -> None:
+        """主回复完成后，旁路抽取并保存记忆。"""
+        try:
+            from nbot.core.auto_memory import extract_and_save_turn_memories
+
+            saved_count = extract_and_save_turn_memories(ctx, callbacks, result)
+            if saved_count:
+                result.metadata["auto_memory_saved"] = saved_count
+        except Exception as exc:
+            _log.debug("Auto memory middleware failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Phase 4: AI 响应

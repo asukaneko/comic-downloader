@@ -300,6 +300,7 @@ def init_default_data(server):
         "features": {
             "ai": True,
             "memory": True,
+            "auto_memory": True,
             "knowledge": True,
             "tts": False,
             "workflow": True,

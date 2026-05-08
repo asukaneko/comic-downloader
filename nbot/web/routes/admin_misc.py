@@ -149,6 +149,11 @@ def register_admin_misc_routes(app, server):
     @app.route("/api/settings", methods=["PUT"])
     def update_settings():
         data = request.json or {}
+        if "features" in data and isinstance(data.get("features"), dict):
+            merged_features = dict(server.settings.get("features") or {})
+            merged_features.update(data["features"])
+            data = dict(data)
+            data["features"] = merged_features
         server.settings.update(data)
         server._save_data("settings")
         return jsonify({"success": True, "settings": server.settings})

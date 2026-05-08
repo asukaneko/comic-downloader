@@ -4479,7 +4479,7 @@ def main(params):
                         impact: config.impact || '',
                         confirmText: config.confirmText || '确认',
                         cancelText: config.cancelText || '取消',
-                        icon: config.icon || 'fa-exclamation-circle',
+                        icon: config.icon || (!config.danger ? 'fa-exclamation-circle' : ''),
                         iconColor: config.iconColor || 'var(--accent-primary)',
                         iconBg: config.iconBg || '',
                         danger: config.danger || false,
@@ -6564,9 +6564,14 @@ def main(params):
                 },
 
                 async deleteCustomPersonalityPreset(preset) {
-                    this.showConfirmDialogFn({
+                    this.showConfirm({
                         title: '删除角色预设',
-                        message: `确定要删除自定义角色预设 "${preset.name}" 吗？`,
+                        messageBefore: '确定要删除自定义角色预设',
+                        highlight: `"${preset.name}"`,
+                        messageAfter: '吗？',
+                        impact: '删除后该角色的所有配置将永久丢失',
+                        confirmText: '删除',
+                        danger: true,
                         onConfirm: async () => {
                             try {
                                 await api.delete(`/api/personality/custom-presets/${preset.id}`);

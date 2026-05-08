@@ -9234,16 +9234,16 @@
         }
 
         .editor-topbar-avatar {
-            width: 24px;
-            height: 24px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             object-fit: cover;
             flex-shrink: 0;
         }
 
         .editor-topbar-avatar-placeholder {
-            width: 24px;
-            height: 24px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             background: rgba(26, 31, 46, 0.6);
             display: flex;
@@ -9253,7 +9253,7 @@
         }
 
         .editor-topbar-avatar-placeholder i {
-            font-size: 11px;
+            font-size: 14px;
             color: #64748b;
         }
 
@@ -9261,7 +9261,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            font-size: 13px;
+            font-size: 15px;
             min-width: 0;
         }
 
@@ -9287,6 +9287,31 @@
             align-items: center;
             gap: 8px;
             flex-shrink: 0;
+        }
+
+        @media (max-width: 768px) {
+            .editor-topbar {
+                flex-wrap: wrap;
+                padding: 10px 14px;
+                gap: 8px;
+            }
+
+            .editor-topbar-actions {
+                flex-wrap: wrap;
+                width: 100%;
+                justify-content: flex-end;
+                gap: 6px;
+            }
+
+            .editor-topbar-actions .btn,
+            .editor-topbar-actions .dropdown > .btn {
+                padding: 5px 10px;
+                font-size: 12px;
+            }
+
+            .editor-topbar-actions .btn-indigo {
+                padding: 5px 12px;
+            }
         }
 
         .btn-ghost {

@@ -292,8 +292,15 @@ def get_workspace_context(user_id=None, group_id=None, group_user_id=None, chara
 
     context = {
         'session_id': session_id,
-        'session_type': session_type
+        'session_type': session_type,
+        'target_id': str(user_id or group_id or ''),
     }
+    if user_id:
+        context['user_id'] = str(user_id)
+    if group_id:
+        context['group_id'] = str(group_id)
+    if group_user_id:
+        context['group_user_id'] = str(group_user_id)
 
     # 添加角色名（如果提供）
     if character_name:
