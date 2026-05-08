@@ -6621,6 +6621,28 @@ def main(params):
                     });
                 },
 
+                async uploadCustomPersonalityPresetToPlatform(preset) {
+                    if (!preset || !preset.id || this.isLoading) return;
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post(`/api/personality/custom-presets/${preset.id}/upload-to-platform`);
+                        if (res.data.success) {
+                            const url = res.data.url || '';
+                            this.showToast(url ? `已上传到角色卡平台：${url}` : '已上传到角色卡平台', 'success');
+                            if (url) {
+                                window.open(url, '_blank');
+                            }
+                        } else {
+                            this.showToast(res.data.error || '上传到平台失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('上传角色卡到平台失败:', e);
+                        this.showToast('上传到平台失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
                 async loadCustomPersonalityPresets() {
                     try {
                         const res = await api.get('/api/personality/custom-presets');

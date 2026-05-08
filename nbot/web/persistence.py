@@ -297,6 +297,8 @@ def init_default_data(server):
         "ws_uri": "ws://127.0.0.1:3001",
         "master_id": "",
         "bot_id": "",
+        "role_card_platform_url": "http://127.0.0.1:7861",
+        "role_card_platform_token": "",
         "features": {
             "ai": True,
             "memory": True,

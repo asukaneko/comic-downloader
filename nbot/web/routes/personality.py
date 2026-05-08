@@ -3,11 +3,14 @@ import json
 import logging
 import os
 import re
+import mimetypes
+import urllib.error
+import urllib.request
 import uuid
 import zipfile
 from datetime import datetime
 
-from flask import jsonify, request, send_from_directory, send_file
+from flask import g, jsonify, request, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 
 _log = logging.getLogger(__name__)
@@ -17,6 +20,74 @@ ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def allowed_image_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
+
+
+def _role_card_platform_url(server):
+    url = getattr(server, "settings", {}).get("role_card_platform_url", "") if hasattr(server, "settings") else ""
+    if not str(url).strip():
+        url = os.getenv("ROLE_CARD_PLATFORM_URL", "").strip()
+    return str(url or "http://127.0.0.1:7861").strip().rstrip("/")
+
+
+def _role_card_platform_token(server):
+    token = getattr(server, "settings", {}).get("role_card_platform_token", "") if hasattr(server, "settings") else ""
+    if not str(token).strip():
+        token = os.getenv("ROLE_CARD_PLATFORM_TOKEN", "").strip()
+    return str(token or "").strip()
+
+
+def _local_portrait_path(server, portrait_url):
+    if not portrait_url or not portrait_url.startswith("/static/uploads/portraits/"):
+        return None
+    filename = os.path.basename(portrait_url)
+    path = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits", filename)
+    return path if os.path.exists(path) else None
+
+
+def _post_card_to_platform(server, character):
+    boundary = f"----NekoBotRoleCard{uuid.uuid4().hex}"
+    chunks = []
+
+    def add_field(name, value):
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+        chunks.append(str(value).encode("utf-8"))
+        chunks.append(b"\r\n")
+
+    def add_file(name, filename, content, content_type):
+        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode("utf-8")
+        )
+        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        chunks.append(content)
+        chunks.append(b"\r\n")
+
+    payload = dict(character)
+    payload["source"] = "nekobot"
+    add_field("character", json.dumps(payload, ensure_ascii=False))
+
+    portrait_path = _local_portrait_path(server, character.get("portrait", ""))
+    if portrait_path:
+        content_type = mimetypes.guess_type(portrait_path)[0] or "application/octet-stream"
+        with open(portrait_path, "rb") as f:
+            add_file("avatar", os.path.basename(portrait_path), f.read(), content_type)
+
+    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    body = b"".join(chunks)
+    headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+    token = _role_card_platform_token(server)
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    request_obj = urllib.request.Request(
+        f"{_role_card_platform_url(server)}/api/cards",
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(request_obj, timeout=15) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def compile_personality_prompt(personality_data, session_context=None, user_name=None):
@@ -283,6 +354,38 @@ def register_personality_routes(app, server):
 
         server._save_data("custom_personality_presets")
         return jsonify({"success": True, "data": preset})
+
+    @app.route("/api/personality/custom-presets/<preset_id>/upload-to-platform", methods=["POST"])
+    def upload_custom_personality_to_platform(preset_id):
+        presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
+        if os.path.exists(presets_file):
+            try:
+                with open(presets_file, "r", encoding="utf-8") as f:
+                    server.custom_personality_presets = json.load(f)
+            except Exception as e:
+                _log.error(f"Failed to load custom personality presets: {e}")
+
+        preset = next((p for p in server.custom_personality_presets if p.get("id") == preset_id), None)
+        if not preset:
+            return jsonify({"success": False, "error": "Role card not found"}), 404
+
+        try:
+            upload_preset = dict(preset)
+            current_username = str(getattr(g, "auth_username", "") or "").strip()
+            if current_username:
+                upload_preset["creator"] = current_username
+                upload_preset["author"] = current_username
+            result = _post_card_to_platform(server, upload_preset)
+            if not result.get("success"):
+                return jsonify({"success": False, "error": result.get("error", "Platform upload failed")}), 502
+            return jsonify({"success": True, "url": result.get("url"), "card": result.get("card")})
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", errors="replace")
+            _log.error(f"Role-card platform rejected upload: {e.code} {detail}")
+            return jsonify({"success": False, "error": f"Platform rejected upload: {e.code}"}), 502
+        except Exception as e:
+            _log.error(f"Upload role card to platform failed: {e}")
+            return jsonify({"success": False, "error": f"Upload failed: {str(e)}"}), 502
 
     @app.route("/api/personality/ai-generate", methods=["POST"])
     def ai_generate_personality():

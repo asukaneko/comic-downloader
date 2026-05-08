@@ -8160,10 +8160,19 @@
 
         .fullscreen-glass-buttons {
             display: flex;
-            gap: 10px;
+            align-items: center;
+            gap: 8px;
             margin-top: auto;
             padding-top: 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .fullscreen-glass-buttons .glass-btn {
+            flex: 1;
+            min-width: 0;
+            height: 42px;
+            padding: 0 10px;
+            box-sizing: border-box;
         }
 
         /* 列表视图 */
@@ -10884,6 +10893,17 @@
         /* 按钮区域分割线 */
         [data-theme="light"] .fullscreen-glass-buttons {
             border-top-color: rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .fullscreen-glass-buttons .glass-btn-secondary {
+            background: rgba(0, 0, 0, 0.05);
+            border-color: rgba(0, 0, 0, 0.1);
+            color: #475569;
+        }
+
+        [data-theme="light"] .fullscreen-glass-buttons .glass-btn-secondary:hover {
+            background: rgba(0, 0, 0, 0.08);
+            border-color: rgba(0, 0, 0, 0.15);
         }
 
         /* ===== 列表视图 ===== */
