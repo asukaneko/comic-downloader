@@ -2656,8 +2656,9 @@
                                         :class="{ expanded: expandedMemory === mem.id }"
                                     >
                                         <div class="memory-item-header" @click="toggleMemoryExpand(mem.id)">
-                                            <div class="memory-item-icon">
-                                                <i class="fas fa-archive"></i>
+                                            <div class="memory-item-icon" :class="{ 'has-portrait': getCharacterPortraitByName(mem.character_name).portrait }">
+                                                <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
+                                                <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-archive'"></i>
                                             </div>
                                             <div class="memory-item-title">{{ mem.title || mem.key }}</div>
                                             <div class="memory-item-actions" @click.stop>
@@ -2710,8 +2711,9 @@
                                         :class="{ expanded: expandedMemory === mem.id, expired: isMemoryExpired(mem) }"
                                     >
                                         <div class="memory-item-header" @click="toggleMemoryExpand(mem.id)">
-                                            <div class="memory-item-icon">
-                                                <i class="fas fa-clock"></i>
+                                            <div class="memory-item-icon short-term-icon" :class="{ 'has-portrait': getCharacterPortraitByName(mem.character_name).portrait }">
+                                                <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
+                                                <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-clock'"></i>
                                             </div>
                                             <div class="memory-item-title">{{ mem.title || mem.key }}</div>
                                             <div class="memory-item-actions" @click.stop>

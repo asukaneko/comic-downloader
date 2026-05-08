@@ -7102,6 +7102,29 @@ def main(params):
                     this.expandedMemory = this.expandedMemory === id ? null : id;
                 },
 
+                // 根据角色名获取立绘/头像
+                getCharacterPortraitByName(characterName) {
+                    if (!characterName) return { portrait: null, avatar: null };
+                    // 优先从自定义角色库匹配
+                    const preset = this.customPersonalityPresets.find(
+                        p => p.name === characterName || p.sender_name === characterName
+                    );
+                    if (preset) {
+                        return {
+                            portrait: preset.portrait || null,
+                            avatar: preset.avatar || preset.sender_avatar || 'fas fa-user-circle'
+                        };
+                    }
+                    // 匹配当前编辑的角色
+                    if (this.personality.name === characterName) {
+                        return {
+                            portrait: this.personality.portrait || null,
+                            avatar: this.personality.avatar || 'fas fa-user-circle'
+                        };
+                    }
+                    return { portrait: null, avatar: 'fas fa-user-circle' };
+                },
+
                 getPriorityLabel(priority) {
                     const labels = {
                         high: '高优先级',

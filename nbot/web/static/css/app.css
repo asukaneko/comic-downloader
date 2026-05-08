@@ -3311,6 +3311,18 @@
             justify-content: center;
             color: var(--accent-primary);
             font-size: 14px;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .memory-item-icon.has-portrait {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .memory-item-icon.short-term-icon:not(.has-portrait) {
+            background: rgba(59, 130, 246, 0.12);
+            color: #60a5fa;
         }
 
         .memory-item-title {
