@@ -626,6 +626,7 @@ const live2dModels = [
             '<button type="button" data-action="history"><span class="nbot-live2d-menu-icon"><i class="fas fa-history"></i></span><span>\u67e5\u770b\u4f1a\u8bdd\u8bb0\u5f55</span></button>',
             '<button type="button" data-action="motions"><span class="nbot-live2d-menu-icon"><i class="fas fa-running"></i></span><span>\u9009\u62e9\u52a8\u4f5c</span></button>',
             '<button type="button" data-action="reset"><span class="nbot-live2d-menu-icon"><i class="fas fa-compress-arrows-alt"></i></span><span>\u56de\u5230\u53f3\u4e0b\u89d2</span></button>',
+            '<button type="button" data-action="close-live2d" style="color:#ef4444;"><span class="nbot-live2d-menu-icon" style="background:rgba(239,68,68,0.12);color:#ef4444;"><i class="fas fa-power-off"></i></span><span>\u5173\u95ed Live2D</span></button>',
             '<div class="nbot-live2d-chat-row"><input class="nbot-live2d-chat-input" type="text" placeholder="\u5bf9\u7740\u6211\u8bf4\u70b9\u4ec0\u4e48..."><button type="button" class="nbot-live2d-chat-send" title="\u53d1\u9001"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>'
         );
         menu.innerHTML = buttons.join('');
@@ -689,6 +690,16 @@ const live2dModels = [
                 const pos = applyDefaultStagePosition(stage);
                 saveStagePosition(pos.left, pos.top);
                 window.__nbotLive2dSay('\u5df2\u56de\u5230\u53f3\u4e0b\u89d2\u3002', 2600, 4);
+            } else if (action === 'close-live2d') {
+                // 关闭 Live2D 看板娘
+                if (window.__nbotLive2dSetEnabled) {
+                    window.__nbotLive2dSetEnabled(false);
+                }
+                const app = window.__nbotVueApp;
+                if (app && app.settings && app.settings.features) {
+                    app.settings.features.live2d = false;
+                }
+                window.__nbotLive2dSay('Live2D \u770b\u677f\u5a18\u5df2\u5173\u95ed\u3002', 2000, 4);
             }
             hideLive2dMenu();
         });
