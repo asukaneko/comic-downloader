@@ -8069,6 +8069,8 @@ def main(params):
                             volume: model.volume || 1.0,
                             language: model.language || 'zh',
                             dimensions: model.dimensions || 1536,
+                            // 图片生成特有配置
+                            prompt_template: model.prompt_template || '',
                             // API Key选择
                             selectedApiKeyId: ''
                         };
@@ -8125,7 +8127,9 @@ def main(params):
                             pitch: 1.0,
                             volume: 1.0,
                             language: 'zh',
-                            dimensions: 1536
+                            dimensions: 1536,
+                            // 图片生成特有配置
+                            prompt_template: 'Create an anime-style character portrait of {character_name}.'
                         };
                         // 应用该用途的默认配置
                         this.onModelPurposeChange();

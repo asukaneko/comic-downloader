@@ -125,6 +125,7 @@ def register_ai_model_routes(app, server):
             "dimensions": data.get("dimensions", default_config.get("dimensions", 1536)),
             # 图片生成特有配置
             "size": data.get("size", default_config.get("size", "1024x1024")),
+            "prompt_template": data.get("prompt_template", ""),
             "created_at": now,
             "updated_at": now,
         }
@@ -212,6 +213,7 @@ def register_ai_model_routes(app, server):
             model["dimensions"] = data.get("dimensions", model.get("dimensions", 1536))
             # 图片生成特有配置
             model["size"] = data.get("size", model.get("size", "1024x1024"))
+            model["prompt_template"] = data.get("prompt_template", model.get("prompt_template", ""))
             model["updated_at"] = datetime.now().isoformat()
             server._save_data("ai_models")
             return jsonify({"success": True, "model": model})

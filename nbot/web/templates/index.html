@@ -3702,6 +3702,11 @@
                                             <input v-model="modelForm.model" type="text" class="form-input" placeholder="dall-e-3">
                                             <div class="form-hint">例如: dall-e-3, doubao-seedream-4-5, stable-diffusion-xl 等</div>
                                         </div>
+                                        <div class="form-group">
+                                            <label class="form-label">主体提示词模板</label>
+                                            <textarea v-model="modelForm.prompt_template" class="form-textarea" rows="4" placeholder="输入主体提示词模板，使用 {character_name} 作为角色名占位符"></textarea>
+                                            <div class="form-hint">用于设定生成图片的风格。可用占位符：<br>• {character_name} - 角色名称<br>• {description} - 角色描述<br>• {personality} - 角色性格<br>• {basic_info} - 角色基本信息<br>默认: Create an anime-style character portrait of {character_name}.</div>
+                                        </div>
                                     </template>
                                 </div>
                                 <div class="modal-footer">

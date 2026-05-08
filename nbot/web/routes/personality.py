@@ -997,20 +997,36 @@ def register_personality_routes(app, server):
 
         try:
             # 构建图片生成提示词
-            prompt_parts = [f"Create an anime-style character portrait of {character_name}."]
+            # 获取用户配置的提示词模板，如果没有则使用默认模板
+            prompt_template = image_gen_config.get('prompt_template', '').strip()
+            if not prompt_template:
+                prompt_template = "Create an anime-style character portrait of {character_name}."
 
-            if basic_info:
-                prompt_parts.append(f"Appearance: {basic_info}")
-            if personality:
-                prompt_parts.append(f"Personality: {personality}")
-            if description:
-                prompt_parts.append(f"Description: {description}")
+            # 替换模板中的占位符
+            image_prompt = prompt_template.format(
+                character_name=character_name,
+                description=description or '',
+                personality=personality or '',
+                basic_info=basic_info or ''
+            )
 
-            # 添加风格和质量要求
-            prompt_parts.append("Style: High-quality anime illustration, detailed, vibrant colors, professional character art.")
-            prompt_parts.append("Format: Portrait orientation, upper body or bust shot, clean background or simple gradient.")
+            # 添加额外的角色信息（如果模板中没有包含）
+            additional_info = []
+            if basic_info and '{basic_info}' not in prompt_template:
+                additional_info.append(f"Appearance: {basic_info}")
+            if personality and '{personality}' not in prompt_template:
+                additional_info.append(f"Personality: {personality}")
+            if description and '{description}' not in prompt_template:
+                additional_info.append(f"Description: {description}")
 
-            image_prompt = " ".join(prompt_parts)
+            if additional_info:
+                image_prompt += " " + " ".join(additional_info)
+
+            # 添加风格和质量要求（如果模板中没有包含风格相关关键词）
+            style_keywords = ['style', 'quality', 'format', 'anime', 'illustration', 'art']
+            if not any(keyword in prompt_template.lower() for keyword in style_keywords):
+                image_prompt += " Style: High-quality anime illustration, detailed, vibrant colors, professional character art."
+                image_prompt += " Format: Portrait orientation, upper body or bust shot, clean background or simple gradient."
 
             # 调用图片生成API
             import requests
