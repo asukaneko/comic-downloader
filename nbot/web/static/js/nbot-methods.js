@@ -3913,6 +3913,7 @@ def main(params):
 
                 closeApiKeyManager() {
                     this.showApiKeyManager = false;
+                    this.viewingApiKeyIds = [];
                     this.resetApiKeyForm();
                 },
 
@@ -3928,8 +3929,32 @@ def main(params):
                     this.apiKeyForm = {
                         id: key.id,
                         name: key.name,
-                        key: '' // 不显示已有的key值
+                        key: ''
                     };
+                },
+
+                // 切换 API Key 值的查看/隐藏
+                async toggleApiKeyValue(keyId) {
+                    const idx = this.viewingApiKeyIds.indexOf(keyId);
+                    if (idx === -1) {
+                        // 展开时从后端获取完整 key 值
+                        try {
+                            const res = await api.get(`/api/api-keys/${keyId}`);
+                            if (res.data?.key) {
+                                const targetKey = this.apiKeys.find(k => k.id === keyId);
+                                if (targetKey) {
+                                    targetKey._fullKey = res.data.key.key;
+                                }
+                            }
+                        } catch (e) {
+                            console.error('获取 API Key 失败:', e);
+                            this.showToast('获取 Key 值失败', 'error');
+                            return;
+                        }
+                        this.viewingApiKeyIds.push(keyId);
+                    } else {
+                        this.viewingApiKeyIds.splice(idx, 1);
+                    }
                 },
 
                 async saveApiKey() {
