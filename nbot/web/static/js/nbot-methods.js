@@ -9789,12 +9789,16 @@ def main(params):
                     this.isRegeneratingOpening = true;
 
                     try {
-                        // 调用 AI 生成新的开场白
+                        // 根据会话关联的角色名，从预设库中找到对应角色的完整设定
+                        const charName = this.currentSession?.sender_name || this.personality.name || '';
+                        const matchedPreset = this.customPersonalityPresets?.find(
+                            p => p.name === charName || p.sender_name === charName
+                        );
                         const res = await api.post('/api/personality/ai-generate-first-message', {
-                            name: this.personality.name || this.currentSession.sender_name || '',
-                            basicInfo: this.personality.basicInfo || '',
-                            personality: this.personality.personality || '',
-                            scenario: this.personality.scenario || this.currentSession.scenario || '',
+                            name: charName,
+                            basicInfo: matchedPreset?.basicInfo || this.personality.basicInfo || '',
+                            personality: matchedPreset?.personality || this.personality.personality || '',
+                            scenario: this.currentSession?.scenario || matchedPreset?.scenario || this.personality.scenario || '',
                         });
 
                         if (res.data?.firstMessage) {
