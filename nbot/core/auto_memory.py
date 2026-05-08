@@ -182,6 +182,7 @@ def _call_memory_model(user_message: str, assistant_message: str) -> List[Dict[s
     from nbot.core.model_adapter import (
         build_chat_completion_payload,
         normalize_chat_completion_data,
+        response_json_utf8,
         resolve_chat_completion_url,
     )
     from nbot.services.ai import refresh_runtime_ai_config
@@ -232,7 +233,7 @@ def _call_memory_model(user_message: str, assistant_message: str) -> List[Dict[s
     response = requests.post(url, json=payload, headers=headers, timeout=60)
     response.raise_for_status()
     normalized = normalize_chat_completion_data(
-        response.json(),
+        response_json_utf8(response),
         base_url=base_url,
         model=model,
         provider_type=provider_type,

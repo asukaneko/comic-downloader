@@ -235,6 +235,7 @@ class PipelineCallbacks(ABC):
         from nbot.core.model_adapter import (
             build_chat_completion_payload,
             normalize_chat_completion_data,
+            response_json_utf8,
             resolve_chat_completion_url,
         )
         import requests
@@ -266,7 +267,7 @@ class PipelineCallbacks(ABC):
             resp = requests.post(url, json=payload, headers=headers, timeout=120)
             resp.raise_for_status()
             normalized = normalize_chat_completion_data(
-                resp.json(),
+                response_json_utf8(resp),
                 base_url=base_url,
                 model=model,
                 provider_type=provider_type,

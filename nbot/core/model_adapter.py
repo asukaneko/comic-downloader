@@ -43,6 +43,49 @@ class NormalizedModelResponse:
         return data
 
 
+def _text_quality_score(text: str) -> int:
+    cjk_count = sum(1 for char in text if "\u4e00" <= char <= "\u9fff")
+    common_punctuation_count = sum(1 for char in text if char in "，。！？：（）【】《》、")
+    suspicious_count = sum(
+        text.count(marker)
+        for marker in ("Ã", "Â", "â", "ï¼", "ð", "�", "\x80", "\x81", "\x82", "\x83", "\x84", "\x85", "\x86", "\x87", "\x88", "\x89", "\x8a", "\x8b", "\x8c", "\x8d", "\x8e", "\x8f", "\x90", "\x91", "\x92", "\x93", "\x94", "\x95", "\x96", "\x97", "\x98", "\x99", "\x9a", "\x9b", "\x9c", "\x9d", "\x9e", "\x9f")
+    )
+    return cjk_count * 3 + common_punctuation_count - suspicious_count * 4
+
+
+def repair_mojibake_text(text: str) -> str:
+    """Repair text that was UTF-8 decoded as Latin-1/CP1252 by misconfigured APIs."""
+    if not isinstance(text, str) or not text:
+        return text
+
+    suspicious_markers = ("Ã", "Â", "â", "ï¼", "ð", "�")
+    has_control_mojibake = any("\x80" <= char <= "\x9f" for char in text)
+    if not has_control_mojibake and not any(marker in text for marker in suspicious_markers):
+        return text
+
+    best = text
+    best_score = _text_quality_score(text)
+    for source_encoding in ("latin-1", "cp1252"):
+        try:
+            candidate = text.encode(source_encoding).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+        candidate_score = _text_quality_score(candidate)
+        if candidate_score > best_score:
+            best = candidate
+            best_score = candidate_score
+    return best
+
+
+def response_json_utf8(response) -> Dict[str, Any]:
+    """Parse API JSON as UTF-8 regardless of missing or wrong charset headers."""
+    try:
+        return json.loads(response.content.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+        response.encoding = "utf-8"
+        return response.json()
+
+
 def infer_provider_profile(
     base_url: str = "",
     model: str = "",
@@ -335,9 +378,9 @@ def normalize_chat_completion_data(
     choice = choices[0] or {}
     message = choice.get("message") or {}
     finish_reason = choice.get("finish_reason") or ""
-    content = message.get("content") or ""
+    content = repair_mojibake_text(message.get("content") or "")
     tool_calls = parse_tool_calls(message)
-    thinking_content = extract_reasoning_content(message, profile)
+    thinking_content = repair_mojibake_text(extract_reasoning_content(message, profile))
 
     if not tool_calls and fallback_tool_parser and "[TOOL_CALL]" in content and "[/TOOL_CALL]" in content:
         parsed_calls = fallback_tool_parser(content)

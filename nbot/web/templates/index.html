@@ -2660,6 +2660,7 @@
                                                 <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
                                                 <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-archive'"></i>
                                             </div>
+                                            <span v-if="mem.character_name" class="memory-character-tag">{{ mem.character_name }}</span>
                                             <div class="memory-item-title">{{ mem.title || mem.key }}</div>
                                             <div class="memory-item-actions" @click.stop>
                                                 <button class="btn-icon" @click="editMemory(mem)" title="编辑">
@@ -2680,9 +2681,6 @@
                                                 <span><i class="fas fa-sync"></i> {{ formatFullTime(mem.updated_at) }}</span>
                                                 <span class="memory-priority" :class="mem.priority || 'normal'">
                                                     {{ getPriorityLabel(mem.priority) }}
-                                                </span>
-                                                <span v-if="mem.character_name" class="memory-character" style="background: var(--accent-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
-                                                    <i class="fas fa-user-circle"></i> {{ mem.character_name }}
                                                 </span>
                                                 <span v-if="mem.target_id" class="memory-target">
                                                     <i class="fas fa-link"></i> {{ getSessionNameById(mem.target_id) }}
@@ -2715,6 +2713,7 @@
                                                 <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
                                                 <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-clock'"></i>
                                             </div>
+                                            <span v-if="mem.character_name" class="memory-character-tag">{{ mem.character_name }}</span>
                                             <div class="memory-item-title">{{ mem.title || mem.key }}</div>
                                             <div class="memory-item-actions" @click.stop>
                                                 <button class="btn-icon" @click="promoteToLongTerm(mem)" title="转为长期记忆">
@@ -2737,9 +2736,6 @@
                                                 <span><i class="fas fa-calendar"></i> {{ formatFullTime(mem.created_at) }}</span>
                                                 <span><i class="fas fa-hourglass-half"></i> 有效期: {{ mem.expire_days || 7 }}天</span>
                                                 <span v-if="isMemoryExpired(mem)" class="memory-expired-badge">已过期</span>
-                                                <span v-if="mem.character_name" class="memory-character" style="background: var(--accent-primary); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
-                                                    <i class="fas fa-user-circle"></i> {{ mem.character_name }}
-                                                </span>
                                                 <span v-if="mem.target_id" class="memory-target">
                                                     <i class="fas fa-link"></i> {{ getSessionNameById(mem.target_id) }}
                                                 </span>

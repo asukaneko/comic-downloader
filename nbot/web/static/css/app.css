@@ -3325,6 +3325,27 @@
             color: #60a5fa;
         }
 
+        .memory-character-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 10px;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+            color: #a5b4fc;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        [data-theme="light"] .memory-character-tag {
+            background: rgba(99, 102, 241, 0.08);
+            border-color: rgba(99, 102, 241, 0.18);
+            color: #4f46e5;
+        }
+
         .memory-item-title {
             flex: 1;
             font-weight: 500;

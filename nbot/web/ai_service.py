@@ -18,7 +18,9 @@ from nbot.core import (
     extract_tool_call_history,
     normalize_chat_completion_data,
     prepare_chat_context,
+    repair_mojibake_text,
     resolve_chat_completion_url,
+    response_json_utf8,
     ToolLoopExit,
     ToolLoopHooks,
     ToolLoopSession,
@@ -665,7 +667,7 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
     resp = requests.post(url, json=payload, headers=headers, timeout=120)
     resp.raise_for_status()
     normalized = normalize_chat_completion_data(
-        resp.json(),
+        response_json_utf8(resp),
         base_url=base_url, model=model, provider_type=provider_type,
     )
     return normalized.to_dict()
@@ -717,9 +719,10 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
                 return raw[overlap:]
         return raw
 
-    for line in resp.iter_lines(decode_unicode=True):
+    for raw_line in resp.iter_lines(decode_unicode=False):
         if stop_event and stop_event.is_set():
             break
+        line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
         if line and line.startswith("data: "):
             data_str = line[6:]
             if data_str.strip() == "[DONE]":
@@ -728,7 +731,7 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
                 data = json.loads(data_str)
                 choices = data.get("choices", [{}])
                 delta = choices[0].get("delta", {})
-                raw = delta.get("content", "")
+                raw = repair_mojibake_text(delta.get("content", ""))
                 if raw:
                     chunk = normalize_chunk(raw)
                     if chunk:
@@ -1247,7 +1250,7 @@ def get_ai_response_with_images(
 
         response = requests.post(url, json=payload, headers=headers, timeout=120)
         response.raise_for_status()
-        data = response.json()
+        data = response_json_utf8(response)
 
         if not data.get("choices"):
             return "图片处理返回结果为空。"
@@ -1394,7 +1397,7 @@ server,
                                 timeout=api_timeout,
                             )
                             resp.raise_for_status()
-                            result_container["data"] = resp.json()
+                            result_container["data"] = response_json_utf8(resp)
                         except Exception as e:
                             result_container["error"] = e
 
@@ -1544,7 +1547,7 @@ server,
                                 timeout=api_timeout,
                             )
                             resp.raise_for_status()
-                            result_container["data"] = resp.json()
+                            result_container["data"] = response_json_utf8(resp)
                         except Exception as e:
                             result_container["error"] = e
 

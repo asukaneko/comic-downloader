@@ -9,7 +9,9 @@ import imageio.v2 as imageio
 from nbot.core import (
     build_chat_completion_payload,
     normalize_chat_completion_data,
+    repair_mojibake_text,
     resolve_chat_completion_url,
+    response_json_utf8,
 )
 from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.web.utils.config_loader import (
@@ -181,6 +183,7 @@ class AIClient:
     def clean_response(content: str) -> str:
         if not content:
             return ""
+        content = repair_mojibake_text(content)
         content = content.strip()
         if content.startswith("```json"):
             content = content[7:]
@@ -227,10 +230,10 @@ class AIClient:
                 # 非流式响应模式
                 resp = requests.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = response_json_utf8(resp)
                 
                 parsed = parse_anthropic_response(data)
-                content = parsed["content"]
+                content = repair_mojibake_text(parsed["content"])
                 usage = parsed.get("usage", {})
                 
                 Message = type("Message", (), {})
@@ -277,7 +280,7 @@ class AIClient:
                 # 非流式响应模式
                 resp = requests.post(url, json=payload, headers=headers)
                 resp.raise_for_status()
-                data = resp.json()
+                data = response_json_utf8(resp)
 
                 if not data.get("choices"):
                     print(f"[DEBUG] API响应没有choices: {data}")
@@ -336,7 +339,7 @@ class AIClient:
                 choices = data.get("choices", [])
                 if choices:
                     delta = choices[0].get("delta", {})
-                    content = delta.get("content", "")
+                    content = repair_mojibake_text(delta.get("content", ""))
                     if content:
                         yield content
             except json.JSONDecodeError:
@@ -369,7 +372,7 @@ class AIClient:
                 parsed = parse_anthropic_stream_chunk(data)
                 
                 if parsed and parsed.get("type") == "content":
-                    yield parsed.get("content", "")
+                    yield repair_mojibake_text(parsed.get("content", ""))
             except json.JSONDecodeError:
                 continue
 
@@ -395,7 +398,9 @@ class AIClient:
             "model": model_name,
             "messages": messages
         }
-        return requests.post(url, json=payload, headers=headers)
+        response = requests.post(url, json=payload, headers=headers)
+        response.encoding = "utf-8"
+        return response
 
     def describe_image(self, image_url: str, text: str = None) -> str:
         print(f"[图片识别] 开始识别图片, URL: {image_url[:80]}{'...(base64已省略)' if image_url.startswith('data:') and len(image_url) > 80 else ''}")
@@ -440,7 +445,7 @@ class AIClient:
                 )
                 response = requests.post(url, json=payload, headers=headers, timeout=60)
                 response.raise_for_status()
-                result = self.clean_response(response.json()["choices"][0]["message"]["content"])
+                result = self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
                 print(f"[图片识别] 识别成功(使用配置模型), 结果: {result[:100]}...")
                 return result
             except Exception as e:
@@ -458,7 +463,7 @@ class AIClient:
         ]
         response = self.silicon_chat(self.pic_model, messages)
         try:
-            result = self.clean_response(response.json()["choices"][0]["message"]["content"])
+            result = self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
             print(f"[图片识别] 识别成功, 结果: {result[:100]}...")
             return result
         except Exception as e:
@@ -537,7 +542,7 @@ class AIClient:
 
             response = self.silicon_chat(self.pic_model, messages)
             try:
-                return self.clean_response(response.json()["choices"][0]["message"]["content"])
+                return self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
             except Exception:
                 return "解析失败"
         except Exception:
@@ -565,7 +570,7 @@ class AIClient:
         ]
         response = self.silicon_chat(self.model, messages)
         try:
-            return self.clean_response(response.json()["choices"][0]["message"]["content"])
+            return self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
         except Exception:
             return "链接失效"
 
@@ -583,7 +588,7 @@ class AIClient:
         ]
         response = self.silicon_chat(self.model, messages)
         try:
-            return self.clean_response(response.json()["choices"][0]["message"]["content"])
+            return self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
         except Exception:
             return ""
 
@@ -601,7 +606,7 @@ class AIClient:
         ]
         try:
             response = self.silicon_chat("Qwen/Qwen2.5-7B-Instruct", messages)
-            result = response.json()
+            result = response_json_utf8(response)
             print(f"[DEBUG] should_search API响应: {result}")
             return int(self.clean_response(result["choices"][0]["message"]["content"])) == 1
         except Exception as e:
@@ -643,7 +648,7 @@ class AIClient:
         }
         try:
             response = requests.post(self.search_api_url, headers=headers, json=data)
-            return str(response.json()["result"]["search_result"])
+            return str(response_json_utf8(response)["result"]["search_result"])
         except Exception:
             return ""
 
@@ -686,7 +691,7 @@ class AIClient:
             }
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             response.raise_for_status()
-            result = self.clean_response(response.json()["choices"][0]["message"]["content"])
+            result = self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
             print(f"[视频识别] 识别成功, 结果: {result[:100]}...")
             return result
         except Exception as e:

@@ -79,6 +79,8 @@ from nbot.core.model_adapter import (
     normalize_chat_completion_data,
     parse_tool_call_arguments,
     parse_tool_calls,
+    repair_mojibake_text,
+    response_json_utf8,
     resolve_chat_completion_url,
 )
 
@@ -151,6 +153,8 @@ __all__ = [
     'normalize_chat_completion_data',
     'parse_tool_call_arguments',
     'parse_tool_calls',
+    'repair_mojibake_text',
+    'response_json_utf8',
     'resolve_chat_completion_url',
     'QQSessionStore',
     'WebSessionStore',
