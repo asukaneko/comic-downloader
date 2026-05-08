@@ -4186,11 +4186,23 @@
             align-items: center;
             justify-content: center;
             font-size: 16px;
+            overflow: hidden;
+        }
+
+        .session-icon.has-portrait {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .session-item.active .session-icon {
             background: var(--accent-primary);
             color: white;
+        }
+
+        .session-item.active .session-icon.has-portrait {
+            background: transparent;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
         }
 
         .session-info { flex: 1; min-width: 0; }
@@ -13305,7 +13317,8 @@
             opacity: 0;
             transition: opacity .2s;
         }
-        .message:hover .msg-actions {
+        .message:hover .msg-actions,
+        .msg-actions.msg-actions-always {
             opacity: 1;
         }
         .msg-action-btn {

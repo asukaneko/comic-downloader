@@ -650,8 +650,13 @@
                                     }"
                                     @click="openSession(session)"
                                 >
-                                    <div class="session-icon">
-                                        <i :class="session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'"></i>
+                                    <div class="session-icon" :class="{ 'has-portrait': session.sender_portrait }">
+                                        <!-- 有立绘时显示立绘 -->
+                                        <img v-if="session.sender_portrait" :src="session.sender_portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
+                                        <!-- 无立绘有头像时显示头像图标 -->
+                                        <i v-else-if="session.sender_avatar" :class="session.sender_avatar"></i>
+                                        <!-- 都没有则显示默认图标 -->
+                                        <i v-else :class="session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'"></i>
                                     </div>
                                     <div class="session-info">
                                         <div class="session-name">{{ session.name }}</div>
@@ -1115,14 +1120,17 @@
                                                     </button>
                                                 </div>
                                                 <!-- 消息操作栏（只对 assistant 消息显示） -->
-                                                <div v-if="msg.role === 'assistant'" class="msg-actions">
+                                                <div v-if="msg.role === 'assistant'" class="msg-actions" :class="{ 'msg-actions-always': isOpeningMessage(msg) }">
                                                     <button class="msg-action-btn" @click="copyMessage(msg)" title="复制">
                                                         <i class="fas fa-copy"></i>
                                                     </button>
-                                                    <button class="msg-action-btn" @click="regenerateMessage(msg)" title="重新生成">
+                                                    <button v-if="isOpeningMessage(msg)" class="msg-action-btn" @click="regenerateOpeningMessage(msg)" title="重新生成开场白" :disabled="isRegeneratingOpening">
+                                                        <i class="fas fa-redo" :class="{ 'fa-spin': isRegeneratingOpening }"></i>
+                                                    </button>
+                                                    <button v-else class="msg-action-btn" @click="regenerateMessage(msg)" title="重新生成">
                                                         <i class="fas fa-redo"></i>
                                                     </button>
-                                                    <button class="msg-action-btn" @click="forkSessionFromMessage(msg)" title="从此 Fork">
+                                                    <button v-if="!isOpeningMessage(msg)" class="msg-action-btn" @click="forkSessionFromMessage(msg)" title="从此 Fork">
                                                         <i class="fas fa-code-branch"></i>
                                                     </button>
                                                     <button v-if="msg.can_continue && currentMessages.indexOf(msg) === currentMessages.length - 1" class="msg-action-btn continue-btn" 
@@ -1209,9 +1217,9 @@
                                     
                                     <!-- 机器人正在输入动画（仅在无进度卡片或进度卡片关闭时显示） -->
                                     <div v-if="isTyping && (!showThinkingCard || !currentMessages.some(m => m.thinking_cards && m.thinking_cards.length > 0))" class="message assistant dragon-bone-message">
-                                        <div class="message-avatar" :class="{ 'has-portrait': personality.portrait }" @click="personality.portrait ? viewPortrait(personality.portrait) : null">
-                                            <img v-if="personality.portrait" :src="personality.portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
-                                            <i v-else :class="personality.avatar || 'fas fa-robot'"></i>
+                                        <div class="message-avatar" :class="{ 'has-portrait': currentSession.sender_portrait }" @click="currentSession.sender_portrait ? viewPortrait(currentSession.sender_portrait) : null">
+                                            <img v-if="currentSession.sender_portrait" :src="currentSession.sender_portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                            <i v-else :class="currentSession.sender_avatar || 'fas fa-robot'"></i>
                                         </div>
                                         <div class="message-content">
                                             <div class="dragon-bone-loading">
@@ -6685,6 +6693,7 @@
                     activeCommandSuggestionIndex: 0,
                     uploadedFiles: [],
                     isTyping: false,
+                    isRegeneratingOpening: false,
                     thinkingCards: [],  // 进度卡片列表
                     showThinkingCard: localStorage.getItem('showThinkingCard') === 'true',  // 是否显示进度卡片（默认关闭）
                     orphanCards: {},  // 找不到父消息的孤儿卡片（按 parentMsgId 分组）

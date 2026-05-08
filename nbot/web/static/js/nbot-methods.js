@@ -9715,6 +9715,66 @@ def main(params):
                     }
                 },
 
+                // 判断消息是否为开场白（第一条 assistant 消息，且前面没有 user 消息）
+                isOpeningMessage(msg) {
+                    if (msg.role !== 'assistant') return false;
+                    const index = this.currentMessages.findIndex(m => m.id === msg.id);
+                    if (index === -1) return false;
+                    for (let i = 0; i < index; i++) {
+                        if (this.currentMessages[i].role === 'user') return false;
+                    }
+                    return true;
+                },
+
+                // 重新生成开场白消息
+                async regenerateOpeningMessage(msg) {
+                    if (!this.currentSession || !msg?.id) {
+                        this.showToast('无法定位开场白消息', 'error');
+                        return;
+                    }
+                    if (this.isRegeneratingOpening) return;
+                    this.isRegeneratingOpening = true;
+
+                    try {
+                        // 调用 AI 生成新的开场白
+                        const res = await api.post('/api/personality/ai-generate-first-message', {
+                            name: this.personality.name || this.currentSession.sender_name || '',
+                            basicInfo: this.personality.basicInfo || '',
+                            personality: this.personality.personality || '',
+                            scenario: this.personality.scenario || this.currentSession.scenario || '',
+                        });
+
+                        if (res.data?.firstMessage) {
+                            let newContent = res.data.firstMessage;
+                            // 替换模板变量
+                            const userName = this.username || '';
+                            const charName = this.currentSession.sender_name || this.personality.name || '';
+                            if (userName) newContent = newContent.replace(/\{\{user\}\}/g, userName);
+                            if (charName) newContent = newContent.replace(/\{\{char\}\}/g, charName);
+
+                            // 更新前端消息内容
+                            const targetMsg = this.currentMessages.find(m => m.id === msg.id);
+                            if (targetMsg) {
+                                targetMsg.content = newContent;
+                            }
+
+                            // 持久化到后端
+                            await api.put(`/api/sessions/${this.currentSession.id}/messages/${msg.id}`, {
+                                content: newContent,
+                            });
+
+                            this.showToast('开场白已重新生成', 'success');
+                        } else {
+                            this.showToast('生成开场白失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('重新生成开场白失败:', e);
+                        this.showToast(e.response?.data?.error || '重新生成开场白失败', 'error');
+                    } finally {
+                        this.isRegeneratingOpening = false;
+                    }
+                },
+
                 async forkSessionFromMessage(msg) {
                     if (!this.currentSession || !msg?.id) {
                         this.showToast('无法定位要分支的回复', 'error');

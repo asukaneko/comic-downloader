@@ -189,9 +189,11 @@ def register_session_routes(app, server):
             if char_name:
                 first_message = first_message.replace('{{char}}', char_name)
             session["messages"].append({
+                "id": str(uuid.uuid4()),
                 "role": "assistant",
                 "content": first_message,
-                "sender": sender_name
+                "sender": sender_name,
+                "timestamp": datetime.now().isoformat(),
             })
         
         # 获取背景设定，存储在会话中用于前端展示
@@ -568,6 +570,31 @@ def register_session_routes(app, server):
 
         session_store.append_message(session_id, message)
         return jsonify(message)
+
+    @app.route("/api/sessions/<session_id>/messages/<message_id>", methods=["PUT"])
+    def update_message(session_id, message_id):
+        """更新单条消息的内容（用于开场白重新生成等场景）"""
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        data = request.json
+        messages = session.get("messages", [])
+
+        target = None
+        for msg in messages:
+            if str(msg.get("id", "")) == str(message_id):
+                target = msg
+                break
+
+        if not target:
+            return jsonify({"error": "Message not found"}), 404
+
+        if "content" in data:
+            target["content"] = data["content"]
+
+        session_store.set_session(session_id, session)
+        return jsonify({"success": True, "message": target})
 
     @app.route("/api/sessions/<session_id>/messages", methods=["DELETE"])
     def clear_messages(session_id):
