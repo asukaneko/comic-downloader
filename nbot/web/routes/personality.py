@@ -91,71 +91,12 @@ def _post_card_to_platform(server, character):
 
 
 def compile_personality_prompt(personality_data, session_context=None, user_name=None):
-    """将角色卡JSON编译成系统提示词，支持 {{user}} 模板变量"""
-    prompt = ''
+    """将角色卡JSON编译成系统提示词，支持 {{user}} 模板变量
 
-    name = personality_data.get('name', '')
-    basic_info = personality_data.get('basicInfo', '')
-    personality = personality_data.get('personality', '')
-    scenario = personality_data.get('scenario', '')
-    response_format = personality_data.get('responseFormat', '')
-    rules = personality_data.get('rules', [])
-    example_dialogues = personality_data.get('exampleDialogues', '')
-
-    # 角色设定部分
-    if name:
-        prompt += f'【角色名称】{name}\n'
-    if basic_info:
-        prompt += f'【基本信息】\n{basic_info}\n'
-    if personality:
-        prompt += f'【性格特点】{personality}\n'
-    if scenario:
-        prompt += f'【背景设定】{scenario}\n'
-    if response_format:
-        prompt += f'【回复格式】{response_format}\n'
-    if rules and len(rules) > 0:
-        prompt += '【行为规则】\n'
-        for i, rule in enumerate(rules, 1):
-            if rule:
-                prompt += f'{i}. {rule}\n'
-    if example_dialogues:
-        prompt += f'【示例对话】\n{example_dialogues}\n'
-
-    # 会话上下文
-    if session_context:
-        prompt += '\n【当前会话上下文】\n'
-        if 'session_name' in session_context:
-            prompt += f"会话名称: {session_context['session_name']}\n"
-        if 'current_time' in session_context:
-            prompt += f"当前时间: {session_context['current_time']}\n"
-        if 'user_info' in session_context:
-            prompt += f"用户信息: {session_context['user_info']}\n"
-        if 'recent_messages' in session_context:
-            prompt += "近期对话:\n"
-            for msg in session_context['recent_messages']:
-                prompt += f"  {msg}\n"
-
-    # 角色状态
-    state = personality_data.get('state', {})
-    if state:
-        prompt += '\n【角色当前状态】\n'
-        if 'affection' in state:
-            prompt += f"好感度: {state['affection']}/100\n"
-        if 'mood' in state:
-            prompt += f"心情: {state['mood']}\n"
-
-    if prompt:
-        prompt = f'你是角色 "{name or "未命名"}"。\n\n' + prompt
-    else:
-        prompt = '请定义你的角色设定。'
-
-    # 替换模板变量 {{user}} -> 当前用户名, {{char}} -> 角色名称
-    if user_name:
-        prompt = prompt.replace('{{user}}', user_name)
-    if name:
-        prompt = prompt.replace('{{char}}', name)
-
-    return prompt
+    委托给 nbot.character.compiler 实现，保持旧接口签名不变。
+    """
+    from nbot.character.compiler import compile_personality_prompt as _compile
+    return _compile(personality_data, session_context=session_context, user_name=user_name)
 
 
 def register_personality_routes(app, server):

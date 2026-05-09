@@ -58,6 +58,9 @@ class PipelineContext:
     # === 流式状态 ===
     streamed_message: Optional[Dict[str, Any]] = None
 
+    # === 角色运行时 ===
+    character_turn: Any = None
+
     # === 结果 ===
     final_content: str = ""
     stopped_prematurely: bool = False
@@ -67,6 +70,19 @@ class PipelineContext:
     usage: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        """延迟初始化 PromptStack，避免循环导入"""
+        if not hasattr(self, '_prompt_stack'):
+            from nbot.character.prompt_stack import PromptStack
+            self._prompt_stack = PromptStack()
+
+    @property
+    def prompt_stack(self):
+        if not hasattr(self, '_prompt_stack'):
+            from nbot.character.prompt_stack import PromptStack
+            self._prompt_stack = PromptStack()
+        return self._prompt_stack
 
 
 @dataclass
@@ -361,6 +377,16 @@ class PipelineCallbacks(ABC):
         """AI 响应完成后的回调。"""
         pass
 
+    # ---- 角色运行时 ----
+
+    def get_character_context(self, ctx: PipelineContext):
+        """返回角色身份标识 (CharacterIdentity)，默认 None 表示不启用角色运行时。"""
+        return None
+
+    def get_character_runtime(self, ctx: PipelineContext):
+        """返回 CharacterRuntime 实例，默认 None。"""
+        return None
+
 
 # ============================================================================
 # AIPipeline 主类
@@ -463,6 +489,10 @@ class AIPipeline:
 
         # Phase 5: 结果组装
         result = self._phase_assemble_result(ctx, callbacks)
+
+        # Phase 5.5: 角色运行时 after_turn
+        self._phase_character_runtime_after_turn(ctx, callbacks, result)
+
         self._phase_auto_memory(ctx, callbacks, result)
         callbacks.on_response_complete(ctx, result)
 
@@ -527,6 +557,7 @@ class AIPipeline:
         max_context_chars: int,
     ) -> None:
         from nbot.core.agent_service import prepare_chat_context
+        from nbot.character.prompt_stack import split_system_prompt
 
         # 加载消息历史
         messages_raw = callbacks.load_messages(ctx)
@@ -543,7 +574,6 @@ class AIPipeline:
             for fc in ctx.file_contents:
                 if fc:
                     enhanced_content += "\n\n" + fc
-            # 找到最后一条 user 消息并更新
             for msg in reversed(messages_for_ai):
                 if msg.get("role") == "user":
                     msg["content"] = enhanced_content
@@ -559,11 +589,21 @@ class AIPipeline:
                     )
                     break
 
-        # 注入跨会话角色记忆
+        # 分离原有 system prompt 和历史消息
+        base_prompt, history_messages = split_system_prompt(messages_for_ai)
+
+        # 知识库注入 → PromptStack
+        if ctx.knowledge_text:
+            ctx.prompt_stack.add(
+                "knowledge.rag",
+                ctx.knowledge_text,
+                priority=70,
+            )
+
+        # 跨会话角色记忆注入 → PromptStack
         try:
             from nbot.core.auto_memory import (
                 build_memory_context,
-                inject_memories_into_messages,
                 load_character_memories,
             )
 
@@ -572,19 +612,116 @@ class AIPipeline:
                 memory_context.get("character_name", ""),
                 memory_context.get("target_id", ""),
             )
-            inject_memories_into_messages(messages_for_ai, memory_text)
+            if memory_text:
+                ctx.prompt_stack.add(
+                    "character.memories_legacy",
+                    memory_text,
+                    priority=60,
+                )
         except Exception:
             pass
+
+        # 角色运行时 before_turn hook
+        self._phase_character_runtime_before_turn(ctx, callbacks)
+        if ctx.character_turn and getattr(ctx.character_turn, "memories", None):
+            ctx.prompt_stack.remove("character.memories_legacy")
+
+        # PromptStack 合成最终 system prompt
+        composed_system = ctx.prompt_stack.render(base_prompt)
+        messages_for_ai = [
+            {"role": "system", "content": composed_system},
+            *history_messages,
+        ]
+
+        # 将合成后的 system prompt 存入 metadata，供 on_response_complete 回写
+        ctx.metadata["composed_system_prompt"] = composed_system
+        ctx.metadata["prompt_stack_debug"] = ctx.prompt_stack.render_debug()
+
+        # 调试日志
+        _log.debug(
+            "[PromptStack] 本轮注入 keys: %s",
+            ctx.prompt_stack.keys,
+        )
 
         # 调用现有的上下文准备
         prepared = prepare_chat_context(
             messages_for_ai,
             user_content,
-            knowledge_text=ctx.knowledge_text,
+            knowledge_text="",
             max_total_chars=max_context_chars,
         )
         ctx.messages = prepared.messages
         ctx.tool_call_history = prepared.tool_call_history
+
+    # ------------------------------------------------------------------
+    # 角色运行时 hooks
+    # ------------------------------------------------------------------
+
+    def _phase_character_runtime_before_turn(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+    ) -> None:
+        """角色运行时 before_turn：读取状态、生成 ReactionPlan、注册 PromptStack 注入项"""
+        runtime = callbacks.get_character_runtime(ctx)
+        identity = callbacks.get_character_context(ctx)
+
+        if not runtime or not identity:
+            return
+
+        try:
+            turn = runtime.before_turn(ctx.chat_request, identity)
+            ctx.character_turn = turn
+
+            from nbot.character.prompt_builder import build_character_injections
+
+            build_character_injections(
+                ctx.prompt_stack,
+                profile=turn.profile,
+                state=turn.state,
+                relationship=turn.relationship,
+                memories=turn.memories,
+                plan=turn.plan,
+            )
+
+            _log.debug(
+                "[CharacterRuntime] before_turn: character=%s scope=%s",
+                identity.character_id,
+                identity.scope_id,
+            )
+        except Exception as exc:
+            _log.warning(
+                "[CharacterRuntime] before_turn 异常: %s", exc, exc_info=True
+            )
+
+    def _phase_character_runtime_after_turn(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+        result: PipelineResult,
+    ) -> None:
+        """角色运行时 after_turn：更新情绪、关系、写入事件、抽取记忆"""
+        runtime = callbacks.get_character_runtime(ctx)
+        identity = callbacks.get_character_context(ctx)
+
+        if not runtime or not identity or not ctx.character_turn:
+            return
+
+        try:
+            runtime.after_turn(
+                chat_request=ctx.chat_request,
+                result=result,
+                turn_context=ctx.character_turn,
+            )
+            _log.debug(
+                "[CharacterRuntime] after_turn: character=%s scope=%s",
+                identity.character_id,
+                identity.scope_id,
+            )
+        except Exception as exc:
+            _log.warning(
+                "[CharacterRuntime] after_turn 异常: %s", exc, exc_info=True
+            )
 
     def _phase_auto_memory(
         self,

@@ -91,7 +91,19 @@ def _merge_session_sources(db_sessions, json_sessions):
                 continue
 
             merged[session_id] = {**json_session, **db_session}
-            for key in ("name", "type", "created_at", "system_prompt", "user_id", "qq_id"):
+            for key in (
+                "name",
+                "type",
+                "created_at",
+                "system_prompt",
+                "user_id",
+                "qq_id",
+                "character_id",
+                "sender_name",
+                "sender_avatar",
+                "sender_portrait",
+                "scenario",
+            ):
                 if not merged[session_id].get(key) and json_session.get(key):
                     merged[session_id][key] = json_session[key]
         return merged
@@ -138,6 +150,8 @@ def _normalize_session_record(session_id, session):
         "messages": messages,
         "system_prompt": system_prompt or "",
     }
+    if not normalized.get("character_id") and normalized.get("sender_name"):
+        normalized["character_id"] = normalized["sender_name"]
     return normalized
 
 
@@ -304,6 +318,7 @@ def init_default_data(server):
             "memory": True,
             "auto_memory": True,
             "knowledge": True,
+            "skills_prompt_injection": False,
             "tts": False,
             "workflow": True,
             "web": True,
@@ -598,6 +613,10 @@ def load_all_data(server):
         if os.path.exists(settings_file):
             with open(settings_file, "r", encoding="utf-8") as f:
                 saved_settings = json.load(f)
+                if isinstance(saved_settings.get("features"), dict):
+                    merged_features = dict(server.settings.get("features") or {})
+                    merged_features.update(saved_settings["features"])
+                    saved_settings["features"] = merged_features
                 server.settings.update(saved_settings)
 
         # 加载登录 Token（持久化存储，重启后仍然有效）

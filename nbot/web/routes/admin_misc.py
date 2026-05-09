@@ -23,6 +23,18 @@ def _get_token_today(server) -> int:
 
 
 def register_admin_misc_routes(app, server):
+    def _normalize_settings():
+        if not isinstance(server.settings, dict):
+            server.settings = {}
+        default_features = {
+            "skills_prompt_injection": False,
+            "live2d": True,
+        }
+        features = dict(default_features)
+        features.update(server.settings.get("features") or {})
+        server.settings["features"] = features
+        return server.settings
+
     @app.route("/api/commands")
     def get_commands_catalog():
         try:
@@ -144,10 +156,11 @@ def register_admin_misc_routes(app, server):
 
     @app.route("/api/settings")
     def get_settings():
-        return jsonify(server.settings)
+        return jsonify(_normalize_settings())
 
     @app.route("/api/settings", methods=["PUT"])
     def update_settings():
+        _normalize_settings()
         data = request.json or {}
         if "features" in data and isinstance(data.get("features"), dict):
             merged_features = dict(server.settings.get("features") or {})
@@ -155,6 +168,7 @@ def register_admin_misc_routes(app, server):
             data = dict(data)
             data["features"] = merged_features
         server.settings.update(data)
+        _normalize_settings()
         server._save_data("settings")
         return jsonify({"success": True, "settings": server.settings})
 

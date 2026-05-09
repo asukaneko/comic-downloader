@@ -985,6 +985,9 @@
                                         <button class="btn-icon" @click="togglePushNotifications" :title="pushButtonTitle" :disabled="pushBusy">
                                             <i :class="pushSubscribed ? 'fas fa-bell' : 'far fa-bell'"></i>
                                         </button>
+                                        <button class="btn-icon" @click="toggleCharacterRuntimePanel" title="角色运行时">
+                                            <i class="fas fa-heartbeat"></i>
+                                        </button>
                                         <button class="btn-icon" @click="exportCurrentSession" title="导出会话" :disabled="isLoading">
                                             <i class="fas fa-file-export"></i>
                                         </button>
@@ -1001,6 +1004,70 @@
                                 </div>
 
                                 <div class="messages-container" ref="messagesContainer" :class="{ 'session-switching': sessionSwitching }" @scroll="handleMessagesScroll">
+                                    <div v-if="showCharacterRuntimePanel" class="character-runtime-panel">
+                                        <div class="character-runtime-panel-header">
+                                            <div>
+                                                <div class="character-runtime-title">
+                                                    <i class="fas fa-heartbeat"></i>
+                                                    角色运行时
+                                                </div>
+                                                <div class="character-runtime-subtitle" v-if="currentSession.character_runtime_snapshot">
+                                                    {{ currentSession.character_runtime_snapshot.mood || '未知' }} · {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}
+                                                </div>
+                                                <div class="character-runtime-subtitle" v-else>本会话还没有动态快照，聊一轮后会出现。</div>
+                                            </div>
+                                            <div class="character-runtime-actions">
+                                                <button class="btn btn-secondary btn-small" @click="refreshCurrentSessionRuntime" :disabled="isLoading">
+                                                    <i class="fas fa-sync-alt"></i> 刷新
+                                                </button>
+                                                <button class="btn-icon-small" @click="showCharacterRuntimePanel = false; localStorage.setItem('nbot_character_runtime_panel', 'false')" title="收起">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <template v-if="currentSession.character_runtime_snapshot">
+                                            <div class="character-runtime-stats">
+                                                <div class="runtime-stat">
+                                                    <label>心情</label>
+                                                    <strong>{{ currentSession.character_runtime_snapshot.mood }}</strong>
+                                                </div>
+                                                <div class="runtime-stat">
+                                                    <label>情绪强度</label>
+                                                    <strong>{{ Math.round((currentSession.character_runtime_snapshot.mood_intensity || 0) * 100) }}%</strong>
+                                                </div>
+                                                <div class="runtime-stat">
+                                                    <label>精力</label>
+                                                    <strong>{{ currentSession.character_runtime_snapshot.energy }}</strong>
+                                                </div>
+                                                <div class="runtime-stat">
+                                                    <label>好感</label>
+                                                    <strong>{{ currentSession.character_runtime_snapshot.affection }}</strong>
+                                                </div>
+                                                <div class="runtime-stat">
+                                                    <label>信任</label>
+                                                    <strong>{{ currentSession.character_runtime_snapshot.trust }}</strong>
+                                                </div>
+                                                <div class="runtime-stat">
+                                                    <label>安全感</label>
+                                                    <strong>{{ currentSession.character_runtime_snapshot.security }}</strong>
+                                                </div>
+                                            </div>
+                                            <div class="character-runtime-plan" v-if="currentSession.character_runtime_snapshot.visible_emotion || currentSession.character_runtime_snapshot.hidden_emotion">
+                                                <span><b>表面情绪</b> {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}</span>
+                                                <span v-if="currentSession.character_runtime_snapshot.hidden_emotion"><b>内心倾向</b> {{ currentSession.character_runtime_snapshot.hidden_emotion }}</span>
+                                            </div>
+                                        </template>
+                                        <div v-if="currentSession.prompt_stack_debug && currentSession.prompt_stack_debug.length" class="runtime-prompt-stack">
+                                            <div v-for="inj in currentSession.prompt_stack_debug" :key="inj.key" class="runtime-prompt-chip" :title="inj.content">
+                                                <span>#{{ inj.priority }}</span>
+                                                <code>{{ inj.key }}</code>
+                                            </div>
+                                        </div>
+                                        <details v-if="currentSession.system_prompt" class="runtime-system-prompt">
+                                            <summary>查看本轮系统提示词</summary>
+                                            <pre>{{ currentSession.system_prompt }}</pre>
+                                        </details>
+                                    </div>
                                     <!-- 背景设定卡片 -->
                                     <div v-if="currentSession?.scenario" class="scenario-card">
                                         <div class="scenario-badge">
@@ -4359,7 +4426,16 @@
                                                 <div class="toggle-slider"></div>
                                             </label>
                                         </div>
-                                        <!-- Live2D 看板娘 -->
+                                        <!-- Skills 提示词注入 -->
+                                        <div class="feature-switch-item" @click="settings.features.skills_prompt_injection = !settings.features.skills_prompt_injection">
+                                            <div class="feature-switch-info">
+                                                <i class="fas fa-wand-magic-sparkles feature-switch-icon"></i>
+                                                <span class="feature-switch-label">Skills 提示词注入</span>
+                                            </div>
+                                            <label class="toggle-switch" :class="{ active: settings.features.skills_prompt_injection }">
+                                                <div class="toggle-slider"></div>
+                                            </label>
+                                        </div>
                                         <div class="feature-switch-item" @click="toggleLive2d()">
                                             <div class="feature-switch-info">
                                                 <i class="fas fa-user-astronaut feature-switch-icon"></i>
@@ -5739,6 +5815,115 @@
                         </div>
                     </div>
 
+                    <!-- 角色运行时状态 -->
+                    <div class="form-section" v-if="viewingSession.character_runtime_snapshot">
+                        <div class="form-section-title">
+                            <i class="fas fa-heart" style="color: #ff6b9d;"></i> 角色运行时状态
+                        </div>
+                        <div class="detail-grid" style="grid-template-columns: repeat(3, 1fr);">
+                            <div class="detail-item">
+                                <label>心情</label>
+                                <span>{{ viewingSession.character_runtime_snapshot.mood }}</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>情绪强度</label>
+                                <span>{{ (viewingSession.character_runtime_snapshot.mood_intensity * 100).toFixed(0) }}%</span>
+                            </div>
+                            <div class="detail-item">
+                                <label>精力</label>
+                                <span>{{ viewingSession.character_runtime_snapshot.energy }}</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <div class="form-section-title" style="font-size: 13px;">关系状态</div>
+                            <div class="detail-grid" style="grid-template-columns: repeat(3, 1fr);">
+                                <div class="detail-item">
+                                    <label>好感</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                            <div :style="{ width: viewingSession.character_runtime_snapshot.affection + '%', height: '100%', background: 'linear-gradient(90deg, #ff6b9d, #ff4081)', borderRadius: '3px' }"></div>
+                                        </div>
+                                        <span style="font-size: 12px; min-width: 32px;">{{ viewingSession.character_runtime_snapshot.affection }}</span>
+                                    </div>
+                                </div>
+                                <div class="detail-item">
+                                    <label>信任</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                            <div :style="{ width: viewingSession.character_runtime_snapshot.trust + '%', height: '100%', background: 'linear-gradient(90deg, #4fc3f7, #2196f3)', borderRadius: '3px' }"></div>
+                                        </div>
+                                        <span style="font-size: 12px; min-width: 32px;">{{ viewingSession.character_runtime_snapshot.trust }}</span>
+                                    </div>
+                                </div>
+                                <div class="detail-item">
+                                    <label>熟悉</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                            <div :style="{ width: viewingSession.character_runtime_snapshot.familiarity + '%', height: '100%', background: 'linear-gradient(90deg, #81c784, #4caf50)', borderRadius: '3px' }"></div>
+                                        </div>
+                                        <span style="font-size: 12px; min-width: 32px;">{{ viewingSession.character_runtime_snapshot.familiarity }}</span>
+                                    </div>
+                                </div>
+                                <div class="detail-item">
+                                    <label>依赖</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                            <div :style="{ width: viewingSession.character_runtime_snapshot.dependency + '%', height: '100%', background: 'linear-gradient(90deg, #ce93d8, #9c27b0)', borderRadius: '3px' }"></div>
+                                        </div>
+                                        <span style="font-size: 12px; min-width: 32px;">{{ viewingSession.character_runtime_snapshot.dependency }}</span>
+                                    </div>
+                                </div>
+                                <div class="detail-item">
+                                    <label>安全感</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                            <div :style="{ width: viewingSession.character_runtime_snapshot.security + '%', height: '100%', background: 'linear-gradient(90deg, #ffb74d, #ff9800)', borderRadius: '3px' }"></div>
+                                        </div>
+                                        <span style="font-size: 12px; min-width: 32px;">{{ viewingSession.character_runtime_snapshot.security }}</span>
+                                    </div>
+                                </div>
+                                <div class="detail-item" v-if="viewingSession.character_runtime_snapshot.jealousy > 0">
+                                    <label>嫉妒</label>
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
+                                            <div :style="{ width: viewingSession.character_runtime_snapshot.jealousy + '%', height: '100%', background: 'linear-gradient(90deg, #ef5350, #d32f2f)', borderRadius: '3px' }"></div>
+                                        </div>
+                                        <span style="font-size: 12px; min-width: 32px;">{{ viewingSession.character_runtime_snapshot.jealousy }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px;" v-if="viewingSession.character_runtime_snapshot.visible_emotion">
+                            <div class="form-section-title" style="font-size: 13px;">本轮反应</div>
+                            <div class="detail-grid" style="grid-template-columns: repeat(2, 1fr);">
+                                <div class="detail-item">
+                                    <label>表面情绪</label>
+                                    <span>{{ viewingSession.character_runtime_snapshot.visible_emotion }}</span>
+                                </div>
+                                <div class="detail-item" v-if="viewingSession.character_runtime_snapshot.hidden_emotion">
+                                    <label>内心倾向</label>
+                                    <span style="color: var(--text-secondary);">{{ viewingSession.character_runtime_snapshot.hidden_emotion }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PromptStack 调试 -->
+                    <div class="form-section" v-if="viewingSession.prompt_stack_debug && viewingSession.prompt_stack_debug.length > 0">
+                        <div class="form-section-title">
+                            <i class="fas fa-layer-group" style="color: var(--accent-primary);"></i> 提示词注入栈
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 6px;">
+                            <div v-for="(inj, idx) in viewingSession.prompt_stack_debug" :key="idx"
+                                 style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 12px;">
+                                <span style="color: var(--text-tertiary); min-width: 24px;">#{{ inj.priority }}</span>
+                                <code style="color: var(--accent-primary); min-width: 160px;">{{ inj.key }}</code>
+                                <span style="color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ inj.content }}</span>
+                                <span class="badge" style="font-size: 10px;">{{ inj.scope }}</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- 原始数据 -->
                     <div class="form-section">
                         <div class="form-section-title">
@@ -6916,6 +7101,7 @@
                     isChatListCollapsed: localStorage.getItem('nbot_chat_list_collapsed') === 'true',
                     isChatHeaderHidden: localStorage.getItem('nbot_chat_header_hidden') === 'true',
                     showChatViewMenu: false,
+                    showCharacterRuntimePanel: localStorage.getItem('nbot_character_runtime_panel') === 'true',
                     chatHorizontalMargin: Math.min(300, Math.max(0, parseInt(localStorage.getItem('nbot_chat_horizontal_margin') || '0', 10) || 0)),
                     sessionSwitching: false,
                     sessionSearch: '',
@@ -7445,6 +7631,7 @@
                             tts: false,
                             workflow: true,
                             web: true,
+                            skills_prompt_injection: false,
                             live2d: true
                         },
                         onboarding: {

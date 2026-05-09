@@ -339,6 +339,9 @@ class WebCallbacks(PipelineCallbacks):
         return []
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:
+        session = self.session_store.get_session(self.session_id)
+        if session and session.get("system_prompt"):
+            return str(session.get("system_prompt") or "").strip()
         return str(
             getattr(self.server, "personality", {}).get("systemPrompt") or ""
         ).strip()
@@ -455,10 +458,10 @@ class WebCallbacks(PipelineCallbacks):
         target_id = ""
         session = self.session_store.get_session(self.session_id)
         if session:
-            character_name = session.get("sender_name", "")
+            character_name = session.get("character_id") or session.get("sender_name", "")
             target_id = session.get("user_id") or session.get("qq_id") or ""
-        # 如果会话中没有角色名，使用当前全局角色名
-        if not character_name:
+        # 只有拿不到会话时才回退到全局角色，避免旧会话被当前设置污染。
+        if not session and not character_name:
             character_name = getattr(self.server, "personality", {}).get("name", "")
 
         context = {"session_id": self.session_id, "session_type": "web"}
@@ -469,11 +472,67 @@ class WebCallbacks(PipelineCallbacks):
             context["character_name"] = character_name
         return context
 
+    # ---- 角色运行时 ----
+
+    def get_character_context(self, ctx):
+        """返回当前会话的角色身份标识"""
+        from nbot.character.adapters.nekobot import get_web_character_context
+        return get_web_character_context(
+            self.server, self.session_store, self.session_id
+        )
+
+    def get_character_runtime(self, ctx):
+        """返回 CharacterRuntime 实例"""
+        from nbot.character.adapters.nekobot import get_character_runtime_from_server
+        return get_character_runtime_from_server(self.server)
+
     # ---- 响应完成 ----
 
     def on_response_complete(self, ctx: PipelineContext, result) -> None:
-        """AI 响应完成后的回调，兜底触发自动命名"""
+        """AI 响应完成后的回调，兜底触发自动命名，并回写实时 system_prompt"""
         self._try_auto_name_session()
+        self._update_session_system_prompt(ctx)
+
+    def _update_session_system_prompt(self, ctx: PipelineContext):
+        """将 PromptStack 合成后的实时 system_prompt 回写到 session，供前端 i 按钮查看"""
+        try:
+            composed = ctx.metadata.get("composed_system_prompt")
+            if not composed:
+                return
+
+            session = self.session_store.get_session(self.session_id)
+            if not session:
+                return
+
+            session["system_prompt"] = composed
+
+            # 同时保存角色运行时调试信息
+            prompt_stack_debug = ctx.metadata.get("prompt_stack_debug")
+            if prompt_stack_debug:
+                session["prompt_stack_debug"] = prompt_stack_debug
+
+            # 保存角色运行时上下文摘要
+            if hasattr(ctx, 'character_turn') and ctx.character_turn:
+                from nbot.character.models import CharacterTurnContext
+                turn = ctx.character_turn
+                session["character_runtime_snapshot"] = {
+                    "mood": turn.state.mood,
+                    "mood_intensity": turn.state.mood_intensity,
+                    "energy": turn.state.energy,
+                    "affection": turn.relationship.affection,
+                    "trust": turn.relationship.trust,
+                    "familiarity": turn.relationship.familiarity,
+                    "dependency": turn.relationship.dependency,
+                    "security": turn.relationship.security,
+                    "jealousy": turn.relationship.jealousy,
+                    "plan_tone": turn.plan.tone,
+                    "visible_emotion": turn.plan.visible_emotion,
+                    "hidden_emotion": turn.plan.hidden_emotion,
+                }
+
+            self.session_store.set_session(self.session_id, session)
+        except Exception:
+            pass
 
     def _try_auto_name_session(self):
         """会话名称自动更新：首次命名 + 每隔一段对话更新"""
@@ -597,6 +656,7 @@ class WebCallbacks(PipelineCallbacks):
     def on_response_complete(self, ctx: PipelineContext, result: PipelineResult) -> None:
         # 自动重命名会话
         self._auto_rename_session(ctx)
+        self._update_session_system_prompt(ctx)
         # 文件变更卡片
         if ctx.round_file_changes:
             _emit_change_card(

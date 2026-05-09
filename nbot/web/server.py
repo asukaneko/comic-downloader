@@ -40,6 +40,7 @@ from nbot.web.routes import (
     register_api_key_routes,
     register_auth_routes,
     register_channel_routes,
+    register_character_routes,
     register_config_legacy_routes,
     register_file_routes,
     register_heartbeat_routes,
@@ -2317,6 +2318,7 @@ class WebChatServer:
         register_ai_model_routes(self.app, self)
         register_auth_routes(self.app, self)
         register_channel_routes(self.app, self)
+        register_character_routes(self.app, self)
         register_heartbeat_routes(self.app, self)
         register_knowledge_routes(self.app, self)
         register_live2d_routes(self.app, self)
@@ -2462,13 +2464,27 @@ class WebChatServer:
         else:
             # 替换模板变量 {{user}} -> 当前用户名
             system_prompt = system_prompt.replace('{{user}}', user_id or '')
+            system_prompt = system_prompt.replace('{{char}}', self.personality.get("name", ""))
+
+        sender_name = self.personality.get("name", "AI")
+        character_id = self.personality.get("id") or sender_name
 
         # 获取所有记忆（标题+摘要）并加入系统提示词
         memory_items = []
         try:
             if PROMPT_MANAGER_AVAILABLE and prompt_manager:
-                # 从 prompt_manager 获取所有记忆
-                all_memories = prompt_manager.get_memories()
+                # 从 prompt_manager 获取本会话角色的记忆
+                all_memories = []
+                seen_memory_keys = set()
+                for memory_character in [character_id, sender_name]:
+                    if not memory_character:
+                        continue
+                    for mem in prompt_manager.get_memories(character_name=memory_character):
+                        memory_key = mem.get("id") or mem.get("title") or mem.get("key") or repr(mem)
+                        if memory_key in seen_memory_keys:
+                            continue
+                        seen_memory_keys.add(memory_key)
+                        all_memories.append(mem)
                 for mem in all_memories:
                     # 兼容新旧格式：获取标题和摘要
                     title = mem.get("title", mem.get("key", ""))
@@ -2487,6 +2503,9 @@ class WebChatServer:
             elif self.memories:
                 # 从 self.memories 获取
                 for mem in self.memories:
+                    mem_character = mem.get("character_name", "")
+                    if mem_character and mem_character not in {character_id, sender_name}:
+                        continue
                     title = mem.get("title", mem.get("key", ""))
                     summary = mem.get("summary", "")
                     content = mem.get("content", mem.get("value", ""))
@@ -2508,8 +2527,13 @@ class WebChatServer:
             _log.info(f"已添加 {len(memory_items)} 个记忆到会话 {session_id[:8]}")
 
         # 添加 Skills 到系统提示词
-        enabled_skills = [s for s in self.skills_config if s.get("enabled", True)]
-        system_prompt += format_skills_prompt(self.skills_config)
+        features = (self.settings or {}).get("features") or {}
+        if features.get("skills_prompt_injection", False):
+            enabled_skills = [s for s in self.skills_config if s.get("enabled", True)]
+            system_prompt += format_skills_prompt(self.skills_config)
+            _log.info(f"已添加 {len(enabled_skills)} 个技能到会话 {session_id[:8]}")
+        else:
+            _log.info(f"Skills prompt injection disabled for session {session_id[:8]}")
 
         # 构建消息列表，包含系统提示词和开场白
         messages = [{"role": "system", "content": system_prompt}]
@@ -2521,7 +2545,7 @@ class WebChatServer:
             messages.append({
                 "role": "assistant", 
                 "content": first_message,
-                "sender": self.personality.get("name", "AI")
+                "sender": sender_name
             })
             _log.info(f"已添加开场白，来自角色: {self.personality.get('name', 'AI')}")
 
@@ -2533,6 +2557,10 @@ class WebChatServer:
             "created_at": datetime.now().isoformat(),
             "messages": messages,
             "system_prompt": system_prompt,
+            "character_id": character_id,
+            "sender_name": sender_name,
+            "sender_avatar": self.personality.get("avatar", ""),
+            "sender_portrait": self.personality.get("portrait", ""),
         }
 
         self.session_store.set_session(session_id, session)

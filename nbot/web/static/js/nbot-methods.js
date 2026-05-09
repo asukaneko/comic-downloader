@@ -773,6 +773,39 @@ const NbotMethods = {
                     this.showChatViewMenu = !this.showChatViewMenu;
                 },
 
+                async toggleCharacterRuntimePanel() {
+                    this.showCharacterRuntimePanel = !this.showCharacterRuntimePanel;
+                    localStorage.setItem('nbot_character_runtime_panel', this.showCharacterRuntimePanel ? 'true' : 'false');
+                    if (this.showCharacterRuntimePanel) {
+                        await this.refreshCurrentSessionRuntime();
+                    }
+                },
+
+                async refreshCurrentSessionRuntime() {
+                    if (!this.currentSession?.id || this.currentSession._isTemp) return;
+                    try {
+                        const res = await api.get('/api/sessions/' + this.currentSession.id);
+                        const fullSession = res.data || {};
+                        if (fullSession.error) return;
+                        const runtimeFields = {
+                            system_prompt: fullSession.system_prompt || '',
+                            prompt_stack_debug: fullSession.prompt_stack_debug || [],
+                            character_runtime_snapshot: fullSession.character_runtime_snapshot || null
+                        };
+                        this.currentSession = {
+                            ...this.currentSession,
+                            ...runtimeFields
+                        };
+                        const session = this.sessions.find(s => s.id === this.currentSession.id);
+                        if (session) {
+                            Object.assign(session, runtimeFields);
+                        }
+                    } catch (e) {
+                        console.error('Failed to refresh character runtime:', e);
+                        this.showToast('刷新角色运行时失败', 'error');
+                    }
+                },
+
                 closeChatViewMenu() {
                     this.showChatViewMenu = false;
                 },
@@ -3143,6 +3176,9 @@ def main(params):
                         });
                         this.currentMessages = normalizedMessages;
                         this.updateContextStats();
+                        if (this.showCharacterRuntimePanel) {
+                            this.refreshCurrentSessionRuntime();
+                        }
                         // 只有在强制滚动或用户没有手动滚动时才滚动到底部
                         this.$nextTick(() => this.scrollToBottom(forceScroll));
                     } catch (e) {
@@ -3943,12 +3979,21 @@ def main(params):
                     this.showToast(this.showThinkingCard ? '进度卡片已显示' : '进度卡片已隐藏', 'info');
                 },
 
-                toggleLive2d() {
+                async toggleLive2d() {
                     this.settings.features.live2d = !this.settings.features.live2d;
                     if (window.__nbotLive2dSetEnabled) {
                         window.__nbotLive2dSetEnabled(this.settings.features.live2d);
                     }
-                    this.showToast(this.settings.features.live2d ? 'Live2D 看板娘已开启' : 'Live2D 看板娘已关闭', 'info');
+                    try {
+                        await api.put('/api/settings', { features: { live2d: this.settings.features.live2d } });
+                        this.showToast(this.settings.features.live2d ? 'Live2D 看板娘已开启' : 'Live2D 看板娘已关闭', 'info');
+                    } catch (e) {
+                        this.settings.features.live2d = !this.settings.features.live2d;
+                        if (window.__nbotLive2dSetEnabled) {
+                            window.__nbotLive2dSetEnabled(this.settings.features.live2d);
+                        }
+                        this.showToast('Live2D 设置保存失败', 'error');
+                    }
                 },
 
                 // ========== API Key 管理 ==========
@@ -4321,6 +4366,8 @@ def main(params):
                             created_at: fullSession.created_at || session.created_at,
                             message_count: fullSession.message_count || session.message_count || 0,
                             system_prompt: fullSession.system_prompt || session.system_prompt || '',
+                            prompt_stack_debug: fullSession.prompt_stack_debug || session.prompt_stack_debug || [],
+                            character_runtime_snapshot: fullSession.character_runtime_snapshot || session.character_runtime_snapshot || null,
                             archived: fullSession.archived || false,
                             channel_id: fullSession.channel_id || '',
                             messages: fullSession.messages || []

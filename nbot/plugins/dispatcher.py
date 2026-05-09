@@ -1,10 +1,25 @@
 import asyncio
+import json
 import logging
+import os
 from typing import Optional, List, Dict, Any
 from nbot.core.prompt_format import format_skills_prompt
 from nbot.plugins.skills.base import SkillContext, SkillRegistry
 
 _log = logging.getLogger(__name__)
+
+
+def _skills_prompt_injection_enabled() -> bool:
+    settings_file = os.path.join(
+        os.path.dirname(__file__), "..", "..", "data", "web", "settings.json"
+    )
+    try:
+        with open(settings_file, "r", encoding="utf-8") as f:
+            settings = json.load(f)
+    except Exception:
+        return False
+    features = (settings or {}).get("features") or {}
+    return bool(features.get("skills_prompt_injection", False))
 
 
 class SkillDispatcher:
@@ -15,6 +30,9 @@ class SkillDispatcher:
 
     def get_available_skills_prompt(self) -> str:
         """生成可用技能的描述，用于注入到 system prompt"""
+        if not _skills_prompt_injection_enabled():
+            return ""
+
         skills = self.plugin_manager.get_skill_list()
 
         if not skills:
