@@ -9982,6 +9982,66 @@ def main(params):
                     }
                 },
 
+                async bindCharacterToSession() {
+                    if (!this.currentSession || !this.bindCharacterSelectedId) return;
+                    if (this.isBindingCharacter) return;
+                    this.isBindingCharacter = true;
+
+                    try {
+                        const preset = this.customPersonalityPresets.find(p => p.id === this.bindCharacterSelectedId);
+                        if (!preset) {
+                            this.showToast('未找到角色卡', 'error');
+                            return;
+                        }
+
+                        let scenario = preset.scenario || '';
+                        if (scenario) {
+                            scenario = scenario.replace(/\{\{user\}\}/g, this.username);
+                            scenario = scenario.replace(/\{\{char\}\}/g, preset.name || '');
+                        }
+
+                        const res = await api.put(`/api/sessions/${this.currentSession.id}/bind-character`, {
+                            sender_name: preset.name || '',
+                            sender_avatar: preset.avatar || '',
+                            sender_portrait: preset.portrait || '',
+                            scenario: scenario,
+                            system_prompt: preset.systemPrompt || '',
+                        });
+
+                        if (res.data?.success) {
+                            // 更新前端会话数据
+                            Object.assign(this.currentSession, {
+                                sender_name: preset.name || '',
+                                sender_avatar: preset.avatar || '',
+                                sender_portrait: preset.portrait || '',
+                                scenario: scenario,
+                                system_prompt: preset.systemPrompt || '',
+                            });
+
+                            // 更新会话列表中的对应会话
+                            const sessionInList = this.sessions.find(s => s.id === this.currentSession.id);
+                            if (sessionInList) {
+                                Object.assign(sessionInList, {
+                                    sender_name: preset.name || '',
+                                    sender_avatar: preset.avatar || '',
+                                    sender_portrait: preset.portrait || '',
+                                });
+                            }
+
+                            this.showBindCharacterModal = false;
+                            this.bindCharacterSelectedId = null;
+                            this.showToast(`已绑定角色「${preset.name}」`, 'success');
+                        } else {
+                            this.showToast(res.data?.error || '绑定失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('绑定角色失败:', e);
+                        this.showToast(e.response?.data?.error || '绑定角色失败', 'error');
+                    } finally {
+                        this.isBindingCharacter = false;
+                    }
+                },
+
                 // 继续生成（从中断点恢复）
                 continueGeneration(msg) {
                     if (!this.currentSession) {

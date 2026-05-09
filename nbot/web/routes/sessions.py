@@ -448,6 +448,10 @@ def register_session_routes(app, server):
             "archived_at": None,
             "messages": forked_messages,
             "system_prompt": system_prompt,
+            "sender_name": session.get("sender_name", ""),
+            "sender_avatar": session.get("sender_avatar", ""),
+            "sender_portrait": session.get("sender_portrait", ""),
+            "scenario": session.get("scenario", ""),
             "forked_from": {
                 "session_id": session_id,
                 "message_id": message_id,
@@ -461,6 +465,50 @@ def register_session_routes(app, server):
                 new_id, new_session.get("type", "web"), new_session.get("name", "")
             )
         return jsonify({"success": True, "id": new_id, "session": new_session})
+
+    @app.route("/api/sessions/<session_id>/bind-character", methods=["PUT"])
+    def bind_character_to_session(session_id):
+        """为会话绑定角色属性"""
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        data = request.json or {}
+        sender_name = (data.get("sender_name") or "").strip()
+        if not sender_name:
+            return jsonify({"error": "角色名称不能为空"}), 400
+
+        session["sender_name"] = sender_name
+        if data.get("sender_avatar"):
+            session["sender_avatar"] = data["sender_avatar"]
+        if data.get("sender_portrait"):
+            session["sender_portrait"] = data["sender_portrait"]
+        if data.get("scenario"):
+            scenario = data["scenario"]
+            user_id = session.get("user_id", "")
+            if user_id:
+                scenario = scenario.replace("{{user}}", user_id)
+            if sender_name:
+                scenario = scenario.replace("{{char}}", sender_name)
+            session["scenario"] = scenario
+
+        # 更新系统提示词中的角色信息
+        system_prompt = session.get("system_prompt", "")
+        if system_prompt and sender_name:
+            old_name = session.get("sender_name", "")
+            if old_name and old_name != sender_name:
+                system_prompt = system_prompt.replace(f'你是角色 "{old_name}"', f'你是角色 "{sender_name}"')
+        if data.get("system_prompt"):
+            system_prompt = data["system_prompt"]
+        session["system_prompt"] = system_prompt
+
+        # 更新 system 消息
+        messages = session.get("messages", [])
+        if messages and messages[0].get("role") == "system":
+            messages[0]["content"] = system_prompt
+
+        session_store.set_session(session_id, session)
+        return jsonify({"success": True, "session": session})
 
     @app.route("/api/sessions/<session_id>/regenerate", methods=["POST"])
     def regenerate_message(session_id):
