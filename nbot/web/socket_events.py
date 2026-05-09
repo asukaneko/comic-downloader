@@ -101,6 +101,11 @@ def register_socket_events(server):
             raw_content = data.get("content", "")
             sender = data.get("sender", "web_user")
             raw_attachments = data.get("attachments", [])
+
+            session = server.sessions.get(session_id)
+            if session and session.get("read_only"):
+                socketio.emit("error", {"message": "此会话为只读归档，无法发送消息"}, to=request.sid)
+                return
             content = adapter.normalize_inbound_message(raw_content)
             attachments = adapter.normalize_attachments(raw_attachments)
 

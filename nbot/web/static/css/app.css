@@ -4445,6 +4445,32 @@
             border-style: solid;
         }
 
+        .ai-summary-content {
+            line-height: 1.7;
+            font-size: 14px;
+            color: var(--text-primary);
+        }
+
+        .ai-summary-content h3 {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+
+        .ai-summary-memories-saved {
+            margin-top: 16px;
+            padding: 10px 14px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 8px;
+            color: #10b981;
+            font-size: 13px;
+        }
+
+        .chat-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         .bind-character-list {
             max-height: 320px;
             overflow-y: auto;

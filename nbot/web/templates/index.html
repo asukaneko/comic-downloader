@@ -957,14 +957,21 @@
                                             <i :class="currentSession.type?.startsWith('qq') ? 'fab fa-qq' : (currentSession.type === 'cli' ? 'fas fa-terminal' : 'fas fa-comment')" style="color: white;"></i>
                                         </div>
                                         <div>
-                                            <div class="chat-header-title">{{ currentSession.name }}</div>
+                                            <div class="chat-header-title">
+                                                {{ currentSession.name }}
+                                                <span v-if="currentSession.is_archive" class="badge badge-warning" style="margin-left: 8px; font-size: 11px;">归档</span>
+                                                <span v-if="currentSession.read_only" class="badge badge-info" style="margin-left: 4px; font-size: 11px;">只读</span>
+                                            </div>
                                             <div class="chat-header-subtitle">
                                                 {{ currentSession.type?.startsWith('qq') ? 'QQ 同步会话' : (currentSession.type === 'cli' ? 'CLI 终端' : 'Web 会话') }} · {{ currentMessages.length }} 条消息
                                                 <span v-if="currentSession.sender_name" style="margin-left: 8px; color: var(--accent-primary);">
                                                     <i :class="currentSession.sender_avatar || 'fas fa-user-circle'"></i> {{ currentSession.sender_name }}
                                                 </span>
-                                                <button v-else class="btn-bind-character" @click="showBindCharacterModal = true" title="绑定角色">
+                                                <button v-else-if="!currentSession.is_archive" class="btn-bind-character" @click="showBindCharacterModal = true" title="绑定角色">
                                                     <i class="fas fa-user-plus"></i> 绑定角色
+                                                </button>
+                                                <button v-if="currentSession.archive_session_id" class="btn-bind-character" style="color: var(--accent-primary); border-color: var(--accent-primary);" @click="openArchiveSession" title="查看归档">
+                                                    <i class="fas fa-archive"></i> 查看归档
                                                 </button>
                                             </div>
                                         </div>
@@ -980,6 +987,9 @@
                                         </button>
                                         <button class="btn-icon" @click="exportCurrentSession" title="导出会话" :disabled="isLoading">
                                             <i class="fas fa-file-export"></i>
+                                        </button>
+                                        <button v-if="currentSession.is_archive || currentSession.archived" class="btn-icon" @click="aiSummarySession" title="AI总结" :disabled="isSummarizing || isLoading">
+                                            <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
                                         </button>
                                         <button class="btn-icon" @click="deleteSession" title="删除会话" :disabled="isLoading">
                                             <i class="fas fa-trash-alt"></i>
@@ -1311,7 +1321,8 @@
                                                 v-model="inputMessage"
                                                 ref="chatInput"
                                                 class="chat-input"
-                                                placeholder="输入消息..."
+                                                :placeholder="currentSession?.read_only ? '此会话为只读归档，无法发送消息' : '输入消息...'"
+                                                :disabled="currentSession?.read_only"
                                                 @input="handleInputMessageChange"
                                                 @keydown="handleChatInputKeydown"
                                                 rows="1"
@@ -1476,7 +1487,7 @@
                                                 class="btn"
                                                 :class="isLoading && (!inputMessage.trim() && uploadedFiles.length === 0) ? 'btn-danger' : 'btn-primary'"
                                                 @click="isLoading && (!inputMessage.trim() && uploadedFiles.length === 0) ? stopGeneration() : sendMessage()"
-                                                :disabled="!isLoading && (!inputMessage.trim() && uploadedFiles.length === 0)"
+                                                :disabled="currentSession?.read_only || (!isLoading && (!inputMessage.trim() && uploadedFiles.length === 0))"
                                             >
                                                 <span v-if="isLoading && (!inputMessage.trim() && uploadedFiles.length === 0)"><i class="fas fa-stop"></i></span>
                                                 <span v-else-if="isLoading"><i class="fas fa-layer-group"></i></span>
@@ -1541,11 +1552,12 @@
                                             <td>
                                                 <div style="display: flex; align-items: center; gap: 10px;">
                                                     <div style="width: 32px; height: 32px; background: var(--bg-tertiary); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                                                        <i :class="session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'"></i>
+                                                        <i :class="session.is_archive ? 'fas fa-archive' : (session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment')"></i>
                                                     </div>
                                                     <span>{{ session.name }}</span>
-                                                    <span class="badge" :class="session.archived ? 'badge-warning' : 'badge-success'">
-                                                        {{ session.archived ? '\u5df2\u5f52\u6863' : '\u672a\u5f52\u6863' }}
+                                                    <span v-if="session.is_archive" class="badge badge-info">归档</span>
+                                                    <span v-else class="badge" :class="session.archived ? 'badge-warning' : 'badge-success'">
+                                                        {{ session.archived ? '已归档' : '未归档' }}
                                                     </span>
                                                 </div>
                                             </td>
@@ -1560,20 +1572,23 @@
                                                 <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" @click="openSession(session)" :disabled="isLoading">
                                                     打开
                                                 </button>
+                                                <button v-if="session.is_archive || session.archived" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="openSessionForAiSummary(session)" :disabled="isLoading">
+                                                    <i class="fas fa-magic"></i> 总结
+                                                </button>
                                                 <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="viewSessionDetails(session)" :disabled="isLoading">
                                                     详情
                                                 </button>
                                                 <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="exportSession(session)" :disabled="isLoading">
                                                     导出
                                                 </button>
-                                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="editSession(session)" :disabled="isLoading">
+                                                <button v-if="!session.is_archive" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="editSession(session)" :disabled="isLoading">
                                                     编辑
                                                 </button>
-                                                <button v-if="!session.archived" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="archiveSession(session)" :disabled="isLoading">
-                                                    &#x5f52;&#x6863;
+                                                <button v-if="!session.archived && !session.is_archive" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="archiveSession(session)" :disabled="isLoading">
+                                                    归档
                                                 </button>
-                                                <button v-else class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="restoreSession(session)" :disabled="isLoading">
-                                                    &#x6062;&#x590d;
+                                                <button v-if="session.archived && !session.is_archive" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="restoreSession(session)" :disabled="isLoading">
+                                                    恢复
                                                 </button>
                                             </td>
                                         </tr>
@@ -4874,6 +4889,34 @@
             </div>
         </div>
 
+        <!-- AI总结弹窗 -->
+        <div v-if="showAiSummaryModal" class="modal-overlay" @click.self="showAiSummaryModal = false">
+            <div class="modal" style="max-width: 640px;">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-magic"></i> AI 对话总结</span>
+                    <button class="modal-close" @click="showAiSummaryModal = false"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div v-if="isSummarizing" style="text-align: center; padding: 40px 0;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: var(--accent-primary);"></i>
+                        <p style="margin-top: 16px; color: var(--text-muted);">正在分析对话内容...</p>
+                    </div>
+                    <div v-else-if="aiSummaryResult" class="ai-summary-content">
+                        <div v-html="renderMarkdown(aiSummaryResult)"></div>
+                        <div v-if="aiSummarySavedMemories > 0" class="ai-summary-memories-saved">
+                            <i class="fas fa-brain"></i> 已自动保存 {{ aiSummarySavedMemories }} 条角色记忆
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showAiSummaryModal = false">关闭</button>
+                    <button v-if="aiSummaryResult && !isSummarizing" class="btn btn-primary" @click="aiSummarySession">
+                        <i class="fas fa-redo"></i> 重新总结
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- AI创建角色卡模态框 -->
         <div v-if="showAiCreateModal" class="modal-overlay" @click.self="cancelAiCreate">
             <div class="modal" style="max-width: 560px;">
@@ -6917,7 +6960,11 @@
                     contextTokenEstimate: 0,  // 预估token数
                     contextUsage: 0,  // 使用百分比
                     contextMessageCount: 0,
-                    isCompressing: false,  // 是否正在压缩上下文
+                    isCompressing: false,
+                    isSummarizing: false,
+                    showAiSummaryModal: false,
+                    aiSummaryResult: '',
+                    aiSummarySavedMemories: 0,
                     
                     // Workflows
                     workflows: [],

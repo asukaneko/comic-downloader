@@ -545,11 +545,9 @@ const NbotMethods = {
 
                     this.isCompressing = true;
                     try {
-                        // 调用后端API压缩上下文
                         const res = await api.post(`/api/sessions/${this.currentSession.id}/compress`, {});
 
                         if (res.data.success) {
-                            // 保存总结信息到会话
                             if (res.data.summary) {
                                 if (!this.currentSession.historySummary) {
                                     this.currentSession.historySummary = [];
@@ -560,10 +558,12 @@ const NbotMethods = {
                                     compressedCount: res.data.compressed_count
                                 });
                             }
-                            // 重新加载会话消息，强制滚动到底部显示新结构
+                            if (res.data.archive_session_id) {
+                                this.currentSession.archive_session_id = res.data.archive_session_id;
+                            }
                             await this.loadMessages(true);
                             this.updateContextStats();
-                            this.showToast('上下文压缩成功', 'success');
+                            this.showToast('上下文压缩成功，已归档被压缩的消息', 'success');
                         } else {
                             this.showToast(res.data.error || '压缩失败', 'error');
                         }
@@ -573,6 +573,62 @@ const NbotMethods = {
                     } finally {
                         this.isCompressing = false;
                     }
+                },
+
+                async openArchiveSession() {
+                    if (!this.currentSession?.archive_session_id) return;
+                    const archiveId = this.currentSession.archive_session_id;
+                    try {
+                        const res = await api.get(`/api/sessions/${archiveId}`);
+                        if (res.data) {
+                            this.currentSession = res.data;
+                            this.currentPage = 'chat';
+                            await this.loadMessages(true);
+                        }
+                    } catch (e) {
+                        this.showToast('打开归档会话失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                async aiSummarySession() {
+                    if (!this.currentSession || this.isSummarizing) return;
+
+                    this.isSummarizing = true;
+                    this.showAiSummaryModal = true;
+                    this.aiSummaryResult = '';
+                    this.aiSummarySavedMemories = 0;
+
+                    try {
+                        const res = await api.post(`/api/sessions/${this.currentSession.id}/ai-summary`);
+                        if (res.data.success) {
+                            this.aiSummaryResult = res.data.summary;
+                            this.aiSummarySavedMemories = res.data.saved_memories || 0;
+                            if (this.aiSummarySavedMemories > 0) {
+                                await this.loadMemory();
+                            }
+                        } else {
+                            this.showToast(res.data.error || '总结失败', 'error');
+                            this.showAiSummaryModal = false;
+                        }
+                    } catch (e) {
+                        console.error('AI Summary error:', e);
+                        this.showToast('AI总结失败: ' + (e.response?.data?.error || e.message), 'error');
+                        this.showAiSummaryModal = false;
+                    } finally {
+                        this.isSummarizing = false;
+                    }
+                },
+
+                renderMarkdown(text) {
+                    if (!text) return '';
+                    return text
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/^## (.+)$/gm, '<h3 style="font-size:16px;font-weight:600;margin:16px 0 8px;color:var(--text-primary);">$1</h3>')
+                        .replace(/^### (.+)$/gm, '<h4 style="font-size:14px;font-weight:600;margin:12px 0 6px;color:var(--text-primary);">$1</h4>')
+                        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n/g, '<br>');
                 },
                 
                 async login() {
@@ -4401,7 +4457,14 @@ def main(params):
                     this.isMobileChatPickerOpen = false;
                     await this.selectSession(session);
                 },
-                
+
+                async openSessionForAiSummary(session) {
+                    await this.openSession(session);
+                    this.$nextTick(() => {
+                        this.aiSummarySession();
+                    });
+                },
+
                 editSession(session) {
                     this.editingSession = { ...session };
                     this.showEditSessionModal = true;
@@ -4410,15 +4473,21 @@ def main(params):
                 async archiveSession(session) {
                     if (!session?.id) return;
                     try {
-                        await api.post(`/api/sessions/${session.id}/archive`);
+                        const res = await api.post(`/api/sessions/${session.id}/archive`);
                         session.archived = true;
                         session.archived_at = new Date().toISOString();
+                        if (res.data.archive_session_id) {
+                            session.archive_session_id = res.data.archive_session_id;
+                        }
                         if (this.currentSession?.id === session.id) {
                             this.currentSession.archived = true;
                             this.currentSession.archived_at = session.archived_at;
+                            if (res.data.archive_session_id) {
+                                this.currentSession.archive_session_id = res.data.archive_session_id;
+                            }
                         }
                         this.selectedSessions = this.selectedSessions.filter(id => id !== session.id);
-                        this.showToast('\u4f1a\u8bdd\u5df2\u5f52\u6863', 'success');
+                        this.showToast('会话已归档', 'success');
                     } catch (e) {
                         this.showToast('Failed to archive session: ' + (e.response?.data?.error || e.message), 'error');
                     }
