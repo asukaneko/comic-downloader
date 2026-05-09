@@ -937,9 +937,15 @@ class AIPipeline:
             ctx.error = str(e)
             full_content = full_content or f"流式输出失败: {e}"
 
-        callbacks.on_stream_end(ctx, message_id)
         ctx.final_content = full_content
-        ctx.metadata["streamed"] = True
+        if ctx.streamed_message:
+            ctx.metadata["streamed"] = True
+            ctx.metadata["stream_end_pending"] = True
+            ctx.metadata["stream_message_id"] = message_id
+        else:
+            ctx.metadata.pop("streamed", None)
+            ctx.metadata.pop("stream_end_pending", None)
+            ctx.metadata.pop("stream_message_id", None)
 
     # ------------------------------------------------------------------
     # Phase 5: 结果组装
@@ -952,15 +958,9 @@ class AIPipeline:
     ) -> PipelineResult:
         from nbot.core.agent_service import extract_tool_call_history
 
-        if ctx.error:
-            result = PipelineResult(
-                final_content=ctx.final_content or ctx.error,
-                error=ctx.error,
-                metadata=ctx.metadata,
-            )
-            return result
-
-        # 流式消息已通过 streamed_message 跟踪，直接用它
+        # Streaming messages are visible in the UI before the final pipeline
+        # result is assembled. Persist them before emitting stream_end so a
+        # message-list refresh cannot drop the temporary bubble.
         if ctx.metadata.get("streamed") and ctx.streamed_message:
             ctx.streamed_message["content"] = ctx.final_content
             callbacks.save_assistant_message(ctx, ctx.streamed_message)
@@ -974,7 +974,20 @@ class AIPipeline:
                 error=ctx.error,
                 metadata=ctx.metadata,
             )
+            if ctx.metadata.pop("stream_end_pending", False):
+                callbacks.on_stream_end(
+                    ctx,
+                    ctx.metadata.get("stream_message_id") or ctx.streamed_message.get("id", ""),
+                )
             callbacks.on_response_complete(ctx, result)
+            return result
+
+        if ctx.error:
+            result = PipelineResult(
+                final_content=ctx.final_content or ctx.error,
+                error=ctx.error,
+                metadata=ctx.metadata,
+            )
             return result
 
         # 非流式：通过适配器构建 assistant_message

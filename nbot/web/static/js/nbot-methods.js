@@ -3164,10 +3164,12 @@ def main(params):
                                 }))
                             };
                         });
+                        const completedStreamIds = new Set(Object.values(this.completedStreamMessages || {}));
                         const streamingMessages = this.currentMessages.filter(msg =>
                             msg.is_streaming ||
                             this.streamTypeQueues[msg.id] ||
-                            this.streamEndPending[msg.id]
+                            this.streamEndPending[msg.id] ||
+                            completedStreamIds.has(msg.id)
                         );
                         streamingMessages.forEach(streamMsg => {
                             if (!normalizedMessages.some(msg => msg.id === streamMsg.id)) {

@@ -789,9 +789,16 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
                 break
             try:
                 data = json.loads(data_str)
-                choices = data.get("choices", [{}])
-                delta = choices[0].get("delta", {})
-                raw = repair_mojibake_text(delta.get("content", ""))
+                choices = data.get("choices") or []
+                if not choices:
+                    continue
+                delta = choices[0].get("delta") or {}
+                raw_content = delta.get("content", "")
+                if raw_content is None:
+                    raw_content = ""
+                if not isinstance(raw_content, str):
+                    raw_content = str(raw_content)
+                raw = repair_mojibake_text(raw_content)
                 if raw:
                     chunk = normalize_chunk(raw)
                     if chunk:
