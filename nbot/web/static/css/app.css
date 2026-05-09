@@ -3462,6 +3462,37 @@
             flex-shrink: 0;
         }
 
+        .session-character-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 10px;
+            background: rgba(59, 130, 246, 0.12);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            color: #60a5fa;
+            white-space: nowrap;
+        }
+
+        .session-character-avatar {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .session-character-icon {
+            font-size: 16px;
+        }
+
+        [data-theme="light"] .session-character-tag {
+            background: rgba(59, 130, 246, 0.08);
+            border-color: rgba(59, 130, 246, 0.15);
+            color: #2563eb;
+        }
+
         [data-theme="light"] .memory-character-tag {
             background: rgba(99, 102, 241, 0.08);
             border-color: rgba(99, 102, 241, 0.18);

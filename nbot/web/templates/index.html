@@ -1396,7 +1396,7 @@
                                         </div>
                                         <div class="chat-actions">
                                             <!-- Context Length Indicator -->
-                                            <div v-if="currentSession" class="context-indicator" tabindex="0">
+                                            <div v-if="currentSession && !currentSession.read_only" class="context-indicator" tabindex="0">
                                                 <svg>
                                                     <circle class="progress-ring-circle progress-ring-bg"
                                                             :cx="20" :cy="20" :r="16"></circle>
@@ -1438,11 +1438,11 @@
                                                 </div>
                                             </div>
                                             <!-- Expand Button -->
-                                            <button class="btn btn-icon chat-input-expand-btn" @click="openExpandEditor(inputMessage)" title="扩展编辑器">
+                                            <button v-if="!currentSession?.read_only" class="btn btn-icon chat-input-expand-btn" @click="openExpandEditor(inputMessage)" title="扩展编辑器">
                                                 <i class="fas fa-expand-alt"></i>
                                             </button>
                                             <!-- 文件上传菜单 -->
-                                            <div class="file-upload-menu" :class="{ active: showFileMenu }" v-click-outside="closeFileMenu">
+                                            <div v-if="!currentSession?.read_only" class="file-upload-menu" :class="{ active: showFileMenu }" v-click-outside="closeFileMenu">
                                                 <button class="btn btn-icon" @click="toggleFileMenu" :disabled="isLoading" title="上传文件">
                                                     <i class="fas fa-paperclip"></i>
                                                 </button>
@@ -1475,6 +1475,7 @@
                                             </div>
                                             <!-- 语音录音按钮 -->
                                             <button
+                                                v-if="!currentSession?.read_only"
                                                 class="btn btn-icon"
                                                 :class="{ 'btn-danger': isRecording, 'btn-secondary': !isRecording, 'btn-warning': isTranscribing }"
                                                 @click="toggleRecording"
@@ -1510,10 +1511,13 @@
                                         <i class="fas fa-search"></i>
                                         <input v-model="sessionSearch" type="text" placeholder="搜索会话...">
                                     </div>
-                                    <select v-model="sessionArchiveFilter" class="form-select" style="width: 120px;" @change="selectedSessions = []">
-                                        <option value="all">&#x5168;&#x90e8;</option>
-                                        <option value="active">&#x672a;&#x5f52;&#x6863;</option>
-                                        <option value="archived">&#x5df2;&#x5f52;&#x6863;</option>
+                                    <select v-model="sessionFilter" class="form-select" style="width: 140px;" @change="selectedSessions = []">
+                                        <option value="all">全部会话</option>
+                                        <option value="active">未归档</option>
+                                        <option value="archived">已归档</option>
+                                        <optgroup v-if="sessionCharacterNames.length" label="按角色">
+                                            <option v-for="name in sessionCharacterNames" :key="name" :value="'char:' + name">{{ name }}</option>
+                                        </optgroup>
                                     </select>
                                     <input ref="sessionImportInput" type="file" accept=".json,application/json" style="display: none;" @change="handleSessionImportFile">
                                     <button class="btn btn-secondary" @click="triggerSessionImport" :disabled="isLoading">
@@ -1538,6 +1542,7 @@
                                                 <input type="checkbox" @change="toggleSelectAllSessions" :checked="isAllSessionsSelected && managedSessions.length > 0" :indeterminate="selectedSessions.length > 0 && !isAllSessionsSelected">
                                             </th>
                                             <th>会话名称</th>
+                                            <th>角色</th>
                                             <th>类型</th>
                                             <th>消息数</th>
                                             <th>创建时间</th>
@@ -1560,6 +1565,14 @@
                                                         {{ session.archived ? '已归档' : '未归档' }}
                                                     </span>
                                                 </div>
+                                            </td>
+                                            <td>
+                                                <span v-if="session.sender_name" class="session-character-tag">
+                                                    <img v-if="getCharacterPortraitByName(session.sender_name).portrait" :src="getCharacterPortraitByName(session.sender_name).portrait" class="session-character-avatar">
+                                                    <i v-else :class="getCharacterPortraitByName(session.sender_name).avatar || 'fas fa-user-circle'" class="session-character-icon"></i>
+                                                    {{ session.sender_name }}
+                                                </span>
+                                                <span v-else style="color: var(--text-muted);">-</span>
                                             </td>
                                             <td>
                                                 <span class="badge" :class="session.type === 'qq' ? 'badge-info' : session.type === 'cli' ? 'badge-warning' : 'badge-success'">
@@ -6906,7 +6919,7 @@
                     chatHorizontalMargin: Math.min(300, Math.max(0, parseInt(localStorage.getItem('nbot_chat_horizontal_margin') || '0', 10) || 0)),
                     sessionSwitching: false,
                     sessionSearch: '',
-                    sessionArchiveFilter: 'all',
+                    sessionFilter: 'all',
                     selectedSessions: [],  // 批量选择的会话
                     showFileMenu: false,  // 文件上传菜单显示状态
                     selectedSenderFilter: '',  // 按角色筛选会话
@@ -7928,13 +7941,24 @@
                     return Array.from(senders).sort();
                 },
 
+                sessionCharacterNames() {
+                    const names = new Set();
+                    this.sessions.forEach(s => {
+                        if (s.sender_name) names.add(s.sender_name);
+                    });
+                    return [...names].sort();
+                },
+
                 managedSessions() {
-                    // 会话管理页面显示所有会话（CLI 除外）
                     let sessionPool = this.sessions.filter(s => s.type !== 'cli');
-                    if (this.sessionArchiveFilter === 'active') {
+                    const filter = this.sessionFilter;
+                    if (filter === 'active') {
                         sessionPool = sessionPool.filter(s => !s.archived);
-                    } else if (this.sessionArchiveFilter === 'archived') {
+                    } else if (filter === 'archived') {
                         sessionPool = sessionPool.filter(s => s.archived);
+                    } else if (filter.startsWith('char:')) {
+                        const charName = filter.slice(5);
+                        sessionPool = sessionPool.filter(s => s.sender_name === charName);
                     }
                     if (!this.sessionSearch) return sessionPool;
                     const search = this.sessionSearch.toLowerCase();
