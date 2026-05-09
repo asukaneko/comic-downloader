@@ -385,6 +385,23 @@ class PromptManager:
 
         return result
     
+    def update_memory(self, memory_id: str, updates: dict) -> bool:
+        """更新记忆
+
+        Args:
+            memory_id: 记忆ID
+            updates: 要更新的字段字典
+
+        Returns:
+            是否更新成功
+        """
+        for mem in self._memories_cache:
+            if mem.get('id') == memory_id:
+                mem.update(updates)
+                self._save_memories()
+                return True
+        return False
+
     def delete_memory(self, memory_id: str) -> bool:
         """删除记忆
         

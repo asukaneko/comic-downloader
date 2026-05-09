@@ -2626,40 +2626,48 @@
                             </div>
                         </div>
 
-                        <!-- 添加记忆按钮 -->
-                        <div class="memory-actions">
-                            <button class="btn btn-primary" @click="openAddMemoryModal">
-                                <i class="fas fa-plus"></i> 添加记忆
-                            </button>
-                            <div class="memory-search">
-                                <i class="fas fa-search"></i>
-                                <input 
-                                    v-model="memorySearch" 
-                                    type="text" 
-                                    placeholder="搜索记忆..."
-                                >
+                        <!-- 工具栏 -->
+                        <div class="memory-toolbar">
+                            <div class="memory-toolbar-left">
+                                <button class="btn btn-primary btn-sm" @click="openAddMemoryModal">
+                                    <i class="fas fa-plus"></i> 添加
+                                </button>
+                                <button v-if="selectedMemoryIds.length > 0" class="btn btn-danger btn-sm" @click="batchDeleteMemories">
+                                    <i class="fas fa-trash"></i> 删除 ({{ selectedMemoryIds.length }})
+                                </button>
+                                <button v-if="selectedMemoryIds.length > 0" class="btn btn-secondary btn-sm" @click="selectedMemoryIds = []">
+                                    取消选择
+                                </button>
                             </div>
-                            <div class="memory-filter">
-                                <button 
-                                    class="filter-btn"
-                                    :class="{ active: memoryFilter === 'all' }"
-                                    @click="memoryFilter = 'all'"
-                                >
-                                    全部
+                            <div class="memory-toolbar-center">
+                                <div class="memory-search">
+                                    <i class="fas fa-search"></i>
+                                    <input v-model="memorySearch" type="text" placeholder="搜索记忆...">
+                                </div>
+                                <select v-model="memoryCharacterFilter" class="memory-filter-select">
+                                    <option value="">全部角色</option>
+                                    <option v-for="name in memoryCharacterNames" :key="name" :value="name">{{ name }}</option>
+                                </select>
+                                <div class="memory-filter">
+                                    <button class="filter-btn" :class="{ active: memoryFilter === 'all' }" @click="memoryFilter = 'all'">全部</button>
+                                    <button class="filter-btn" :class="{ active: memoryFilter === 'long' }" @click="memoryFilter = 'long'">长期</button>
+                                    <button class="filter-btn" :class="{ active: memoryFilter === 'short' }" @click="memoryFilter = 'short'">短期</button>
+                                </div>
+                            </div>
+                            <div class="memory-toolbar-right">
+                                <select v-model="memorySortBy" class="memory-filter-select" style="width: auto;">
+                                    <option value="newest">最新优先</option>
+                                    <option value="oldest">最早优先</option>
+                                    <option value="title">按标题</option>
+                                </select>
+                                <button class="btn-icon memory-toolbar-btn" @click="importMemoryDialog" title="导入记忆">
+                                    <i class="fas fa-file-import"></i>
                                 </button>
-                                <button 
-                                    class="filter-btn"
-                                    :class="{ active: memoryFilter === 'long' }"
-                                    @click="memoryFilter = 'long'"
-                                >
-                                    长期
+                                <button class="btn-icon memory-toolbar-btn" @click="exportMemory" title="导出记忆">
+                                    <i class="fas fa-file-export"></i>
                                 </button>
-                                <button 
-                                    class="filter-btn"
-                                    :class="{ active: memoryFilter === 'short' }"
-                                    @click="memoryFilter = 'short'"
-                                >
-                                    短期
+                                <button class="btn-icon memory-toolbar-btn" :class="{ active: memorySelectMode }" @click="toggleMemorySelectMode" title="批量选择">
+                                    <i class="fas fa-check-square"></i>
                                 </button>
                             </div>
                         </div>
@@ -2669,21 +2677,29 @@
                             <!-- 长期记忆 -->
                             <div v-if="memoryFilter !== 'short'" class="memory-section">
                                 <div class="memory-section-header">
-                                    <h3><i class="fas fa-archive"></i> 长期记忆</h3>
-                                    <span class="memory-count">{{ filteredLongTermMemories.length }} 条</span>
+                                    <h3>
+                                        <label v-if="memorySelectMode" class="memory-select-all" @click.stop="toggleSelectAllLongTerm">
+                                            <input type="checkbox" :checked="allLongTermSelected" @click.prevent>
+                                        </label>
+                                        <i class="fas fa-archive"></i> 长期记忆
+                                    </h3>
+                                    <span class="memory-count">{{ sortedFilteredLongTermMemories.length }} 条</span>
                                 </div>
                                 <div class="memory-list">
-                                    <div v-if="filteredLongTermMemories.length === 0" class="memory-empty">
+                                    <div v-if="sortedFilteredLongTermMemories.length === 0" class="memory-empty">
                                         <i class="fas fa-inbox"></i>
                                         <p>暂无长期记忆</p>
                                     </div>
-                                    <div 
-                                        v-for="mem in filteredLongTermMemories" 
+                                    <div
+                                        v-for="mem in sortedFilteredLongTermMemories"
                                         :key="mem.id"
                                         class="memory-item"
-                                        :class="{ expanded: expandedMemory === mem.id }"
+                                        :class="{ expanded: expandedMemory === mem.id, selected: selectedMemoryIds.includes(mem.id) }"
                                     >
-                                        <div class="memory-item-header" @click="toggleMemoryExpand(mem.id)">
+                                        <div class="memory-item-header" @click="memorySelectMode ? toggleMemorySelect(mem.id) : toggleMemoryExpand(mem.id)">
+                                            <label v-if="memorySelectMode" class="memory-checkbox" @click.stop>
+                                                <input type="checkbox" :checked="selectedMemoryIds.includes(mem.id)" @change="toggleMemorySelect(mem.id)">
+                                            </label>
                                             <div class="memory-item-icon" :class="{ 'has-portrait': getCharacterPortraitByName(mem.character_name).portrait }">
                                                 <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
                                                 <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-archive'"></i>
@@ -2706,7 +2722,6 @@
                                             <p>{{ mem.content || mem.value }}</p>
                                             <div class="memory-item-meta">
                                                 <span><i class="fas fa-calendar"></i> {{ formatFullTime(mem.created_at) }}</span>
-                                                <span><i class="fas fa-sync"></i> {{ formatFullTime(mem.updated_at) }}</span>
                                                 <span class="memory-priority" :class="mem.priority || 'normal'">
                                                     {{ getPriorityLabel(mem.priority) }}
                                                 </span>
@@ -2722,21 +2737,29 @@
                             <!-- 短期记忆 -->
                             <div v-if="memoryFilter !== 'long'" class="memory-section">
                                 <div class="memory-section-header">
-                                    <h3><i class="fas fa-clock"></i> 短期记忆</h3>
-                                    <span class="memory-count">{{ filteredShortTermMemories.length }} 条</span>
+                                    <h3>
+                                        <label v-if="memorySelectMode" class="memory-select-all" @click.stop="toggleSelectAllShortTerm">
+                                            <input type="checkbox" :checked="allShortTermSelected" @click.prevent>
+                                        </label>
+                                        <i class="fas fa-clock"></i> 短期记忆
+                                    </h3>
+                                    <span class="memory-count">{{ sortedFilteredShortTermMemories.length }} 条</span>
                                 </div>
                                 <div class="memory-list">
-                                    <div v-if="filteredShortTermMemories.length === 0" class="memory-empty">
+                                    <div v-if="sortedFilteredShortTermMemories.length === 0" class="memory-empty">
                                         <i class="fas fa-inbox"></i>
                                         <p>暂无短期记忆</p>
                                     </div>
-                                    <div 
-                                        v-for="mem in filteredShortTermMemories" 
+                                    <div
+                                        v-for="mem in sortedFilteredShortTermMemories"
                                         :key="mem.id"
                                         class="memory-item short-term"
-                                        :class="{ expanded: expandedMemory === mem.id, expired: isMemoryExpired(mem) }"
+                                        :class="{ expanded: expandedMemory === mem.id, expired: isMemoryExpired(mem), selected: selectedMemoryIds.includes(mem.id) }"
                                     >
-                                        <div class="memory-item-header" @click="toggleMemoryExpand(mem.id)">
+                                        <div class="memory-item-header" @click="memorySelectMode ? toggleMemorySelect(mem.id) : toggleMemoryExpand(mem.id)">
+                                            <label v-if="memorySelectMode" class="memory-checkbox" @click.stop>
+                                                <input type="checkbox" :checked="selectedMemoryIds.includes(mem.id)" @change="toggleMemorySelect(mem.id)">
+                                            </label>
                                             <div class="memory-item-icon short-term-icon" :class="{ 'has-portrait': getCharacterPortraitByName(mem.character_name).portrait }">
                                                 <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
                                                 <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-clock'"></i>
@@ -2773,6 +2796,9 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- 隐藏的导入文件输入 -->
+                        <input type="file" ref="memoryImportInput" accept=".json" style="display:none" @change="importMemoryFromFile">
                     </div>
 
                     <!-- Knowledge Base -->
@@ -7065,6 +7091,10 @@
                     shortTermMemories: [],
                     memorySearch: '',
                     memoryFilter: 'all',
+                    memoryCharacterFilter: '',
+                    memorySortBy: 'newest',
+                    memorySelectMode: false,
+                    selectedMemoryIds: [],
                     expandedMemory: null,
                     showAddMemoryModal: false,
                     editingMemory: {
@@ -8010,30 +8040,38 @@
                     );
                 },
 
+                memoryCharacterNames() {
+                    const names = new Set();
+                    this.memories.forEach(m => {
+                        if (m.character_name) names.add(m.character_name);
+                    });
+                    return [...names].sort();
+                },
+
+                sortedFilteredLongTermMemories() {
+                    return this._applyMemorySort(this._applyMemoryFilter(this.longTermMemories));
+                },
+
+                sortedFilteredShortTermMemories() {
+                    return this._applyMemorySort(this._applyMemoryFilter(this.shortTermMemories));
+                },
+
+                allLongTermSelected() {
+                    const items = this.sortedFilteredLongTermMemories;
+                    return items.length > 0 && items.every(m => this.selectedMemoryIds.includes(m.id));
+                },
+
+                allShortTermSelected() {
+                    const items = this.sortedFilteredShortTermMemories;
+                    return items.length > 0 && items.every(m => this.selectedMemoryIds.includes(m.id));
+                },
+
                 filteredLongTermMemories() {
-                    let memories = this.longTermMemories;
-                    if (this.memorySearch) {
-                        const search = this.memorySearch.toLowerCase();
-                        memories = memories.filter(m => {
-                            const title = (m.title || m.key || '').toLowerCase();
-                            const content = (m.content || m.value || '').toLowerCase();
-                            return title.includes(search) || content.includes(search);
-                        });
-                    }
-                    return memories;
+                    return this._applyMemoryFilter(this.longTermMemories);
                 },
 
                 filteredShortTermMemories() {
-                    let memories = this.shortTermMemories;
-                    if (this.memorySearch) {
-                        const search = this.memorySearch.toLowerCase();
-                        memories = memories.filter(m => {
-                            const title = (m.title || m.key || '').toLowerCase();
-                            const content = (m.content || m.value || '').toLowerCase();
-                            return title.includes(search) || content.includes(search);
-                        });
-                    }
-                    return memories;
+                    return this._applyMemoryFilter(this.shortTermMemories);
                 },
 
                 qqGroupSessions() {

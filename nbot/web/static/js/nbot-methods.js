@@ -58,9 +58,10 @@ const NbotMethods = {
                 changeLanguage(lang) {
                     this.$setLanguage(lang);
                     this.currentLanguage = lang;
-                    // 强制刷新页面以应用新语言
                     this.$forceUpdate();
                     this.showToast(this.$t('language.changed'), 'success');
+                    // 同步语言设置到后端
+                    api.put('/api/settings', { language: lang }).catch(() => {});
                 },
 
                 handleGlobalModalOverlayClick(event) {
@@ -7124,6 +7125,35 @@ def main(params):
                     this.expandedMemory = this.expandedMemory === id ? null : id;
                 },
 
+                _applyMemoryFilter(memories) {
+                    let result = memories || [];
+                    if (this.memorySearch) {
+                        const search = this.memorySearch.toLowerCase();
+                        result = result.filter(m => {
+                            const title = (m.title || m.key || '').toLowerCase();
+                            const content = (m.content || m.value || '').toLowerCase();
+                            const charName = (m.character_name || '').toLowerCase();
+                            return title.includes(search) || content.includes(search) || charName.includes(search);
+                        });
+                    }
+                    if (this.memoryCharacterFilter) {
+                        result = result.filter(m => m.character_name === this.memoryCharacterFilter);
+                    }
+                    return result;
+                },
+
+                _applyMemorySort(items) {
+                    const sorted = [...(items || [])];
+                    if (this.memorySortBy === 'newest') {
+                        sorted.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+                    } else if (this.memorySortBy === 'oldest') {
+                        sorted.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+                    } else if (this.memorySortBy === 'title') {
+                        sorted.sort((a, b) => (a.title || a.key || '').localeCompare(b.title || b.key || ''));
+                    }
+                    return sorted;
+                },
+
                 // 根据角色名获取立绘/头像
                 getCharacterPortraitByName(characterName) {
                     if (!characterName) return { portrait: null, avatar: null };
@@ -7276,7 +7306,101 @@ def main(params):
                         }
                     });
                 },
-                
+
+                toggleMemorySelectMode() {
+                    this.memorySelectMode = !this.memorySelectMode;
+                    if (!this.memorySelectMode) {
+                        this.selectedMemoryIds = [];
+                    }
+                },
+
+                toggleMemorySelect(id) {
+                    const idx = this.selectedMemoryIds.indexOf(id);
+                    if (idx >= 0) {
+                        this.selectedMemoryIds.splice(idx, 1);
+                    } else {
+                        this.selectedMemoryIds.push(id);
+                    }
+                },
+
+                toggleSelectAllLongTerm() {
+                    const items = this.sortedFilteredLongTermMemories;
+                    if (this.allLongTermSelected) {
+                        const ids = new Set(items.map(m => m.id));
+                        this.selectedMemoryIds = this.selectedMemoryIds.filter(id => !ids.has(id));
+                    } else {
+                        const existing = new Set(this.selectedMemoryIds);
+                        items.forEach(m => existing.add(m.id));
+                        this.selectedMemoryIds = [...existing];
+                    }
+                },
+
+                toggleSelectAllShortTerm() {
+                    const items = this.sortedFilteredShortTermMemories;
+                    if (this.allShortTermSelected) {
+                        const ids = new Set(items.map(m => m.id));
+                        this.selectedMemoryIds = this.selectedMemoryIds.filter(id => !ids.has(id));
+                    } else {
+                        const existing = new Set(this.selectedMemoryIds);
+                        items.forEach(m => existing.add(m.id));
+                        this.selectedMemoryIds = [...existing];
+                    }
+                },
+
+                async batchDeleteMemories() {
+                    if (this.selectedMemoryIds.length === 0) return;
+                    this.showConfirm({
+                        title: '批量删除记忆',
+                        message: `确定要删除选中的 ${this.selectedMemoryIds.length} 条记忆吗？`,
+                        impact: '这些记忆将被永久清除，无法恢复',
+                        confirmText: '删除',
+                        danger: true,
+                        onConfirm: async () => {
+                            this.isLoading = true;
+                            try {
+                                await api.post('/api/memory/batch-delete', { ids: this.selectedMemoryIds });
+                                this.selectedMemoryIds = [];
+                                this.memorySelectMode = false;
+                                await this.loadMemory();
+                                this.showToast('批量删除成功', 'success');
+                            } catch (e) {
+                                console.error('批量删除失败:', e);
+                                this.showToast('批量删除失败: ' + (e.response?.data?.error || e.message), 'error');
+                            } finally {
+                                this.isLoading = false;
+                            }
+                        }
+                    });
+                },
+
+                importMemoryDialog() {
+                    this.$refs.memoryImportInput.click();
+                },
+
+                async importMemoryFromFile(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    try {
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        const items = data.memories || data;
+                        if (!Array.isArray(items)) {
+                            this.showToast('无效的JSON格式', 'error');
+                            return;
+                        }
+                        this.isLoading = true;
+                        const res = await api.post('/api/memory/import', { memories: items });
+                        await this.loadMemory();
+                        this.showToast(`导入完成: 成功 ${res.data.imported} 条, 跳过 ${res.data.skipped} 条`, 'success');
+                    } catch (e) {
+                        console.error('导入失败:', e);
+                        this.showToast('导入失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                        event.target.value = '';
+                    }
+                },
+
                 // Knowledge Functions
                 toggleDocDropdown(docId) {
                     this.activeDocDropdown = this.activeDocDropdown === docId ? null : docId;

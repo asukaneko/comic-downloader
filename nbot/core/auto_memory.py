@@ -8,6 +8,12 @@ import requests
 
 _log = logging.getLogger(__name__)
 
+# 记忆提取频率控制：同一角色每 N 轮对话才提取一次，使用累积的对话内容
+_MEMORY_TURN_COUNTERS: Dict[str, int] = {}
+_MEMORY_TURN_INTERVAL = 6
+# 对话缓冲区：按角色存储累积的对话轮次
+_MEMORY_TURN_BUFFER: Dict[str, List[Dict[str, str]]] = {}
+
 
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
 
@@ -88,7 +94,7 @@ def parse_memory_response(text: str) -> List[Dict[str, Any]]:
                 "type": mem_type,
             }
         )
-    return memories[:5]
+    return memories[:1]
 
 
 def format_memories_for_prompt(memories: List[Dict[str, Any]]) -> str:
@@ -141,7 +147,8 @@ def build_memory_context(ctx, callbacks) -> Dict[str, str]:
             context = callbacks.get_memory_context(ctx) or {}
         else:
             context = callbacks.get_workspace_context(ctx) or {}
-    except Exception:
+    except Exception as exc:
+        _log.warning("[AutoMemory] 获取记忆上下文失败: %s", exc)
         context = {}
 
     metadata = getattr(ctx.chat_request, "metadata", {}) or {}
@@ -178,7 +185,17 @@ def inject_memories_into_messages(messages: List[Dict[str, Any]], memory_text: s
     messages.insert(0, {"role": "system", "content": memory_text.strip()})
 
 
-def _call_memory_model(user_message: str, assistant_message: str) -> List[Dict[str, Any]]:
+def _call_memory_model(turns: List[Dict[str, str]],
+                       character_name: str = "", user_name: str = "",
+                       language: str = "") -> List[Dict[str, Any]]:
+    """调用 AI 模型从多轮对话中提取记忆
+
+    Args:
+        turns: 对话轮次列表，每项包含 user 和 assistant 两个字段
+        character_name: 角色名称
+        user_name: 用户名称
+        language: 记忆输出语言
+    """
     from nbot.core.model_adapter import (
         build_chat_completion_payload,
         normalize_chat_completion_data,
@@ -195,20 +212,48 @@ def _call_memory_model(user_message: str, assistant_message: str) -> List[Dict[s
     if not base_url or not model:
         return []
 
+    char_desc = f" The character's name is {character_name}." if character_name else ""
+    user_desc = f" The user's name is {user_name}." if user_name else ""
+
+    lang_names = {"zh": "Chinese (中文)", "en": "English", "ja": "Japanese (日本語)",
+                  "ko": "Korean (한국어)", "zh-TW": "Traditional Chinese (繁體中文)"}
+    lang_instruction = ""
+    if language:
+        lang_display = lang_names.get(language, language)
+        lang_instruction = f"\nIMPORTANT: Write ALL memory fields (title, summary, content) in {lang_display}. Do NOT use any other language."
+
     system_prompt = (
-        "You are a memory extraction middleware, not a roleplay character. "
-        "Extract only stable, future-useful memories from the latest turn. "
-        "Remember user preferences, identity facts, durable relationship changes, "
-        "long-term goals, promises, and stable fictional-world facts. "
-        "Ignore ordinary chat, one-off requests, and claims invented only by the assistant. "
-        "Return only a JSON array. If nothing is worth remembering, return []. "
-        "Each item must have title, summary, content, and type ('long' or 'short')."
+        "You are a memory extraction middleware, not a roleplay character."
+        f"{char_desc}{user_desc}\n"
+        "You will receive multiple conversation turns. Your task is to consolidate them into exactly ONE concise memory entry. "
+        "Synthesize all important, stable, future-useful information into a single summary. "
+        "IMPORTANT: The memory MUST be specifically about or related to the character. "
+        "Do NOT include generic information that is not tied to this character. "
+        "For example, user preferences should be framed as what the user feels toward this character, "
+        "and relationship facts must involve this character.\n"
+        "Focus on: user preferences about this character, identity facts involving this character, "
+        "durable relationship changes between the user and this character, "
+        "long-term goals involving this character, promises made to or by this character, "
+        "and stable fictional-world facts about this character.\n"
+        "Ignore ordinary chat, one-off requests, claims invented only by the assistant, "
+        "and anything not directly related to this character.\n"
+        "If nothing worth remembering about this character, return []. "
+        "Otherwise, return a JSON array with exactly ONE item containing title, summary, content, and type ('long' or 'short'). "
+        "The content should be a well-organized consolidation of all noteworthy facts from the conversation."
+        f"{lang_instruction}"
     )
-    user_prompt = (
-        "Latest conversation turn:\n\n"
-        f"User:\n{user_message[:4000]}\n\n"
-        f"Assistant:\n{assistant_message[:4000]}\n"
-    )
+
+    # 拼接多轮对话
+    turn_parts = []
+    for i, turn in enumerate(turns, 1):
+        user_msg = turn.get("user", "")[:2000]
+        asst_msg = turn.get("assistant", "")[:2000]
+        turn_parts.append(
+            f"--- Turn {i} ---\n"
+            f"User ({user_name or 'User'}):\n{user_msg}\n\n"
+            f"Assistant ({character_name or 'Assistant'}):\n{asst_msg}"
+        )
+    user_prompt = f"Conversation ({len(turns)} turns):\n\n" + "\n\n".join(turn_parts) + "\n"
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
@@ -243,37 +288,92 @@ def _call_memory_model(user_message: str, assistant_message: str) -> List[Dict[s
 
 def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
     if not is_auto_memory_enabled():
+        _log.info("[AutoMemory] 跳过: 自动记忆功能未启用")
         return 0
     if getattr(result, "error", None):
+        _log.info("[AutoMemory] 跳过: AI响应有错误 - %s", getattr(result, "error", None))
         return 0
 
     metadata = getattr(ctx.chat_request, "metadata", {}) or {}
     if metadata.get("is_heartbeat") or metadata.get("skip_auto_memory"):
+        _log.info("[AutoMemory] 跳过: heartbeat或skip_auto_memory标记")
         return 0
 
     user_message = (getattr(ctx.chat_request, "content", "") or "").strip()
     assistant_message = (getattr(result, "final_content", "") or "").strip()
     if len(user_message) < 2 or len(assistant_message) < 2:
+        _log.info("[AutoMemory] 跳过: 消息过短 (user=%d, assistant=%d)", len(user_message), len(assistant_message))
         return 0
 
     memory_context = build_memory_context(ctx, callbacks)
     character_name = memory_context.get("character_name", "")
     target_id = memory_context.get("target_id", "")
     if not character_name and not target_id:
+        _log.warning("[AutoMemory] 跳过: character_name和target_id都为空，无法建立记忆关联")
         return 0
 
+    counter_key = character_name or target_id
+    turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0) + 1
+    _MEMORY_TURN_COUNTERS[counter_key] = turn_count
+
+    if counter_key not in _MEMORY_TURN_BUFFER:
+        _MEMORY_TURN_BUFFER[counter_key] = []
+    _MEMORY_TURN_BUFFER[counter_key].append({
+        "user": user_message,
+        "assistant": assistant_message,
+    })
+
+    if turn_count < _MEMORY_TURN_INTERVAL:
+        return 0
+
+    buffered_turns = _MEMORY_TURN_BUFFER.pop(counter_key, [])
+
+    _log.info(
+        "[AutoMemory] 达到%d轮，开始提取记忆: character=%s",
+        _MEMORY_TURN_INTERVAL, character_name or "-",
+    )
+
+    user_name = ""
+    if hasattr(ctx, 'chat_request'):
+        user_name = getattr(ctx.chat_request, 'user_id', '') or ''
+        metadata = getattr(ctx.chat_request, 'metadata', {}) or {}
+        if not user_name:
+            user_name = metadata.get('user_name', '') or metadata.get('sender', '') or ''
+
+    language = ""
     try:
-        memories = _call_memory_model(user_message, assistant_message)
+        from nbot.web.server import NBotWebServer
+        server = NBotWebServer.get_instance()
+        if server:
+            language = (server.settings or {}).get("language", "") or ""
+    except Exception:
+        pass
+
+    try:
+        memories = _call_memory_model(buffered_turns,
+                                      character_name=character_name, user_name=user_name,
+                                      language=language)
     except Exception as exc:
-        _log.debug("Auto memory extraction failed: %s", exc)
+        _log.warning("[AutoMemory] 记忆提取模型调用失败: %s", exc, exc_info=True)
+        _MEMORY_TURN_BUFFER[counter_key] = buffered_turns
+        _MEMORY_TURN_COUNTERS[counter_key] = _MEMORY_TURN_INTERVAL
         return 0
 
     if not memories:
+        _log.info("[AutoMemory] 模型未返回任何值得保存的记忆")
+        _MEMORY_TURN_COUNTERS[counter_key] = 0
         return 0
+
+    _MEMORY_TURN_COUNTERS[counter_key] = 0
 
     try:
         from nbot.core.prompt import prompt_manager
 
+        memory = memories[0]
+        memory_key = (
+            str(memory.get("title") or "").strip(),
+            str(memory.get("content") or "").strip(),
+        )
         existing = prompt_manager.get_memories(
             None if character_name else (target_id or None),
             None,
@@ -286,39 +386,27 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
             )
             for item in existing
         }
-        saved = 0
-        for memory in memories:
-            memory_key = (
-                str(memory.get("title") or "").strip(),
-                str(memory.get("content") or "").strip(),
-            )
-            if memory_key in existing_keys:
-                continue
-            if prompt_manager.add_memory(
-                memory["title"],
-                memory["content"],
-                target_id,
-                memory.get("summary"),
-                memory.get("type", "long"),
-                7,
-                character_name or None,
-            ):
-                existing_keys.add(memory_key)
-                saved += 1
-                _log.info(
-                    "[AutoMemory] saved memory: character=%s target=%s title=%s",
-                    character_name or "-",
-                    target_id or "-",
-                    memory["title"],
-                )
-        if saved:
+        if memory_key in existing_keys:
+            _log.info("[AutoMemory] 记忆已存在，跳过: title=%s", memory.get("title", ""))
+            return 0
+        if not character_name:
+            _log.info("[AutoMemory] 无角色名，跳过保存")
+            return 0
+        if prompt_manager.add_memory(
+            memory["title"],
+            memory["content"],
+            target_id,
+            memory.get("summary"),
+            memory.get("type", "long"),
+            7,
+            character_name,
+        ):
             _log.info(
-                "[AutoMemory] saved %s memory item(s): character=%s target=%s",
-                saved,
-                character_name or "-",
-                target_id or "-",
+                "[AutoMemory] 已保存记忆: character=%s title=%s",
+                character_name, memory["title"],
             )
-        return saved
+            return 1
+        return 0
     except Exception as exc:
-        _log.debug("Auto memory save failed: %s", exc)
+        _log.warning("[AutoMemory] 记忆保存失败: %s", exc, exc_info=True)
         return 0

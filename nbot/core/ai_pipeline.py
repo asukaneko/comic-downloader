@@ -600,7 +600,7 @@ class AIPipeline:
             if saved_count:
                 result.metadata["auto_memory_saved"] = saved_count
         except Exception as exc:
-            _log.debug("Auto memory middleware failed: %s", exc)
+            _log.warning("[AutoMemory] 记忆中间件异常: %s", exc, exc_info=True)
 
     # ------------------------------------------------------------------
     # Phase 4: AI 响应
