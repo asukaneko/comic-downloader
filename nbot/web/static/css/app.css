@@ -13789,34 +13789,86 @@
             border-radius: 4px;
             margin-left: 4px;
         }
-        .user-copy-action {
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
+        .user-msg-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .user-msg-time {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .user-msg-actions {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .user-msg-action-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 5px;
-            width: 24px;
-            height: 24px;
-            padding: 0;
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
             border: none;
-            border-radius: 5px;
-            background: transparent;
-            color: rgba(255, 255, 255, 0.72);
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.7);
             font-size: 12px;
-            line-height: 1;
             cursor: pointer;
             transition: background .15s, color .15s;
         }
-        .message.user .message-time {
-            padding-right: 28px;
-            position: relative;
-        }
-        .user-copy-action:hover {
-            background: rgba(255, 255, 255, 0.14);
+
+        .user-msg-action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
             color: #fff;
+        }
+
+        .user-edit-inline {
+            margin: 0;
+        }
+
+        .user-edit-textarea {
+            width: 100%;
+            min-height: 40px;
+            max-height: 160px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font-size: 14px;
+            line-height: 1.6;
+            resize: vertical;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .user-edit-textarea:focus {
+            border-color: rgba(255, 255, 255, 0.45);
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .user-edit-textarea::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .user-msg-action-confirm {
+            background: rgba(59, 130, 246, 0.3) !important;
+            color: #93c5fd !important;
+        }
+
+        .user-msg-action-confirm:hover {
+            background: rgba(59, 130, 246, 0.5) !important;
+            color: #fff !important;
+        }
+
+        .user-msg-action-confirm:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         /* 进度卡片改进样式 */
@@ -14270,6 +14322,45 @@
             border-color: rgba(255, 255, 255, 0.22);
             color: #fff;
             box-shadow: 0 14px 34px rgba(37, 99, 235, 0.26);
+        }
+
+        [data-theme="light"] .user-msg-time {
+            color: rgba(0, 0, 0, 0.45);
+        }
+
+        [data-theme="light"] .user-msg-action-btn {
+            background: rgba(0, 0, 0, 0.06);
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] .user-msg-action-btn:hover {
+            background: rgba(0, 0, 0, 0.1);
+            color: rgba(0, 0, 0, 0.8);
+        }
+
+        [data-theme="light"] .user-edit-textarea {
+            border-color: rgba(0, 0, 0, 0.15);
+            background: rgba(0, 0, 0, 0.04);
+            color: #1e293b;
+        }
+
+        [data-theme="light"] .user-edit-textarea:focus {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .user-edit-textarea::placeholder {
+            color: rgba(0, 0, 0, 0.35);
+        }
+
+        [data-theme="light"] .user-msg-action-confirm {
+            background: rgba(59, 130, 246, 0.15) !important;
+            color: #3b82f6 !important;
+        }
+
+        [data-theme="light"] .user-msg-action-confirm:hover {
+            background: rgba(59, 130, 246, 0.25) !important;
+            color: #2563eb !important;
         }
 
         [data-theme="light"] body.has-bg-image .search-box,

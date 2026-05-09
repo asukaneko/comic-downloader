@@ -9858,6 +9858,102 @@ def main(params):
                     }
                 },
 
+                startEditMessage(msg) {
+                    if (!msg?.id) return;
+                    this.editingMessageId = msg.id;
+                    this.editingMessageContent = msg.content || '';
+                    this.$nextTick(() => {
+                        const textarea = document.querySelector('.user-edit-textarea');
+                        if (textarea) {
+                            textarea.focus();
+                            textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                        }
+                    });
+                },
+
+                cancelEditMessage() {
+                    this.editingMessageId = null;
+                    this.editingMessageContent = '';
+                },
+
+                async confirmEditMessage(msg) {
+                    const newContent = (this.editingMessageContent || '').trim();
+                    if (!newContent) {
+                        this.showToast('消息内容不能为空', 'error');
+                        return;
+                    }
+                    if (newContent === msg.content) {
+                        this.cancelEditMessage();
+                        return;
+                    }
+                    if (this.isEditingMessage) return;
+                    this.isEditingMessage = true;
+
+                    try {
+                        const sessionId = this.currentSession?.id;
+                        if (!sessionId || !msg?.id) {
+                            this.showToast('无法定位消息', 'error');
+                            return;
+                        }
+
+                        // 调用后端 API：更新消息内容并截断后续对话
+                        const res = await api.put(`/api/sessions/${sessionId}/messages/${msg.id}`, {
+                            content: newContent,
+                            truncate_after: true,
+                        });
+
+                        if (res.data?.success) {
+                            // 更新前端消息内容
+                            const targetMsg = this.currentMessages.find(m => m.id === msg.id);
+                            if (targetMsg) {
+                                targetMsg.content = newContent;
+                            }
+
+                            // 截断前端消息列表：移除该消息之后的所有消息
+                            const msgIndex = this.currentMessages.findIndex(m => m.id === msg.id);
+                            if (msgIndex !== -1 && msgIndex < this.currentMessages.length - 1) {
+                                this.currentMessages.splice(msgIndex + 1);
+                            }
+
+                            this.cancelEditMessage();
+                            this.showToast('消息已更新，后续对话已丢弃', 'success');
+
+                            // 直接通过 socket 请求 AI 回复
+                            this.isLoading = true;
+                            this.loadingSessionId = sessionId;
+                            this.loadingStartTime = Date.now();
+                            this.isTyping = true;
+                            localStorage.setItem('nbot_loading_session_id', sessionId);
+                            localStorage.setItem('nbot_loading_start_time', Date.now().toString());
+
+                            try {
+                                socket.emit('send_message', {
+                                    session_id: sessionId,
+                                    content: newContent,
+                                    sender: this.username,
+                                    attachments: [],
+                                    tempId: msg.id,
+                                    is_edit_resend: true,
+                                });
+                            } catch (socketErr) {
+                                this.isTyping = false;
+                                this.isLoading = false;
+                                this.loadingSessionId = null;
+                                localStorage.removeItem('nbot_loading_session_id');
+                                localStorage.removeItem('nbot_loading_start_time');
+                                console.error('编辑重发 socket 失败:', socketErr);
+                            }
+                        } else {
+                            this.showToast(res.data?.error || '更新失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('编辑消息失败:', e);
+                        this.showToast(e.response?.data?.error || '编辑消息失败', 'error');
+                    } finally {
+                        this.isEditingMessage = false;
+                    }
+                },
+
                 async forkSessionFromMessage(msg) {
                     if (!this.currentSession || !msg?.id) {
                         this.showToast('无法定位要分支的回复', 'error');

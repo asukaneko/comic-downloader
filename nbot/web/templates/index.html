@@ -1056,11 +1056,15 @@
                                                     </div>
                                                 </div>
                                                 <div
-                                                    v-else-if="msg.content || msg.is_streaming"
+                                                    v-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming)"
                                                     class="message-body"
                                                     :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming }"
                                                     v-html="renderMessageBody(msg)"
                                                 ></div>
+                                                <!-- 用户消息编辑态：直接在原位置替换 -->
+                                                <div v-if="msg.role === 'user' && editingMessageId === msg.id" class="user-edit-inline" @click.stop>
+                                                    <textarea v-model="editingMessageContent" class="user-edit-textarea" rows="2" @keydown.enter.ctrl="confirmEditMessage(msg)" @keydown.escape="cancelEditMessage()"></textarea>
+                                                </div>
                                                 <!-- 用户上传的附件 -->
                                                 <div v-if="msg.attachments && msg.attachments.length > 0" class="message-attachments">
                                                     <div v-for="(att, idx) in msg.attachments" :key="idx" class="attachment-card" @click="previewAttachment(att)">
@@ -1112,12 +1116,27 @@
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div class="message-time">
-                                                    {{ formatFullTime(msg.timestamp) }}
-                                                    <span v-if="msg.source === 'qq'"> · <i class="fab fa-qq"></i> QQ</span>
-                                                    <button v-if="msg.role === 'user'" class="user-copy-action" @click.stop="copyMessage(msg)" title="复制">
-                                                        <i class="fas fa-copy"></i>
-                                                    </button>
+                                                <div v-if="msg.role === 'user' && editingMessageId !== msg.id" class="user-msg-meta" @click.stop>
+                                                    <span class="user-msg-time">{{ formatFullTime(msg.timestamp) }}<span v-if="msg.source === 'qq'"> · <i class="fab fa-qq"></i> QQ</span></span>
+                                                    <div class="user-msg-actions">
+                                                        <button class="user-msg-action-btn" @click="copyMessage(msg)" title="复制">
+                                                            <i class="fas fa-copy"></i>
+                                                        </button>
+                                                        <button class="user-msg-action-btn" @click="startEditMessage(msg)" title="编辑">
+                                                            <i class="fas fa-pen"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div v-if="msg.role === 'user' && editingMessageId === msg.id" class="user-msg-meta" @click.stop>
+                                                    <span class="user-msg-time">{{ formatFullTime(msg.timestamp) }}</span>
+                                                    <div class="user-msg-actions">
+                                                        <button class="user-msg-action-btn" @click="cancelEditMessage()" title="取消">
+                                                            <i class="fas fa-times"></i>
+                                                        </button>
+                                                        <button class="user-msg-action-btn user-msg-action-confirm" @click="confirmEditMessage(msg)" title="发送" :disabled="isEditingMessage">
+                                                            <i class="fas fa-paper-plane" :class="{ 'fa-spin': isEditingMessage }"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 <!-- 消息操作栏（只对 assistant 消息显示） -->
                                                 <div v-if="msg.role === 'assistant'" class="msg-actions" :class="{ 'msg-actions-always': isOpeningMessage(msg) }">
@@ -6760,6 +6779,9 @@
                     uploadedFiles: [],
                     isTyping: false,
                     isRegeneratingOpening: false,
+                    editingMessageId: null,
+                    editingMessageContent: '',
+                    isEditingMessage: false,
                     thinkingCards: [],  // 进度卡片列表
                     showThinkingCard: localStorage.getItem('showThinkingCard') === 'true',  // 是否显示进度卡片（默认关闭）
                     orphanCards: {},  // 找不到父消息的孤儿卡片（按 parentMsgId 分组）

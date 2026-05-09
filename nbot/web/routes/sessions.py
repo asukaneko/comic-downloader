@@ -573,7 +573,7 @@ def register_session_routes(app, server):
 
     @app.route("/api/sessions/<session_id>/messages/<message_id>", methods=["PUT"])
     def update_message(session_id, message_id):
-        """更新单条消息的内容（用于开场白重新生成等场景）"""
+        """更新单条消息的内容，支持截断后续消息（用于用户编辑重发等场景）"""
         session = _get_web_session(session_id)
         if not session:
             return jsonify({"error": "Session not found"}), 404
@@ -581,20 +581,24 @@ def register_session_routes(app, server):
         data = request.json
         messages = session.get("messages", [])
 
-        target = None
-        for msg in messages:
+        target_idx = None
+        for idx, msg in enumerate(messages):
             if str(msg.get("id", "")) == str(message_id):
-                target = msg
+                target_idx = idx
                 break
 
-        if not target:
+        if target_idx is None:
             return jsonify({"error": "Message not found"}), 404
 
         if "content" in data:
-            target["content"] = data["content"]
+            messages[target_idx]["content"] = data["content"]
+
+        # 截断该消息之后的所有消息
+        if data.get("truncate_after"):
+            messages[:] = messages[: target_idx + 1]
 
         session_store.set_session(session_id, session)
-        return jsonify({"success": True, "message": target})
+        return jsonify({"success": True, "message": messages[target_idx]})
 
     @app.route("/api/sessions/<session_id>/messages", methods=["DELETE"])
     def clear_messages(session_id):

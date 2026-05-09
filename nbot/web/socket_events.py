@@ -178,6 +178,8 @@ def register_socket_events(server):
                         }
                         processed_attachments.append(processed_att)
 
+            is_edit_resend = data.get("is_edit_resend", False)
+
             chat_request = adapter.build_chat_request(
                 conversation_id=session_id,
                 content=content,
@@ -187,34 +189,35 @@ def register_socket_events(server):
                 metadata={"tempId": temp_id},
             )
 
-            message = adapter.build_message(
-                role="user",
-                content=chat_request.content,
-                sender=chat_request.sender,
-                conversation_id=chat_request.conversation_id,
-                attachments=chat_request.attachments,
-                metadata={"tempId": temp_id},
-            )
-
-            session_store.append_message(session_id, message)
-
-            if getattr(server, "MESSAGE_MODULE_AVAILABLE", False) and getattr(
-                server, "message_manager", None
-            ):
-                manager_payload = adapter.build_manager_payload_from_message(
-                    message,
-                    default_role="user",
-                    default_content=chat_request.content,
-                    default_sender=chat_request.sender,
-                    default_conversation_id=chat_request.conversation_id,
+            if not is_edit_resend:
+                message = adapter.build_message(
+                    role="user",
+                    content=chat_request.content,
+                    sender=chat_request.sender,
+                    conversation_id=chat_request.conversation_id,
+                    attachments=chat_request.attachments,
                     metadata={"tempId": temp_id},
                 )
-                server.message_manager.add_web_message(
-                    session_id,
-                    server.create_message(**manager_payload),
-                )
 
-            server.socketio.emit("new_message", message, room=session_id)
+                session_store.append_message(session_id, message)
+
+                if getattr(server, "MESSAGE_MODULE_AVAILABLE", False) and getattr(
+                    server, "message_manager", None
+                ):
+                    manager_payload = adapter.build_manager_payload_from_message(
+                        message,
+                        default_role="user",
+                        default_content=chat_request.content,
+                        default_sender=chat_request.sender,
+                        default_conversation_id=chat_request.conversation_id,
+                        metadata={"tempId": temp_id},
+                    )
+                    server.message_manager.add_web_message(
+                        session_id,
+                        server.create_message(**manager_payload),
+                    )
+
+                server.socketio.emit("new_message", message, room=session_id)
 
             if is_command and matched_handler:
                 web_user_id = str(int(hashlib.md5(session_id.encode()).hexdigest(), 16))[
@@ -244,7 +247,7 @@ def register_socket_events(server):
 
                 server.socketio.start_background_task(run_command)
             else:
-                parent_msg_id = temp_id if temp_id else message["id"]
+                parent_msg_id = temp_id if temp_id else (message["id"] if not is_edit_resend else temp_id)
                 server._trigger_ai_response(
                     chat_request.conversation_id,
                     chat_request.content,
