@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "NekoBot"
-  text: "多频道 AI 机器人"
-  tagline: 一个面向 QQ 与 Web 双频道的 AI 机器人，集成聊天、工作区、工具调用、知识库、记忆、工作流与可视化管理后台
+  text: "多频道 AI 角色扮演"
+  tagline: 一个面向Web的多频道 AI 角色扮演项目，集成实时情感引擎、角色卡系统、聊天、工作区、工具调用、知识库、记忆、工作流与可视化管理后台
   image:
     src: /neko.png
     alt: NekoBot
@@ -20,6 +20,9 @@ hero:
       link: /guide/guide.md
 
 features:
+  - icon: 🎭
+    title: 实时情感引擎
+    details: 独立角色运行时，支持情绪惯性、六维关系系统、动态提示词栈、ReactionPlan反应计划
   - icon: 🌐
     title: 多频道支持
     details: 支持 QQ、Web、Telegram 等多频道接入，统一 AI 内核，频道适配层分离
@@ -48,9 +51,10 @@ features:
 
 ## 项目简介
 
-NekoBot 是一个面向 QQ 与 Web 双频道的 AI 机器人项目，采用"统一 AI 内核 + 频道适配层"的架构设计：
+NekoBot是一个多频道 AI 角色扮演系统，采用"统一 AI 内核 + 频道适配层"的架构设计：
 
-- **QQ 与 Web 共用同一套 AI 核心** - 通过统一的 `ChatRequest` / `ChatResponse` 处理链路
+- **实时情感引擎** - 独立角色运行时，支持情绪惯性、关系系统、动态提示词栈、ReactionPlan
+- **拥有AI管道，支持多频道接入** - 通过统一的 `ChatRequest` / `ChatResponse` 处理链路
 - **支持会话级与共享工作区** - 文件创建、修改、删除、发送，支持 diff 预览
 - **支持工具调用与多轮对话** - 可继续执行中断的工具调用任务
 - **提供 Web 仪表盘** - AI 配置中心、工作流、日志与调试界面
@@ -68,11 +72,18 @@ Ncatbot-comic-QQbot/
 │   │   ├── chat_models.py     # ChatRequest / ChatResponse
 │   │   ├── session_store.py   # 会话读写
 │   │   └── model_adapter.py   # 模型适配层
+│   ├── character/         # 实时情感引擎（新增）
+│   │   ├── models.py          # 数据模型
+│   │   ├── runtime.py         # 运行时引擎
+│   │   ├── prompt_stack.py    # 动态提示词栈
+│   │   ├── planner.py         # 反应计划生成器
+│   │   └── state_machine.py   # 状态机
 │   ├── plugins/           # 插件系统
 │   ├── services/          # AI、工具、聊天服务
 │   └── web/               # Web 后台与前端
 ├── data/                  # 运行数据
 │   ├── qq/               # QQ 相关数据
+│   ├── character/        # 角色运行时数据
 │   ├── web/              # Web 会话、模型配置
 │   └── workspaces/       # 私有 / 共享工作区
 └── resources/            # 静态资源
@@ -103,6 +114,34 @@ python bot.py --no-web
 # CLI + Web 模式
 python bot.py --cli-and-web
 ```
+
+## 核心特性
+
+### 实时情感引擎
+
+NekoBot 提供独立的角色运行时引擎，让角色具备"活人感"：
+
+- **动态提示词栈（PromptStack）** - 支持多模块动态注册提示词注入项，按优先级合成，不污染历史消息
+- **角色运行时状态** - 每个会话/用户独立的角色状态（心情、情绪强度、精力、场景）
+- **关系系统** - 六维关系模型：好感、信任、熟悉、依赖、安全感、嫉妒
+- **信号分析器** - 分析用户输入中的情绪信号（夸奖、拒绝、亲密、敌意、关心等）
+- **反应计划（ReactionPlan）** - 每轮动态生成回复策略，控制情绪表达和回复风格
+- **状态机** - 情绪惯性更新，关系值平滑变化，避免暴涨暴跌
+
+### 角色扮演系统
+
+- 可视化角色卡编辑器
+- 角色立绘支持本地上传或 AI 生成
+- 角色卡导入/导出功能
+- AI 辅助创建角色
+- 多角色切换，每个会话可指定不同角色
+
+### 记忆系统
+
+- 每个角色拥有独立的记忆空间
+- 支持长期记忆和短期记忆
+- 知识库 RAG 智能问答
+- 工具调用自动关联当前角色
 
 ## 技术栈
 
