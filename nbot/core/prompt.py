@@ -152,13 +152,13 @@ class PromptManager:
             记忆内容字符串（包含标题和摘要）
         """
         self._load_memories()
+        self._cleanup_expired()
 
         target_id = user_id or group_id
         if not target_id:
             return ""
 
         memories = []
-        now = datetime.now()
 
         for mem in self._memories_cache:
             mem_target = mem.get('target_id', '')
@@ -169,22 +169,6 @@ class PromptManager:
             mem_character = mem.get('character_name', '')
             if character_name and mem_character and mem_character != character_name:
                 continue
-
-            mem_type = mem.get('type', 'long')
-
-            # 检查是否过期
-            if mem_type == 'short':
-                created_at = mem.get('created_at', '')
-                expire_days = mem.get('expire_days', 7)
-
-                if created_at:
-                    try:
-                        created = datetime.fromisoformat(created_at)
-                        diff_days = (now - created).days
-                        if diff_days > expire_days:
-                            continue
-                    except:
-                        pass
 
             # 新格式：包含标题、摘要、内容
             title = mem.get('title', '')
@@ -350,8 +334,31 @@ class PromptManager:
         self._save_memories()
         return True
     
+    def _is_expired(self, mem) -> bool:
+        """检查短期记忆是否已过期"""
+        if mem.get('type', 'long') != 'short':
+            return False
+        created_at = mem.get('created_at', '')
+        expire_days = mem.get('expire_days', 7)
+        if not created_at:
+            return False
+        try:
+            created = datetime.fromisoformat(created_at)
+            return (datetime.now() - created).days > expire_days
+        except Exception:
+            return False
+
+    def _cleanup_expired(self):
+        """清理所有过期的短期记忆并持久化"""
+        before = len(self._memories_cache)
+        self._memories_cache = [m for m in self._memories_cache if not self._is_expired(m)]
+        removed = before - len(self._memories_cache)
+        if removed > 0:
+            self._save_memories()
+            print(f"已清理 {removed} 条过期短期记忆")
+
     def get_memories(self, target_id: str = None, mem_type: str = None, character_name: str = None) -> List[Dict]:
-        """获取记忆列表
+        """获取记忆列表（自动清理过期短期记忆）
 
         Args:
             target_id: 目标ID（可选）
@@ -362,6 +369,7 @@ class PromptManager:
             记忆列表
         """
         self._load_memories()
+        self._cleanup_expired()
 
         result = self._memories_cache
 

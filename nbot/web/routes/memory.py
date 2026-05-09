@@ -18,6 +18,8 @@ def register_memory_routes(app, server):
                     target_id, mem_type if mem_type != "all" else None,
                     character_name if character_name else None
                 )
+                # 同步 server.memories 缓存（清理后可能变少）
+                server.memories = server.prompt_manager.get_memories()
             except Exception:
                 memories = server.memories
         else:
