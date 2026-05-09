@@ -126,6 +126,21 @@ export default defineConfig({
               ]
             },
             {
+              text: 'character - 实时情感引擎',
+              collapsed: true,
+              items: [
+                { text: 'index - 概述', link: '/guide/nbot/character/index.md' },
+                { text: 'models - 数据模型', link: '/guide/nbot/character/models.md' },
+                { text: 'prompt_stack - 动态提示词栈', link: '/guide/nbot/character/prompt_stack.md' },
+                { text: 'runtime - 运行时引擎', link: '/guide/nbot/character/runtime.md' },
+                { text: 'planner - 反应计划生成器', link: '/guide/nbot/character/planner.md' },
+                { text: 'state_machine - 状态机', link: '/guide/nbot/character/state_machine.md' },
+                { text: 'policies - 信号分析器', link: '/guide/nbot/character/policies.md' },
+                { text: 'memory - 角色记忆服务', link: '/guide/nbot/character/memory.md' },
+                { text: 'repository - 数据仓库', link: '/guide/nbot/character/repository.md' },
+              ]
+            },
+            {
               text: 'channels - 频道层',
               collapsed: true,
               items: [
