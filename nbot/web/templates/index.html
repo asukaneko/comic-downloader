@@ -809,9 +809,35 @@
                                     </span>
                                     <i class="fas fa-chevron-down"></i>
                                 </button>
-                                <button class="mobile-chat-nav-btn mobile-push-btn" @click="togglePushNotifications" :title="pushButtonTitle" :disabled="pushBusy">
-                                    <i :class="pushSubscribed ? 'fas fa-bell' : 'far fa-bell'"></i>
-                                </button>
+                                <!-- 移动端二级菜单 -->
+                                <div class="mobile-chat-actions-menu" v-click-outside="() => showMobileChatActions = false">
+                                    <button class="mobile-chat-nav-btn mobile-actions-btn" @click.stop="showMobileChatActions = !showMobileChatActions" title="更多操作">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <div v-if="showMobileChatActions" class="mobile-chat-actions-dropdown">
+                                        <div class="mobile-chat-actions-item" @click="togglePushNotifications(); showMobileChatActions = false" :class="{ disabled: pushBusy }">
+                                            <i :class="pushSubscribed ? 'fas fa-bell' : 'far fa-bell'"></i>
+                                            <span>{{ pushSubscribed ? '关闭通知' : '开启通知' }}</span>
+                                        </div>
+                                        <div class="mobile-chat-actions-item" @click="toggleCharacterRuntimePanel(); showMobileChatActions = false">
+                                            <i class="fas fa-heartbeat"></i>
+                                            <span>角色运行时</span>
+                                        </div>
+                                        <div v-if="currentSession" class="mobile-chat-actions-item" @click="exportCurrentSession(); showMobileChatActions = false" :class="{ disabled: isLoading }">
+                                            <i class="fas fa-file-export"></i>
+                                            <span>导出会话</span>
+                                        </div>
+                                        <div v-if="currentSession && (currentSession.is_archive || currentSession.archived)" class="mobile-chat-actions-item" @click="aiSummarySession(); showMobileChatActions = false" :class="{ disabled: isSummarizing || isLoading }">
+                                            <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
+                                            <span>AI总结</span>
+                                        </div>
+                                        <div v-if="currentSession" class="mobile-chat-actions-divider"></div>
+                                        <div v-if="currentSession" class="mobile-chat-actions-item danger" @click="deleteSession(); showMobileChatActions = false" :class="{ disabled: isLoading }">
+                                            <i class="fas fa-trash-alt"></i>
+                                            <span>删除会话</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <!-- Web 会话为空 -->
                             <div v-if="(chatTab === 'web' || chatTab === 'cli') && !currentSession" class="chat-home-container">
@@ -982,24 +1008,58 @@
                                                 <i class="fas fa-sliders-h"></i>
                                             </button>
                                         </div>
-                                        <button class="btn-icon" @click="togglePushNotifications" :title="pushButtonTitle" :disabled="pushBusy">
+                                        <!-- 桌面端按钮 -->
+                                        <button class="btn-icon desktop-only" @click="togglePushNotifications" :title="pushButtonTitle" :disabled="pushBusy">
                                             <i :class="pushSubscribed ? 'fas fa-bell' : 'far fa-bell'"></i>
                                         </button>
-                                        <button class="btn-icon" @click="toggleCharacterRuntimePanel" title="角色运行时">
+                                        <button class="btn-icon desktop-only" @click="toggleCharacterRuntimePanel" title="角色运行时">
                                             <i class="fas fa-heartbeat"></i>
                                         </button>
-                                        <button class="btn-icon" @click="exportCurrentSession" title="导出会话" :disabled="isLoading">
+                                        <button class="btn-icon desktop-only" @click="exportCurrentSession" title="导出会话" :disabled="isLoading">
                                             <i class="fas fa-file-export"></i>
                                         </button>
-                                        <button v-if="currentSession.is_archive || currentSession.archived" class="btn-icon" @click="aiSummarySession" title="AI总结" :disabled="isSummarizing || isLoading">
+                                        <button v-if="currentSession.is_archive || currentSession.archived" class="btn-icon desktop-only" @click="aiSummarySession" title="AI总结" :disabled="isSummarizing || isLoading">
                                             <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
                                         </button>
-                                        <button class="btn-icon" @click="deleteSession" title="删除会话" :disabled="isLoading">
+                                        <button class="btn-icon desktop-only" @click="deleteSession" title="删除会话" :disabled="isLoading">
                                             <i class="fas fa-trash-alt"></i>
                                         </button>
-                                        <button class="btn-icon" @click="closeCurrentSession" title="关闭会话" :disabled="isLoading">
+                                        <button class="btn-icon desktop-only" @click="closeCurrentSession" title="关闭会话" :disabled="isLoading">
                                             <i class="fas fa-times"></i>
                                         </button>
+                                        <!-- 移动端二级菜单 -->
+                                        <div class="mobile-actions-menu dropdown-menu-container" v-click-outside="() => showMobileChatActions = false">
+                                            <button class="btn-icon mobile-menu-trigger" @click.stop="showMobileChatActions = !showMobileChatActions" title="更多操作">
+                                                <i class="fas fa-ellipsis-v"></i>
+                                            </button>
+                                            <div v-if="showMobileChatActions" class="dropdown-menu mobile-chat-actions-dropdown">
+                                                <div class="dropdown-item" @click="togglePushNotifications; showMobileChatActions = false" :class="{ disabled: pushBusy }">
+                                                    <i :class="pushSubscribed ? 'fas fa-bell' : 'far fa-bell'"></i>
+                                                    <span>{{ pushSubscribed ? '关闭通知' : '开启通知' }}</span>
+                                                </div>
+                                                <div class="dropdown-item" @click="toggleCharacterRuntimePanel; showMobileChatActions = false">
+                                                    <i class="fas fa-heartbeat"></i>
+                                                    <span>角色运行时</span>
+                                                </div>
+                                                <div class="dropdown-item" @click="exportCurrentSession; showMobileChatActions = false" :class="{ disabled: isLoading }">
+                                                    <i class="fas fa-file-export"></i>
+                                                    <span>导出会话</span>
+                                                </div>
+                                                <div v-if="currentSession.is_archive || currentSession.archived" class="dropdown-item" @click="aiSummarySession; showMobileChatActions = false" :class="{ disabled: isSummarizing || isLoading }">
+                                                    <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
+                                                    <span>AI总结</span>
+                                                </div>
+                                                <div class="dropdown-divider"></div>
+                                                <div class="dropdown-item" @click="deleteSession; showMobileChatActions = false" :class="{ disabled: isLoading }">
+                                                    <i class="fas fa-trash-alt" style="color: var(--danger);"></i>
+                                                    <span style="color: var(--danger);">删除会话</span>
+                                                </div>
+                                                <div class="dropdown-item" @click="closeCurrentSession; showMobileChatActions = false" :class="{ disabled: isLoading }">
+                                                    <i class="fas fa-times"></i>
+                                                    <span>关闭会话</span>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -6971,6 +7031,7 @@
                     isSidebarCollapsed: false,
                     isMobileMenuOpen: false,
                     isMobileChatPickerOpen: false,
+                    showMobileChatActions: false,  // 移动端聊天操作菜单
                     username: sessionStorage.getItem('username') || '',
                     password: '',
                     appMode: window.location.pathname === '/dashboard' ? 'dashboard' : 'chat',

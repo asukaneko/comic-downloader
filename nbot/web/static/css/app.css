@@ -6271,6 +6271,92 @@
             .mobile-menu-btn {
                 display: none;
             }
+
+            .mobile-actions-menu {
+                display: none !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            /* 桌面端按钮在移动端隐藏 */
+            .desktop-only {
+                display: none !important;
+            }
+
+            /* 移动端二级菜单 */
+            .mobile-actions-menu {
+                position: relative;
+                display: flex;
+                align-items: center;
+            }
+
+            .mobile-menu-trigger {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                background: transparent;
+                border: none;
+                color: var(--text-primary);
+                font-size: 16px;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+                border-radius: 6px;
+                transition: background 0.2s;
+            }
+
+            .mobile-menu-trigger:active {
+                background: var(--bg-hover);
+            }
+
+            .mobile-chat-actions-dropdown {
+                position: absolute;
+                top: 100%;
+                right: 0;
+                margin-top: 8px;
+                min-width: 160px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 1000;
+                padding: 4px 0;
+            }
+
+            .mobile-chat-actions-dropdown .dropdown-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 14px;
+                cursor: pointer;
+                transition: background 0.2s;
+                font-size: 14px;
+                color: var(--text-primary);
+            }
+
+            .mobile-chat-actions-dropdown .dropdown-item:hover {
+                background: var(--bg-hover);
+            }
+
+            .mobile-chat-actions-dropdown .dropdown-item.disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+            .mobile-chat-actions-dropdown .dropdown-divider {
+                height: 1px;
+                background: var(--border-color);
+                margin: 4px 0;
+            }
+
+            .mobile-chat-actions-dropdown .dropdown-item i {
+                width: 16px;
+                text-align: center;
+                font-size: 14px;
+            }
         }
 
         .message-time {
@@ -15163,6 +15249,79 @@
                 color: var(--text-muted);
                 font-size: 11px;
                 line-height: 1.2;
+            }
+
+            /* 移动端二级菜单 */
+            .mobile-chat-actions-menu {
+                position: relative;
+                display: flex;
+                align-items: center;
+            }
+
+            .mobile-actions-btn {
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+            }
+
+            .mobile-actions-btn:active {
+                background: var(--bg-hover);
+            }
+
+            .mobile-chat-actions-dropdown {
+                position: absolute;
+                top: calc(100% + 6px);
+                right: 0;
+                min-width: 150px;
+                background: var(--bg-secondary);
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+                z-index: 1000;
+                padding: 6px 0;
+            }
+
+            .mobile-chat-actions-item {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                padding: 10px 14px;
+                cursor: pointer;
+                transition: background 0.15s;
+                font-size: 14px;
+                color: var(--text-primary);
+                white-space: nowrap;
+            }
+
+            .mobile-chat-actions-item:hover {
+                background: var(--bg-hover);
+            }
+
+            .mobile-chat-actions-item.disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
+                pointer-events: none;
+            }
+
+            .mobile-chat-actions-item.danger {
+                color: var(--danger);
+            }
+
+            .mobile-chat-actions-item.danger:hover {
+                background: rgba(239, 68, 68, 0.1);
+            }
+
+            .mobile-chat-actions-divider {
+                height: 1px;
+                background: var(--border-color);
+                margin: 4px 0;
+            }
+
+            .mobile-chat-actions-item i {
+                width: 16px;
+                text-align: center;
+                font-size: 14px;
+                flex-shrink: 0;
             }
 
             .chat-header {
