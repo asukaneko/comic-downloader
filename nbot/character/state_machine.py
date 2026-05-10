@@ -100,8 +100,10 @@ class StateMachine:
             target_mood = deltas.get("mood_toward", old_state.mood)
             intensity_delta = deltas.get("mood_intensity_delta", 0.0)
 
-            if target_mood != old_state.mood:
-                # 情绪惯性：如果目标情绪和当前不同，逐步转移
+            if target_mood != old_state.mood and (
+                abs(intensity_delta) >= 0.08 or old_state.mood_intensity < 0.55
+            ):
+                # 情绪惯性：弱信号不会立刻覆盖较强的当前情绪
                 new_state.mood = target_mood
 
             # 情绪强度更新：惯性混合
@@ -110,6 +112,9 @@ class StateMachine:
                 + (old_state.mood_intensity + intensity_delta) * (1 - _MOOD_INERTIA)
             )
             new_state.mood_intensity = max(0.0, min(1.0, new_intensity))
+        else:
+            # 无显著信号时缓慢回落，避免情绪长时间卡在高强度。
+            new_state.mood_intensity = max(0.0, old_state.mood_intensity - 0.03)
 
         # 精力微减（每轮 -1）
         new_state.energy = max(0, old_state.energy - 1)

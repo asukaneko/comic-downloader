@@ -26,6 +26,11 @@ class UserSignals:
     intimacy_score: float = 0.0
     question_score: float = 0.0
     command_score: float = 0.0
+    sentiment_score: float = 0.0
+    arousal_score: float = 0.0
+    uncertainty_score: float = 0.0
+    apology_score: float = 0.0
+    playfulness_score: float = 0.0
 
     detected_keywords: List[str] = field(default_factory=list)
 
@@ -39,6 +44,11 @@ class UserSignals:
             "intimacy_score": round(self.intimacy_score, 2),
             "question_score": round(self.question_score, 2),
             "command_score": round(self.command_score, 2),
+            "sentiment_score": round(self.sentiment_score, 2),
+            "arousal_score": round(self.arousal_score, 2),
+            "uncertainty_score": round(self.uncertainty_score, 2),
+            "apology_score": round(self.apology_score, 2),
+            "playfulness_score": round(self.playfulness_score, 2),
             "detected_keywords": self.detected_keywords,
         }
 
@@ -71,6 +81,18 @@ _KEYWORD_RULES = {
     },
 }
 
+_INTENSIFIERS = ["非常", "超级", "特别", "真的", "好", "太", "最", "超", "巨", "绝对"]
+_DOWNTONERS = ["有点", "稍微", "可能", "也许", "大概", "一点"]
+_APOLOGY_KEYWORDS = ["对不起", "抱歉", "不好意思", "我错了", "别生气", "原谅我"]
+_UNCERTAINTY_KEYWORDS = ["吗", "嘛", "是不是", "可以吗", "行不行", "能不能", "也许", "可能"]
+_PLAYFUL_KEYWORDS = ["嘿嘿", "哈哈", "嘻嘻", "笨蛋", "呆瓜", "逗你", "开玩笑", "略略"]
+_POSITIVE_CATEGORIES = ("praise", "affection", "care", "intimacy")
+_NEGATIVE_CATEGORIES = ("rejection", "hostility")
+
+
+def _clamp_score(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
 
 def _contains_any(text: str, keywords: List[str]) -> List[str]:
     """检查文本中是否包含关键词，返回匹配到的关键词列表"""
@@ -102,12 +124,22 @@ class SignalAnalyzer:
             return signals
 
         # 关键词匹配
+        intensity_multiplier = 1.0
+        matched_intensifiers = _contains_any(user_message, _INTENSIFIERS)
+        matched_downtoners = _contains_any(user_message, _DOWNTONERS)
+        if matched_intensifiers:
+            intensity_multiplier += min(0.35, len(matched_intensifiers) * 0.08)
+            signals.detected_keywords.extend(matched_intensifiers)
+        if matched_downtoners:
+            intensity_multiplier -= min(0.25, len(matched_downtoners) * 0.06)
+            signals.detected_keywords.extend(matched_downtoners)
+
         for category, rule in _KEYWORD_RULES.items():
             matched = _contains_any(user_message, rule["keywords"])
             if matched:
                 score = rule["score"]
                 # 多个关键词叠加，但上限为 1.0
-                adjusted = min(score + len(matched) * 0.1, 1.0)
+                adjusted = _clamp_score((score + len(matched) * 0.1) * intensity_multiplier)
                 signals.detected_keywords.extend(matched)
 
                 if category == "praise":
@@ -127,10 +159,54 @@ class SignalAnalyzer:
         if "？" in user_message or "?" in user_message:
             signals.question_score = 0.5
 
+        matched_apologies = _contains_any(user_message, _APOLOGY_KEYWORDS)
+        if matched_apologies:
+            signals.apology_score = _clamp_score(0.45 + len(matched_apologies) * 0.12)
+            signals.care_score = max(signals.care_score, signals.apology_score * 0.6)
+            signals.detected_keywords.extend(matched_apologies)
+
+        matched_uncertainty = _contains_any(user_message, _UNCERTAINTY_KEYWORDS)
+        if matched_uncertainty or signals.question_score > 0:
+            signals.uncertainty_score = _clamp_score(0.25 + len(matched_uncertainty) * 0.08)
+            signals.detected_keywords.extend(matched_uncertainty)
+
+        matched_playful = _contains_any(user_message, _PLAYFUL_KEYWORDS)
+        if matched_playful:
+            signals.playfulness_score = _clamp_score(0.35 + len(matched_playful) * 0.12)
+            signals.detected_keywords.extend(matched_playful)
+
         # 命令式检测
         command_patterns = ["帮我", "给我", "去做", "快点", "马上"]
         if any(p in user_message for p in command_patterns):
             signals.command_score = 0.4
+
+        exclamation_count = user_message.count("!") + user_message.count("！")
+        repeated_mark_count = (
+            user_message.count("??")
+            + user_message.count("？？")
+            + user_message.count("!!")
+            + user_message.count("！！")
+        )
+        signals.arousal_score = _clamp_score(
+            max(
+                signals.praise_score,
+                signals.rejection_score,
+                signals.affection_score,
+                signals.hostility_score,
+                signals.care_score,
+                signals.intimacy_score,
+            )
+            + min(0.25, exclamation_count * 0.05 + repeated_mark_count * 0.08)
+        )
+
+        positive_score = max(getattr(signals, f"{category}_score") for category in _POSITIVE_CATEGORIES)
+        negative_score = max(getattr(signals, f"{category}_score") for category in _NEGATIVE_CATEGORIES)
+        signals.sentiment_score = max(-1.0, min(1.0, positive_score - negative_score))
+
+        if signals.playfulness_score > 0 and signals.hostility_score > 0:
+            signals.hostility_score *= 0.65
+            signals.rejection_score *= 0.75
+            signals.sentiment_score = max(signals.sentiment_score, -0.2)
 
         # 关系状态修正：安全感低时，更容易感到不安
         if relationship and relationship.security < 30:
@@ -138,5 +214,9 @@ class SignalAnalyzer:
                 signals.rejection_score = min(signals.rejection_score * 1.3, 1.0)
             if signals.hostility_score > 0:
                 signals.hostility_score = min(signals.hostility_score * 1.2, 1.0)
+
+        if relationship and relationship.trust > 70 and signals.apology_score > 0:
+            signals.rejection_score *= 0.7
+            signals.hostility_score *= 0.7
 
         return signals

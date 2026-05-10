@@ -92,6 +92,9 @@ class ReactionPlanner:
             "praise": signals.praise_score,
             "intimacy": signals.intimacy_score,
             "care": signals.care_score,
+            "apology": signals.apology_score,
+            "playfulness": signals.playfulness_score,
+            "uncertainty": signals.uncertainty_score,
         }
 
         strongest = max(signal_scores, key=lambda k: signal_scores[k])
@@ -101,6 +104,12 @@ class ReactionPlanner:
         if strongest_score < 0.3:
             plan.tone = "natural"
             plan.visible_emotion = state.mood
+            if signals.question_score > 0:
+                plan.style_controls = {
+                    "length": "medium",
+                    "action_detail": "medium",
+                    "initiative": "medium",
+                }
             return plan
 
         # 根据最强信号设置反应
@@ -108,6 +117,25 @@ class ReactionPlanner:
         plan.tone = emotion_config.get("tone", "natural")
         plan.visible_emotion = emotion_config.get("visible", state.mood)
         plan.hidden_emotion = emotion_config.get("hidden", "")
+
+        if strongest == "apology":
+            plan.tone = "soft_reassuring"
+            plan.visible_emotion = "心软"
+            plan.hidden_emotion = "想要和好"
+        elif strongest == "playfulness":
+            plan.tone = "playful"
+            plan.visible_emotion = "得意"
+            plan.hidden_emotion = "觉得被逗得有点开心"
+        elif strongest == "uncertainty":
+            plan.tone = "curious_soft"
+            plan.visible_emotion = "好奇"
+            plan.hidden_emotion = "想确认对方的意思"
+
+        if signals.sentiment_score < -0.4 and strongest not in ("hostility", "rejection"):
+            plan.visible_emotion = "不安"
+            plan.hidden_emotion = "有点拿不准对方的态度"
+        elif signals.sentiment_score > 0.4 and strongest in ("uncertainty", "playfulness"):
+            plan.hidden_emotion = "轻松又有点期待"
 
         # 安全感低时，负面情绪更强烈
         if relationship.security < 30 and strongest in ("rejection", "hostility"):
@@ -163,6 +191,18 @@ class ReactionPlanner:
             controls["length"] = "medium"
             controls["action_detail"] = "high"
             controls["initiative"] = "medium"
+        elif signal_type == "apology":
+            controls["length"] = "medium"
+            controls["action_detail"] = "medium"
+            controls["initiative"] = "medium"
+        elif signal_type == "playfulness":
+            controls["length"] = "medium"
+            controls["action_detail"] = "high"
+            controls["initiative"] = "high"
+        elif signal_type == "uncertainty":
+            controls["length"] = "short"
+            controls["action_detail"] = "medium"
+            controls["initiative"] = "medium"
 
         # 依赖度高时更主动
         if relationship.dependency > 70:
@@ -189,6 +229,15 @@ class ReactionPlanner:
         if signals.care_score > 0.3:
             deltas["mood_toward"] = "感动"
             deltas["mood_intensity_delta"] = 0.1
+        if signals.apology_score > 0.3:
+            deltas["mood_toward"] = "心软"
+            deltas["mood_intensity_delta"] = 0.08
+        if signals.playfulness_score > 0.3:
+            deltas["mood_toward"] = "得意"
+            deltas["mood_intensity_delta"] = 0.06
+        if signals.uncertainty_score > 0.4 and signals.sentiment_score < 0.2:
+            deltas["mood_toward"] = "试探"
+            deltas["mood_intensity_delta"] = 0.04
 
         return deltas
 
@@ -205,6 +254,10 @@ class ReactionPlanner:
             deltas["affection"] = deltas.get("affection", 0) - 2
         if signals.hostility_score > 0.3:
             deltas["affection"] = deltas.get("affection", 0) - 3
+        if signals.apology_score > 0.3:
+            deltas["affection"] = deltas.get("affection", 0) + 1
+        if signals.playfulness_score > 0.5 and signals.sentiment_score >= -0.2:
+            deltas["affection"] = deltas.get("affection", 0) + 1
 
         # 安全感变化
         if signals.rejection_score > 0.3:
@@ -215,12 +268,16 @@ class ReactionPlanner:
             deltas["security"] = deltas.get("security", 0) + 2
         if signals.affection_score > 0.3:
             deltas["security"] = deltas.get("security", 0) + 1
+        if signals.apology_score > 0.3:
+            deltas["security"] = deltas.get("security", 0) + 1
 
         # 信任变化
         if signals.care_score > 0.3:
             deltas["trust"] = 1
         if signals.hostility_score > 0.3:
             deltas["trust"] = deltas.get("trust", 0) - 2
+        if signals.apology_score > 0.3:
+            deltas["trust"] = deltas.get("trust", 0) + 1
 
         # 熟悉度（每次互动微增）
         deltas["familiarity"] = deltas.get("familiarity", 0) + 1
