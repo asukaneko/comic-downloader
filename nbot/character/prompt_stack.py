@@ -11,10 +11,44 @@
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
 
 _log = logging.getLogger(__name__)
+
+_DYNAMIC_SECTION_KEYS = (
+    "character.runtime_state",
+    "character.relationship",
+    "character.reaction_plan",
+    "character.memories",
+    "character.memories_legacy",
+    "knowledge.rag",
+)
+
+
+def strip_dynamic_prompt_sections(prompt: str) -> str:
+    """Remove runtime PromptStack sections from a persisted base prompt."""
+    if not prompt:
+        return ""
+
+    cleaned = prompt
+    for key in _DYNAMIC_SECTION_KEYS:
+        cleaned = re.sub(
+            rf"(?:\n{{2,}}|\A)## {re.escape(key)}\n.*?(?=\n{{2,}}## |\Z)",
+            "\n\n",
+            cleaned,
+            flags=re.DOTALL,
+        )
+
+    # Older compiled profile prompts embedded initial runtime values directly.
+    cleaned = re.sub(
+        r"(?:\n{2,}|\A)【角色当前状态】\n.*?(?=\n{2,}(?:## |【)|\Z)",
+        "\n\n",
+        cleaned,
+        flags=re.DOTALL,
+    )
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 PromptRole = Literal["system", "developer"]
 PromptScope = Literal["global", "session", "turn"]
@@ -123,6 +157,7 @@ class PromptStack:
         """
         parts = []
 
+        base_prompt = strip_dynamic_prompt_sections(base_prompt)
         if base_prompt and base_prompt.strip():
             parts.append(base_prompt.strip())
 

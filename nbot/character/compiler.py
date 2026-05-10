@@ -81,19 +81,28 @@ def compile_profile_prompt(
             "mood_intensity": state.mood_intensity,
             "energy": state.energy,
         }
-    elif profile.initial_state:
-        state_data = profile.initial_state
-
     if state_data:
         prompt += "\n【角色当前状态】\n"
-        if "affection" in state_data:
-            prompt += f"好感度: {state_data['affection']}/100\n"
         if "mood" in state_data:
             prompt += f"心情: {state_data['mood']}\n"
         if "mood_intensity" in state_data:
             prompt += f"情绪强度: {state_data['mood_intensity']}\n"
         if "energy" in state_data:
             prompt += f"精力: {state_data['energy']}\n"
+        # 多维度关系状态（初始值）
+        has_rel = any(k in state_data for k in ["affection", "trust", "familiarity", "dependency", "security"])
+        if has_rel:
+            prompt += "\n与用户的初始关系：\n"
+            if "affection" in state_data:
+                prompt += f"  好感: {state_data['affection']}/100\n"
+            if "trust" in state_data:
+                prompt += f"  信任: {state_data['trust']}/100\n"
+            if "familiarity" in state_data:
+                prompt += f"  熟悉: {state_data['familiarity']}/100\n"
+            if "dependency" in state_data:
+                prompt += f"  依赖: {state_data['dependency']}/100\n"
+            if "security" in state_data:
+                prompt += f"  安全感: {state_data['security']}/100\n"
 
     # 关系状态
     if relationship:

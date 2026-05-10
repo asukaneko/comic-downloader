@@ -666,7 +666,11 @@ class AIPipeline:
         runtime = callbacks.get_character_runtime(ctx)
         identity = callbacks.get_character_context(ctx)
 
-        if not runtime or not identity:
+        if not runtime:
+            _log.debug("[CharacterRuntime] before_turn skipped: runtime is None")
+            return
+        if not identity:
+            _log.debug("[CharacterRuntime] before_turn skipped: identity is None")
             return
 
         try:
@@ -685,9 +689,15 @@ class AIPipeline:
             )
 
             _log.debug(
-                "[CharacterRuntime] before_turn: character=%s scope=%s",
+                "[CharacterRuntime] before_turn executed: character=%s target=%s "
+                "rel(affection=%s trust=%s familiarity=%s dependency=%s security=%s)",
                 identity.character_id,
-                identity.scope_id,
+                identity.target_id,
+                turn.relationship.affection if turn.relationship else "N/A",
+                turn.relationship.trust if turn.relationship else "N/A",
+                turn.relationship.familiarity if turn.relationship else "N/A",
+                turn.relationship.dependency if turn.relationship else "N/A",
+                turn.relationship.security if turn.relationship else "N/A",
             )
         except Exception as exc:
             _log.warning(
@@ -704,7 +714,14 @@ class AIPipeline:
         runtime = callbacks.get_character_runtime(ctx)
         identity = callbacks.get_character_context(ctx)
 
-        if not runtime or not identity or not ctx.character_turn:
+        if not runtime:
+            _log.debug("[CharacterRuntime] after_turn skipped: runtime is None")
+            return
+        if not identity:
+            _log.debug("[CharacterRuntime] after_turn skipped: identity is None")
+            return
+        if not ctx.character_turn:
+            _log.debug("[CharacterRuntime] after_turn skipped: ctx.character_turn is None")
             return
 
         try:
@@ -714,7 +731,7 @@ class AIPipeline:
                 turn_context=ctx.character_turn,
             )
             _log.debug(
-                "[CharacterRuntime] after_turn: character=%s scope=%s",
+                "[CharacterRuntime] after_turn executed: character=%s scope=%s",
                 identity.character_id,
                 identity.scope_id,
             )

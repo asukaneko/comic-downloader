@@ -4456,25 +4456,42 @@
         .chat-header-title { font-size: 16px; font-weight: 600; }
         .chat-header-subtitle { font-size: 12px; color: var(--text-muted); }
 
-        .character-runtime-panel {
-            margin-bottom: 16px;
+        .character-runtime-float {
+            position: absolute;
+            top: 72px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100% - 48px);
+            max-width: 720px;
             padding: 16px;
             border: 1px solid rgba(96, 165, 250, 0.34);
             border-radius: 12px;
             background:
-                linear-gradient(145deg, rgba(15, 23, 42, 0.64), rgba(15, 23, 42, 0.44)),
+                linear-gradient(145deg, rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.72)),
                 radial-gradient(circle at 8% 0%, rgba(255, 107, 157, 0.12), transparent 28%),
                 radial-gradient(circle at 90% 12%, rgba(88, 166, 255, 0.12), transparent 30%);
             box-shadow:
-                0 22px 58px rgba(0, 0, 0, 0.28),
+                0 22px 58px rgba(0, 0, 0, 0.32),
                 inset 0 1px 0 rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(18px) saturate(1.18);
             -webkit-backdrop-filter: blur(18px) saturate(1.18);
-            position: relative;
+            z-index: 100;
             overflow: hidden;
+            animation: runtimeFloatIn 0.25s ease-out;
         }
 
-        .character-runtime-panel::before {
+        @keyframes runtimeFloatIn {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(-12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        .character-runtime-float::before {
             content: '';
             position: absolute;
             inset: 0;
@@ -4488,12 +4505,12 @@
             opacity: 0.72;
         }
 
-        .character-runtime-panel > * {
+        .character-runtime-float > * {
             position: relative;
             z-index: 1;
         }
 
-        .character-runtime-panel-header {
+        .character-runtime-float-header {
             display: flex;
             align-items: flex-start;
             justify-content: space-between;
@@ -4638,14 +4655,14 @@
             line-height: 1.5;
         }
 
-        [data-theme="light"] .character-runtime-panel {
+        [data-theme="light"] .character-runtime-float {
             border-color: rgba(96, 165, 250, 0.38);
             background:
-                linear-gradient(145deg, rgba(255, 255, 255, 0.66), rgba(248, 251, 255, 0.46)),
+                linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 251, 255, 0.82)),
                 radial-gradient(circle at 8% 0%, rgba(236, 72, 153, 0.12), transparent 28%),
                 radial-gradient(circle at 90% 12%, rgba(59, 130, 246, 0.12), transparent 30%);
             box-shadow:
-                0 18px 48px rgba(71, 85, 105, 0.14),
+                0 18px 48px rgba(71, 85, 105, 0.18),
                 inset 0 1px 0 rgba(255, 255, 255, 0.72);
         }
 
@@ -4669,7 +4686,13 @@
         }
 
         @media (max-width: 560px) {
-            .character-runtime-panel-header {
+            .character-runtime-float {
+                width: calc(100% - 24px);
+                top: 64px;
+                padding: 12px;
+            }
+
+            .character-runtime-float-header {
                 flex-direction: column;
             }
 
@@ -8193,13 +8216,24 @@
         /* 状态面板 */
         .glass-stats-panel {
             display: flex;
-            align-items: center;
-            gap: 16px;
+            flex-direction: column;
+            gap: 10px;
             padding: 12px 16px;
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 12px;
             margin-top: 4px;
+        }
+
+        .glass-stats-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .glass-stats-row:not(:last-child) {
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .glass-stat {
@@ -8320,8 +8354,16 @@
             }
 
             .glass-stats-panel {
-                flex-direction: column;
-                gap: 12px;
+                gap: 8px;
+            }
+
+            .glass-stats-row {
+                flex-wrap: wrap;
+                gap: 8px 12px;
+            }
+
+            .glass-stats-row:not(:last-child) {
+                padding-bottom: 8px;
             }
 
             .glass-stat-divider {

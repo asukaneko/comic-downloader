@@ -54,7 +54,7 @@ class CharacterProfile:
             response_format=data.get("responseFormat", ""),
             rules=data.get("rules", []),
             system_prompt=data.get("systemPrompt", ""),
-            initial_state=data.get("state", {"affection": 50, "mood": "开心"}),
+            initial_state=data.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}),
             metadata={
                 "greeting": data.get("greeting", ""),
             },

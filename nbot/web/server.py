@@ -1100,7 +1100,7 @@ class WebChatServer:
                     "不要替主人说话或决定动作",
                     "只能描写自己的动作、表情、心理和语言"
                 ],
-                "state": {"affection": 50, "mood": "开心"},
+                "state": {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"},
                 "greeting": ""
             }
 
@@ -1166,7 +1166,7 @@ class WebChatServer:
                     "不要替主人说话或决定动作",
                     "只能描写自己的动作、表情、心理和语言"
                 ],
-                "state": {"affection": 50, "mood": "开心"},
+                "state": {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"},
                 "greeting": ""
             }
             default_personality["systemPrompt"] = compile_personality_prompt(default_personality)

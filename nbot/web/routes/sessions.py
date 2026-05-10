@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from copy import deepcopy
 from datetime import datetime
@@ -16,6 +17,58 @@ _log = logging.getLogger(__name__)
 def _skills_prompt_injection_enabled(settings):
     features = (settings or {}).get("features") or {}
     return bool(features.get("skills_prompt_injection", False))
+
+
+def _get_base_dir(server):
+    return getattr(server, "base_dir", os.getcwd())
+
+
+def _copy_character_runtime_state(server, character_id, source_session_id, target_session_id):
+    if not character_id or not source_session_id or not target_session_id:
+        return
+
+    try:
+        from nbot.character.repository import (
+            CharacterStateRepository,
+            RelationshipRepository,
+        )
+
+        base_dir = _get_base_dir(server)
+        source_scope = f"web:{source_session_id}"
+        target_scope = f"web:{target_session_id}"
+
+        state_repo = CharacterStateRepository(base_dir)
+        state = state_repo.get(character_id, source_scope)
+        if state:
+            state.scope_id = target_scope
+            state_repo.save(state)
+
+        relationship_repo = RelationshipRepository(base_dir)
+        source_session = getattr(server, "sessions", {}).get(source_session_id, {}) or {}
+        source_targets = [
+            source_scope,
+            source_session.get("user_id"),
+            source_session.get("qq_id"),
+            source_session_id,
+        ]
+        relationship = None
+        for source_target in source_targets:
+            if not source_target:
+                continue
+            relationship = relationship_repo.get(character_id, str(source_target))
+            if relationship:
+                break
+        if relationship:
+            relationship.target_id = target_scope
+            relationship_repo.save(relationship)
+    except Exception as exc:
+        _log.warning(
+            "[CharacterRuntime] failed to copy fork runtime state %s -> %s: %s",
+            source_session_id,
+            target_session_id,
+            exc,
+            exc_info=True,
+        )
 
 
 def register_session_routes(app, server):
@@ -433,6 +486,7 @@ def register_session_routes(app, server):
             "sender_avatar": session.get("sender_avatar", ""),
             "sender_portrait": session.get("sender_portrait", ""),
             "scenario": session.get("scenario", ""),
+            "character_runtime_snapshot": deepcopy(session.get("character_runtime_snapshot")),
             "forked_from": {
                 "session_id": session_id,
                 "message_id": message_id,
@@ -441,6 +495,12 @@ def register_session_routes(app, server):
             },
         }
         session_store.set_session(new_id, new_session)
+        _copy_character_runtime_state(
+            server,
+            new_session.get("character_id"),
+            session_id,
+            new_id,
+        )
         if server.WORKSPACE_AVAILABLE and server.workspace_manager:
             server.workspace_manager.get_or_create(
                 new_id, new_session.get("type", "web"), new_session.get("name", "")

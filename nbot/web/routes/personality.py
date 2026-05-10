@@ -126,7 +126,7 @@ def register_personality_routes(app, server):
         server.personality["responseFormat"] = data.get("responseFormat", server.personality.get("responseFormat", ""))
         server.personality["rules"] = data.get("rules", server.personality.get("rules", []))
 
-        server.personality["state"] = data.get("state", server.personality.get("state", {"affection": 50, "mood": "开心"}))
+        server.personality["state"] = data.get("state", server.personality.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}))
         server.personality["greeting"] = data.get("greeting", server.personality.get("greeting", ""))
 
         # 始终根据最新字段自动编译 systemPrompt，确保与角色设定同步
@@ -144,6 +144,21 @@ def register_personality_routes(app, server):
             _log.info(f"Personality saved to {personality_file}")
         except Exception as e:
             _log.error(f"Failed to save personality: {e}")
+
+        # 同步更新角色引擎的 profiles.json，确保运行时状态使用最新的 initial_state
+        try:
+            from nbot.character.repository import ProfileRepository
+            profile_repo = ProfileRepository(server.base_dir)
+            profile_repo.get_or_create_by_personality(server.personality)
+            # 强制重新保存以更新 initial_state
+            from nbot.character.models import CharacterProfile
+            profile = CharacterProfile.from_personality_dict(server.personality)
+            if not profile.id:
+                profile.id = profile.name or "default"
+            profile_repo.save(profile)
+            _log.info(f"Profile synced to character engine: {profile.id}")
+        except Exception as e:
+            _log.error(f"Failed to sync profile to character engine: {e}")
 
         return jsonify({"success": True, "personality": server.personality})
 
@@ -203,7 +218,7 @@ def register_personality_routes(app, server):
                     "不要替主人说话或决定动作",
                     "只能描写自己的动作、表情、心理和语言"
                 ],
-                "state": {"affection": 50, "mood": "开心"}
+                "state": {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}
             },
         ]
         return jsonify(presets)
@@ -238,7 +253,7 @@ def register_personality_routes(app, server):
             "exampleDialogues": data.get("exampleDialogues", ""),
             "responseFormat": data.get("responseFormat", ""),
             "rules": data.get("rules", []),
-            "state": data.get("state", {"affection": 50, "mood": "开心"}),
+            "state": data.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}),
             "created_at": datetime.now().isoformat(),
         }
         # 立绘图字段 - 存储图片的URL或路径，不包含原始图片数据
@@ -284,7 +299,7 @@ def register_personality_routes(app, server):
         preset["exampleDialogues"] = data.get("exampleDialogues", preset.get("exampleDialogues", ""))
         preset["responseFormat"] = data.get("responseFormat", preset.get("responseFormat", ""))
         preset["rules"] = data.get("rules", preset.get("rules", []))
-        preset["state"] = data.get("state", preset.get("state", {"affection": 50, "mood": "开心"}))
+        preset["state"] = data.get("state", preset.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}))
         preset["updated_at"] = datetime.now().isoformat()
 
         # 重新编译系统提示词
@@ -316,7 +331,12 @@ def register_personality_routes(app, server):
             result = _post_card_to_platform(server, upload_preset)
             if not result.get("success"):
                 return jsonify({"success": False, "error": result.get("error", "Platform upload failed")}), 502
-            return jsonify({"success": True, "url": result.get("url"), "card": result.get("card")})
+            url = result.get("url", "")
+            token = _role_card_platform_token(server)
+            if url and token:
+                separator = "&" if "?" in url else "?"
+                url = f"{url}{separator}api_token={token}"
+            return jsonify({"success": True, "url": url, "card": result.get("card")})
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")
             _log.error(f"Role-card platform rejected upload: {e.code} {detail}")
@@ -353,7 +373,14 @@ def register_personality_routes(app, server):
     "exampleDialogues": "<user>用户消息示例\\n<assistant>角色回复示例（要符合角色风格和语气）",
     "responseFormat": "期望的回复格式描述，如：（动作描写）对话内容【心情/附加信息】",
     "rules": ["行为规则1", "行为规则2", "行为规则3"],
-    "state": {"affection": 50, "mood": "开心"}
+    "state": {
+        "affection": 50,
+        "trust": 50,
+        "familiarity": 30,
+        "dependency": 30,
+        "security": 50,
+        "mood": "开心"
+    }
 }
 
 要求：
@@ -365,7 +392,14 @@ def register_personality_routes(app, server):
 6. firstMessage 要符合角色性格，自然不做作
 7. exampleDialogues 至少包含2轮对话示例
 8. rules 要覆盖角色行为约束和特色
-9. 所有字段都用中文填写"""
+9. state 中的关系初始值必须根据角色设定合理设置：
+   - affection（好感）：根据角色对用户的初始态度设置（0-100）
+   - trust（信任）：根据角色对用户的初始信任程度设置（0-100）
+   - familiarity（熟悉）：根据角色与用户的初始熟悉度设置（0-100）
+   - dependency（依赖）：根据角色对用户的初始依赖程度设置（0-100）
+   - security（安全感）：根据角色在关系中的初始安全感设置（0-100）
+   - mood（心情）：根据角色当前心情设置
+10. 所有字段都用中文填写"""
 
         try:
             response = server.ai_client.chat_completion(
@@ -398,7 +432,22 @@ def register_personality_routes(app, server):
             character.setdefault("exampleDialogues", "")
             character.setdefault("responseFormat", "")
             character.setdefault("rules", [])
-            character.setdefault("state", {"affection": 50, "mood": "开心"})
+            # 确保 state 包含所有多维度关系字段
+            default_state = {
+                "affection": 50,
+                "trust": 50,
+                "familiarity": 30,
+                "dependency": 30,
+                "security": 50,
+                "mood": "开心"
+            }
+            ai_state = character.get("state", {})
+            if isinstance(ai_state, dict):
+                for key, val in default_state.items():
+                    ai_state.setdefault(key, val)
+                character["state"] = ai_state
+            else:
+                character["state"] = default_state
             # 立绘图字段 - 由用户后续上传
             character.setdefault("portrait", "")
             character["systemPrompt"] = compile_personality_prompt(character)
@@ -410,6 +459,114 @@ def register_personality_routes(app, server):
             return jsonify({"success": False, "error": "AI 生成的角色卡格式有误，请重试"}), 500
         except Exception as e:
             _log.error(f"AI 生成角色卡失败: {e}")
+            return jsonify({"success": False, "error": f"生成失败: {str(e)}"}), 500
+
+    @app.route("/api/personality/ai-generate-state", methods=["POST"])
+    def ai_generate_state():
+        """AI 根据当前角色卡内容生成推荐的状态初始值"""
+        data = request.json or {}
+        character = data.get("character", {})
+
+        if not server.ai_client:
+            return jsonify({"success": False, "error": "AI 客户端未初始化"}), 503
+
+        name = character.get("name", "")
+        basic_info = character.get("basicInfo", "")
+        personality_desc = character.get("personality", "")
+        scenario = character.get("scenario", "")
+
+        if not name:
+            return jsonify({"success": False, "error": "角色名称不能为空"}), 400
+
+        system_prompt = """你是一个角色关系分析专家。根据提供的角色卡信息，分析该角色对用户的初始关系状态。
+
+你必须严格按照以下JSON格式返回（不要包含任何额外的文字说明，只返回JSON）：
+
+{
+    "affection": 50,
+    "trust": 50,
+    "familiarity": 30,
+    "dependency": 30,
+    "security": 50,
+    "mood": "开心"
+}
+
+各字段含义和设置规则：
+- affection（好感，0-100）：角色对用户的初始好感度。陌生人通常30-50，友好角色50-70，敌对角色10-30，亲密关系70-90
+- trust（信任，0-100）：角色对用户的初始信任度。初次见面通常20-40，坦诚角色40-60，谨慎角色10-30
+- familiarity（熟悉，0-100）：角色与用户的初始熟悉度。初次相遇通常10-30，旧识50-80
+- dependency（依赖，0-100）：角色对用户的初始依赖程度。独立角色10-30，粘人角色40-60，极度依赖70-90
+- security（安全感，0-100）：角色在关系中的初始安全感。自信角色60-80，不安角色20-40
+- mood（心情）：角色当前的心情状态，从以下选择：开心、平静、期待、紧张、害羞、委屈、生气、伤心、困倦、得意
+
+分析要求：
+1. 必须基于角色的性格、背景和设定来推断初始关系值
+2. 不要所有角色都用默认值，要根据角色特点差异化设置
+3. 返回纯JSON，不要任何额外文字"""
+
+        user_prompt = f"""请分析以下角色对用户的初始关系状态：
+
+角色名称：{name}
+
+角色基本资料：
+{basic_info or '（未提供）'}
+
+角色性格：
+{personality_desc or '（未提供）'}
+
+角色背景：
+{scenario or '（未提供）'}
+
+请返回推荐的初始关系状态JSON。"""
+
+        try:
+            response = server.ai_client.chat_completion(
+                model=server.ai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                stream=False,
+            )
+
+            content = response.choices[0].message.content.strip()
+
+            # 提取 JSON（可能被 markdown 代码块包裹）
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+            if json_match:
+                content = json_match.group(1)
+
+            state = json.loads(content)
+
+            # 验证并填充缺失字段
+            default_state = {
+                "affection": 50,
+                "trust": 50,
+                "familiarity": 30,
+                "dependency": 30,
+                "security": 50,
+                "mood": "开心"
+            }
+            if isinstance(state, dict):
+                for key, val in default_state.items():
+                    if key not in state:
+                        state[key] = val
+                    # 数值字段限制在0-100
+                    if key != "mood" and isinstance(state[key], (int, float)):
+                        state[key] = max(0, min(100, int(state[key])))
+                    # mood必须是字符串
+                    if key == "mood" and not isinstance(state.get(key), str):
+                        state[key] = "开心"
+            else:
+                state = default_state
+
+            return jsonify({"success": True, "state": state})
+
+        except json.JSONDecodeError as e:
+            _log.error(f"AI 生成状态 JSON 解析失败: {e}, content: {content[:500] if 'content' in dir() else 'N/A'}")
+            return jsonify({"success": False, "error": "AI 生成的状态格式有误，请重试"}), 500
+        except Exception as e:
+            _log.error(f"AI 生成状态失败: {e}")
             return jsonify({"success": False, "error": f"生成失败: {str(e)}"}), 500
 
     @app.route("/api/personality/import", methods=["POST"])
@@ -497,7 +654,7 @@ def register_personality_routes(app, server):
             character.setdefault("exampleDialogues", "")
             character.setdefault("responseFormat", "")
             character.setdefault("rules", [])
-            character.setdefault("state", {"affection": 50, "mood": "开心"})
+            character.setdefault("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"})
             if not character.get("systemPrompt"):
                 character["systemPrompt"] = compile_personality_prompt(character)
 
@@ -717,7 +874,7 @@ def register_personality_routes(app, server):
                         "exampleDialogues": preset.get("exampleDialogues", ""),
                         "responseFormat": preset.get("responseFormat", ""),
                         "rules": preset.get("rules", []),
-                        "state": preset.get("state", {"affection": 50, "mood": "开心"})
+                        "state": preset.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"})
                     }
 
                     # 创建角色专属文件夹名称（安全化文件名）
@@ -859,7 +1016,7 @@ def register_personality_routes(app, server):
                             "exampleDialogues": character.get("exampleDialogues", ""),
                             "responseFormat": character.get("responseFormat", ""),
                             "rules": character.get("rules", []),
-                            "state": character.get("state", {"affection": 50, "mood": "开心"}),
+                            "state": character.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}),
                             "created_at": datetime.now().isoformat(),
                         }
                         if portrait_url:

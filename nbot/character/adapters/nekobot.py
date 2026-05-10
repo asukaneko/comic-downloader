@@ -37,16 +37,12 @@ def get_web_character_context(server, session_store, session_id: str) -> Optiona
         or "default"
     )
 
-    # 目标ID：用户标识
-    target_id = (
-        session.get("user_id")
-        or session.get("qq_id")
-        or session_id
-    )
+    # 目标ID：Web 会话标识。关系状态需要按会话隔离，避免新会话继承旧会话的六维进行时。
+    target_id = f"web:{session_id}"
 
     return CharacterIdentity(
         character_id=str(character_id),
-        target_id=str(target_id),
+        target_id=target_id,
         scope_id=f"web:{session_id}",
         channel="web",
     )
@@ -92,8 +88,6 @@ def get_character_runtime_from_server(server):
         CharacterRuntime 实例或 None
     """
     runtime = getattr(server, "character_runtime", None)
-    if runtime:
-        return runtime
 
     try:
         from nbot.character.memory import PromptManagerMemoryAdapter
@@ -118,7 +112,22 @@ def get_character_runtime_from_server(server):
         profile_repo = ProfileRepository(base_dir)
         personality = getattr(server, "personality", {}) or {}
         if isinstance(personality, dict) and personality:
-            profile_repo.get_or_create_by_personality(personality)
+            # 始终同步最新的 personality 到 profiles.json，确保 initial_state 是最新的
+            from nbot.character.models import CharacterProfile
+            profile = CharacterProfile.from_personality_dict(personality)
+            if not profile.id:
+                profile.id = profile.name or "default"
+            profile_repo.save(profile)
+
+        if runtime:
+            # runtime 已存在，更新所有 repo 引用，确保数据同步
+            runtime.profile_repo = profile_repo
+            # 同时刷新 relationship_repo 和 state_repo，避免缓存旧数据
+            runtime.relationship_repo = RelationshipRepository(base_dir)
+            runtime.state_repo = CharacterStateRepository(base_dir)
+            _log.debug("[CharacterRuntime] refreshed repos for character=%s",
+                       getattr(server, "personality", {}).get("name", "unknown"))
+            return runtime
 
         runtime = CharacterRuntime(
             profile_repo=profile_repo,

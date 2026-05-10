@@ -64,7 +64,23 @@ class CharacterRuntime:
         state = self._get_or_create_state(identity, profile)
 
         # 读取或创建关系状态
-        relationship = self._get_or_create_relationship(identity)
+        relationship = self._get_or_create_relationship(identity, profile)
+
+        _log.debug(
+            "[CharacterRuntime] before_turn: character=%s target=%s "
+            "profile.initial_state=%s state.mood=%s relationship=%s",
+            identity.character_id,
+            identity.target_id,
+            profile.initial_state,
+            state.mood if state else None,
+            {
+                "affection": relationship.affection if relationship else None,
+                "trust": relationship.trust if relationship else None,
+                "familiarity": relationship.familiarity if relationship else None,
+                "dependency": relationship.dependency if relationship else None,
+                "security": relationship.security if relationship else None,
+            },
+        )
 
         # 检索相关记忆
         memories = self._search_memories(identity, chat_request)
@@ -101,6 +117,7 @@ class CharacterRuntime:
             turn_context: before_turn 返回的上下文
         """
         if not self.state_machine:
+            _log.warning("[CharacterRuntime] after_turn skipped: state_machine is None")
             return
 
         # 应用状态变化
@@ -111,6 +128,26 @@ class CharacterRuntime:
             plan=turn_context.plan,
             user_message=getattr(chat_request, "content", ""),
             assistant_message=getattr(result, "final_content", ""),
+        )
+
+        _log.debug(
+            "[CharacterRuntime] after_turn: old_rel=%s new_rel=%s state_repo=%s rel_repo=%s",
+            {
+                "affection": turn_context.relationship.affection,
+                "trust": turn_context.relationship.trust,
+                "familiarity": turn_context.relationship.familiarity,
+                "dependency": turn_context.relationship.dependency,
+                "security": turn_context.relationship.security,
+            },
+            {
+                "affection": new_relationship.affection,
+                "trust": new_relationship.trust,
+                "familiarity": new_relationship.familiarity,
+                "dependency": new_relationship.dependency,
+                "security": new_relationship.security,
+            },
+            self.state_repo is not None,
+            self.relationship_repo is not None,
         )
 
         # 保存状态
@@ -156,12 +193,13 @@ class CharacterRuntime:
             scope_id=identity.scope_id,
         )
 
-    def _get_or_create_relationship(self, identity: CharacterIdentity) -> RelationshipState:
+    def _get_or_create_relationship(self, identity: CharacterIdentity, profile: CharacterProfile) -> RelationshipState:
         """获取或创建关系状态"""
         if self.relationship_repo:
             rel = self.relationship_repo.get_or_create(
                 identity.character_id,
                 identity.target_id,
+                initial_state=profile.initial_state,
             )
             if rel:
                 return rel

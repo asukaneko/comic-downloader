@@ -1063,71 +1063,73 @@
                                     </div>
                                 </div>
 
-                                <div class="messages-container" ref="messagesContainer" :class="{ 'session-switching': sessionSwitching }" @scroll="handleMessagesScroll">
-                                    <div v-if="showCharacterRuntimePanel" class="character-runtime-panel">
-                                        <div class="character-runtime-panel-header">
-                                            <div>
-                                                <div class="character-runtime-title">
-                                                    <i class="fas fa-heartbeat"></i>
-                                                    角色运行时
-                                                </div>
-                                                <div class="character-runtime-subtitle" v-if="currentSession.character_runtime_snapshot">
-                                                    {{ currentSession.character_runtime_snapshot.mood || '未知' }} · {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}
-                                                </div>
-                                                <div class="character-runtime-subtitle" v-else>本会话还没有动态快照，聊一轮后会出现。</div>
+                                <!-- 角色运行时悬浮面板 -->
+                                <div v-if="showCharacterRuntimePanel" class="character-runtime-float">
+                                    <div class="character-runtime-float-header">
+                                        <div>
+                                            <div class="character-runtime-title">
+                                                <i class="fas fa-heartbeat"></i>
+                                                角色运行时
                                             </div>
-                                            <div class="character-runtime-actions">
-                                                <button class="btn btn-secondary btn-small" @click="refreshCurrentSessionRuntime" :disabled="isLoading">
-                                                    <i class="fas fa-sync-alt"></i> 刷新
-                                                </button>
-                                                <button class="btn-icon-small" @click="showCharacterRuntimePanel = false; localStorage.setItem('nbot_character_runtime_panel', 'false')" title="收起">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
+                                            <div class="character-runtime-subtitle" v-if="currentSession.character_runtime_snapshot">
+                                                {{ currentSession.character_runtime_snapshot.mood || '未知' }} · {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}
                                             </div>
+                                            <div class="character-runtime-subtitle" v-else>本会话还没有动态快照，聊一轮后会出现。</div>
                                         </div>
-                                        <template v-if="currentSession.character_runtime_snapshot">
-                                            <div class="character-runtime-stats">
-                                                <div class="runtime-stat">
-                                                    <label>心情</label>
-                                                    <strong>{{ currentSession.character_runtime_snapshot.mood }}</strong>
-                                                </div>
-                                                <div class="runtime-stat">
-                                                    <label>情绪强度</label>
-                                                    <strong>{{ Math.round((currentSession.character_runtime_snapshot.mood_intensity || 0) * 100) }}%</strong>
-                                                </div>
-                                                <div class="runtime-stat">
-                                                    <label>精力</label>
-                                                    <strong>{{ currentSession.character_runtime_snapshot.energy }}</strong>
-                                                </div>
-                                                <div class="runtime-stat">
-                                                    <label>好感</label>
-                                                    <strong>{{ currentSession.character_runtime_snapshot.affection }}</strong>
-                                                </div>
-                                                <div class="runtime-stat">
-                                                    <label>信任</label>
-                                                    <strong>{{ currentSession.character_runtime_snapshot.trust }}</strong>
-                                                </div>
-                                                <div class="runtime-stat">
-                                                    <label>安全感</label>
-                                                    <strong>{{ currentSession.character_runtime_snapshot.security }}</strong>
-                                                </div>
-                                            </div>
-                                            <div class="character-runtime-plan" v-if="currentSession.character_runtime_snapshot.visible_emotion || currentSession.character_runtime_snapshot.hidden_emotion">
-                                                <span><b>表面情绪</b> {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}</span>
-                                                <span v-if="currentSession.character_runtime_snapshot.hidden_emotion"><b>内心倾向</b> {{ currentSession.character_runtime_snapshot.hidden_emotion }}</span>
-                                            </div>
-                                        </template>
-                                        <div v-if="currentSession.prompt_stack_debug && currentSession.prompt_stack_debug.length" class="runtime-prompt-stack">
-                                            <div v-for="inj in currentSession.prompt_stack_debug" :key="inj.key" class="runtime-prompt-chip" :title="inj.content">
-                                                <span>#{{ inj.priority }}</span>
-                                                <code>{{ inj.key }}</code>
-                                            </div>
+                                        <div class="character-runtime-actions">
+                                            <button class="btn btn-secondary btn-small" @click="refreshCurrentSessionRuntime" :disabled="isLoading">
+                                                <i class="fas fa-sync-alt"></i> 刷新
+                                            </button>
+                                            <button class="btn-icon-small" @click="showCharacterRuntimePanel = false; localStorage.setItem('nbot_character_runtime_panel', 'false')" title="收起">
+                                                <i class="fas fa-times"></i>
+                                            </button>
                                         </div>
-                                        <details v-if="currentSession.system_prompt" class="runtime-system-prompt">
-                                            <summary>查看本轮系统提示词</summary>
-                                            <pre>{{ currentSession.system_prompt }}</pre>
-                                        </details>
                                     </div>
+                                    <template v-if="currentSession.character_runtime_snapshot">
+                                        <div class="character-runtime-stats">
+                                            <div class="runtime-stat">
+                                                <label>心情</label>
+                                                <strong>{{ currentSession.character_runtime_snapshot.mood }}</strong>
+                                            </div>
+                                            <div class="runtime-stat">
+                                                <label>情绪强度</label>
+                                                <strong>{{ Math.round((currentSession.character_runtime_snapshot.mood_intensity || 0) * 100) }}%</strong>
+                                            </div>
+                                            <div class="runtime-stat">
+                                                <label>精力</label>
+                                                <strong>{{ currentSession.character_runtime_snapshot.energy }}</strong>
+                                            </div>
+                                            <div class="runtime-stat">
+                                                <label>好感</label>
+                                                <strong>{{ currentSession.character_runtime_snapshot.affection }}</strong>
+                                            </div>
+                                            <div class="runtime-stat">
+                                                <label>信任</label>
+                                                <strong>{{ currentSession.character_runtime_snapshot.trust }}</strong>
+                                            </div>
+                                            <div class="runtime-stat">
+                                                <label>安全感</label>
+                                                <strong>{{ currentSession.character_runtime_snapshot.security }}</strong>
+                                            </div>
+                                        </div>
+                                        <div class="character-runtime-plan" v-if="currentSession.character_runtime_snapshot.visible_emotion || currentSession.character_runtime_snapshot.hidden_emotion">
+                                            <span><b>表面情绪</b> {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}</span>
+                                            <span v-if="currentSession.character_runtime_snapshot.hidden_emotion"><b>内心倾向</b> {{ currentSession.character_runtime_snapshot.hidden_emotion }}</span>
+                                        </div>
+                                    </template>
+                                    <div v-if="currentSession.prompt_stack_debug && currentSession.prompt_stack_debug.length" class="runtime-prompt-stack">
+                                        <div v-for="inj in currentSession.prompt_stack_debug" :key="inj.key" class="runtime-prompt-chip" :title="inj.content">
+                                            <span>#{{ inj.priority }}</span>
+                                            <code>{{ inj.key }}</code>
+                                        </div>
+                                    </div>
+                                    <details v-if="currentSession.system_prompt" class="runtime-system-prompt">
+                                        <summary>查看本轮系统提示词</summary>
+                                        <pre>{{ currentSession.system_prompt }}</pre>
+                                    </details>
+                                </div>
+
+                                <div class="messages-container" ref="messagesContainer" :class="{ 'session-switching': sessionSwitching }" @scroll="handleMessagesScroll">
                                     <!-- 背景设定卡片 -->
                                     <div v-if="currentSession?.scenario" class="scenario-card">
                                         <div class="scenario-badge">
@@ -2398,12 +2400,51 @@
                                         </div>
                                         <div v-show="!foldedSections.characterState" class="section-body">
                                             <div class="state-card-grid">
-                                                <div class="state-card">
-                                                    <label class="form-label">好感度 <span style="color: #818cf8; font-weight: 600;">{{ personality.state.affection }}</span></label>
-                                                    <div class="affection-slider-wrap">
-                                                        <span class="affection-icon">💔</span>
-                                                        <input v-model.number="personality.state.affection" type="range" min="-100" max="100" class="form-range" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
-                                                        <span class="affection-icon">💜</span>
+                                                <!-- 多维度关系状态 -->
+                                                <div class="state-card" style="grid-column: 1 / -1;">
+                                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                                        <label class="form-label" style="margin-bottom: 0;">初始关系状态</label>
+                                                        <button class="btn btn-secondary btn-small" @click="aiGenerateState" :disabled="isGeneratingState || !personality.name">
+                                                            <i class="fas fa-magic" :class="{ 'fa-spin': isGeneratingState }"></i>
+                                                            {{ isGeneratingState ? '生成中...' : 'AI生成' }}
+                                                        </button>
+                                                    </div>
+                                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                                                        <div class="relation-stat-item">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">❤️ 好感</span>
+                                                                <span style="font-size: 13px; font-weight: 600; color: #ff6b9d;">{{ personality.state.affection || 50 }}</span>
+                                                            </div>
+                                                            <input v-model.number="personality.state.affection" type="range" min="0" max="100" class="form-range" style="--range-color: #ff6b9d;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                                        </div>
+                                                        <div class="relation-stat-item">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">🤝 信任</span>
+                                                                <span style="font-size: 13px; font-weight: 600; color: #4fc3f7;">{{ personality.state.trust || 50 }}</span>
+                                                            </div>
+                                                            <input v-model.number="personality.state.trust" type="range" min="0" max="100" class="form-range" style="--range-color: #4fc3f7;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                                        </div>
+                                                        <div class="relation-stat-item">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">🌿 熟悉</span>
+                                                                <span style="font-size: 13px; font-weight: 600; color: #81c784;">{{ personality.state.familiarity || 30 }}</span>
+                                                            </div>
+                                                            <input v-model.number="personality.state.familiarity" type="range" min="0" max="100" class="form-range" style="--range-color: #81c784;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                                        </div>
+                                                        <div class="relation-stat-item">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">💫 依赖</span>
+                                                                <span style="font-size: 13px; font-weight: 600; color: #ce93d8;">{{ personality.state.dependency || 30 }}</span>
+                                                            </div>
+                                                            <input v-model.number="personality.state.dependency" type="range" min="0" max="100" class="form-range" style="--range-color: #ce93d8;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                                        </div>
+                                                        <div class="relation-stat-item">
+                                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">🏠 安全感</span>
+                                                                <span style="font-size: 13px; font-weight: 600; color: #ffb74d;">{{ personality.state.security || 50 }}</span>
+                                                            </div>
+                                                            <input v-model.number="personality.state.security" type="range" min="0" max="100" class="form-range" style="--range-color: #ffb74d;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div class="state-card">
@@ -2469,19 +2510,60 @@
                                             
                                             <!-- 状态面板 -->
                                             <div class="glass-stats-panel">
-                                                <div class="glass-stat">
-                                                    <span class="glass-stat-icon">❤️</span>
-                                                    <span class="glass-stat-label">好感度</span>
-                                                    <span class="glass-stat-value">{{ activePersonality.state?.affection || 50 }}</span>
-                                                    <div class="glass-progress-bar">
-                                                        <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, (activePersonality.state?.affection || 50) + 50)) + '%' }"></div>
+                                                <!-- 第一排：关系维度 -->
+                                                <div class="glass-stats-row">
+                                                    <div class="glass-stat">
+                                                        <span class="glass-stat-icon">❤️</span>
+                                                        <span class="glass-stat-label">好感</span>
+                                                        <span class="glass-stat-value">{{ activePersonality.state?.affection || 50 }}</span>
+                                                        <div class="glass-progress-bar">
+                                                            <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.affection || 50)) + '%', background: 'linear-gradient(90deg, #ff6b9d, #ff4081)' }"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="glass-stat-divider"></div>
+                                                    <div class="glass-stat">
+                                                        <span class="glass-stat-icon">🤝</span>
+                                                        <span class="glass-stat-label">信任</span>
+                                                        <span class="glass-stat-value">{{ activePersonality.state?.trust || 50 }}</span>
+                                                        <div class="glass-progress-bar">
+                                                            <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.trust || 50)) + '%', background: 'linear-gradient(90deg, #4fc3f7, #2196f3)' }"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="glass-stat-divider"></div>
+                                                    <div class="glass-stat">
+                                                        <span class="glass-stat-icon">🌿</span>
+                                                        <span class="glass-stat-label">熟悉</span>
+                                                        <span class="glass-stat-value">{{ activePersonality.state?.familiarity || 30 }}</span>
+                                                        <div class="glass-progress-bar">
+                                                            <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.familiarity || 30)) + '%', background: 'linear-gradient(90deg, #81c784, #4caf50)' }"></div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div class="glass-stat-divider"></div>
-                                                <div class="glass-stat">
-                                                    <span class="glass-stat-icon">🙂</span>
-                                                    <span class="glass-stat-label">心情</span>
-                                                    <span class="glass-stat-value">{{ activePersonality.state?.mood || '开心' }}</span>
+                                                <!-- 第二排：关系维度 + 心情 -->
+                                                <div class="glass-stats-row">
+                                                    <div class="glass-stat">
+                                                        <span class="glass-stat-icon">💫</span>
+                                                        <span class="glass-stat-label">依赖</span>
+                                                        <span class="glass-stat-value">{{ activePersonality.state?.dependency || 30 }}</span>
+                                                        <div class="glass-progress-bar">
+                                                            <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.dependency || 30)) + '%', background: 'linear-gradient(90deg, #ce93d8, #9c27b0)' }"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="glass-stat-divider"></div>
+                                                    <div class="glass-stat">
+                                                        <span class="glass-stat-icon">🏠</span>
+                                                        <span class="glass-stat-label">安全感</span>
+                                                        <span class="glass-stat-value">{{ activePersonality.state?.security || 50 }}</span>
+                                                        <div class="glass-progress-bar">
+                                                            <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.security || 50)) + '%', background: 'linear-gradient(90deg, #ffb74d, #ff9800)' }"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="glass-stat-divider"></div>
+                                                    <div class="glass-stat">
+                                                        <span class="glass-stat-icon">🙂</span>
+                                                        <span class="glass-stat-label">心情</span>
+                                                        <span class="glass-stat-value">{{ activePersonality.state?.mood || '开心' }}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                             
@@ -2540,14 +2622,32 @@
                                                     <div class="preset-glass-stats" v-if="preset.state">
                                                         <div class="preset-stat">
                                                             <span class="preset-stat-icon">❤️</span>
-                                                            <span class="preset-stat-label">好感度</span>
+                                                            <span class="preset-stat-label">好感</span>
                                                             <span class="preset-stat-value">{{ preset.state.affection || 50 }}</span>
                                                         </div>
                                                         <div class="preset-stat-divider"></div>
                                                         <div class="preset-stat">
-                                                            <span class="preset-stat-icon">🙂</span>
-                                                            <span class="preset-stat-label">心情</span>
-                                                            <span class="preset-stat-value">{{ preset.state.mood || '开心' }}</span>
+                                                            <span class="preset-stat-icon">🤝</span>
+                                                            <span class="preset-stat-label">信任</span>
+                                                            <span class="preset-stat-value">{{ preset.state.trust || 50 }}</span>
+                                                        </div>
+                                                        <div class="preset-stat-divider"></div>
+                                                        <div class="preset-stat">
+                                                            <span class="preset-stat-icon">🌿</span>
+                                                            <span class="preset-stat-label">熟悉</span>
+                                                            <span class="preset-stat-value">{{ preset.state.familiarity || 30 }}</span>
+                                                        </div>
+                                                        <div class="preset-stat-divider"></div>
+                                                        <div class="preset-stat">
+                                                            <span class="preset-stat-icon">💫</span>
+                                                            <span class="preset-stat-label">依赖</span>
+                                                            <span class="preset-stat-value">{{ preset.state.dependency || 30 }}</span>
+                                                        </div>
+                                                        <div class="preset-stat-divider"></div>
+                                                        <div class="preset-stat">
+                                                            <span class="preset-stat-icon">🏠</span>
+                                                            <span class="preset-stat-label">安全感</span>
+                                                            <span class="preset-stat-value">{{ preset.state.security || 50 }}</span>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -7007,6 +7107,7 @@
                     isLoading: false,
                     loadingSessionId: localStorage.getItem('nbot_loading_session_id') || null,  // 追踪哪个会话正在加载，从localStorage恢复
                     loadingStartTime: localStorage.getItem('nbot_loading_start_time') ? parseInt(localStorage.getItem('nbot_loading_start_time')) : null,  // 记录加载开始时间，用于超时检测
+                    isGeneratingState: false,  // AI生成状态时的独立loading标志
                     isUserScrolling: false,
                     isSidebarCollapsed: false,
                     isMobileMenuOpen: false,
@@ -7289,9 +7390,13 @@
                         responseFormat: '',
                         rules: [],
                         
-                        // 状态
+                        // 状态（多维度关系初始值）
                         state: {
                             affection: 50,
+                            trust: 50,
+                            familiarity: 30,
+                            dependency: 30,
+                            security: 50,
                             mood: '开心'
                         }
                     },

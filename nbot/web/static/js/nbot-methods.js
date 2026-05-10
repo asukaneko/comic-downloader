@@ -7155,6 +7155,45 @@ def main(params):
                         this.isLoading = false;
                     }
                 },
+
+                // AI 根据角色卡生成推荐状态
+                async aiGenerateState() {
+                    if (!this.personality.name) {
+                        this.showToast('请先填写角色名称', 'error');
+                        return;
+                    }
+                    this.isGeneratingState = true;
+                    try {
+                        const res = await api.post('/api/personality/ai-generate-state', {
+                            character: {
+                                name: this.personality.name,
+                                basicInfo: this.personality.basicInfo || '',
+                                personality: this.personality.personality || '',
+                                scenario: this.personality.scenario || '',
+                            }
+                        });
+                        if (res.data.success) {
+                            const newState = res.data.state;
+                            this.personality.state = {
+                                ...this.personality.state,
+                                ...newState
+                            };
+                            this.personalityHasUnsavedChanges = true;
+                            this.showToast('状态已生成', 'success');
+                            // 更新滑块进度条显示
+                            this.$nextTick(() => {
+                                this.updateRangeProgress();
+                            });
+                        } else {
+                            this.showToast(res.data.error || '生成失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('生成状态失败:', e);
+                        this.showToast('生成失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isGeneratingState = false;
+                    }
+                },
                 
                 // Memory Functions
                 async exportMemory() {

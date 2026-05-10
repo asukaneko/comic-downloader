@@ -17,25 +17,33 @@ _log = logging.getLogger(__name__)
 
 
 class JsonStore:
-    """通用 JSON 文件存储，带线程安全读写"""
+    """通用 JSON 文件存储，带线程安全读写和自动缓存失效"""
 
     def __init__(self, file_path: str):
         self.file_path = file_path
         self._lock = threading.Lock()
         self._cache: Optional[Dict[str, Any]] = None
+        self._cache_mtime: float = 0.0
 
     def _load(self) -> Dict[str, Any]:
-        """从文件加载数据"""
-        if self._cache is not None:
-            return self._cache
-
-        if not os.path.exists(self.file_path):
-            return {}
-
+        """从文件加载数据，自动检测文件修改并刷新缓存"""
         try:
+            if os.path.exists(self.file_path):
+                mtime = os.path.getmtime(self.file_path)
+                if self._cache is not None and mtime <= self._cache_mtime:
+                    return self._cache
+            else:
+                if self._cache is not None:
+                    return self._cache
+                return {}
+
+            if not os.path.exists(self.file_path):
+                return {}
+
             with open(self.file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self._cache = data if isinstance(data, dict) else {}
+            self._cache_mtime = os.path.getmtime(self.file_path)
             return self._cache
         except Exception as exc:
             _log.warning("[JsonStore] 加载失败 %s: %s", self.file_path, exc)

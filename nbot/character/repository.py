@@ -23,6 +23,23 @@ from nbot.character.storage.json_store import (
 _log = logging.getLogger(__name__)
 
 
+RELATIONSHIP_FIELDS = (
+    "affection",
+    "trust",
+    "familiarity",
+    "dependency",
+    "security",
+    "jealousy",
+)
+
+
+def _clamp_relationship_value(value: Any, default: int) -> int:
+    try:
+        return max(0, min(100, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 class ProfileRepository:
     """角色卡仓库"""
 
@@ -145,16 +162,52 @@ class RelationshipRepository:
         self,
         character_id: str,
         target_id: str,
+        initial_state: Optional[Dict[str, Any]] = None,
     ) -> RelationshipState:
-        """获取或创建关系状态"""
+        """获取或创建关系状态
+
+        Args:
+            character_id: 角色ID
+            target_id: 目标用户ID
+            initial_state: 初始状态字典，可包含 affection, trust, familiarity, dependency, security 等
+        """
         existing = self.get(character_id, target_id)
         if existing:
+            _log.debug(
+                "[RelationshipRepository] get_or_create: found existing rel for %s::%s = %s",
+                character_id,
+                target_id,
+                {"affection": existing.affection, "trust": existing.trust},
+            )
             return existing
 
         rel = RelationshipState(
             character_id=character_id,
             target_id=target_id,
         )
+
+        # 从角色卡的 initial_state 中读取关系初始值
+        if initial_state:
+            for field_name in RELATIONSHIP_FIELDS:
+                if field_name in initial_state:
+                    setattr(
+                        rel,
+                        field_name,
+                        _clamp_relationship_value(
+                            initial_state[field_name],
+                            getattr(rel, field_name),
+                        ),
+                    )
+
+        _log.info(
+            "[RelationshipRepository] get_or_create: created new rel for %s::%s with initial_state=%s -> rel=%s",
+            character_id,
+            target_id,
+            initial_state,
+            {"affection": rel.affection, "trust": rel.trust, "familiarity": rel.familiarity,
+             "dependency": rel.dependency, "security": rel.security},
+        )
+
         self.save(rel)
         return rel
 

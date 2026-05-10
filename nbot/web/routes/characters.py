@@ -25,6 +25,13 @@ def _get_base_dir(server):
     return getattr(server, "base_dir", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
+def _get_profile_initial_state(server, character_id: str) -> Dict[str, Any]:
+    from nbot.character.repository import ProfileRepository
+
+    profile = ProfileRepository(_get_base_dir(server)).get(character_id)
+    return profile.initial_state if profile else {}
+
+
 def register_character_routes(app, server):
     """注册角色管理 API 路由"""
 
@@ -156,7 +163,11 @@ def register_character_routes(app, server):
 
         from nbot.character.repository import RelationshipRepository
         repo = RelationshipRepository(_get_base_dir(server))
-        rel = repo.get(character_id, target_id)
+        rel = repo.get_or_create(
+            character_id,
+            target_id,
+            initial_state=_get_profile_initial_state(server, character_id),
+        )
         if not rel:
             return jsonify({"success": False, "error": "关系不存在"}), 404
         return jsonify(rel.to_dict())
@@ -173,7 +184,11 @@ def register_character_routes(app, server):
         from nbot.character.repository import RelationshipRepository
 
         repo = RelationshipRepository(_get_base_dir(server))
-        rel = repo.get_or_create(character_id, target_id)
+        rel = repo.get_or_create(
+            character_id,
+            target_id,
+            initial_state=_get_profile_initial_state(server, character_id),
+        )
 
         # 更新字段
         for field_name in ["affection", "trust", "familiarity", "dependency", "security", "jealousy"]:
