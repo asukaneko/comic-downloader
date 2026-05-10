@@ -1179,10 +1179,12 @@ const NbotMethods = {
                             firstMessage: form.firstMessage || this.personality.firstMessage || '',
                             state: this.personality.state || { affection: 50, mood: 'happy' }
                         };
-                        await api.put('/api/personality', {
-                            ...this.personality,
-                            _manualSystemPrompt: true
-                        });
+                        // systemPrompt 由后端自动编译，前端不再发送 _manualSystemPrompt
+                        const { systemPrompt, ...dataWithoutPrompt } = this.personality;
+                        const res = await api.put('/api/personality', dataWithoutPrompt);
+                        if (res.data && res.data.personality) {
+                            this.personality = { ...res.data.personality };
+                        }
                         this.activePersonality = { ...this.personality };
                         this.personalityHasUnsavedChanges = false;
                         this.showToast('Personality saved', 'success');
@@ -6276,11 +6278,15 @@ def main(params):
                 async savePersonality() {
                     this.isLoading = true;
                     try {
-                        await api.put('/api/personality', {
-                            ...this.personality,
-                            _manualSystemPrompt: this._manualSystemPrompt || false
-                        });
-                        this.activePersonality = { ...this.personality };
+                        // systemPrompt 由后端自动编译生成，前端不再发送
+                        const { systemPrompt, ...dataWithoutPrompt } = this.personality;
+                        const res = await api.put('/api/personality', dataWithoutPrompt);
+                        // 用后端返回的 personality 更新本地状态（包含自动编译的 systemPrompt）
+                        if (res.data && res.data.personality) {
+                            this.personality = { ...res.data.personality };
+                        } else {
+                            this.activePersonality = { ...this.personality };
+                        }
                         this.personalityHasUnsavedChanges = false;
                         this.showToast('人格设置已保存', 'success');
                     } catch (e) {
@@ -6319,7 +6325,6 @@ def main(params):
                         state: preset.state || { affection: 50, mood: '开心' }
                     };
                     this.personalityTagsInput = (this.personality.tags || []).join(' ');
-                    this._manualSystemPrompt = false;
                     this.personalityHasUnsavedChanges = true;
                     this.showToast('已加载角色到编辑器', 'success');
                 },
@@ -6369,42 +6374,6 @@ def main(params):
                         confirmText: '关闭'
                     };
                     this.showInfoModal = true;
-                },
-
-                regenerateSystemPrompt() {
-                    const p = this.personality;
-                    let prompt = '';
-
-                    if (p.name) prompt += `【角色名称】${p.name}\n`;
-                    if (p.basicInfo) prompt += `【基本信息】\n${p.basicInfo}\n`;
-                    if (p.personality) prompt += `【性格特点】${p.personality}\n`;
-                    if (p.scenario) prompt += `【背景设定】${p.scenario}\n`;
-                    if (p.responseFormat) prompt += `【回复格式】${p.responseFormat}\n`;
-                    if (p.rules && p.rules.length > 0) {
-                        prompt += `【行为规则】\n`;
-                        p.rules.forEach((rule, i) => {
-                            if (rule) prompt += `${i + 1}. ${rule}\n`;
-                        });
-                    }
-                    if (p.exampleDialogues) prompt += `【示例对话】\n${p.exampleDialogues}\n`;
-
-                    // 角色状态
-                    const state = p.state || {};
-                    if (Object.keys(state).length > 0) {
-                        prompt += '\n【角色当前状态】\n';
-                        if ('affection' in state) prompt += `好感度: ${state.affection}/100\n`;
-                        if ('mood' in state) prompt += `心情: ${state.mood}\n`;
-                    }
-
-                    if (prompt) {
-                        prompt = `你是角色 "${p.name || '未命名'}"。\n\n` + prompt;
-                        this.personality.systemPrompt = prompt;
-                        this._manualSystemPrompt = false;
-                        this.personalityHasUnsavedChanges = true;
-                        this.showToast('已重新生成系统提示词', 'success');
-                    } else {
-                        this.showToast('请先填写角色设定', 'warning');
-                    }
                 },
 
                 addPersonalityRule() {
@@ -6541,7 +6510,6 @@ def main(params):
                         state: { affection: 50, mood: '开心' }
                     };
                     this.personalityTagsInput = '';
-                    this._manualSystemPrompt = false;
                     this.personalityHasUnsavedChanges = false;
                     this.showToast('请在左侧编辑器中填写角色信息，然后点击保存', 'info');
                 },

@@ -32,7 +32,7 @@ from nbot.web.persistence import (
     load_all_data,
     save_data,
 )
-from nbot.core.prompt_format import format_memory_items, format_skills_prompt
+from nbot.core.prompt_format import format_skills_prompt
 from nbot.web.routes import (
     register_admin_misc_routes,
     register_ai_config_routes,
@@ -2469,62 +2469,7 @@ class WebChatServer:
         sender_name = self.personality.get("name", "AI")
         character_id = self.personality.get("id") or sender_name
 
-        # 获取所有记忆（标题+摘要）并加入系统提示词
-        memory_items = []
-        try:
-            if PROMPT_MANAGER_AVAILABLE and prompt_manager:
-                # 从 prompt_manager 获取本会话角色的记忆
-                all_memories = []
-                seen_memory_keys = set()
-                for memory_character in [character_id, sender_name]:
-                    if not memory_character:
-                        continue
-                    for mem in prompt_manager.get_memories(character_name=memory_character):
-                        memory_key = mem.get("id") or mem.get("title") or mem.get("key") or repr(mem)
-                        if memory_key in seen_memory_keys:
-                            continue
-                        seen_memory_keys.add(memory_key)
-                        all_memories.append(mem)
-                for mem in all_memories:
-                    # 兼容新旧格式：获取标题和摘要
-                    title = mem.get("title", mem.get("key", ""))
-                    summary = mem.get("summary", "")
-                    content = mem.get("content", mem.get("value", ""))
-                    if title:
-                        # 优先使用摘要，否则使用内容前100字
-                        display = (
-                            summary
-                            if summary
-                            else (
-                                content[:100] + "..." if len(content) > 100 else content
-                            )
-                        )
-                        memory_items.append({"title": title, "summary": display})
-            elif self.memories:
-                # 从 self.memories 获取
-                for mem in self.memories:
-                    mem_character = mem.get("character_name", "")
-                    if mem_character and mem_character not in {character_id, sender_name}:
-                        continue
-                    title = mem.get("title", mem.get("key", ""))
-                    summary = mem.get("summary", "")
-                    content = mem.get("content", mem.get("value", ""))
-                    if title:
-                        display = (
-                            summary
-                            if summary
-                            else (
-                                content[:100] + "..." if len(content) > 100 else content
-                            )
-                        )
-                        memory_items.append({"title": title, "summary": display})
-        except Exception as e:
-            _log.warning(f"获取记忆失败: {e}")
-
-        # 如果有记忆，添加到系统提示词
-        if memory_items:
-            system_prompt += format_memory_items(memory_items)
-            _log.info(f"已添加 {len(memory_items)} 个记忆到会话 {session_id[:8]}")
+        # 记忆由 ai_pipeline.py 中的 PromptStack 动态注入，不在此处重复添加
 
         # 添加 Skills 到系统提示词
         features = (self.settings or {}).get("features") or {}

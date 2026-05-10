@@ -6,7 +6,7 @@ from datetime import datetime
 from flask import jsonify, request
 
 from nbot.core import WebSessionStore
-from nbot.core.prompt_format import format_memory_items, format_skills_prompt
+from nbot.core.prompt_format import format_skills_prompt
 from nbot.web.persistence import is_web_visible_session
 from nbot.web.sessions_db import get_session as get_session_from_db
 
@@ -16,21 +16,6 @@ _log = logging.getLogger(__name__)
 def _skills_prompt_injection_enabled(settings):
     features = (settings or {}).get("features") or {}
     return bool(features.get("skills_prompt_injection", False))
-
-
-def _get_character_memories(prompt_manager, character_id, sender_name):
-    memories = []
-    seen = set()
-    for name in [character_id, sender_name]:
-        if not name:
-            continue
-        for mem in prompt_manager.get_memories(character_name=name):
-            key = mem.get("id") or mem.get("title") or mem.get("key") or repr(mem)
-            if key in seen:
-                continue
-            seen.add(key)
-            memories.append(mem)
-    return memories
 
 
 def register_session_routes(app, server):
@@ -126,62 +111,12 @@ def register_session_routes(app, server):
         if char_name:
             system_prompt = system_prompt.replace('{{char}}', char_name)
     
-        # 获取角色信息（提前获取用于筛选记忆）
+        # 获取角色信息
         sender_name = data.get("sender_name") or server.personality.get("name", "AI")
         character_id = data.get("character_id") or sender_name
 
-        # 获取当前角色的记忆（按角色名筛选）并加入系统提示词
-        memory_items = []
-        try:
-            if server.PROMPT_MANAGER_AVAILABLE and server.prompt_manager:
-                # 从 server.prompt_manager 获取当前角色的记忆
-                all_memories = _get_character_memories(server.prompt_manager, character_id, sender_name)
-                for mem in all_memories:
-                    # 兼容新旧格式：获取标题和摘要
-                    title = mem.get("title", mem.get("key", ""))
-                    summary = mem.get("summary", "")
-                    content = mem.get("content", mem.get("value", ""))
-                    if title:
-                        # 优先使用摘要，否则使用内容前100字
-                        display = (
-                            summary
-                            if summary
-                            else (
-                                content[:100] + "..."
-                                if len(content) > 100
-                                else content
-                            )
-                        )
-                        memory_items.append({"title": title, "summary": display})
-            elif server.memories:
-                # 从 server.memories 获取当前角色的记忆
-                for mem in server.memories:
-                    # 只获取当前角色的记忆（或无角色标记的通用记忆）
-                    mem_character = mem.get("character_name", "")
-                    if mem_character and mem_character not in {character_id, sender_name}:
-                        continue
-                    title = mem.get("title", mem.get("key", ""))
-                    summary = mem.get("summary", "")
-                    content = mem.get("content", mem.get("value", ""))
-                    if title:
-                        display = (
-                            summary
-                            if summary
-                            else (
-                                content[:100] + "..."
-                                if len(content) > 100
-                                else content
-                            )
-                        )
-                        memory_items.append({"title": title, "summary": display})
-        except Exception as e:
-            _log.warning(f"获取记忆失败: {e}")
-    
-        # 如果有记忆，添加到系统提示词
-        if memory_items:
-            system_prompt += format_memory_items(memory_items)
-            _log.info(f"已添加 {len(memory_items)} 个记忆到会话 {session_id[:8]}")
-    
+        # 记忆由 ai_pipeline.py 中的 PromptStack 动态注入，不在此处重复添加
+
         # 添加 Skills 到系统提示词
         if _skills_prompt_injection_enabled(server.settings):
             enabled_skills = [s for s in server.skills_config if s.get("enabled", True)]

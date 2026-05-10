@@ -165,9 +165,12 @@ def build_memory_context(ctx, callbacks) -> Dict[str, str]:
         or getattr(ctx.chat_request, "user_id", None)
         or ""
     )
+    # session_id 用于区分同一角色的不同 Web 会话
+    session_id = str(context.get("session_id") or "").strip()
     return {
         "character_name": str(character_name or "").strip(),
         "target_id": str(target_id or "").strip(),
+        "session_id": session_id,
     }
 
 
@@ -308,11 +311,15 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
     memory_context = build_memory_context(ctx, callbacks)
     character_name = memory_context.get("character_name", "")
     target_id = memory_context.get("target_id", "")
+    session_id = memory_context.get("session_id", "")
     if not character_name and not target_id:
         _log.warning("[AutoMemory] 跳过: character_name和target_id都为空，无法建立记忆关联")
         return 0
 
-    counter_key = character_name or target_id
+    # 使用 character_name + target_id + session_id 组合作为 key
+    # session_id 用于区分 Web 端同一角色的不同会话
+    parts = [p for p in (character_name, target_id, session_id) if p]
+    counter_key = ":".join(parts) if parts else "default"
     turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0) + 1
     _MEMORY_TURN_COUNTERS[counter_key] = turn_count
 

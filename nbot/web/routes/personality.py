@@ -116,7 +116,7 @@ def register_personality_routes(app, server):
         # 立绘图字段 - 存储图片的URL或路径，不包含原始图片数据
         server.personality["portrait"] = data.get("portrait", server.personality.get("portrait", ""))
 
-        server.personality["systemPrompt"] = data.get("systemPrompt", server.personality.get("systemPrompt", ""))
+        # systemPrompt 不再由前端传入，始终由后端根据字段自动编译
         server.personality["basicInfo"] = data.get("basicInfo", server.personality.get("basicInfo", ""))
         server.personality["personality"] = data.get("personality", server.personality.get("personality", ""))
         server.personality["scenario"] = data.get("scenario", server.personality.get("scenario", ""))
@@ -129,11 +129,8 @@ def register_personality_routes(app, server):
         server.personality["state"] = data.get("state", server.personality.get("state", {"affection": 50, "mood": "开心"}))
         server.personality["greeting"] = data.get("greeting", server.personality.get("greeting", ""))
 
-        # 如果用户没有手动编辑过 systemPrompt（前端传的是自动生成的），
-        # 则根据最新字段重新编译，确保状态等字段反映到提示词中
-        manual_prompt = data.get("_manualSystemPrompt", False)
-        if not manual_prompt or not server.personality.get("systemPrompt"):
-            server.personality["systemPrompt"] = compile_personality_prompt(server.personality)
+        # 始终根据最新字段自动编译 systemPrompt，确保与角色设定同步
+        server.personality["systemPrompt"] = compile_personality_prompt(server.personality)
 
         try:
             # 保存完整的 personality 数据到 JSON 文件

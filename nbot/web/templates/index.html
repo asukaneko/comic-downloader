@@ -2419,27 +2419,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- 高级系统提示词 -->
-                                    <div class="form-section">
-                                        <div class="section-header" @click="toggleSection('systemPrompt')">
-                                            <div class="section-header-title">
-                                                <i class="fas fa-code"></i> 系统提示词（高级）
-                                            </div>
-                                            <div class="section-header-actions">
-                                                <button class="btn btn-ghost btn-sm" @click.stop="regenerateSystemPrompt" style="font-size: 11px; padding: 3px 8px;">
-                                                    <i class="fas fa-magic"></i> 重新生成
-                                                </button>
-                                                <i class="fas fa-chevron-down section-header-chevron" :class="{ 'is-folded': foldedSections.systemPrompt }"></i>
-                                            </div>
-                                        </div>
-                                        <div v-show="!foldedSections.systemPrompt" class="section-body">
-                                            <div class="form-group">
-                                                <textarea v-model="personality.systemPrompt" class="form-textarea code-editor" rows="8" placeholder="这是最终发送给AI的系统提示词。如果不填写，会自动根据上面的设定生成。&#10;&#10;可使用 {{user}} 和 {{char}} 变量&#10;【标签】内的内容会被高亮显示" @change="personalityHasUnsavedChanges = true" @input="_manualSystemPrompt = true"></textarea>
-                                                <div class="char-count">{{ (personality.systemPrompt || '').length }} 字</div>
-                                                <div class="form-hint">高级用户可以直接编辑，覆盖自动生成的提示词</div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <!-- 系统提示词已改为自动生成，不再在前端显示编辑区域 -->
                                 </div>
                             </div>
 
@@ -7320,7 +7300,6 @@
                     customPersonalityPage: 1, // 角色卡当前页码
                     customPersonalityPageSize: 10, // 角色卡每页数量
                     personalityHasUnsavedChanges: false, // 是否有未保存的修改
-                    _manualSystemPrompt: false, // 用户是否手动编辑了系统提示词
                     activePersonality: {}, // 服务器端当前实际应用的角色
                     personalityTagsInput: '', // 标签输入框的临时值（兼容旧逻辑）
                     personalityTagDraft: '', // 标签输入框当前草稿
