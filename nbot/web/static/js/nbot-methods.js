@@ -4445,6 +4445,10 @@ def main(params):
                     if (!sessionId) return;
                     try {
                         const res = await api.get('/api/sessions/' + sessionId + '/public/status');
+                        // 检查当前查看的会话是否仍然是查询时的会话（防止竞态条件）
+                        if (this.viewingSession?.id !== sessionId) {
+                            return;
+                        }
                         if (res.data.success && res.data.is_public) {
                             this.sessionIsPublic = true;
                             this.sessionShareUrl = res.data.public_url;

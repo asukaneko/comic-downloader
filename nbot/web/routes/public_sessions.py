@@ -165,6 +165,7 @@ def register_public_session_routes(app, server):
     @app.route("/api/sessions/<session_id>/public/status", methods=["GET"])
     def get_session_public_status(session_id):
         """获取会话公开状态"""
+        _cleanup_expired()
         public_id = _generate_public_id(session_id)
         is_public = public_id in _public_sessions
         result = {"success": True, "is_public": is_public}
