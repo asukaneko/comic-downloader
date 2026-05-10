@@ -753,6 +753,11 @@ const NbotMethods = {
                     this.isSidebarCollapsed = !this.isSidebarCollapsed;
                 },
 
+                toggleNavSection(section) {
+                    this.navCollapsed[section] = !this.navCollapsed[section];
+                    localStorage.setItem('nbot_nav_collapsed', JSON.stringify(this.navCollapsed));
+                },
+
                 goDashboard(page = 'dashboard') {
                     localStorage.setItem('nbot_dashboard_page', page);
                     window.location.href = '/dashboard';
@@ -1009,6 +1014,15 @@ const NbotMethods = {
 
                 async loadHomeData() {
                     this.appDataReady = false;
+                    // 从 localStorage 恢复导航折叠状态
+                    try {
+                        const savedNavCollapsed = localStorage.getItem('nbot_nav_collapsed');
+                        if (savedNavCollapsed) {
+                            this.navCollapsed = JSON.parse(savedNavCollapsed);
+                        }
+                    } catch (e) {
+                        // 忽略解析错误
+                    }
                     try {
                         await Promise.all([
                             this.loadSessions(),
@@ -4388,11 +4402,108 @@ def main(params):
                             channel_id: fullSession.channel_id || '',
                             messages: fullSession.messages || []
                         };
+                        // 重置公开状态
+                        this.sessionQrCode = '';
+                        this.sessionShareUrl = '';
+                        this.sessionIsPublic = false;
                         this.showSessionDetailsModal = true;
+                        // 查询公开状态
+                        this.checkSessionPublicStatus(this.viewingSession.id);
                     } catch (e) {
                         console.error('获取会话详情失败:', e);
                         this.showToast('获取详情失败', 'error');
                     }
+                },
+
+                // 查询会话公开状态
+                async checkSessionPublicStatus(sessionId) {
+                    if (!sessionId) return;
+                    try {
+                        const res = await api.get('/api/sessions/' + sessionId + '/public/status');
+                        if (res.data.success && res.data.is_public) {
+                            this.sessionIsPublic = true;
+                            this.sessionShareUrl = res.data.public_url;
+                            // 生成二维码
+                            this.generatePublicQrCode(res.data.public_url);
+                        }
+                    } catch (e) {
+                        console.error('查询公开状态失败:', e);
+                    }
+                },
+
+                // 公开会话
+                async makeSessionPublic(sessionId) {
+                    if (!sessionId) return;
+                    this.isLoadingPublic = true;
+                    try {
+                        const res = await api.post('/api/sessions/' + sessionId + '/public');
+                        if (res.data.success) {
+                            this.sessionIsPublic = true;
+                            this.sessionShareUrl = res.data.public_url;
+                            this.showToast('会话已公开', 'success');
+                            // 生成二维码
+                            this.generatePublicQrCode(res.data.public_url);
+                        } else {
+                            this.showToast(res.data.error || '公开失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('公开会话失败:', e);
+                        this.showToast('公开失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoadingPublic = false;
+                    }
+                },
+
+                // 取消公开会话
+                async removeSessionPublic(sessionId) {
+                    if (!sessionId) return;
+                    try {
+                        await api.delete('/api/sessions/' + sessionId + '/public');
+                        this.sessionIsPublic = false;
+                        this.sessionQrCode = '';
+                        this.sessionShareUrl = '';
+                        this.showToast('已取消公开', 'success');
+                    } catch (e) {
+                        console.error('取消公开失败:', e);
+                        this.showToast('取消公开失败', 'error');
+                    }
+                },
+
+                // 生成公开链接的二维码
+                async generatePublicQrCode(publicUrl) {
+                    if (!publicUrl) return;
+                    this.isLoadingQrCode = true;
+                    try {
+                        const res = await api.post('/api/qrcode/generate', {
+                            data: publicUrl,
+                            scale: 10,
+                            dark: '#1a1a2e',
+                            light: '#f0f0f0'
+                        });
+                        if (res.data.success) {
+                            this.sessionQrCode = res.data.image;
+                        }
+                    } catch (e) {
+                        console.error('生成二维码失败:', e);
+                    } finally {
+                        this.isLoadingQrCode = false;
+                    }
+                },
+
+                // 复制会话分享链接
+                copySessionShareUrl() {
+                    if (!this.sessionShareUrl) return;
+                    navigator.clipboard.writeText(this.sessionShareUrl).then(() => {
+                        this.showToast('链接已复制到剪贴板', 'success');
+                    }).catch(() => {
+                        this.showToast('复制失败', 'error');
+                    });
+                },
+
+                // 打开分享链接
+                openSessionShareUrl() {
+                    if (!this.sessionShareUrl) return;
+                    window.open(this.sessionShareUrl, '_blank');
                 },
 
                 // Web 会话删除

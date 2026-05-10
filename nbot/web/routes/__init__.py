@@ -12,8 +12,10 @@ from nbot.web.routes.knowledge import register_knowledge_routes
 from nbot.web.routes.live2d import register_live2d_routes
 from nbot.web.routes.memory import register_memory_routes
 from nbot.web.routes.personality import register_personality_routes
+from nbot.web.routes.public_sessions import register_public_session_routes
 from nbot.web.routes.push import register_push_routes
 from nbot.web.routes.qq_overview import register_qq_overview_routes
+from nbot.web.routes.qrcode import register_qrcode_routes
 from nbot.web.routes.sessions import register_session_routes
 from nbot.web.routes.skills import register_skill_routes
 from nbot.web.routes.skills_storage import register_skills_storage_routes
@@ -41,8 +43,10 @@ __all__ = [
     "register_live2d_routes",
     "register_memory_routes",
     "register_personality_routes",
+    "register_public_session_routes",
     "register_push_routes",
     "register_qq_overview_routes",
+    "register_qrcode_routes",
     "register_session_routes",
     "register_skill_routes",
     "register_skills_storage_routes",

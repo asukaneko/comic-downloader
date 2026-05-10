@@ -166,59 +166,79 @@
                 </div>
 
                 <nav class="sidebar-nav">
-                    <div class="nav-section">
-                        <div class="nav-section-title">{{ $t('nav.overview') }}</div>
-                        <div 
-                            v-for="item in navItems.overview" 
-                            :key="item.id"
-                            class="nav-item"
-                            :class="{ active: currentPage === item.id }"
-                            @click="navigateTo(item.id, $event)"
-                        >
-                            <i :class="item.icon" class="nav-icon"></i>
-                            <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                    <div class="nav-section" :class="{ collapsed: navCollapsed.overview }">
+                        <div class="nav-section-title" @click="toggleNavSection('overview')">
+                            <span>{{ $t('nav.overview') }}</span>
+                            <i class="fas fa-chevron-down nav-section-arrow"></i>
+                        </div>
+                        <div class="nav-section-content">
+                            <div 
+                                v-for="item in navItems.overview" 
+                                :key="item.id"
+                                class="nav-item"
+                                :class="{ active: currentPage === item.id }"
+                                @click="navigateTo(item.id, $event)"
+                            >
+                                <i :class="item.icon" class="nav-icon"></i>
+                                <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="nav-section">
-                        <div class="nav-section-title">{{ $t('nav.chat') }}</div>
-                        <div 
-                            v-for="item in navItems.chat" 
-                            :key="item.id"
-                            class="nav-item"
-                            :class="{ active: currentPage === item.id }"
-                            @click="navigateTo(item.id, $event)"
-                        >
-                            <i :class="item.icon" class="nav-icon"></i>
-                            <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                    <div class="nav-section" :class="{ collapsed: navCollapsed.chat }">
+                        <div class="nav-section-title" @click="toggleNavSection('chat')">
+                            <span>{{ $t('nav.chat') }}</span>
+                            <i class="fas fa-chevron-down nav-section-arrow"></i>
+                        </div>
+                        <div class="nav-section-content">
+                            <div 
+                                v-for="item in navItems.chat" 
+                                :key="item.id"
+                                class="nav-item"
+                                :class="{ active: currentPage === item.id }"
+                                @click="navigateTo(item.id, $event)"
+                            >
+                                <i :class="item.icon" class="nav-icon"></i>
+                                <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="nav-section">
-                        <div class="nav-section-title">{{ $t('nav.config') }}</div>
-                        <div 
-                            v-for="item in navItems.config" 
-                            :key="item.id"
-                            class="nav-item"
-                            :class="{ active: currentPage === item.id }"
-                            @click="navigateTo(item.id, $event)"
-                        >
-                            <i :class="item.icon" class="nav-icon"></i>
-                            <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                    <div class="nav-section" :class="{ collapsed: navCollapsed.config }">
+                        <div class="nav-section-title" @click="toggleNavSection('config')">
+                            <span>{{ $t('nav.config') }}</span>
+                            <i class="fas fa-chevron-down nav-section-arrow"></i>
+                        </div>
+                        <div class="nav-section-content">
+                            <div 
+                                v-for="item in navItems.config" 
+                                :key="item.id"
+                                class="nav-item"
+                                :class="{ active: currentPage === item.id }"
+                                @click="navigateTo(item.id, $event)"
+                            >
+                                <i :class="item.icon" class="nav-icon"></i>
+                                <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="nav-section">
-                        <div class="nav-section-title">{{ $t('nav.system') }}</div>
-                        <div 
-                            v-for="item in navItems.system" 
-                            :key="item.id"
-                            class="nav-item"
-                            :class="{ active: currentPage === item.id }"
-                            @click="navigateTo(item.id, $event)"
-                        >
-                            <i :class="item.icon" class="nav-icon"></i>
-                            <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                    <div class="nav-section" :class="{ collapsed: navCollapsed.system }">
+                        <div class="nav-section-title" @click="toggleNavSection('system')">
+                            <span>{{ $t('nav.system') }}</span>
+                            <i class="fas fa-chevron-down nav-section-arrow"></i>
+                        </div>
+                        <div class="nav-section-content">
+                            <div 
+                                v-for="item in navItems.system" 
+                                :key="item.id"
+                                class="nav-item"
+                                :class="{ active: currentPage === item.id }"
+                                @click="navigateTo(item.id, $event)"
+                            >
+                                <i :class="item.icon" class="nav-icon"></i>
+                                <span class="nav-text">{{ $t(item.labelKey) }}</span>
+                            </div>
                         </div>
                     </div>
                 </nav>
@@ -6064,6 +6084,48 @@
                         </div>
                     </div>
 
+                    <!-- 公开分享 -->
+                    <div class="form-section" v-if="viewingSession.id">
+                        <div class="form-section-title">
+                            <i class="fas fa-share-alt" style="color: var(--accent-primary);"></i> 公开分享
+                        </div>
+                        <div style="padding: 16px;">
+                            <!-- 未公开状态 -->
+                            <div v-if="!sessionIsPublic" style="text-align: center;">
+                                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                                    公开后会生成一个只读链接，其他人可以查看对话内容但无法交互
+                                </p>
+                                <button class="btn btn-primary btn-small" @click="makeSessionPublic(viewingSession.id)" :disabled="isLoadingPublic">
+                                    <i class="fas fa-globe" :class="{ 'fa-spin': isLoadingPublic }"></i>
+                                    {{ isLoadingPublic ? '处理中...' : '公开会话' }}
+                                </button>
+                            </div>
+
+                            <!-- 已公开状态 -->
+                            <div v-else style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                                <img v-if="sessionQrCode" :src="sessionQrCode" alt="分享二维码" style="width: 180px; height: 180px; border-radius: 8px; border: 1px solid var(--border-color);">
+                                <div v-else style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; background: var(--bg-secondary); border-radius: 8px; color: var(--text-muted);">
+                                    <i class="fas fa-spinner fa-spin" v-if="isLoadingQrCode"></i>
+                                    <span v-else>生成中...</span>
+                                </div>
+                                <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                                    <button class="btn btn-secondary btn-small" @click="copySessionShareUrl">
+                                        <i class="fas fa-link"></i> 复制链接
+                                    </button>
+                                    <button class="btn btn-secondary btn-small" @click="openSessionShareUrl">
+                                        <i class="fas fa-external-link-alt"></i> 打开链接
+                                    </button>
+                                    <button class="btn btn-danger btn-small" @click="removeSessionPublic(viewingSession.id)">
+                                        <i class="fas fa-lock"></i> 取消公开
+                                    </button>
+                                </div>
+                                <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin: 0;">
+                                    扫描二维码或访问链接查看只读对话
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- 原始数据 -->
                     <div class="form-section">
                         <div class="form-section-title">
@@ -7149,6 +7211,12 @@
                             { id: 'debug', labelKey: 'nav.debug', icon: 'fas fa-bug' }
                         ]
                     },
+                    navCollapsed: {
+                        overview: false,
+                        chat: false,
+                        config: false,
+                        system: false
+                    },
                     
                     // Stats
                     stats: {
@@ -7793,6 +7861,11 @@
                     editingSession: {},
                     showSessionDetailsModal: false,
                     viewingSession: null,
+                    sessionQrCode: '',
+                    sessionShareUrl: '',
+                    isLoadingQrCode: false,
+                    sessionIsPublic: false,
+                    isLoadingPublic: false,
                     showConfirmModal: false,
                     showExpandEditor: false,
                     expandEditorContent: '',

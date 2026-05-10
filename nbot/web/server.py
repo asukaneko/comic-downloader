@@ -48,8 +48,10 @@ from nbot.web.routes import (
     register_live2d_routes,
     register_memory_routes,
     register_personality_routes,
+    register_public_session_routes,
     register_push_routes,
     register_qq_overview_routes,
+    register_qrcode_routes,
     register_session_routes,
     register_skill_routes,
     register_skills_storage_routes,
@@ -2326,6 +2328,8 @@ class WebChatServer:
         register_personality_routes(self.app, self)
         register_push_routes(self.app, self)
         register_qq_overview_routes(self.app, self)
+        register_qrcode_routes(self.app, self)
+        register_public_session_routes(self.app, self)
         register_session_routes(self.app, self)
         register_skill_routes(self.app, self)
         register_task_center_routes(self.app, self)
