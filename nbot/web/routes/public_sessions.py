@@ -2,6 +2,7 @@
 """公开会话 API - 生成只读分享链接"""
 
 import hashlib
+import json
 import logging
 import os
 import time
@@ -9,11 +10,55 @@ from datetime import datetime
 
 from flask import jsonify, render_template, request
 
+from nbot.web.secure_store import read_secure_json, write_secure_json
+
 _log = logging.getLogger(__name__)
 
 # 内存中存储公开会话映射: public_id -> {session_id, created_at, expires_at}
-# 实际生产环境应该使用数据库或持久化存储
 _public_sessions = {}
+_public_sessions_loaded = False
+
+
+def _get_public_sessions_file(data_dir):
+    """获取公开会话存储文件路径"""
+    return os.path.join(data_dir, "public_sessions.json")
+
+
+def _load_public_sessions(data_dir):
+    """从文件加载公开会话数据"""
+    global _public_sessions, _public_sessions_loaded
+    if _public_sessions_loaded:
+        return
+
+    file_path = _get_public_sessions_file(data_dir)
+    if os.path.exists(file_path):
+        try:
+            data, _ = read_secure_json(file_path, data_dir, {})
+            if isinstance(data, dict):
+                # 过滤掉已过期的会话
+                now = time.time()
+                _public_sessions = {
+                    k: v for k, v in data.items()
+                    if v.get("expires_at", 0) > now
+                }
+                _log.info("[PublicSession] 已加载 %d 个公开会话", len(_public_sessions))
+        except Exception as e:
+            _log.error("[PublicSession] 加载公开会话失败: %s", e)
+            _public_sessions = {}
+    else:
+        _public_sessions = {}
+
+    _public_sessions_loaded = True
+
+
+def _save_public_sessions(data_dir):
+    """保存公开会话数据到文件"""
+    global _public_sessions
+    file_path = _get_public_sessions_file(data_dir)
+    try:
+        write_secure_json(file_path, data_dir, _public_sessions)
+    except Exception as e:
+        _log.error("[PublicSession] 保存公开会话失败: %s", e)
 
 
 def _generate_public_id(session_id):
@@ -30,10 +75,14 @@ def _cleanup_expired():
     ]
     for pid in expired:
         del _public_sessions[pid]
+    return len(expired)
 
 
 def register_public_session_routes(app, server):
     """注册公开会话路由"""
+
+    # 启动时加载公开会话数据
+    _load_public_sessions(server.data_dir)
 
     @app.route("/api/sessions/<session_id>/public", methods=["POST"])
     def make_session_public(session_id):
@@ -85,6 +134,9 @@ def register_public_session_routes(app, server):
             }
         }
 
+        # 持久化到文件
+        _save_public_sessions(server.data_dir)
+
         # 构建公开链接
         host_url = request.headers.get("Origin", "")
         if not host_url:
@@ -105,6 +157,8 @@ def register_public_session_routes(app, server):
         public_id = _generate_public_id(session_id)
         if public_id in _public_sessions:
             del _public_sessions[public_id]
+            # 持久化到文件
+            _save_public_sessions(server.data_dir)
             _log.info("[PublicSession] 会话 %s 已取消公开", session_id[:8])
         return jsonify({"success": True})
 

@@ -1001,6 +1001,31 @@ const NbotMethods = {
                     return 'fas fa-comment';
                 },
 
+                // 根据用户名生成头像颜色
+                getUserAvatarColor(name) {
+                    if (!name) return 'linear-gradient(135deg, #6366f1, #8b5cf6)';
+                    // 预定义的颜色列表
+                    const colors = [
+                        'linear-gradient(135deg, #6366f1, #8b5cf6)', // 紫
+                        'linear-gradient(135deg, #3b82f6, #06b6d4)', // 蓝
+                        'linear-gradient(135deg, #10b981, #34d399)', // 绿
+                        'linear-gradient(135deg, #f59e0b, #fbbf24)', // 黄
+                        'linear-gradient(135deg, #ef4444, #f87171)', // 红
+                        'linear-gradient(135deg, #ec4899, #f472b6)', // 粉
+                        'linear-gradient(135deg, #8b5cf6, #a78bfa)', // 浅紫
+                        'linear-gradient(135deg, #14b8a6, #2dd4bf)', // 青
+                        'linear-gradient(135deg, #f97316, #fb923c)', // 橙
+                        'linear-gradient(135deg, #06b6d4, #22d3ee)', // 天蓝
+                    ];
+                    // 根据用户名哈希选择颜色
+                    let hash = 0;
+                    for (let i = 0; i < name.length; i++) {
+                        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+                    }
+                    const index = Math.abs(hash) % colors.length;
+                    return colors[index];
+                },
+
                 async refreshCurrentChat() {
                     if (this.currentSession) {
                         // 手动刷新时强制滚动到底部

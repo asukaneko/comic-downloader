@@ -1195,11 +1195,21 @@
                                     <template v-for="msg in currentMessages.filter(m => !m.hide_in_web)" :key="msg.id">
                                         <!-- 消息主体 -->
                                         <div class="message" :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg) }]">
-                                            <div class="message-avatar" :class="{ 'has-portrait': msg.role === 'assistant' && currentSession.sender_portrait }" @click="msg.role === 'assistant' && currentSession.sender_portrait ? viewPortrait(currentSession.sender_portrait) : null">
+                                            <div class="message-avatar" :class="{ 'has-portrait': msg.role === 'assistant' && currentSession.sender_portrait, 'user-avatar': msg.role === 'user' }" @click="msg.role === 'assistant' && currentSession.sender_portrait ? viewPortrait(currentSession.sender_portrait) : null">
                                                 <!-- AI消息显示立绘或头像 -->
                                                 <template v-if="msg.role === 'assistant'">
                                                     <img v-if="currentSession.sender_portrait" :src="currentSession.sender_portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
                                                     <i v-else :class="currentSession.sender_avatar || 'fas fa-robot'"></i>
+                                                </template>
+                                                <!-- 用户消息显示用户名首字母 -->
+                                                <template v-else-if="msg.role === 'user'">
+                                                    <div v-if="msg.sender && msg.sender !== '用户'" class="user-avatar-text" :style="{ background: getUserAvatarColor(msg.sender) }">
+                                                        {{ msg.sender[0]?.toUpperCase() }}
+                                                    </div>
+                                                    <div v-else-if="username" class="user-avatar-text" :style="{ background: getUserAvatarColor(username) }">
+                                                        {{ username[0]?.toUpperCase() }}
+                                                    </div>
+                                                    <i v-else class="fas fa-user"></i>
                                                 </template>
                                                 <i v-else class="fas fa-user"></i>
                                             </div>
