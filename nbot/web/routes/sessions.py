@@ -700,14 +700,20 @@ def register_session_routes(app, server):
             return jsonify({"error": "Session not found"}), 404
 
         messages = session.get("messages", [])
-        if len(messages) < 10:
+        # 已经压缩过的会话允许更少消息即可再次压缩，确保归档可以持续追加
+        has_been_compressed = any(
+            m.get("role") == "system" and m.get("id", "").startswith("summary_")
+            for m in messages
+        )
+        min_messages = 5 if has_been_compressed else 10
+        if len(messages) < min_messages:
             return jsonify({"success": False, "error": "消息数量不足，无需压缩"}), 400
 
         system_msg = None
         if messages and messages[0].get("role") == "system":
             system_msg = messages[0]
 
-        keep_count = min(5, len(messages) - 2)
+        keep_count = min(3 if has_been_compressed else 5, len(messages) - 2)
         recent_messages = messages[-keep_count:] if messages else []
 
         compress_start = 1 if system_msg else 0

@@ -3357,8 +3357,9 @@ def main(params):
                         ...this.pendingMessageQueues,
                         [sessionId]: queue
                     };
-                    // 立即尝试处理队列
-                    this.$nextTick(() => this.processPendingQueue(sessionId));
+                    // 始终调度延迟的队列处理，确保超时保护能生效
+                    // processPendingQueue 内部会检查 isLoading，不会重复发送
+                    setTimeout(() => this.processPendingQueue(sessionId), 500);
                     return queue.length;
                 },
 
@@ -3376,46 +3377,44 @@ def main(params):
                 async processPendingQueue(sessionId) {
                     if (!sessionId || this.isProcessingQueuedMessage) return;
 
-                    const queue = this.pendingMessageQueues[sessionId] || [];
-                    if (!queue.length) return;
-
-                    // 智能检测：如果最后一条消息是AI回复且isLoading仍为true，自动重置状态
-                    if (this.isLoading && this.currentSession?.id === sessionId) {
-                        const lastMessage = this.currentMessages[this.currentMessages.length - 1];
-                        const isTimeout = this.loadingStartTime && (Date.now() - this.loadingStartTime > 120000); // 2分钟超时
-
-                        if (lastMessage && lastMessage.role === 'assistant') {
-                            console.log('[Queue] 检测到AI已回复但isLoading仍为true，自动重置状态');
+                    // 如果正在等待AI回复，不处理队列（等AI回复完成后由事件触发）
+                    if (this.isLoading && this.loadingSessionId === sessionId) {
+                        // 超时保护：如果等待超过60秒，自动重置状态
+                        if (this.loadingStartTime && (Date.now() - this.loadingStartTime > 60000)) {
+                            console.log('[Queue] 等待AI回复超时，自动重置状态');
                             this.isLoading = false;
                             this.loadingSessionId = null;
                             this.loadingStartTime = null;
+                            this.isTyping = false;
                             localStorage.removeItem('nbot_loading_session_id');
                             localStorage.removeItem('nbot_loading_start_time');
-                        } else if (isTimeout) {
-                            console.log('[Queue] 生成超时，自动重置状态');
-                            this.isLoading = false;
-                            this.loadingSessionId = null;
-                            this.loadingStartTime = null;
-                            localStorage.removeItem('nbot_loading_session_id');
-                            localStorage.removeItem('nbot_loading_start_time');
-                            this.showToast('生成响应超时，请重试', 'warning');
                         } else {
-                            // 如果正在生成中，等待一段时间后重试
-                            setTimeout(() => this.processPendingQueue(sessionId), 500);
+                            // 仍有队列消息时，延迟重试确保超时保护最终能生效
+                            if ((this.pendingMessageQueues[sessionId] || []).length > 0) {
+                                setTimeout(() => this.processPendingQueue(sessionId), 5000);
+                            }
                             return;
                         }
                     }
+
+                    const queue = this.pendingMessageQueues[sessionId] || [];
+                    if (!queue.length) return;
 
                     const nextPayload = this.dequeuePendingMessage(sessionId);
                     if (!nextPayload) return;
 
                     this.isProcessingQueuedMessage = true;
                     try {
+                        // 触发骨架动画提示队列消息正在发送
+                        if (window.__nbotLive2dSay) {
+                            window.__nbotLive2dSay('正在发送队列中的消息...', 3200, 4);
+                        }
                         await this.sendPreparedMessage(nextPayload);
+                    } catch (e) {
+                        console.error('[Queue] 发送队列消息失败:', e);
                     } finally {
                         this.isProcessingQueuedMessage = false;
-                        // 发送完成后，继续检查队列
-                        this.$nextTick(() => this.processPendingQueue(sessionId));
+                        // 不在此处递归调用！等待AI回复完成后由事件触发下一条
                     }
                 },
 
@@ -3574,6 +3573,17 @@ def main(params):
                         return;
                     }
 
+                    // 清理过期的加载状态（超过60秒视为卡住）
+                    if (this.isLoading && this.loadingStartTime && (Date.now() - this.loadingStartTime > 60000)) {
+                        console.log('[Send] 检测到过期加载状态，自动重置');
+                        this.isLoading = false;
+                        this.loadingSessionId = null;
+                        this.loadingStartTime = null;
+                        this.isTyping = false;
+                        localStorage.removeItem('nbot_loading_session_id');
+                        localStorage.removeItem('nbot_loading_start_time');
+                    }
+
                     const payload = this.buildPendingMessagePayload(
                         content,
                         files,
@@ -3583,7 +3593,9 @@ def main(params):
                     this.inputMessage = '';
                     this.uploadedFiles = [];
 
-                    if (this.isLoading && this.loadingSessionId === this.currentSession.id) {
+                    // 如果正在加载，或者当前会话有待发送队列消息，都应入队以保证顺序
+                    const hasQueuedMessages = (this.pendingMessageQueues[this.currentSession.id] || []).length > 0;
+                    if ((this.isLoading && this.loadingSessionId === this.currentSession.id) || hasQueuedMessages) {
                         const queueLength = this.enqueuePendingMessage(this.currentSession.id, payload);
                         if (window.__nbotLive2dSay) {
                             window.__nbotLive2dSay('\u5df2\u52a0\u5165\u5f53\u524d\u4f1a\u8bdd\u7684\u53d1\u9001\u961f\u5217\u3002', 3200, 4);
@@ -6284,9 +6296,9 @@ def main(params):
                         // 用后端返回的 personality 更新本地状态（包含自动编译的 systemPrompt）
                         if (res.data && res.data.personality) {
                             this.personality = { ...res.data.personality };
-                        } else {
-                            this.activePersonality = { ...this.personality };
                         }
+                        // 始终同步更新 activePersonality，确保角色卡预览立即刷新
+                        this.activePersonality = { ...this.personality };
                         this.personalityHasUnsavedChanges = false;
                         this.showToast('人格设置已保存', 'success');
                     } catch (e) {
@@ -8825,12 +8837,21 @@ def main(params):
                         }, 15000);
                     }
                     this.scheduleStreamScroll(true);
-                    this.isTyping = false;
-                    this.isLoading = false;
-                    this.loadingSessionId = null;
-                    this.loadingStartTime = null;
-                    localStorage.removeItem('nbot_loading_session_id');
-                    localStorage.removeItem('nbot_loading_start_time');
+                    // 只有当没有新消息正在处理时才重置加载状态
+                    // 如果 loadingSessionId 已被新消息设置，说明用户已发送新消息，不应重置
+                    if (!this.loadingSessionId) {
+                        this.isTyping = false;
+                        this.isLoading = false;
+                        this.loadingStartTime = null;
+                        localStorage.removeItem('nbot_loading_session_id');
+                        localStorage.removeItem('nbot_loading_start_time');
+                    }
+                    // 流式输出完全结束后，触发待发送队列处理下一条消息
+                    // 使用 fallback 确保即使 messageSessionId 为空也能触发
+                    const triggerSessionId = messageSessionId || this.currentSession?.id;
+                    if (triggerSessionId) {
+                        this.$nextTick(() => this.processPendingQueue(triggerSessionId));
+                    }
                 },
 
                 // Socket.io
@@ -9177,7 +9198,7 @@ def main(params):
                             localStorage.removeItem('nbot_loading_start_time');
                             this.scheduleStreamType(finishedMessageId);
                         }
-                        if (this.currentSession && finishedSessionId === this.currentSession.id && window.__nbotLive2dComment) {
+                        if (this.currentSession && finishedSessionId === this.currentSession.id && window.__nbotLive2dComment && this.settings?.features?.live2d !== false) {
                             // Collect last 5 rounds (up to 10 messages) for Live2D commentary
                             const allMsgs = this.currentMessages.filter(m => m.role === 'user' || m.role === 'assistant');
                             const recent = allMsgs.slice(-10).map(m => ({ role: m.role, content: m.content || '' }));
@@ -9190,6 +9211,7 @@ def main(params):
                             if (!queue.length && !this.streamTypeTimers[finishedMessageId]) {
                                 this.finishStreamMessage(finishedMessageId);
                             }
+                            // 如果还有待排版内容，finishStreamMessage 会在排版完成后自动触发 processPendingQueue
                         } else {
                             this.isTyping = false;
                             this.isLoading = false;
@@ -9197,8 +9219,9 @@ def main(params):
                             this.loadingStartTime = null;
                             localStorage.removeItem('nbot_loading_session_id');
                             localStorage.removeItem('nbot_loading_start_time');
+                            // 无 messageId 时直接触发队列处理
+                            this.processPendingQueue(finishedSessionId);
                         }
-                        this.processPendingQueue(finishedSessionId);
                     });
 
                     socket.on('ai_response', (data) => {
@@ -9211,7 +9234,7 @@ def main(params):
                         localStorage.removeItem('nbot_loading_session_id');
                         localStorage.removeItem('nbot_loading_start_time');
                         if (this.currentSession && data.session_id === this.currentSession.id) {
-                            if (data.message?.content && window.__nbotLive2dComment) {
+                            if (data.message?.content && window.__nbotLive2dComment && this.settings?.features?.live2d !== false) {
                                 const allMsgs = this.currentMessages.filter(m => m.role === 'user' || m.role === 'assistant');
                                 const recent = allMsgs.slice(-10).map(m => ({ role: m.role, content: m.content || '' }));
                                 if (recent.length) {
@@ -9259,9 +9282,10 @@ def main(params):
                         } else {
                             console.log('AI response ignored: session mismatch', this.currentSession?.id, data.session_id);
                         }
+                        // 非流式回复完成，触发队列处理下一条
                         this.processPendingQueue(finishedSessionId);
                     });
-                    
+
                     socket.on('error', (err) => {
                         console.error('Socket error:', err);
                         this.isTyping = false;

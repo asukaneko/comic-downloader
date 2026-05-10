@@ -8420,16 +8420,18 @@
                 // 应用已保存的聊天背景
                 this.applyChatBackground();
 
-                // 检查并清理过期的加载状态（超过2分钟）
+                // 检查并清理过期的加载状态（超过60秒）
                 const savedLoadingStartTime = localStorage.getItem('nbot_loading_start_time');
                 if (savedLoadingStartTime) {
                     const loadingStartTime = parseInt(savedLoadingStartTime);
-                    const isExpired = Date.now() - loadingStartTime > 120000; // 2分钟超时
+                    const isExpired = Date.now() - loadingStartTime > 60000; // 60秒超时
                     if (isExpired) {
                         localStorage.removeItem('nbot_loading_session_id');
                         localStorage.removeItem('nbot_loading_start_time');
                         this.loadingSessionId = null;
                         this.loadingStartTime = null;
+                        this.isLoading = false;
+                        this.isTyping = false;
                     }
                 }
 
