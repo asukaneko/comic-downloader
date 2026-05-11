@@ -905,9 +905,17 @@ class AIPipeline:
         try:
             execution_result = run_tool_loop_session(session)
         except Exception as e:
+            error_str = str(e)
             _log.error(f"Tool loop failed: {e}")
-            ctx.error = str(e)
-            ctx.final_content = f"工具循环执行失败: {e}"
+            # 如果是 400 错误（如模型不支持工具调用），回退到普通对话
+            if "400" in error_str and ("Bad Request" in error_str or "chat/completions" in error_str):
+                _log.warning("模型返回400错误，跳过工具调用，回退到普通对话")
+                progress.on_thinking_start(ctx)
+                self._run_simple(ctx, callbacks)
+                progress.on_done(ctx)
+                return
+            ctx.error = error_str
+            ctx.final_content = f"工具循环执行失败: {error_str}"
             return
 
         loop_result = execution_result.loop_result

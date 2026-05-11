@@ -484,11 +484,11 @@ relationship_deltas: dict # 关系变化量
 ```text
 /help
 /workspace
-/ws_send <文件名>
-/summary_recent
-/summary_today
-/findbook <书名>
-/jm <漫画ID>
+/model        # 切换模型
+/character    # 切换角色
+/resume       # 继承web端的会话
+/push         # 推送当前会话到web端
+
 ```
 
 ---

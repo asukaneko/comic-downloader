@@ -328,5 +328,17 @@
         </div>
     </div>
     {% endif %}
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const userAvatar = localStorage.getItem('userAvatar');
+            if (userAvatar) {
+                document.querySelectorAll('.message.user .message-avatar').forEach(avatarDiv => {
+                    if (avatarDiv.querySelector('svg') && !avatarDiv.querySelector('img')) {
+                        avatarDiv.innerHTML = `<img src="${userAvatar}" alt="用户头像" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+                    }
+                });
+            }
+        });
+    </script>
 </body>
 </html>

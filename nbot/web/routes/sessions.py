@@ -168,6 +168,26 @@ def register_session_routes(app, server):
         sender_name = data.get("sender_name") or server.personality.get("name", "AI")
         character_id = data.get("character_id") or sender_name
 
+        if any(key in data for key in ("state", "initial_state", "initialState", "relationship", "initialRelationship")):
+            try:
+                from nbot.character.models import CharacterProfile
+                from nbot.character.repository import ProfileRepository
+
+                profile_data = dict(getattr(server, "personality", {}) or {})
+                profile_data.update(data)
+                profile = CharacterProfile.from_personality_dict(profile_data)
+                profile.id = str(character_id)
+                if not profile.name:
+                    profile.name = sender_name
+                ProfileRepository(_get_base_dir(server)).save(profile)
+            except Exception as exc:
+                _log.warning(
+                    "[CharacterRuntime] failed to sync session character profile %s: %s",
+                    character_id,
+                    exc,
+                    exc_info=True,
+                )
+
         # 记忆由 ai_pipeline.py 中的 PromptStack 动态注入，不在此处重复添加
 
         # 添加 Skills 到系统提示词

@@ -113,6 +113,7 @@ const NbotMethods = {
                     localStorage.setItem('messageTextColor', this.messageStyle.textColor);
                     localStorage.setItem('userBubbleColor', this.messageStyle.userBubbleColor);
                     localStorage.setItem('assistantBubbleColor', this.messageStyle.assistantBubbleColor);
+                    localStorage.setItem('userAvatar', this.messageStyle.userAvatar);
 
                     this.showMessageStyleModal = false;
                     this.showToast('消息样式已保存', 'success');
@@ -129,9 +130,38 @@ const NbotMethods = {
                         paragraphSpacing: 12,
                         textColor: '',
                         userBubbleColor: '',
-                        assistantBubbleColor: ''
+                        assistantBubbleColor: '',
+                        userAvatar: ''
                     };
                     this.updateStylePreview();
+                },
+
+                // 处理用户头像上传
+                handleUserAvatarUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    // 验证文件类型
+                    if (!file.type.startsWith('image/')) {
+                        this.showToast('请选择图片文件', 'error');
+                        return;
+                    }
+
+                    // 验证文件大小 (5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        this.showToast('图片大小不能超过5MB', 'error');
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.messageStyle.userAvatar = e.target.result;
+                        this.updateStylePreview();
+                    };
+                    reader.readAsDataURL(file);
+
+                    // 清空input值，允许重复选择同一文件
+                    event.target.value = '';
                 },
 
                 applyMessageStyles() {

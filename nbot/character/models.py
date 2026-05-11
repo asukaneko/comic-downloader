@@ -9,6 +9,105 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+DEFAULT_INITIAL_STATE: Dict[str, Any] = {
+    "affection": 50,
+    "trust": 50,
+    "familiarity": 30,
+    "dependency": 30,
+    "security": 50,
+    "jealousy": 0,
+    "mood": "开心",
+}
+
+
+_INITIAL_STATE_CONTAINER_KEYS = (
+    "state",
+    "initial_state",
+    "initialState",
+    "runtime_state",
+    "runtimeState",
+)
+
+
+_RELATIONSHIP_CONTAINER_KEYS = (
+    "relationship",
+    "relationships",
+    "initial_relationship",
+    "initialRelationship",
+    "initial_relation",
+    "initialRelation",
+)
+
+
+_INITIAL_STATE_FIELD_ALIASES = {
+    "affection": "affection",
+    "好感": "affection",
+    "好感度": "affection",
+    "trust": "trust",
+    "信任": "trust",
+    "信任度": "trust",
+    "familiarity": "familiarity",
+    "熟悉": "familiarity",
+    "熟悉度": "familiarity",
+    "dependency": "dependency",
+    "dependence": "dependency",
+    "依赖": "dependency",
+    "依赖度": "dependency",
+    "security": "security",
+    "安全感": "security",
+    "jealousy": "jealousy",
+    "嫉妒": "jealousy",
+    "嫉妒心": "jealousy",
+    "mood": "mood",
+    "心情": "mood",
+    "当前心情": "mood",
+    "energy": "energy",
+    "精力": "energy",
+    "mood_intensity": "mood_intensity",
+    "emotion_intensity": "mood_intensity",
+    "情绪强度": "mood_intensity",
+}
+
+
+def _normalize_initial_state_value(key: str, value: Any) -> Any:
+    if key == "mood":
+        return str(value)
+    if key == "mood_intensity":
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return value
+    if key in {"affection", "trust", "familiarity", "dependency", "security", "jealousy", "energy"}:
+        try:
+            return max(0, min(100, int(value)))
+        except (TypeError, ValueError):
+            return value
+    return value
+
+
+def _merge_initial_state_fields(target: Dict[str, Any], source: Any) -> None:
+    if not isinstance(source, dict):
+        return
+    for raw_key, value in source.items():
+        field_name = _INITIAL_STATE_FIELD_ALIASES.get(str(raw_key), str(raw_key))
+        if field_name in _INITIAL_STATE_FIELD_ALIASES.values():
+            target[field_name] = _normalize_initial_state_value(field_name, value)
+
+
+def normalize_character_initial_state(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a complete initial runtime state from supported card formats."""
+    initial_state = dict(DEFAULT_INITIAL_STATE)
+
+    for key in _INITIAL_STATE_CONTAINER_KEYS:
+        _merge_initial_state_fields(initial_state, data.get(key))
+
+    for key in _RELATIONSHIP_CONTAINER_KEYS:
+        _merge_initial_state_fields(initial_state, data.get(key))
+
+    _merge_initial_state_fields(initial_state, data)
+    return initial_state
+
+
 @dataclass
 class CharacterProfile:
     """静态角色卡，描述角色的固定设定"""
@@ -54,7 +153,7 @@ class CharacterProfile:
             response_format=data.get("responseFormat", ""),
             rules=data.get("rules", []),
             system_prompt=data.get("systemPrompt", ""),
-            initial_state=data.get("state", {"affection": 50, "trust": 50, "familiarity": 30, "dependency": 30, "security": 50, "mood": "开心"}),
+            initial_state=normalize_character_initial_state(data),
             metadata={
                 "greeting": data.get("greeting", ""),
             },

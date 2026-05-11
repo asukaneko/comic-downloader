@@ -50,6 +50,13 @@ class ProfileRepository:
         """获取角色卡"""
         data = self._store.get(character_id)
         if not data:
+            for candidate in self._store.list_all():
+                if not isinstance(candidate, dict):
+                    continue
+                if candidate.get("id") == character_id or candidate.get("name") == character_id:
+                    data = candidate
+                    break
+        if not data:
             return None
         return CharacterProfile.from_personality_dict(data)
 

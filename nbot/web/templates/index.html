@@ -1201,9 +1201,10 @@
                                                     <img v-if="currentSession.sender_portrait" :src="currentSession.sender_portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
                                                     <i v-else :class="currentSession.sender_avatar || 'fas fa-robot'"></i>
                                                 </template>
-                                                <!-- 用户消息显示用户名首字母 -->
+                                                <!-- 用户消息显示用户名首字母或自定义头像 -->
                                                 <template v-else-if="msg.role === 'user'">
-                                                    <div v-if="msg.sender && msg.sender !== '用户'" class="user-avatar-text" :style="{ background: getUserAvatarColor(msg.sender) }">
+                                                    <img v-if="messageStyle.userAvatar" :src="messageStyle.userAvatar" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                                    <div v-else-if="msg.sender && msg.sender !== '用户'" class="user-avatar-text" :style="{ background: getUserAvatarColor(msg.sender) }">
                                                         {{ msg.sender[0]?.toUpperCase() }}
                                                     </div>
                                                     <div v-else-if="username" class="user-avatar-text" :style="{ background: getUserAvatarColor(username) }">
@@ -2109,6 +2110,28 @@
                                         </div>
 
                                         <div class="style-section">
+                                            <h4><i class="fas fa-user-circle"></i> 用户头像</h4>
+                                            <div class="form-group">
+                                                <label class="form-label">自定义头像</label>
+                                                <div class="avatar-upload-row">
+                                                    <div class="avatar-upload-preview" :style="{ backgroundImage: messageStyle.userAvatar ? `url(${messageStyle.userAvatar})` : 'none' }">
+                                                        <i v-if="!messageStyle.userAvatar" class="fas fa-user"></i>
+                                                    </div>
+                                                    <div style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+                                                        <input type="file" id="userAvatarFileInput" accept="image/*" @change="handleUserAvatarUpload" style="display: none;">
+                                                        <label for="userAvatarFileInput" class="btn btn-sm" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                                                            <i class="fas fa-upload"></i> 选择图片
+                                                        </label>
+                                                        <button v-if="messageStyle.userAvatar" class="btn btn-sm" @click="messageStyle.userAvatar = ''; updateStylePreview()">
+                                                            <i class="fas fa-times"></i> 移除头像
+                                                        </button>
+                                                        <input v-else type="text" v-model="messageStyle.userAvatar" class="form-input" placeholder="或输入图片URL" style="font-size: 12px;">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="style-section">
                                             <h4><i class="fas fa-comment-dots"></i> 气泡样式</h4>
                                             <div class="form-group">
                                                 <label class="form-label">用户气泡颜色</label>
@@ -2135,7 +2158,10 @@
                                         <div class="style-preview-container" :style="previewContainerStyle">
                                             <!-- 用户消息预览 -->
                                             <div class="preview-message user" :style="userBubbleStyle">
-                                                <div class="preview-avatar"><i class="fas fa-user"></i></div>
+                                                <div class="preview-avatar" :style="messageStyle.userAvatar ? { backgroundImage: `url(${messageStyle.userAvatar})` } : {}">
+                                                    <i v-if="!messageStyle.userAvatar" class="fas fa-user"></i>
+                                                    <img v-else :src="messageStyle.userAvatar" alt="用户头像">
+                                                </div>
                                                 <div class="preview-bubble" :style="userBubbleContentStyle">
                                                     <p>这是一段用户发送的消息预览。</p>
                                                     <p>可以看到字体、颜色和间距的实时效果。</p>
@@ -7340,7 +7366,8 @@
                         paragraphSpacing: parseInt(localStorage.getItem('messageParagraphSpacing')) || 12,
                         textColor: localStorage.getItem('messageTextColor') || '',
                         userBubbleColor: localStorage.getItem('userBubbleColor') || '',
-                        assistantBubbleColor: localStorage.getItem('assistantBubbleColor') || ''
+                        assistantBubbleColor: localStorage.getItem('assistantBubbleColor') || '',
+                        userAvatar: localStorage.getItem('userAvatar') || ''  // 用户自定义头像
                     },
                     showMessageStyleModal: false,
 

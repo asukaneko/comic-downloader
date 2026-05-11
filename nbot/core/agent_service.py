@@ -328,6 +328,9 @@ def should_stop_tool_loop(
     consecutive_errors: int,
     max_consecutive_errors: int = 3,
 ) -> bool:
+    # content_filter 表示内容被安全策略过滤，应立即停止循环
+    if finish_reason == "content_filter":
+        return True
     return (
         finish_reason == "stop"
         or (not finish_reason and bool(final_content))
@@ -446,6 +449,24 @@ def run_tool_call_loop(
         final_content = response.get("content", "")
         finish_reason = response.get("finish_reason", "")
         consecutive_errors = 0 if final_content else consecutive_errors + 1
+
+        # 处理 content_filter：内容被安全策略过滤
+        if finish_reason == "content_filter":
+            _log.warning("[AgentLoop] 内容被安全策略过滤 (content_filter)")
+            if final_content:
+                return ToolLoopResult(
+                    final_content=final_content,
+                    tool_messages=tool_messages,
+                    iterations=iteration + 1,
+                    consecutive_errors=consecutive_errors,
+                )
+            else:
+                return ToolLoopResult(
+                    final_content="抱歉，我的回答触发了内容安全过滤，请换个话题试试。",
+                    tool_messages=tool_messages,
+                    iterations=iteration + 1,
+                    consecutive_errors=consecutive_errors,
+                )
 
         if should_stop_tool_loop(
             final_content,
