@@ -81,6 +81,83 @@ except ImportError:
 last_log_entry = {}
 
 
+def _get_project_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _load_json_file(path: str, default=None):
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"[QQ Character] failed to load {path}: {e}")
+    return default
+
+
+def _load_session_prompt_text(user_id: str = None, group_id: str = None) -> str:
+    base_dir = _get_project_root()
+    if user_id:
+        prompt_file = os.path.join(
+            base_dir, "resources", "prompts", "user", f"user_{user_id}.txt"
+        )
+    elif group_id:
+        prompt_file = os.path.join(
+            base_dir, "resources", "prompts", "group", f"group_{group_id}.txt"
+        )
+    else:
+        return ""
+    try:
+        if os.path.exists(prompt_file):
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                return f.read().strip()
+    except Exception as e:
+        print(f"[QQ Character] failed to load session prompt: {e}")
+    return ""
+
+
+def _iter_character_dicts():
+    base_dir = _get_project_root()
+    profiles = _load_json_file(
+        os.path.join(base_dir, "data", "character", "profiles.json"), {}
+    )
+    if isinstance(profiles, dict):
+        for value in profiles.values():
+            if isinstance(value, dict):
+                yield value
+
+    current = _load_json_file(
+        os.path.join(base_dir, "resources", "prompts", "personality.json"), {}
+    )
+    if isinstance(current, dict):
+        yield current
+
+    presets = _load_json_file(
+        os.path.join(base_dir, "data", "web", "custom_personality_presets.json"), []
+    )
+    if isinstance(presets, list):
+        for value in presets:
+            if isinstance(value, dict):
+                yield value
+
+
+def _resolve_qq_character_name(user_id: str = None, group_id: str = None) -> str:
+    session_prompt = _load_session_prompt_text(user_id=user_id, group_id=group_id)
+    if session_prompt:
+        for character in _iter_character_dicts():
+            system_prompt = str(character.get("systemPrompt") or "").strip()
+            if system_prompt and system_prompt == session_prompt:
+                return str(character.get("name") or character.get("id") or "").strip()
+
+    current = _load_json_file(
+        os.path.join(_get_project_root(), "resources", "prompts", "personality.json"),
+        {},
+    )
+    if isinstance(current, dict):
+        return str(current.get("name") or current.get("id") or "").strip()
+    return ""
+
+
 def _save_legacy_qq_histories():
     try:
         dump_json("saved_message/user_messages.json", user_messages)
@@ -147,8 +224,7 @@ class QQCallbacks(PipelineCallbacks):
 
     def get_workspace_context(self, ctx: PipelineContext) -> Dict[str, Any]:
         # 从系统获取当前角色名
-        from nbot.web.server import server as web_server
-        character_name = getattr(web_server, "personality", {}).get("name", "")
+        character_name = _resolve_qq_character_name(self.user_id, self.group_id)
         return get_workspace_context(self.user_id, self.group_id, self.group_user_id, character_name)
 
     def check_confirmation(

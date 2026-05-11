@@ -72,6 +72,11 @@ class FeishuChatCallbacks(PipelineCallbacks):
         return messages
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:
+        session_store = self._get_session_store()
+        session = session_store.get_session(self.session_id) or {}
+        session_prompt = str(session.get("system_prompt") or "").strip()
+        if session_prompt:
+            return session_prompt
         return str(
             getattr(self.server, "personality", {}).get("systemPrompt") or ""
         ).strip()

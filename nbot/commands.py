@@ -4729,6 +4729,295 @@ async def handle_new_session(msg, is_group=True):
         await bot.api.post_private_msg(msg.user_id, text="已创建新会话喵~ 之前的对话历史已清空")
 
 
+def _get_project_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _load_character_options() -> List[Dict]:
+    """Load switchable characters from the character repo and legacy preset files."""
+    characters = []
+    seen = set()
+
+    def add_character(data):
+        if not isinstance(data, dict):
+            return
+        name = str(data.get("name") or "").strip()
+        character_id = str(data.get("id") or name).strip()
+        if not name and not character_id:
+            return
+        key = character_id or name
+        if key in seen:
+            return
+        seen.add(key)
+        item = dict(data)
+        item["id"] = character_id or name
+        item["name"] = name or character_id
+        characters.append(item)
+
+    base_dir = _get_project_root()
+
+    try:
+        from nbot.character.repository import ProfileRepository
+        for profile in ProfileRepository(base_dir).list_all():
+            add_character(profile.to_personality_dict())
+    except Exception as e:
+        _log.warning(f"Load character profiles failed: {e}")
+
+    for file_path in (
+        os.path.join(base_dir, "resources", "prompts", "personality.json"),
+        os.path.join(base_dir, "data", "web", "custom_personality_presets.json"),
+    ):
+        try:
+            if not os.path.exists(file_path):
+                continue
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                for item in data:
+                    add_character(item)
+            elif isinstance(data, dict):
+                add_character(data)
+        except Exception as e:
+            _log.warning(f"Load character file failed: {file_path}, {e}")
+
+    return characters
+
+
+def _compile_character_prompt(character: Dict) -> str:
+    if character.get("systemPrompt"):
+        return str(character.get("systemPrompt") or "")
+    from nbot.character.compiler import compile_personality_prompt
+    return compile_personality_prompt(character)
+
+
+def _resolve_character_session(msg, is_group: bool):
+    if is_group and getattr(msg, "group_id", None):
+        return "group", str(msg.group_id)
+    if not is_group and getattr(msg, "user_id", None):
+        return "user", str(msg.user_id)
+
+    session_id = (
+        getattr(msg, "session_id", None)
+        or getattr(msg, "chat_id", None)
+        or getattr(msg, "conversation_id", None)
+    )
+    if session_id:
+        return "channel", str(session_id)
+
+    if getattr(msg, "user_id", None):
+        return "user", str(msg.user_id)
+    return "", ""
+
+
+def _get_session_prompt(scope: str, target_id: str, msg=None) -> str:
+    if scope == "channel":
+        session_id = getattr(msg, "session_id", None) or target_id
+        server = getattr(msg, "server", None)
+        session = None
+        if server and hasattr(server, "sessions"):
+            session = server.sessions.get(str(session_id))
+        if session:
+            prompt = session.get("system_prompt") or session.get("prompt") or ""
+            if prompt:
+                return str(prompt)
+            for item in session.get("messages", []):
+                if item.get("role") == "system":
+                    return str(item.get("content") or "")
+
+    prefix = "group" if scope == "group" else "user" if scope == "user" else "channel"
+    prompt_file = os.path.join(
+        _get_project_root(),
+        "resources",
+        "prompts",
+        prefix,
+        f"{prefix}_{target_id}.txt",
+    )
+    try:
+        if os.path.exists(prompt_file):
+            with open(prompt_file, "r", encoding="utf-8") as f:
+                return f.read()
+    except Exception as e:
+        _log.warning(f"Load session prompt failed: {e}")
+    return ""
+
+
+def _find_session_character(characters: List[Dict], scope: str, target_id: str, msg=None) -> Dict:
+    current_prompt = _get_session_prompt(scope, target_id, msg).strip()
+    if current_prompt:
+        for character in characters:
+            try:
+                if _compile_character_prompt(character).strip() == current_prompt:
+                    return character
+            except Exception:
+                continue
+    return _get_active_character()
+
+
+def _get_active_character() -> Dict:
+    personality_file = os.path.join(_get_project_root(), "resources", "prompts", "personality.json")
+    try:
+        if os.path.exists(personality_file):
+            with open(personality_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception as e:
+        _log.warning(f"Load active character failed: {e}")
+    return {}
+
+
+def _find_character(characters: List[Dict], arg: str):
+    if not arg:
+        return None
+    try:
+        index = int(arg)
+        if 1 <= index <= len(characters):
+            return characters[index - 1]
+    except ValueError:
+        pass
+
+    needle = arg.casefold()
+    for character in characters:
+        if needle in {
+            str(character.get("id") or "").casefold(),
+            str(character.get("name") or "").casefold(),
+        }:
+            return character
+
+    matches = [
+        c for c in characters
+        if needle in str(c.get("id") or "").casefold()
+        or needle in str(c.get("name") or "").casefold()
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _set_current_session_character(msg, is_group: bool, character: Dict) -> None:
+    base_dir = _get_project_root()
+    prompt = _compile_character_prompt(dict(character))
+    scope, target_id = _resolve_character_session(msg, is_group)
+    if not scope or not target_id:
+        raise ValueError("无法识别当前会话")
+
+    prefix = "group" if scope == "group" else "user" if scope == "user" else "channel"
+    prompt_dir = os.path.join(base_dir, "resources", "prompts", prefix)
+    prompt_file = os.path.join(prompt_dir, f"{prefix}_{target_id}.txt")
+
+    os.makedirs(prompt_dir, exist_ok=True)
+    with open(prompt_file, "w", encoding="utf-8") as f:
+        f.write(prompt)
+
+    if scope in {"group", "user"}:
+        messages = group_messages if scope == "group" else user_messages
+        if target_id in messages:
+            del messages[target_id]
+        messages[target_id] = [{"role": "system", "content": prompt}]
+
+        history_file = "saved_message/group_messages.json" if scope == "group" else "saved_message/user_messages.json"
+        try:
+            with open(history_file, "w", encoding="utf-8") as f:
+                json.dump(messages, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            _log.warning(f"Save session history failed: {e}")
+
+        if scope == "group":
+            delete_session_workspace(
+                group_id=target_id,
+                group_user_id=str(getattr(msg, "user_id", "")),
+            )
+        else:
+            delete_session_workspace(user_id=target_id)
+    else:
+        server = getattr(msg, "server", None)
+        session_id = getattr(msg, "session_id", None) or target_id
+        if server and hasattr(server, "sessions"):
+            from nbot.core.session_store import WebSessionStore
+            session_store = WebSessionStore(
+                server.sessions,
+                save_callback=lambda: server._save_data("sessions")
+            )
+            session = session_store.get_session(str(session_id))
+            if session is not None:
+                system_msg = {"role": "system", "content": prompt}
+                session["system_prompt"] = prompt
+                session["character_id"] = character.get("id") or character.get("name") or ""
+                session["sender_name"] = character.get("name") or "AI"
+                session["sender_avatar"] = character.get("avatar", "")
+                session["sender_portrait"] = character.get("portrait", "")
+                session_store.replace_messages(str(session_id), [system_msg])
+                session_store.set_session(str(session_id), session)
+        if WORKSPACE_AVAILABLE:
+            try:
+                from nbot.core.workspace import workspace_manager
+                workspace_manager.delete_workspace(str(session_id))
+            except Exception as e:
+                _log.debug(f"Delete channel workspace skipped: {e}")
+
+    try:
+        from nbot.core.prompt import prompt_manager
+        prompt_manager._prompt_cache = {}
+    except Exception:
+        pass
+
+
+async def _reply_text(msg, is_group: bool, text: str):
+    if is_group:
+        await msg.reply(text=text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=text)
+
+
+@register_command("/character", "/char", help_text="/character -> 查看/切换角色\n/character list -> 列出角色\n/character <编号|id|名称> -> 切换角色", category="2")
+async def handle_character_switch(msg, is_group=True):
+    """View and switch the global QQ/Web character."""
+    raw = (getattr(msg, "raw_message", "") or "").strip()
+    parts = raw.split(maxsplit=1)
+    arg = parts[1].strip() if len(parts) > 1 else ""
+
+    characters = _load_character_options()
+    session_scope, session_target_id = _resolve_character_session(msg, is_group)
+    active = _find_session_character(characters, session_scope, session_target_id, msg)
+    active_id = str(active.get("id") or active.get("name") or "")
+    active_name = str(active.get("name") or active_id or "未设置")
+
+    if not characters:
+        await _reply_text(msg, is_group, "还没有可切换的角色。请先在 Web 角色卡里创建或导入角色。")
+        return
+
+    if not arg or arg.lower() == "list":
+        lines = [f"当前角色：{active_name}", "", "可用角色："]
+        for i, character in enumerate(characters, 1):
+            name = character.get("name") or character.get("id") or "未命名"
+            character_id = character.get("id") or name
+            marker = "（当前）" if str(character_id) == active_id or str(name) == active_name else ""
+            desc = str(character.get("description") or "").strip()
+            suffix = f" - {desc[:40]}" if desc else ""
+            lines.append(f"{i}. {name} [{character_id}]{marker}{suffix}")
+        lines.append("")
+        lines.append("用法：/character <编号|id|名称>")
+        await _reply_text(msg, is_group, "\n".join(lines))
+        return
+
+    target = _find_character(characters, arg)
+    if not target:
+        await _reply_text(msg, is_group, f"没有找到角色：{arg}\n发送 /character list 查看可用角色。")
+        return
+
+    try:
+        _set_current_session_character(msg, is_group, target)
+    except Exception as e:
+        _log.error(f"Switch character failed: {e}", exc_info=True)
+        await _reply_text(msg, is_group, f"切换角色失败：{e}")
+        return
+
+    name = target.get("name") or target.get("id") or arg
+    await _reply_text(
+        msg,
+        is_group,
+        f"已切换当前会话角色：{name}\n当前会话历史已清空，提示词已更新。",
+    )
+
+
 @register_command("/model", help_text="/model -> 查看当前模型\n/model <编号> -> 切换到指定模型\n/model list -> 列出所有可用模型", category="2")
 async def handle_model_switch(msg, is_group=True):
     """查看和切换 AI 模型"""
