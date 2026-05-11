@@ -2220,8 +2220,8 @@
                     </div>
 
                     <!-- Personality - 角色卡编辑器 -->
-                    <div v-if="currentPage === 'personality'" class="fade-in">
-                        <div class="grid-2" style="align-items: start;">
+                    <div v-if="currentPage === 'personality'" class="fade-in personality-page">
+                        <div class="grid-2 personality-layout" style="align-items: start;">
                             <!-- 左侧：角色卡编辑器 -->
                             <div class="card editor-card" style="height: fit-content;">
                                 <div class="editor-topbar">
@@ -2306,7 +2306,7 @@
                                             <!-- 角色立绘 -->
                                             <div class="form-group" style="margin-top: 16px;">
                                                 <label class="form-label">角色立绘</label>
-                                                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                                                <div class="portrait-upload-row" style="display: flex; gap: 12px; align-items: flex-start;">
                                                     <!-- 立绘预览 -->
                                                     <div class="portrait-frame" @click="personality.portrait ? viewPortrait(personality.portrait) : null">
                                                         <img v-if="personality.portrait" :src="personality.portrait" style="width: 100%; height: 100%; object-fit: cover;">
@@ -2320,7 +2320,7 @@
                                                         </button>
                                                     </div>
                                                     <!-- 上传按钮和AI生成按钮 -->
-                                                    <div style="flex: 1;">
+                                                    <div class="portrait-actions" style="flex: 1;">
                                                         <input type="file" ref="portraitInput" accept="image/*" style="display: none;" @change="handlePortraitUpload">
                                                         <button class="btn btn-secondary btn-sm" @click="$refs.portraitInput.click()" style="margin-bottom: 6px; width: 80px; font-size: 12px; padding: 4px 8px;">
                                                             <i class="fas fa-upload"></i> 上传
@@ -2495,7 +2495,7 @@
                             </div>
 
                             <!-- 右侧：角色卡列表 -->
-                            <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <div class="personality-side-panel" style="display: flex; flex-direction: column; gap: 20px;">
                                 <!-- 当前角色卡预览 -->
                                 <div class="character-card-glass" v-if="activePersonality.name">
                                     <!-- 背景光斑装饰 -->
