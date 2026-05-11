@@ -1267,5 +1267,79 @@ def register_personality_routes(app, server):
             _log.error("图片生成请求超时")
             return jsonify({"success": False, "error": "图片生成请求超时，请稍后重试"}), 504
         except Exception as e:
-            _log.error(f"AI生成立绘失败: {e}")
+            _log.error(f"AI立绘生成失败: {e}")
             return jsonify({"success": False, "error": f"生成失败: {str(e)}"}), 500
+
+    @app.route("/api/personality/clean-unused-portraits", methods=["POST"])
+    def clean_unused_portraits():
+        """清理未被任何角色卡使用的立绘文件"""
+        try:
+            portraits_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
+            if not os.path.exists(portraits_dir):
+                return jsonify({"success": True, "deleted_count": 0, "message": "没有立绘文件需要清理"})
+
+            # 收集所有正在使用的立绘URL
+            used_portraits = set()
+
+            # 1. 当前角色的立绘
+            current_portrait = server.personality.get("portrait", "")
+            if current_portrait:
+                used_portraits.add(current_portrait)
+
+            # 2. 自定义角色预设中的立绘
+            presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
+            if os.path.exists(presets_file):
+                try:
+                    with open(presets_file, "r", encoding="utf-8") as f:
+                        presets = json.load(f)
+                    for preset in presets:
+                        portrait = preset.get("portrait", "")
+                        if portrait:
+                            used_portraits.add(portrait)
+                except Exception as e:
+                    _log.error(f"加载角色预设文件失败: {e}")
+
+            # 3. 检查会话中的立绘引用（会话可能引用角色立绘）
+            if hasattr(server, 'sessions'):
+                for session in server.sessions.values():
+                    portrait = session.get("sender_portrait", "")
+                    if portrait:
+                        used_portraits.add(portrait)
+
+            # 扫描立绘目录，找出未使用的文件
+            all_portraits = os.listdir(portraits_dir)
+            unused_portraits = []
+            deleted_count = 0
+
+            for filename in all_portraits:
+                if not allowed_image_file(filename):
+                    continue
+
+                portrait_url = f"/static/uploads/portraits/{filename}"
+                if portrait_url not in used_portraits:
+                    filepath = os.path.join(portraits_dir, filename)
+                    try:
+                        file_size = os.path.getsize(filepath)
+                        os.remove(filepath)
+                        deleted_count += 1
+                        unused_portraits.append({
+                            "filename": filename,
+                            "size": file_size
+                        })
+                        _log.info(f"清理未使用立绘: {filepath}")
+                    except Exception as e:
+                        _log.error(f"删除立绘失败 {filepath}: {e}")
+
+            total_saved = sum(p["size"] for p in unused_portraits)
+            message = f"已清理 {deleted_count} 个未使用的立绘文件，释放 {total_saved / 1024:.1f} KB 空间"
+
+            return jsonify({
+                "success": True,
+                "deleted_count": deleted_count,
+                "total_saved": total_saved,
+                "message": message
+            })
+
+        except Exception as e:
+            _log.error(f"清理未使用立绘失败: {e}")
+            return jsonify({"success": False, "error": f"清理失败: {str(e)}"}), 500

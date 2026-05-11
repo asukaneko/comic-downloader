@@ -7197,6 +7197,34 @@ def main(params):
                     }
                 },
 
+                // 清理未使用角色立绘
+                async cleanUnusedPortraits() {
+                    const self = this;
+                    this.showConfirm({
+                        title: '清理未使用立绘',
+                        message: '将删除未被任何角色卡引用的立绘文件。此操作不可撤销，确定继续吗？',
+                        icon: 'fa-broom',
+                        iconColor: '#f59e0b',
+                        iconBg: 'rgba(245,158,11,0.12)',
+                        onConfirm: async () => {
+                            self.isCleaningPortraits = true;
+                            try {
+                                const res = await api.post('/api/personality/clean-unused-portraits');
+                                if (res.data.success) {
+                                    self.showToast(res.data.message, 'success');
+                                } else {
+                                    self.showToast(res.data.error || '清理失败', 'error');
+                                }
+                            } catch (e) {
+                                console.error('清理未使用立绘失败:', e);
+                                self.showToast('清理失败: ' + (e.response?.data?.error || e.message), 'error');
+                            } finally {
+                                self.isCleaningPortraits = false;
+                            }
+                        }
+                    });
+                },
+
                 // 触发导入文件选择
                 triggerImportPersonality() {
                     this.$refs.importPersonalityFile.click();

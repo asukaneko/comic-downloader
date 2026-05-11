@@ -4643,6 +4643,15 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                                    <label class="form-label">数据维护</label>
+                                    <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+                                        <button class="btn btn-secondary" @click="cleanUnusedPortraits" :disabled="isCleaningPortraits">
+                                            <i class="fas fa-broom"></i> {{ isCleaningPortraits ? '清理中...' : '清理未使用角色立绘' }}
+                                        </button>
+                                    </div>
+                                    <div class="form-hint">删除未被任何角色卡引用的立绘文件，释放磁盘空间</div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -7543,6 +7552,7 @@
                     showCreateCharacterMenu: false, // 新建角色下拉菜单
                     showBulkImportExportMenu: false, // 批量导入导出菜单
                     isGeneratingPortrait: false, // 是否正在AI生成立绘
+                    isCleaningPortraits: false, // 是否正在清理未使用立绘
                     characterCardViewMode: localStorage.getItem('characterCardViewMode') || 'grid', // 角色卡视图模式: grid/list
                     showCharacterCardFullscreen: false, // 是否显示角色卡全屏界面
                     fullscreenCharacterFilter: '', // 全屏角色卡筛选
