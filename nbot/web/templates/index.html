@@ -2122,10 +2122,10 @@
                                                         <label for="userAvatarFileInput" class="btn btn-sm" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                                                             <i class="fas fa-upload"></i> 选择图片
                                                         </label>
-                                                        <button v-if="messageStyle.userAvatar" class="btn btn-sm" @click="messageStyle.userAvatar = ''; updateStylePreview()">
+                                                        <button v-if="messageStyle.userAvatar" class="btn btn-sm" @click="messageStyle.userAvatar = ''; localStorage.setItem('userAvatar', ''); updateStylePreview()">
                                                             <i class="fas fa-times"></i> 移除头像
                                                         </button>
-                                                        <input v-else type="text" v-model="messageStyle.userAvatar" class="form-input" placeholder="或输入图片URL" style="font-size: 12px;">
+                                                        <input v-else type="text" v-model="messageStyle.userAvatar" @blur="localStorage.setItem('userAvatar', messageStyle.userAvatar); updateStylePreview()" class="form-input" placeholder="或输入图片URL" style="font-size: 12px;">
                                                     </div>
                                                 </div>
                                             </div>

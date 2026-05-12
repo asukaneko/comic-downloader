@@ -147,9 +147,9 @@ const NbotMethods = {
                         return;
                     }
 
-                    // 验证文件大小 (5MB)
-                    if (file.size > 5 * 1024 * 1024) {
-                        this.showToast('图片大小不能超过5MB', 'error');
+                    // 验证文件大小 (2MB，localStorage 容量限制)
+                    if (file.size > 2 * 1024 * 1024) {
+                        this.showToast('图片大小不能超过2MB', 'error');
                         return;
                     }
 
@@ -157,6 +157,9 @@ const NbotMethods = {
                     reader.onload = (e) => {
                         this.messageStyle.userAvatar = e.target.result;
                         this.updateStylePreview();
+                        // 自动保存到 localStorage
+                        localStorage.setItem('userAvatar', this.messageStyle.userAvatar);
+                        this.showToast('头像已上传并保存', 'success');
                     };
                     reader.readAsDataURL(file);
 

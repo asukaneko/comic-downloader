@@ -8699,135 +8699,6 @@
             flex-shrink: 0;
         }
 
-        @media (max-width: 768px) {
-            .personality-page .character-card-glass {
-                border-radius: 14px;
-                padding: 18px;
-            }
-
-            .personality-page .glass-content {
-                gap: 14px;
-            }
-
-            .personality-page .glass-stats-panel,
-            .personality-page .preset-glass-stats {
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            .personality-page .character-grid-glass {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-                gap: 12px;
-            }
-
-            .personality-page .glass-card-grid {
-                border-radius: 14px;
-            }
-
-            .personality-page .glass-card-info {
-                padding: 12px;
-                padding-top: 0;
-            }
-
-            .personality-page .glass-card-actions {
-                gap: 6px;
-            }
-
-            .personality-page .glass-btn-small {
-                padding: 8px 10px;
-                min-height: 36px;
-            }
-
-            .personality-page .glass-card-list {
-                align-items: flex-start;
-                gap: 10px;
-            }
-
-            .personality-page .glass-card-list-actions {
-                align-self: stretch;
-                flex-direction: column;
-            }
-
-            .personality-page .preset-glass-card {
-                padding: 14px;
-                border-radius: 14px;
-            }
-
-            .personality-page .preset-glass-layout {
-                gap: 12px;
-            }
-
-            .personality-page .preset-glass-avatar {
-                width: 64px;
-                height: 84px;
-            }
-
-            .personality-page .preset-glass-stats {
-                gap: 10px;
-                padding: 8px;
-            }
-
-            .personality-page .preset-stat {
-                flex-shrink: 0;
-            }
-        }
-
-        @media (max-width: 560px) {
-            .personality-page .character-card-glass {
-                padding: 16px;
-            }
-
-            .personality-page .glass-content,
-            .personality-page .preset-glass-layout {
-                flex-direction: column;
-                align-items: center;
-                text-align: center;
-            }
-
-            .personality-page .glass-header,
-            .personality-page .glass-tags,
-            .personality-page .preset-glass-header,
-            .personality-page .preset-glass-tags {
-                justify-content: center;
-            }
-
-            .personality-page .glass-stats-row {
-                flex-wrap: nowrap;
-                min-width: max-content;
-            }
-
-            .personality-page .glass-actions {
-                flex-direction: column;
-            }
-
-            .personality-page .character-grid-glass {
-                grid-template-columns: minmax(0, 1fr);
-            }
-
-            .personality-page .glass-card-list {
-                display: grid;
-                grid-template-columns: 52px minmax(0, 1fr);
-            }
-
-            .personality-page .glass-card-list-portrait {
-                width: 52px;
-                height: 52px;
-            }
-
-            .personality-page .glass-card-list-actions {
-                grid-column: 1 / -1;
-                flex-direction: row;
-            }
-
-            .personality-page .glass-card-list-actions .glass-btn {
-                min-height: 38px;
-            }
-
-            .personality-page .preset-glass-desc {
-                -webkit-line-clamp: 2;
-            }
-        }
-
         /* 小按钮 */
         .glass-btn-small {
             padding: 6px 10px;
@@ -10158,135 +10029,27 @@
         }
 
         @media (max-width: 768px) {
-            .personality-page {
-                margin: -4px -4px 0;
-            }
-
-            .personality-layout {
-                grid-template-columns: minmax(0, 1fr) !important;
-                gap: 14px !important;
-            }
-
-            .personality-layout > *,
-            .personality-side-panel,
-            .editor-card {
-                min-width: 0;
-                width: 100%;
-            }
-
-            .personality-page .card-body {
-                padding: 14px;
-                overflow-x: hidden;
-            }
-
             .editor-topbar {
                 flex-wrap: wrap;
                 padding: 10px 14px;
                 gap: 8px;
             }
 
-            .editor-topbar-left {
-                width: 100%;
-            }
-
-            .editor-breadcrumb {
-                flex: 1;
-            }
-
-            .editor-breadcrumb-root,
-            .editor-breadcrumb-sep {
-                display: none;
-            }
-
-            .editor-breadcrumb-name {
-                font-size: 14px;
-            }
-
             .editor-topbar-actions {
                 flex-wrap: wrap;
                 width: 100%;
-                justify-content: stretch;
+                justify-content: flex-end;
                 gap: 6px;
             }
 
             .editor-topbar-actions .btn,
             .editor-topbar-actions .dropdown > .btn {
-                flex: 1 1 calc(50% - 6px);
-                min-width: 0;
-                justify-content: center;
                 padding: 5px 10px;
                 font-size: 12px;
             }
 
             .editor-topbar-actions .btn-indigo {
                 padding: 5px 12px;
-            }
-
-            .editor-topbar-actions .dropdown {
-                flex: 1 1 calc(50% - 6px);
-                min-width: 0;
-            }
-
-            .editor-topbar-actions .dropdown > .btn {
-                width: 100%;
-            }
-
-            .personality-page .form-row {
-                flex-direction: column;
-                gap: 12px;
-            }
-
-            .personality-page .form-row .form-group {
-                flex-basis: auto !important;
-                width: 100%;
-            }
-
-            .portrait-upload-row {
-                align-items: stretch !important;
-            }
-
-            .portrait-actions {
-                min-width: 0;
-            }
-
-            .portrait-actions .btn {
-                width: auto !important;
-                min-width: 96px;
-                min-height: 36px;
-                margin-right: 8px;
-            }
-
-            .personality-page .form-hint {
-                line-height: 1.45;
-            }
-
-            .personality-page .section-header-title::after {
-                min-width: 0;
-            }
-
-            .personality-page .state-card-grid {
-                grid-template-columns: minmax(0, 1fr);
-            }
-
-            .personality-page .mood-selector {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-            }
-
-            .personality-page .rule-item {
-                gap: 8px;
-                padding: 10px;
-            }
-
-            .personality-page .rule-item-drag {
-                display: none;
-            }
-
-            .personality-page .rule-item input {
-                min-width: 0;
-            }
-
-            .personality-page .rule-item-delete {
-                opacity: 1;
             }
         }
 
@@ -13979,42 +13742,6 @@
             color: white;
             font-size: 14px;
             flex-shrink: 0;
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            overflow: hidden;
-        }
-
-        .preview-avatar img {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            object-fit: cover;
-        }
-
-        /* 用户头像上传样式 */
-        .avatar-upload-row {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .avatar-upload-preview {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--bg-tertiary);
-            border: 2px dashed var(--border-color);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-muted);
-            font-size: 20px;
-            flex-shrink: 0;
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            overflow: hidden;
         }
 
         .preview-bubble {
