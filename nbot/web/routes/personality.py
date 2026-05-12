@@ -90,6 +90,37 @@ def _post_card_to_platform(server, character):
         return json.loads(response.read().decode("utf-8"))
 
 
+def _get_preview_token(server, card_id: str) -> dict:
+    """获取卡片预览token
+
+    Args:
+        server: NBotWebServer 实例
+        card_id: 卡片ID
+
+    Returns:
+        包含 preview_url 和 expires_in 的字典，失败返回空字典
+    """
+    token = _role_card_platform_token(server)
+    if not token or not card_id:
+        return {}
+
+    try:
+        request_obj = urllib.request.Request(
+            f"{_role_card_platform_url(server)}/api/cards/{card_id}/preview-token",
+            headers={"Authorization": f"Bearer {token}"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request_obj, timeout=10) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")
+        _log.error(f"Failed to get preview token: {e.code} {detail}")
+        return {}
+    except Exception as e:
+        _log.error(f"Failed to get preview token: {e}")
+        return {}
+
+
 def compile_personality_prompt(personality_data, session_context=None, user_name=None):
     """将角色卡JSON编译成系统提示词，支持 {{user}} 模板变量
 
@@ -331,12 +362,41 @@ def register_personality_routes(app, server):
             result = _post_card_to_platform(server, upload_preset)
             if not result.get("success"):
                 return jsonify({"success": False, "error": result.get("error", "Platform upload failed")}), 502
-            url = result.get("url", "")
-            token = _role_card_platform_token(server)
-            if url and token:
-                separator = "&" if "?" in url else "?"
-                url = f"{url}{separator}api_token={token}"
-            return jsonify({"success": True, "url": url, "card": result.get("card")})
+
+            # 获取卡片信息
+            card = result.get("card", {})
+            card_id = card.get("id")
+            card_slug = card.get("slug")
+            base_url = result.get("url", "")
+
+            # 尝试获取 preview_token 生成安全预览链接
+            preview_url = None
+            if card_id:
+                token_result = _get_preview_token(server, card_id)
+                if token_result.get("success"):
+                    # API 可能返回完整的 preview_url，也可能只返回 preview_token
+                    preview_url = token_result.get("preview_url")
+                    preview_token = token_result.get("preview_token")
+                    expires_in = token_result.get("expires_in", 600)
+
+                    # 如果只返回了 token，需要手动拼接 URL
+                    if not preview_url and preview_token and card_slug:
+                        preview_url = f"{_role_card_platform_url(server)}/card/{card_slug}?preview_token={preview_token}"
+
+                    if preview_url:
+                        _log.info(f"Preview token generated for card {card_id}, expires in {expires_in}s")
+
+            # 如果没有获取到 preview_url，使用原始URL（不带token）
+            if not preview_url:
+                preview_url = base_url or f"{_role_card_platform_url(server)}/card/{card_slug}" if card_slug else ""
+                if not preview_url:
+                    return jsonify({"success": False, "error": "Failed to generate preview URL"}), 500
+
+            return jsonify({
+                "success": True,
+                "url": preview_url,
+                "card": card
+            })
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")
             _log.error(f"Role-card platform rejected upload: {e.code} {detail}")
