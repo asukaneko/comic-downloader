@@ -152,6 +152,7 @@ def _normalize_session_record(session_id, session):
         "tags": session.get("tags") if isinstance(session.get("tags"), list) else [],
         "favorite": bool(session.get("favorite")),
         "pinned": bool(session.get("pinned")),
+        "is_public": bool(session.get("is_public")),
         "character_runtime_timeline": session.get("character_runtime_timeline")
         if isinstance(session.get("character_runtime_timeline"), list)
         else [],

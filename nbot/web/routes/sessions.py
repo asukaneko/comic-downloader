@@ -146,6 +146,9 @@ def register_session_routes(app, server):
 
     @app.route("/api/sessions")
     def get_sessions():
+        # 导入公开会话管理模块
+        from nbot.web.routes.public_sessions import _public_sessions, _generate_public_id
+        
         current_time = server.time.time() if hasattr(server, "time") else None
         if current_time is None:
             import time
@@ -162,6 +165,10 @@ def register_session_routes(app, server):
             if not is_web_visible_session(sid, session):
                 continue
             archived = bool(session.get("archived"))
+            # 检查会话是否已公开
+            public_id = _generate_public_id(sid)
+            is_public = public_id in _public_sessions
+            
             sessions.append(
                 {
                     "id": sid,
@@ -187,6 +194,7 @@ def register_session_routes(app, server):
                     "tags": _normalize_tags(session.get("tags", [])),
                     "favorite": bool(session.get("favorite")),
                     "pinned": bool(session.get("pinned")),
+                    "is_public": is_public,
                     "character_runtime_timeline": session.get("character_runtime_timeline", []),
                 }
             )
@@ -270,6 +278,7 @@ def register_session_routes(app, server):
             "tags": _normalize_tags(data.get("tags", [])),
             "favorite": bool(data.get("favorite")),
             "pinned": bool(data.get("pinned")),
+            "is_public": bool(data.get("is_public")),
             "character_runtime_timeline": [],
         }
 

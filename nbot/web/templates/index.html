@@ -1697,6 +1697,7 @@
                                             <option value="archived">已归档</option>
                                             <option value="favorite">收藏</option>
                                             <option value="pinned">置顶</option>
+                                            <option value="public">已公开</option>
                                             <optgroup v-if="sessionTagNames.length" label="按标签">
                                                 <option v-for="tag in sessionTagNames" :key="tag" :value="'tag:' + tag">{{ tag }}</option>
                                             </optgroup>
@@ -1757,6 +1758,9 @@
                                                     <span v-if="session.is_archive" class="badge badge-info">归档</span>
                                                     <span v-else class="badge" :class="session.archived ? 'badge-warning' : 'badge-success'">
                                                         {{ session.archived ? '已归档' : '未归档' }}
+                                                    </span>
+                                                    <span v-if="session.is_public" class="badge badge-primary" title="此会话已公开">
+                                                        <i class="fas fa-globe"></i> 已公开
                                                     </span>
                                                 </div>
                                                 <div v-if="session.tags && session.tags.length" class="session-tags-row">
@@ -8562,6 +8566,8 @@
                         sessionPool = sessionPool.filter(s => s.favorite);
                     } else if (filter === 'pinned') {
                         sessionPool = sessionPool.filter(s => s.pinned);
+                    } else if (filter === 'public') {
+                        sessionPool = sessionPool.filter(s => s.is_public);
                     } else if (filter.startsWith('char:')) {
                         const charName = filter.slice(5);
                         sessionPool = sessionPool.filter(s => s.sender_name === charName);
