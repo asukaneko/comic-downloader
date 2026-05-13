@@ -4357,18 +4357,35 @@ async def dispatch_message(msg, is_group: bool):
     loop = asyncio.get_event_loop()
 
     if is_group:
-        # 群聊：只有@bot时才回复
-        if not is_at_bot(msg):
+        # 群聊：@bot 必回；开启 auto_reply 后，未 @ 时按话痨程度概率回复。
+        group_id = str(msg.group_id) if hasattr(msg, 'group_id') else None
+        user_id = str(msg.user_id) if hasattr(msg, 'user_id') else None
+        at_bot = is_at_bot(msg)
+        auto_reply_enabled = False
+        auto_reply_level = 0.3
+
+        if group_id:
+            try:
+                auto_reply_enabled = switch.get_switch_state('auto_reply', group_id=group_id)
+                auto_reply_level = float(switch.group_switches.get(group_id, {}).get("auto_reply_level", 0.5))
+                auto_reply_level = max(0.0, min(auto_reply_level, 1.0))
+            except Exception as e:
+                _log.warning(f"Failed to read auto_reply config for group {group_id}: {e}")
+
+        if not at_bot and not auto_reply_enabled:
             _log.debug(f"Group message ignored (not @bot): {raw_msg[:50]}...")
+            return
+
+        if not at_bot and random.random() > auto_reply_level:
+            _log.debug(f"Group auto_reply skipped by level={auto_reply_level:.2f}: {raw_msg[:50]}...")
             return
         
         from nbot.services.chat_service import chat as do_chat
         try:
             content = raw_msg
-            group_id = str(msg.group_id) if hasattr(msg, 'group_id') else None
-            user_id = str(msg.user_id) if hasattr(msg, 'user_id') else None
             atts = [{"type": "image", "url": image_url, "source": "qq"}] if image_url else []
-            _log.info(f"Processing group message (at bot) from {user_id} in {group_id}: {content[:50]}..., image: {bool(image_url)}")
+            trigger = "at bot" if at_bot else f"auto_reply level={auto_reply_level:.2f}"
+            _log.info(f"Processing group message ({trigger}) from {user_id} in {group_id}: {content[:50]}..., image: {bool(image_url)}")
             response = await loop.run_in_executor(None, do_chat, content, None, group_id, user_id, False, None, None, atts)
             if response:
                 _log.info(f"Sending group reply: {response[:50]}...")
