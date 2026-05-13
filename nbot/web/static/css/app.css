@@ -5644,6 +5644,54 @@
             color: var(--text-secondary);
         }
 
+        .runtime-timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .runtime-timeline-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+        }
+
+        .runtime-timeline-item {
+            display: grid;
+            grid-template-columns: 64px 72px 1fr;
+            gap: 8px;
+            align-items: center;
+            padding: 6px 8px;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 7px;
+            background: rgba(15, 23, 42, 0.28);
+            font-size: 12px;
+        }
+
+        .runtime-timeline-item span {
+            color: var(--text-muted);
+        }
+
+        .runtime-timeline-item strong {
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .runtime-timeline-item em {
+            color: var(--text-secondary);
+            font-style: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .runtime-timeline-detail .runtime-timeline-item {
+            grid-template-columns: 160px 80px 1fr;
+        }
+
         .markdown-body blockquote:first-child {
             margin-top: 0;
         }
@@ -7945,6 +7993,54 @@
         }
 
         /* Tables */
+        .sessions-card {
+            overflow: visible;
+        }
+
+        .sessions-card-header {
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .sessions-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .sessions-filter-group,
+        .sessions-action-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .sessions-filter-group {
+            flex: 1;
+            justify-content: flex-end;
+        }
+
+        .sessions-search {
+            width: min(360px, 42vw);
+            min-width: 220px;
+        }
+
+        .sessions-filter {
+            width: 190px;
+            flex: 0 0 190px;
+        }
+
+        .sessions-icon-btn {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            justify-content: center;
+        }
+
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -7981,6 +8077,220 @@
             vertical-align: middle;
         }
 
+        .sessions-table th:nth-child(2) {
+            width: 34%;
+        }
+
+        .sessions-table th:nth-child(3) {
+            width: 16%;
+        }
+
+        .sessions-table th:nth-child(4),
+        .sessions-table th:nth-child(5) {
+            width: 82px;
+        }
+
+        .sessions-table th:nth-child(6) {
+            width: 170px;
+        }
+
+        .sessions-table th:nth-child(7) {
+            width: 180px;
+        }
+
+        .session-title-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .session-kind-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .session-name-text {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .session-icon-toggle {
+            width: 26px;
+            height: 26px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .session-icon-toggle.active {
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.35);
+            background: rgba(251, 191, 36, 0.12);
+        }
+
+        .session-tags-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 8px 0 0 40px;
+        }
+
+        .session-tag-chip {
+            display: inline-flex;
+            align-items: center;
+            max-width: 140px;
+            padding: 3px 8px;
+            border: 1px solid rgba(59, 130, 246, 0.24);
+            border-radius: 999px;
+            background: rgba(59, 130, 246, 0.1);
+            color: #60a5fa;
+            font-size: 11px;
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+
+        .session-actions-cell {
+            overflow: visible;
+        }
+
+        .sessions-table .session-actions {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .sessions-table .session-actions .btn-small {
+            padding: 7px 12px;
+            font-size: 12px;
+            min-width: 48px;
+        }
+
+        .session-more-menu {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .session-more-menu summary {
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--border-color);
+            border-radius: 7px;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .session-more-menu summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .session-more-menu[open] summary {
+            border-color: rgba(59, 130, 246, 0.45);
+            color: var(--accent-primary);
+        }
+
+        .session-more-popover {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            z-index: 20;
+            min-width: 128px;
+            padding: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+            box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+        }
+
+        .session-more-popover button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 12px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .session-more-popover button:hover {
+            background: var(--bg-tertiary);
+        }
+
+        @media (max-width: 1180px) {
+            .sessions-card-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .sessions-toolbar {
+                justify-content: space-between;
+            }
+
+            .sessions-search {
+                width: 100%;
+            }
+
+            .sessions-filter-group {
+                justify-content: flex-start;
+            }
+        }
+
+        @media (max-width: 760px) {
+            .sessions-toolbar,
+            .sessions-filter-group,
+            .sessions-action-group {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+
+            .sessions-filter-group {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .sessions-filter {
+                width: 100%;
+                flex-basis: auto;
+            }
+
+            .sessions-action-group {
+                justify-content: flex-end;
+            }
+        }
+
         .badge {
             display: inline-flex;
             align-items: center;
@@ -7998,6 +8308,42 @@
         .badge-secondary {
             background: var(--bg-tertiary);
             color: var(--text-secondary);
+        }
+
+        .public-share-options {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .public-share-grid {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            text-align: left;
+        }
+
+        .public-share-grid label,
+        .public-share-toggles label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .public-share-toggles {
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .public-share-toggles label {
+            flex-direction: row;
+            align-items: center;
         }
 
         /* 角色卡样式 */
@@ -13794,6 +14140,15 @@
             color: white;
             font-size: 14px;
             flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .preview-avatar img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+            border-radius: 50%;
         }
 
         .preview-bubble {
@@ -15960,33 +16315,50 @@
                 vertical-align: middle;
             }
 
-            .sessions-table td:nth-child(4)::before {
+            .sessions-table td:nth-child(5)::before {
                 content: '消息 ';
                 color: var(--text-muted);
                 margin-right: 2px;
             }
 
-            .sessions-table td:nth-child(5) {
+            .sessions-table td:nth-child(6) {
                 display: block;
                 width: 100%;
+                margin-top: 8px;
                 margin-right: 0;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
 
-            .sessions-table td:nth-child(6) {
+            .sessions-table td:nth-child(7) {
                 display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: 1fr;
                 gap: 8px;
                 margin-top: 12px;
             }
 
-            .sessions-table td:nth-child(6) .btn {
+            .sessions-table .session-actions {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 8px;
+            }
+
+            .sessions-table td:nth-child(7) .btn {
                 width: 100%;
                 margin-left: 0 !important;
                 padding: 8px 10px !important;
                 font-size: 12px !important;
+            }
+
+            .sessions-table .session-more-menu summary {
+                width: 100%;
+                height: 34px;
+            }
+
+            .sessions-table .session-more-popover {
+                right: 0;
+                left: auto;
             }
         }
 

@@ -515,7 +515,7 @@ class WebCallbacks(PipelineCallbacks):
             if hasattr(ctx, 'character_turn') and ctx.character_turn:
                 from nbot.character.models import CharacterTurnContext
                 turn = ctx.character_turn
-                session["character_runtime_snapshot"] = {
+                snapshot = {
                     "mood": turn.state.mood,
                     "mood_intensity": turn.state.mood_intensity,
                     "energy": turn.state.energy,
@@ -529,6 +529,38 @@ class WebCallbacks(PipelineCallbacks):
                     "visible_emotion": turn.plan.visible_emotion,
                     "hidden_emotion": turn.plan.hidden_emotion,
                 }
+                session["character_runtime_snapshot"] = snapshot
+
+                timeline = session.get("character_runtime_timeline", [])
+                if not isinstance(timeline, list):
+                    timeline = []
+                entry = {
+                    **{
+                        key: snapshot.get(key)
+                        for key in (
+                            "mood",
+                            "mood_intensity",
+                            "energy",
+                            "affection",
+                            "trust",
+                            "security",
+                            "familiarity",
+                            "dependency",
+                            "jealousy",
+                            "visible_emotion",
+                            "hidden_emotion",
+                        )
+                    },
+                    "timestamp": datetime.now().isoformat(),
+                }
+                last = timeline[-1] if timeline else None
+                if isinstance(last, dict) and {
+                    k: v for k, v in last.items() if k != "timestamp"
+                } == {k: v for k, v in entry.items() if k != "timestamp"}:
+                    last["timestamp"] = entry["timestamp"]
+                else:
+                    timeline.append(entry)
+                session["character_runtime_timeline"] = timeline[-200:]
 
             self.session_store.set_session(self.session_id, session)
         except Exception:

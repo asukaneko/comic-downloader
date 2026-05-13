@@ -1147,6 +1147,14 @@
                                             <span><b>表面情绪</b> {{ currentSession.character_runtime_snapshot.visible_emotion || '自然' }}</span>
                                             <span v-if="currentSession.character_runtime_snapshot.hidden_emotion"><b>内心倾向</b> {{ currentSession.character_runtime_snapshot.hidden_emotion }}</span>
                                         </div>
+                                        <div v-if="currentSession.character_runtime_timeline && currentSession.character_runtime_timeline.length" class="runtime-timeline">
+                                            <div class="runtime-timeline-title">状态时间线</div>
+                                            <div v-for="item in currentSession.character_runtime_timeline.slice(-5).reverse()" :key="item.timestamp" class="runtime-timeline-item">
+                                                <span>{{ formatShortTime(item.timestamp) }}</span>
+                                                <strong>{{ item.mood || '未知' }}</strong>
+                                                <em>好感 {{ item.affection ?? '-' }} / 信任 {{ item.trust ?? '-' }}</em>
+                                            </div>
+                                        </div>
                                     </template>
                                     <div v-if="currentSession.prompt_stack_debug && currentSession.prompt_stack_debug.length" class="runtime-prompt-stack">
                                         <div v-for="inj in currentSession.prompt_stack_debug" :key="inj.key" class="runtime-prompt-chip" :title="inj.content">
@@ -1674,35 +1682,44 @@
 
                     <!-- Sessions -->
                     <div v-if="currentPage === 'sessions'" class="fade-in">
-                        <div class="card">
-                            <div class="card-header">
+                        <div class="card sessions-card">
+                            <div class="card-header sessions-card-header">
                                 <span class="card-title">{{ $t('page.sessions') }}</span>
-                                <div style="display: flex; gap: 8px; align-items: center;">
-                                    <div class="search-box" style="width: 240px;">
-                                        <i class="fas fa-search"></i>
-                                        <input v-model="sessionSearch" type="text" placeholder="搜索会话...">
+                                <div class="sessions-toolbar">
+                                    <div class="sessions-filter-group">
+                                        <div class="search-box sessions-search">
+                                            <i class="fas fa-search"></i>
+                                            <input v-model="sessionSearch" type="text" placeholder="搜索会话、角色或标签...">
+                                        </div>
+                                        <select v-model="sessionFilter" class="form-select sessions-filter" @change="selectedSessions = []">
+                                            <option value="all">全部会话</option>
+                                            <option value="active">未归档</option>
+                                            <option value="archived">已归档</option>
+                                            <option value="favorite">收藏</option>
+                                            <option value="pinned">置顶</option>
+                                            <optgroup v-if="sessionTagNames.length" label="按标签">
+                                                <option v-for="tag in sessionTagNames" :key="tag" :value="'tag:' + tag">{{ tag }}</option>
+                                            </optgroup>
+                                            <optgroup v-if="sessionCharacterNames.length" label="按角色">
+                                                <option v-for="name in sessionCharacterNames" :key="name" :value="'char:' + name">{{ name }}</option>
+                                            </optgroup>
+                                        </select>
                                     </div>
-                                    <select v-model="sessionFilter" class="form-select" style="width: 140px;" @change="selectedSessions = []">
-                                        <option value="all">全部会话</option>
-                                        <option value="active">未归档</option>
-                                        <option value="archived">已归档</option>
-                                        <optgroup v-if="sessionCharacterNames.length" label="按角色">
-                                            <option v-for="name in sessionCharacterNames" :key="name" :value="'char:' + name">{{ name }}</option>
-                                        </optgroup>
-                                    </select>
-                                    <input ref="sessionImportInput" type="file" accept=".json,application/json" style="display: none;" @change="handleSessionImportFile">
-                                    <button class="btn btn-secondary" @click="triggerSessionImport" :disabled="isLoading">
-                                        <i class="fas fa-file-import"></i> 导入
-                                    </button>
-                                    <button class="btn btn-secondary" @click="exportSelectedOrVisibleSessions" :disabled="isLoading || managedSessions.length === 0">
-                                        <i class="fas fa-file-export"></i> 导出
-                                    </button>
-                                    <button class="btn btn-primary" @click="createNewSession" :disabled="isLoading">
-                                        <i class="fas fa-plus"></i> 新建
-                                    </button>
-                                    <button v-if="selectedSessions.length > 0" class="btn btn-danger" @click="batchDeleteSessions" :disabled="isLoading">
-                                        <i class="fas fa-trash"></i> 删除选中 ({{ selectedSessions.length }})
-                                    </button>
+                                    <div class="sessions-action-group">
+                                        <input ref="sessionImportInput" type="file" accept=".json,application/json" style="display: none;" @change="handleSessionImportFile">
+                                        <button class="btn btn-secondary sessions-icon-btn" @click="triggerSessionImport" :disabled="isLoading" title="导入">
+                                            <i class="fas fa-file-import"></i>
+                                        </button>
+                                        <button class="btn btn-secondary sessions-icon-btn" @click="exportSelectedOrVisibleSessions" :disabled="isLoading || managedSessions.length === 0" title="导出">
+                                            <i class="fas fa-file-export"></i>
+                                        </button>
+                                        <button v-if="selectedSessions.length > 0" class="btn btn-danger" @click="batchDeleteSessions" :disabled="isLoading">
+                                            <i class="fas fa-trash"></i> {{ selectedSessions.length }}
+                                        </button>
+                                        <button class="btn btn-primary" @click="createNewSession" :disabled="isLoading">
+                                            <i class="fas fa-plus"></i> 新建
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="card-body" style="padding: 0;">
@@ -1726,15 +1743,26 @@
                                                 <input type="checkbox" :value="session.id" v-model="selectedSessions">
                                             </td>
                                             <td>
-                                                <div style="display: flex; align-items: center; gap: 10px;">
-                                                    <div style="width: 32px; height: 32px; background: var(--bg-tertiary); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                                                <div class="session-title-row">
+                                                    <div class="session-kind-icon">
                                                         <i :class="session.is_archive ? 'fas fa-archive' : (session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment')"></i>
                                                     </div>
-                                                    <span>{{ session.name }}</span>
+                                                    <button class="session-icon-toggle" :class="{ active: session.pinned }" @click.stop="toggleSessionPinned(session)" :title="session.pinned ? '取消置顶' : '置顶'">
+                                                        <i class="fas fa-thumbtack"></i>
+                                                    </button>
+                                                    <button class="session-icon-toggle" :class="{ active: session.favorite }" @click.stop="toggleSessionFavorite(session)" :title="session.favorite ? '取消收藏' : '收藏'">
+                                                        <i class="fas fa-star"></i>
+                                                    </button>
+                                                    <span class="session-name-text">{{ session.name }}</span>
                                                     <span v-if="session.is_archive" class="badge badge-info">归档</span>
                                                     <span v-else class="badge" :class="session.archived ? 'badge-warning' : 'badge-success'">
                                                         {{ session.archived ? '已归档' : '未归档' }}
                                                     </span>
+                                                </div>
+                                                <div v-if="session.tags && session.tags.length" class="session-tags-row">
+                                                    <button v-for="tag in session.tags" :key="tag" class="session-tag-chip" @click.stop="sessionFilter = 'tag:' + tag; selectedSessions = []">
+                                                        {{ tag }}
+                                                    </button>
                                                 </div>
                                             </td>
                                             <td>
@@ -1752,28 +1780,35 @@
                                             </td>
                                             <td>{{ session.message_count }}</td>
                                             <td>{{ formatFullTime(session.created_at) }}</td>
-                                            <td>
-                                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" @click="openSession(session)" :disabled="isLoading">
-                                                    打开
-                                                </button>
-                                                <button v-if="session.is_archive || session.archived" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="openSessionForAiSummary(session)" :disabled="isLoading">
-                                                    <i class="fas fa-magic"></i> 总结
-                                                </button>
-                                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="viewSessionDetails(session)" :disabled="isLoading">
-                                                    详情
-                                                </button>
-                                                <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="exportSession(session)" :disabled="isLoading">
-                                                    导出
-                                                </button>
-                                                <button v-if="!session.is_archive" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="editSession(session)" :disabled="isLoading">
-                                                    编辑
-                                                </button>
-                                                <button v-if="!session.archived && !session.is_archive" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="archiveSession(session)" :disabled="isLoading">
-                                                    归档
-                                                </button>
-                                                <button v-if="session.archived && !session.is_archive" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px; margin-left: 8px;" @click="restoreSession(session)" :disabled="isLoading">
-                                                    恢复
-                                                </button>
+                                            <td class="session-actions-cell">
+                                                <div class="session-actions">
+                                                    <button class="btn btn-secondary btn-small" @click="openSession(session)" :disabled="isLoading">
+                                                        打开
+                                                    </button>
+                                                    <button class="btn btn-secondary btn-small" @click="viewSessionDetails(session)" :disabled="isLoading">
+                                                        详情
+                                                    </button>
+                                                    <details class="session-more-menu">
+                                                        <summary title="更多操作"><i class="fas fa-ellipsis-h"></i></summary>
+                                                        <div class="session-more-popover">
+                                                            <button v-if="session.is_archive || session.archived" @click="openSessionForAiSummary(session)" :disabled="isLoading">
+                                                                <i class="fas fa-magic"></i> 总结
+                                                            </button>
+                                                            <button @click="exportSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-file-export"></i> 导出
+                                                            </button>
+                                                            <button v-if="!session.is_archive" @click="editSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-pen"></i> 编辑
+                                                            </button>
+                                                            <button v-if="!session.archived && !session.is_archive" @click="archiveSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-archive"></i> 归档
+                                                            </button>
+                                                            <button v-if="session.archived && !session.is_archive" @click="restoreSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-undo"></i> 恢复
+                                                            </button>
+                                                        </div>
+                                                    </details>
+                                                </div>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -2169,7 +2204,7 @@
                                         <div class="style-preview-container" :style="previewContainerStyle">
                                             <!-- 用户消息预览 -->
                                             <div class="preview-message user" :style="userBubbleStyle">
-                                                <div class="preview-avatar" :style="messageStyle.userAvatar ? { backgroundImage: `url(${messageStyle.userAvatar})` } : {}">
+                                                <div class="preview-avatar">
                                                     <i v-if="!messageStyle.userAvatar" class="fas fa-user"></i>
                                                     <img v-else :src="messageStyle.userAvatar" alt="用户头像">
                                                 </div>
@@ -6038,6 +6073,15 @@
                                 <label>消息数量</label>
                                 <span>{{ viewingSession.message_count || 0 }} 条</span>
                             </div>
+                            <div class="detail-item">
+                                <label>会话标记</label>
+                                <span>
+                                    <span v-if="viewingSession.pinned" class="badge badge-info">置顶</span>
+                                    <span v-if="viewingSession.favorite" class="badge badge-warning">收藏</span>
+                                    <span v-for="tag in (viewingSession.tags || [])" :key="tag" class="session-tag-chip">{{ tag }}</span>
+                                    <span v-if="!viewingSession.pinned && !viewingSession.favorite && !(viewingSession.tags || []).length" style="color: var(--text-muted);">无</span>
+                                </span>
+                            </div>
                         </div>
                     </div>
 
@@ -6142,6 +6186,19 @@
                         </div>
                     </div>
 
+                    <div class="form-section" v-if="viewingSession.character_runtime_timeline && viewingSession.character_runtime_timeline.length">
+                        <div class="form-section-title">
+                            <i class="fas fa-chart-line" style="color: var(--accent-primary);"></i> 状态时间线
+                        </div>
+                        <div class="runtime-timeline runtime-timeline-detail">
+                            <div v-for="item in viewingSession.character_runtime_timeline.slice(-12).reverse()" :key="item.timestamp" class="runtime-timeline-item">
+                                <span>{{ formatFullTime(item.timestamp) }}</span>
+                                <strong>{{ item.mood || '未知' }}</strong>
+                                <em>强度 {{ Math.round((item.mood_intensity || 0) * 100) }}% · 精力 {{ item.energy ?? '-' }} · 好感 {{ item.affection ?? '-' }} · 信任 {{ item.trust ?? '-' }}</em>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- PromptStack 调试 -->
                     <div class="form-section" v-if="viewingSession.prompt_stack_debug && viewingSession.prompt_stack_debug.length > 0">
                         <div class="form-section-title">
@@ -6165,10 +6222,38 @@
                         </div>
                         <div style="padding: 16px;">
                             <!-- 未公开状态 -->
-                            <div v-if="!sessionIsPublic" style="text-align: center;">
+                            <div v-if="!sessionIsPublic" class="public-share-options">
                                 <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
                                     公开后会生成一个只读链接，其他人可以查看对话内容但无法交互
                                 </p>
+                                <div class="public-share-grid">
+                                    <label>
+                                        <span>有效期</span>
+                                        <select v-model.number="publicShareOptions.expires_days" class="form-select">
+                                            <option :value="1">1 天</option>
+                                            <option :value="7">7 天</option>
+                                            <option :value="30">30 天</option>
+                                            <option :value="90">90 天</option>
+                                            <option :value="365">365 天</option>
+                                        </select>
+                                    </label>
+                                    <label>
+                                        <span>访问密码</span>
+                                        <input v-model="publicShareOptions.password" type="password" class="form-input" placeholder="可留空">
+                                    </label>
+                                    <label>
+                                        <span>起始消息序号</span>
+                                        <input v-model.number="publicShareOptions.message_start" type="number" min="1" class="form-input" placeholder="全部">
+                                    </label>
+                                    <label>
+                                        <span>结束消息序号</span>
+                                        <input v-model.number="publicShareOptions.message_end" type="number" min="1" class="form-input" placeholder="全部">
+                                    </label>
+                                </div>
+                                <div class="public-share-toggles">
+                                    <label><input type="checkbox" v-model="publicShareOptions.include_character"> 显示角色信息和设定</label>
+                                    <label><input type="checkbox" v-model="publicShareOptions.include_user_messages"> 显示用户消息</label>
+                                </div>
                                 <button class="btn btn-primary btn-small" @click="makeSessionPublic(viewingSession.id)" :disabled="isLoadingPublic">
                                     <i class="fas fa-globe" :class="{ 'fa-spin': isLoadingPublic }"></i>
                                     {{ isLoadingPublic ? '处理中...' : '公开会话' }}
@@ -6195,6 +6280,8 @@
                                 </div>
                                 <p style="font-size: 12px; color: var(--text-muted); text-align: center; margin: 0;">
                                     扫描二维码或访问链接查看只读对话
+                                    <span v-if="publicSharePasswordRequired"> · 需要密码</span>
+                                    <span v-if="publicShareExpiresAt"> · {{ formatPublicExpiresAt(publicShareExpiresAt) }} 失效</span>
                                 </p>
                             </div>
                         </div>
@@ -6230,6 +6317,19 @@
                     <div class="form-group">
                         <label class="form-label">会话名称</label>
                         <input v-model="editingSession.name" type="text" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">标签</label>
+                        <input v-model="editingSession.tagsText" type="text" class="form-input" placeholder="重要, 剧情, 待总结">
+                        <div class="form-hint">多个标签用逗号分隔。</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-label" style="margin-right: 14px;">
+                            <input type="checkbox" v-model="editingSession.favorite"> 收藏
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" v-model="editingSession.pinned"> 置顶
+                        </label>
                     </div>
                     <div class="form-group">
                         <label class="form-label">系统提示词</label>
@@ -7943,6 +8043,16 @@
                     isLoadingQrCode: false,
                     sessionIsPublic: false,
                     isLoadingPublic: false,
+                    publicShareOptions: {
+                        expires_days: 30,
+                        password: '',
+                        include_character: true,
+                        include_user_messages: true,
+                        message_start: '',
+                        message_end: ''
+                    },
+                    publicSharePasswordRequired: false,
+                    publicShareExpiresAt: null,
                     showConfirmModal: false,
                     showExpandEditor: false,
                     expandEditorContent: '',
@@ -8431,6 +8541,16 @@
                     return [...names].sort();
                 },
 
+                sessionTagNames() {
+                    const tags = new Set();
+                    this.sessions.forEach(s => {
+                        (s.tags || []).forEach(tag => {
+                            if (tag) tags.add(tag);
+                        });
+                    });
+                    return [...tags].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+                },
+
                 managedSessions() {
                     let sessionPool = this.sessions.filter(s => s.type !== 'cli');
                     const filter = this.sessionFilter;
@@ -8438,13 +8558,29 @@
                         sessionPool = sessionPool.filter(s => !s.archived);
                     } else if (filter === 'archived') {
                         sessionPool = sessionPool.filter(s => s.archived);
+                    } else if (filter === 'favorite') {
+                        sessionPool = sessionPool.filter(s => s.favorite);
+                    } else if (filter === 'pinned') {
+                        sessionPool = sessionPool.filter(s => s.pinned);
                     } else if (filter.startsWith('char:')) {
                         const charName = filter.slice(5);
                         sessionPool = sessionPool.filter(s => s.sender_name === charName);
+                    } else if (filter.startsWith('tag:')) {
+                        const tagName = filter.slice(4);
+                        sessionPool = sessionPool.filter(s => (s.tags || []).includes(tagName));
                     }
+                    sessionPool = [...sessionPool].sort((a, b) => {
+                        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                        if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
+                        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+                    });
                     if (!this.sessionSearch) return sessionPool;
                     const search = this.sessionSearch.toLowerCase();
-                    return sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
+                    return sessionPool.filter(s =>
+                        (s.name || '').toLowerCase().includes(search) ||
+                        (s.sender_name || '').toLowerCase().includes(search) ||
+                        (s.tags || []).some(tag => String(tag).toLowerCase().includes(search))
+                    );
                 },
 
                 // 自定义频道的会话列表

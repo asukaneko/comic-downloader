@@ -828,8 +828,22 @@ const NbotMethods = {
                         const runtimeFields = {
                             system_prompt: fullSession.system_prompt || '',
                             prompt_stack_debug: fullSession.prompt_stack_debug || [],
-                            character_runtime_snapshot: fullSession.character_runtime_snapshot || null
+                            character_runtime_snapshot: fullSession.character_runtime_snapshot || null,
+                            character_runtime_timeline: fullSession.character_runtime_timeline || []
                         };
+                        if (runtimeFields.character_runtime_snapshot) {
+                            try {
+                                const timelineRes = await api.post(
+                                    '/api/sessions/' + this.currentSession.id + '/runtime-timeline',
+                                    { snapshot: runtimeFields.character_runtime_snapshot }
+                                );
+                                if (timelineRes.data?.success) {
+                                    runtimeFields.character_runtime_timeline = timelineRes.data.timeline || [];
+                                }
+                            } catch (timelineError) {
+                                console.warn('Failed to record character runtime timeline:', timelineError);
+                            }
+                        }
                         this.currentSession = {
                             ...this.currentSession,
                             ...runtimeFields
@@ -4479,12 +4493,19 @@ def main(params):
                     try {
                         const res = await api.get('/api/sessions/' + sessionId + '/public/status');
                         // 检查当前查看的会话是否仍然是查询时的会话（防止竞态条件）
-                        if (this.viewingSession?.id !== sessionId) {
+                        if (String(this.viewingSession?.id || '') !== String(sessionId)) {
                             return;
                         }
                         if (res.data.success && res.data.is_public) {
                             this.sessionIsPublic = true;
                             this.sessionShareUrl = res.data.public_url;
+                            this.publicShareOptions = {
+                                ...this.publicShareOptions,
+                                ...(res.data.options || {}),
+                                password: ''
+                            };
+                            this.publicSharePasswordRequired = !!res.data.password_required;
+                            this.publicShareExpiresAt = res.data.expires_at || null;
                             // 生成二维码
                             this.generatePublicQrCode(res.data.public_url);
                         }
@@ -4496,12 +4517,23 @@ def main(params):
                 // 公开会话
                 async makeSessionPublic(sessionId) {
                     if (!sessionId) return;
+                    const targetSessionId = String(sessionId);
                     this.isLoadingPublic = true;
                     try {
-                        const res = await api.post('/api/sessions/' + sessionId + '/public');
+                        const res = await api.post('/api/sessions/' + targetSessionId + '/public', {
+                            ...this.publicShareOptions,
+                            message_start: this.publicShareOptions.message_start || null,
+                            message_end: this.publicShareOptions.message_end || null,
+                        });
+                        if (String(this.viewingSession?.id || '') !== targetSessionId) {
+                            return;
+                        }
                         if (res.data.success) {
                             this.sessionIsPublic = true;
                             this.sessionShareUrl = res.data.public_url;
+                            this.publicSharePasswordRequired = !!res.data.password_required;
+                            this.publicShareExpiresAt = res.data.expires_at || null;
+                            this.publicShareOptions.password = '';
                             this.showToast('会话已公开', 'success');
                             // 生成二维码
                             this.generatePublicQrCode(res.data.public_url);
@@ -4519,11 +4551,17 @@ def main(params):
                 // 取消公开会话
                 async removeSessionPublic(sessionId) {
                     if (!sessionId) return;
+                    const targetSessionId = String(sessionId);
                     try {
-                        await api.delete('/api/sessions/' + sessionId + '/public');
+                        await api.delete('/api/sessions/' + targetSessionId + '/public');
+                        if (String(this.viewingSession?.id || '') !== targetSessionId) {
+                            return;
+                        }
                         this.sessionIsPublic = false;
                         this.sessionQrCode = '';
                         this.sessionShareUrl = '';
+                        this.publicSharePasswordRequired = false;
+                        this.publicShareExpiresAt = null;
                         this.showToast('已取消公开', 'success');
                     } catch (e) {
                         console.error('取消公开失败:', e);
@@ -4702,8 +4740,58 @@ def main(params):
                 },
 
                 editSession(session) {
-                    this.editingSession = { ...session };
+                    this.editingSession = {
+                        ...session,
+                        tags: [...(session.tags || [])],
+                        tagsText: (session.tags || []).join(', '),
+                        favorite: !!session.favorite,
+                        pinned: !!session.pinned,
+                    };
                     this.showEditSessionModal = true;
+                },
+
+                normalizeSessionTags(tagsText) {
+                    return String(tagsText || '')
+                        .replace(/，/g, ',')
+                        .split(',')
+                        .map(tag => tag.trim())
+                        .filter(Boolean)
+                        .filter((tag, index, arr) => arr.findIndex(item => item.toLowerCase() === tag.toLowerCase()) === index)
+                        .slice(0, 20);
+                },
+
+                async updateSessionMeta(session, patch) {
+                    if (!session?.id) return;
+                    const payload = {
+                        name: session.name,
+                        system_prompt: session.system_prompt || '',
+                        ...patch,
+                    };
+                    const res = await api.put(`/api/sessions/${session.id}`, payload);
+                    const updated = res.data?.session || payload;
+                    Object.assign(session, updated);
+                    if (this.currentSession?.id === session.id) {
+                        Object.assign(this.currentSession, updated);
+                    }
+                    if (this.viewingSession?.id === session.id) {
+                        Object.assign(this.viewingSession, updated);
+                    }
+                },
+
+                async toggleSessionFavorite(session) {
+                    try {
+                        await this.updateSessionMeta(session, { favorite: !session.favorite });
+                    } catch (e) {
+                        this.showToast('收藏状态更新失败', 'error');
+                    }
+                },
+
+                async toggleSessionPinned(session) {
+                    try {
+                        await this.updateSessionMeta(session, { pinned: !session.pinned });
+                    } catch (e) {
+                        this.showToast('置顶状态更新失败', 'error');
+                    }
                 },
 
                 async archiveSession(session) {
@@ -4748,6 +4836,7 @@ def main(params):
                 
                 async viewSessionDetails(session) {
                     // 先直接展示已有数据，再后台加载完整详情
+                    const targetSessionId = String(session.id || '');
                     this.viewingSession = {
                         id: session.id,
                         name: session.name,
@@ -4758,12 +4847,33 @@ def main(params):
                         system_prompt: session.system_prompt || '',
                         archived: session.archived || false,
                         channel_id: session.channel_id || '',
+                        tags: session.tags || [],
+                        favorite: !!session.favorite,
+                        pinned: !!session.pinned,
+                        character_runtime_timeline: session.character_runtime_timeline || [],
+                    };
+                    this.sessionQrCode = '';
+                    this.sessionShareUrl = '';
+                    this.sessionIsPublic = false;
+                    this.publicSharePasswordRequired = false;
+                    this.publicShareExpiresAt = null;
+                    this.publicShareOptions = {
+                        expires_days: 30,
+                        password: '',
+                        include_character: true,
+                        include_user_messages: true,
+                        message_start: '',
+                        message_end: ''
                     };
                     this.showSessionDetailsModal = true;
+                    this.checkSessionPublicStatus(targetSessionId);
 
                     // 后台加载完整数据（含消息列表）
                     try {
-                        const res = await api.get(`/api/sessions/${session.id}`);
+                        const res = await api.get(`/api/sessions/${targetSessionId}`);
+                        if (String(this.viewingSession?.id || '') !== targetSessionId) {
+                            return;
+                        }
                         if (res.data && !res.data.error) {
                             this.viewingSession = {
                                 ...this.viewingSession,
@@ -4788,6 +4898,7 @@ def main(params):
                 async saveSessionEdit() {
                     this.isLoading = true;
                     try {
+                        this.editingSession.tags = this.normalizeSessionTags(this.editingSession.tagsText);
                         await api.put(`/api/sessions/${this.editingSession.id}`, this.editingSession);
                         await this.loadSessions();
                         this.showEditSessionModal = false;
@@ -9697,6 +9808,19 @@ def main(params):
                 formatFullTime(timestamp) {
                     if (!timestamp) return '';
                     const date = new Date(timestamp);
+                    return date.toLocaleString('zh-CN');
+                },
+
+                formatShortTime(timestamp) {
+                    if (!timestamp) return '';
+                    const date = new Date(timestamp);
+                    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+                },
+
+                formatPublicExpiresAt(expiresAt) {
+                    if (!expiresAt) return '';
+                    const seconds = Number(expiresAt);
+                    const date = new Date(seconds > 10000000000 ? seconds : seconds * 1000);
                     return date.toLocaleString('zh-CN');
                 },
 

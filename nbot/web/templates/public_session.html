@@ -47,6 +47,47 @@
             font-size: 16px;
         }
 
+        .password-form {
+            max-width: 360px;
+            margin: 80px auto;
+            padding: 24px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 14px;
+        }
+
+        .password-form h1 {
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+
+        .password-form input {
+            width: 100%;
+            margin: 12px 0;
+            padding: 11px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            background: rgba(15, 23, 42, 0.8);
+            color: #e2e8f0;
+            outline: none;
+        }
+
+        .password-form button {
+            width: 100%;
+            padding: 10px 12px;
+            border: 0;
+            border-radius: 8px;
+            background: #3b82f6;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .password-error {
+            color: #f87171;
+            font-size: 13px;
+        }
+
         .header {
             background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(12px);
@@ -266,6 +307,18 @@
             <h1>链接已失效</h1>
             <p>{{ error }}</p>
         </div>
+    </div>
+    {% elif password_required %}
+    <div class="container">
+        <form class="password-form" method="get" action="/public/{{ public_id }}">
+            <h1>需要访问密码</h1>
+            <p style="color:#94a3b8;font-size:14px;">这个公开会话受密码保护。</p>
+            <input type="password" name="password" placeholder="输入密码" autofocus>
+            {% if password_error %}
+            <div class="password-error">密码不正确，请重试。</div>
+            {% endif %}
+            <button type="submit">进入会话</button>
+        </form>
     </div>
     {% else %}
     <div class="container">

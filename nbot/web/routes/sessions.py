@@ -14,6 +14,53 @@ from nbot.web.sessions_db import get_session as get_session_from_db
 _log = logging.getLogger(__name__)
 
 
+def _normalize_tags(tags):
+    if isinstance(tags, str):
+        tags = [part.strip() for part in tags.replace("，", ",").split(",")]
+    if not isinstance(tags, list):
+        return []
+    normalized = []
+    seen = set()
+    for tag in tags:
+        tag = str(tag or "").strip()
+        if not tag:
+            continue
+        tag = tag[:24]
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(tag)
+        if len(normalized) >= 20:
+            break
+    return normalized
+
+
+def _runtime_snapshot_signature(snapshot):
+    if not isinstance(snapshot, dict):
+        return {}
+    keys = (
+        "mood",
+        "mood_intensity",
+        "energy",
+        "affection",
+        "trust",
+        "security",
+        "familiarity",
+        "dependency",
+        "jealousy",
+        "visible_emotion",
+        "hidden_emotion",
+    )
+    return {key: snapshot.get(key) for key in keys if key in snapshot}
+
+
+def _normalize_runtime_timeline_entry(snapshot, timestamp=None):
+    entry = _runtime_snapshot_signature(snapshot)
+    entry["timestamp"] = timestamp or datetime.now().isoformat()
+    return entry
+
+
 def _skills_prompt_injection_enabled(settings):
     features = (settings or {}).get("features") or {}
     return bool(features.get("skills_prompt_injection", False))
@@ -137,6 +184,10 @@ def register_session_routes(app, server):
                     "sender_avatar": session.get("sender_avatar", ""),
                     "sender_portrait": session.get("sender_portrait", ""),
                     "scenario": session.get("scenario", ""),
+                    "tags": _normalize_tags(session.get("tags", [])),
+                    "favorite": bool(session.get("favorite")),
+                    "pinned": bool(session.get("pinned")),
+                    "character_runtime_timeline": session.get("character_runtime_timeline", []),
                 }
             )
 
@@ -216,6 +267,10 @@ def register_session_routes(app, server):
             "sender_name": sender_name,
             "sender_avatar": sender_avatar,
             "sender_portrait": sender_portrait,
+            "tags": _normalize_tags(data.get("tags", [])),
+            "favorite": bool(data.get("favorite")),
+            "pinned": bool(data.get("pinned")),
+            "character_runtime_timeline": [],
         }
 
         # 如果有开场白，添加为第一条 assistant 消息
@@ -303,6 +358,12 @@ def register_session_routes(app, server):
 
         data = request.json
         session["name"] = data.get("name", session["name"])
+        if "tags" in data:
+            session["tags"] = _normalize_tags(data.get("tags"))
+        if "favorite" in data:
+            session["favorite"] = bool(data.get("favorite"))
+        if "pinned" in data:
+            session["pinned"] = bool(data.get("pinned"))
 
         new_prompt = data.get("system_prompt", session.get("system_prompt", ""))
         if new_prompt != session.get("system_prompt", ""):
@@ -314,6 +375,47 @@ def register_session_routes(app, server):
 
         session_store.set_session(session_id, session)
         return jsonify({"success": True, "session": session})
+
+    @app.route("/api/sessions/<session_id>/runtime-timeline", methods=["GET"])
+    def get_runtime_timeline(session_id):
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+        timeline = session.get("character_runtime_timeline", [])
+        if not isinstance(timeline, list):
+            timeline = []
+        return jsonify({"success": True, "timeline": timeline})
+
+    @app.route("/api/sessions/<session_id>/runtime-timeline", methods=["POST"])
+    def add_runtime_timeline(session_id):
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        data = request.json or {}
+        snapshot = data.get("snapshot") if isinstance(data, dict) else None
+        if not isinstance(snapshot, dict):
+            return jsonify({"error": "Invalid runtime snapshot"}), 400
+
+        entry = _normalize_runtime_timeline_entry(snapshot)
+        timeline = session.get("character_runtime_timeline", [])
+        if not isinstance(timeline, list):
+            timeline = []
+
+        last = timeline[-1] if timeline else None
+        if isinstance(last, dict):
+            last_signature = {k: v for k, v in last.items() if k != "timestamp"}
+            entry_signature = {k: v for k, v in entry.items() if k != "timestamp"}
+            if last_signature == entry_signature:
+                last["timestamp"] = entry["timestamp"]
+            else:
+                timeline.append(entry)
+        else:
+            timeline.append(entry)
+
+        session["character_runtime_timeline"] = timeline[-200:]
+        session_store.set_session(session_id, session)
+        return jsonify({"success": True, "timeline": session["character_runtime_timeline"]})
 
     @app.route("/api/sessions/<session_id>/archive", methods=["POST"])
     def archive_session(session_id):

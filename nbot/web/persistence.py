@@ -149,6 +149,12 @@ def _normalize_session_record(session_id, session):
         "archived_at": session.get("archived_at") if session.get("archived") else None,
         "messages": messages,
         "system_prompt": system_prompt or "",
+        "tags": session.get("tags") if isinstance(session.get("tags"), list) else [],
+        "favorite": bool(session.get("favorite")),
+        "pinned": bool(session.get("pinned")),
+        "character_runtime_timeline": session.get("character_runtime_timeline")
+        if isinstance(session.get("character_runtime_timeline"), list)
+        else [],
     }
     if not normalized.get("character_id") and normalized.get("sender_name"):
         normalized["character_id"] = normalized["sender_name"]
