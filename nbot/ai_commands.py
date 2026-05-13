@@ -636,7 +636,7 @@ def register_ai_commands(
 
     @register_command(
         "/auto_reply",
-        help_text="/auto_reply [话痨程度0-1] -> 开启或关闭群聊智能自动回复(admin)",
+        help_text="/auto_reply [on|off|话痨程度0-1] -> 开启/关闭或设置群聊智能自动回复(admin)",
         category="2",
         admin_show=True,
     )
@@ -650,15 +650,39 @@ def register_ai_commands(
         group_id_str = str(msg.group_id)
         raw = (getattr(msg, "raw_message", "") or "")[len("/auto_reply"):].strip()
         level = None
+        desired_state = None
         if raw:
+            parts = raw.split()
+            action = parts[0].lower()
+            if action in {"on", "enable", "start", "开启", "打开"}:
+                desired_state = True
+                parts = parts[1:]
+            elif action in {"off", "disable", "stop", "关闭", "关掉"}:
+                desired_state = False
+                parts = parts[1:]
+
+            level_text = parts[0] if parts else None
+            if level_text is None and desired_state is None:
+                level_text = action
+
+        if raw and level_text is not None:
             try:
-                level = max(0.0, min(float(raw.split()[0]), 1.0))
+                level = max(0.0, min(float(level_text), 1.0))
             except ValueError:
-                await msg.reply(text="格式错误喔，请输入 0~1 之间的小数，例如 0.3 或 0.8")
+                await msg.reply(text="格式错误喔，请输入 on/off，或 0~1 之间的小数，例如 0.3 或 0.8")
                 return
             switch.group_switches.setdefault(group_id_str, {})["auto_reply_level"] = level
-            switch.save_switches()
-        state = switch.toggle_switch("auto_reply", group_id=group_id_str)
+
+            # 设置话痨程度时应保持自动回复开启，避免连续设置 level 反复切换开关。
+            if desired_state is None:
+                desired_state = True
+
+        if desired_state is None:
+            state = switch.toggle_switch("auto_reply", group_id=group_id_str)
+        else:
+            switch.set_switch_state("auto_reply", desired_state, group_id=group_id_str)
+            state = desired_state
+
         if level is None:
             try:
                 level = float(switch.group_switches.get(group_id_str, {}).get("auto_reply_level", 0.5))
@@ -666,6 +690,7 @@ def register_ai_commands(
                 level = 0.5
         text = ("已开启群聊智能自动回复喔~" if state else "已关闭群聊智能自动回复喔~") + f" 当前话痨程度：{level:.2f}"
         await msg.reply(text=text)
+        switch.save_switches()
 
     @register_command(
         "/主动聊天",
