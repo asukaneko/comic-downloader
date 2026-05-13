@@ -9794,7 +9794,7 @@ def main(params):
                     if (msg?.is_streaming) {
                         return this.renderStreamingHtml(content);
                     }
-                    return this.renderMarkdown(content);
+                    return this.renderMarkdown(content, { disableStrikethrough: true });
                 },
 
                 isStreamAwaiting(msg) {
@@ -9886,7 +9886,7 @@ def main(params):
                 },
 
                 // 渲染 Markdown 内容
-                renderMarkdown(content) {
+                renderMarkdown(content, options = {}) {
                     if (!content) return '';
                     
                     // 配置 marked 选项
@@ -9909,7 +9909,14 @@ def main(params):
                     });
                     
                     try {
-                        let html = marked.parse(content);
+                        const tildePlaceholder = 'NBOT_TILDE_PLACEHOLDER_8f4d9c2a';
+                        const markdownSource = options.disableStrikethrough
+                            ? String(content).replace(/~/g, tildePlaceholder)
+                            : content;
+                        let html = marked.parse(markdownSource);
+                        if (options.disableStrikethrough) {
+                            html = html.replaceAll(tildePlaceholder, '~');
+                        }
                         
                         // 给每个代码块包裹 header + 复制按钮
                         let blockIndex = 0;
@@ -10476,6 +10483,7 @@ def main(params):
 
                         const res = await api.put(`/api/sessions/${this.currentSession.id}/bind-character`, {
                             sender_name: preset.name || '',
+                            character_id: preset.id || preset.name || '',
                             sender_avatar: preset.avatar || '',
                             sender_portrait: preset.portrait || '',
                             scenario: scenario,
@@ -10486,6 +10494,7 @@ def main(params):
                             // 更新前端会话数据
                             Object.assign(this.currentSession, {
                                 sender_name: preset.name || '',
+                                character_id: preset.id || preset.name || '',
                                 sender_avatar: preset.avatar || '',
                                 sender_portrait: preset.portrait || '',
                                 scenario: scenario,
@@ -10497,8 +10506,11 @@ def main(params):
                             if (sessionInList) {
                                 Object.assign(sessionInList, {
                                     sender_name: preset.name || '',
+                                    character_id: preset.id || preset.name || '',
                                     sender_avatar: preset.avatar || '',
                                     sender_portrait: preset.portrait || '',
+                                    scenario: scenario,
+                                    system_prompt: preset.systemPrompt || '',
                                 });
                             }
 
@@ -10513,6 +10525,80 @@ def main(params):
                         this.showToast(e.response?.data?.error || '绑定角色失败', 'error');
                     } finally {
                         this.isBindingCharacter = false;
+                    }
+                },
+
+                async syncCharacterCardToSession(session = this.currentSession) {
+                    if (!session?.id || this.isSyncingCharacterCard) return;
+                    const characterName = session.sender_name || session.character_id || '';
+                    if (!characterName) {
+                        this.showToast('当前会话未绑定角色', 'warning');
+                        return;
+                    }
+
+                    this.isSyncingCharacterCard = true;
+                    try {
+                        await this.loadCustomPersonalityPresets();
+                        const preset = this.customPersonalityPresets.find(p =>
+                            p.id === session.character_id ||
+                            p.name === session.sender_name ||
+                            p.sender_name === session.sender_name ||
+                            p.name === characterName
+                        );
+                        if (!preset) {
+                            this.showToast(`未找到角色「${characterName}」的角色卡`, 'error');
+                            return;
+                        }
+
+                        let scenario = preset.scenario || '';
+                        if (scenario) {
+                            scenario = scenario.replace(/\{\{user\}\}/g, this.username || session.user_id || '');
+                            scenario = scenario.replace(/\{\{char\}\}/g, preset.name || '');
+                        }
+
+                        const res = await api.put(`/api/sessions/${session.id}/bind-character`, {
+                            sender_name: preset.name || '',
+                            character_id: preset.id || preset.name || '',
+                            sender_avatar: preset.avatar || '',
+                            sender_portrait: preset.portrait || '',
+                            scenario: scenario,
+                            system_prompt: preset.systemPrompt || '',
+                        });
+
+                        if (!res.data?.success) {
+                            this.showToast(res.data?.error || '同步角色卡失败', 'error');
+                            return;
+                        }
+
+                        const updatedSession = res.data.session || {};
+                        const sessionFields = {
+                            sender_name: updatedSession.sender_name || preset.name || '',
+                            character_id: updatedSession.character_id || preset.id || preset.name || '',
+                            sender_avatar: updatedSession.sender_avatar || preset.avatar || '',
+                            sender_portrait: updatedSession.sender_portrait || preset.portrait || '',
+                            scenario: updatedSession.scenario || scenario,
+                            system_prompt: updatedSession.system_prompt || preset.systemPrompt || '',
+                        };
+
+                        if (this.currentSession?.id === session.id) {
+                            Object.assign(this.currentSession, sessionFields);
+                            this.applyChatBackground();
+                            this.updateContextStats();
+                        }
+                        if (this.viewingSession?.id === session.id) {
+                            Object.assign(this.viewingSession, sessionFields);
+                        }
+                        const sessionInList = this.sessions.find(s => s.id === session.id);
+                        if (sessionInList) {
+                            Object.assign(sessionInList, sessionFields);
+                        }
+
+                        this.showToast(`已同步角色「${preset.name}」的最新角色卡`, 'success');
+                    } catch (e) {
+                        console.error('同步角色卡失败:', e);
+                        this.showToast(e.response?.data?.error || '同步角色卡失败', 'error');
+                    } finally {
+                        this.isSyncingCharacterCard = false;
                     }
                 },
 

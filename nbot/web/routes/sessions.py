@@ -542,12 +542,12 @@ def register_session_routes(app, server):
 
         session["sender_name"] = sender_name
         session["character_id"] = (data.get("character_id") or sender_name).strip()
-        if data.get("sender_avatar"):
-            session["sender_avatar"] = data["sender_avatar"]
-        if data.get("sender_portrait"):
-            session["sender_portrait"] = data["sender_portrait"]
-        if data.get("scenario"):
-            scenario = data["scenario"]
+        if "sender_avatar" in data:
+            session["sender_avatar"] = data.get("sender_avatar") or ""
+        if "sender_portrait" in data:
+            session["sender_portrait"] = data.get("sender_portrait") or ""
+        if "scenario" in data:
+            scenario = data.get("scenario") or ""
             user_id = session.get("user_id", "")
             if user_id:
                 scenario = scenario.replace("{{user}}", user_id)
@@ -560,8 +560,8 @@ def register_session_routes(app, server):
         if system_prompt and sender_name:
             if old_name and old_name != sender_name:
                 system_prompt = system_prompt.replace(f'你是角色 "{old_name}"', f'你是角色 "{sender_name}"')
-        if data.get("system_prompt"):
-            system_prompt = data["system_prompt"]
+        if "system_prompt" in data:
+            system_prompt = data.get("system_prompt") or ""
         session["system_prompt"] = system_prompt
 
         # 更新 system 消息

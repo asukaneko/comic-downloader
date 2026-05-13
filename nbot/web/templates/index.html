@@ -810,6 +810,14 @@
                                     <input type="range" v-model.number="chatHorizontalMargin" min="0" max="300" step="4" @input="updateChatHorizontalMargin">
                                     <span class="chat-margin-value">{{ chatHorizontalMargin }}px</span>
                                 </label>
+                                <button v-if="currentSession" class="chat-view-action" @click.prevent="togglePushNotifications(); closeChatViewMenu()" :disabled="pushBusy">
+                                    <i :class="pushSubscribed ? 'fas fa-bell-slash' : 'far fa-bell'"></i>
+                                    {{ pushSubscribed ? '关闭通知' : '开启通知' }}
+                                </button>
+                                <button v-if="currentSession" class="chat-view-action" @click.prevent="exportCurrentSession(); closeChatViewMenu()" :disabled="isLoading">
+                                    <i class="fas fa-file-export"></i>
+                                    导出会话
+                                </button>
                                 <button class="chat-view-action" @click.prevent="toggleChatHeader">
                                     <i class="fas fa-window-minimize"></i>
                                     {{ $t('chat.hide_topbar') }}
@@ -968,7 +976,7 @@
                                             <div v-if="msg.role === 'user' && msg.sender" class="message-sender" style="font-size: 12px; color: rgba(255,255,255,0.9); font-weight: 600; margin-bottom: 4px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">
                                                 <i class="fab fa-qq"></i> {{ msg.sender }}
                                             </div>
-                                            <div v-if="msg.content" class="markdown-body" v-html="renderMarkdown(parseMessageContent(msg.content, msg))"></div>
+                                            <div v-if="msg.content" class="markdown-body" v-html="renderMarkdown(parseMessageContent(msg.content, msg), { disableStrikethrough: true })"></div>
                                             <div class="message-time">{{ formatTime(msg.timestamp) }}</div>
                                         </div>
                                     </div>
@@ -1010,8 +1018,17 @@
                                             </div>
                                             <div class="chat-header-subtitle">
                                                 {{ currentSession.type?.startsWith('qq') ? 'QQ 同步会话' : (currentSession.type === 'cli' ? 'CLI 终端' : 'Web 会话') }} · {{ currentMessages.length }} 条消息
-                                                <span v-if="currentSession.sender_name" style="margin-left: 8px; color: var(--accent-primary);">
+                                                <span v-if="currentSession.sender_name" class="chat-session-character">
                                                     <i :class="currentSession.sender_avatar || 'fas fa-user-circle'"></i> {{ currentSession.sender_name }}
+                                                    <button
+                                                        v-if="!currentSession.is_archive && !currentSession.read_only"
+                                                        class="character-sync-btn"
+                                                        @click.stop="syncCharacterCardToSession(currentSession)"
+                                                        :disabled="isSyncingCharacterCard"
+                                                        title="同步最新角色卡"
+                                                    >
+                                                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isSyncingCharacterCard }"></i>
+                                                    </button>
                                                 </span>
                                                 <button v-else-if="!currentSession.is_archive" class="btn-bind-character" @click="showBindCharacterModal = true" title="绑定角色">
                                                     <i class="fas fa-user-plus"></i> 绑定角色
@@ -1029,14 +1046,8 @@
                                             </button>
                                         </div>
                                         <!-- 桌面端按钮 -->
-                                        <button class="btn-icon desktop-only" @click="togglePushNotifications" :title="pushButtonTitle" :disabled="pushBusy">
-                                            <i :class="pushSubscribed ? 'fas fa-bell' : 'far fa-bell'"></i>
-                                        </button>
                                         <button class="btn-icon desktop-only" @click="toggleCharacterRuntimePanel" title="角色运行时">
                                             <i class="fas fa-heartbeat"></i>
-                                        </button>
-                                        <button class="btn-icon desktop-only" @click="exportCurrentSession" title="导出会话" :disabled="isLoading">
-                                            <i class="fas fa-file-export"></i>
                                         </button>
                                         <button v-if="currentSession.is_archive || currentSession.archived" class="btn-icon desktop-only" @click="aiSummarySession" title="AI总结" :disabled="isSummarizing || isLoading">
                                             <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
@@ -5991,6 +6002,24 @@
                                 <label>会话名称</label>
                                 <span>{{ viewingSession.name }}</span>
                             </div>
+                            <div class="detail-item" v-if="viewingSession.sender_name">
+                                <label>绑定角色</label>
+                                <span class="session-detail-character">
+                                    <span>
+                                        <i :class="viewingSession.sender_avatar || 'fas fa-user-circle'"></i>
+                                        {{ viewingSession.sender_name }}
+                                    </span>
+                                    <button
+                                        v-if="!viewingSession.is_archive && !viewingSession.read_only"
+                                        class="character-sync-btn"
+                                        @click.stop="syncCharacterCardToSession(viewingSession)"
+                                        :disabled="isSyncingCharacterCard"
+                                        title="同步最新角色卡"
+                                    >
+                                        <i class="fas fa-sync-alt" :class="{ 'fa-spin': isSyncingCharacterCard }"></i>
+                                    </button>
+                                </span>
+                            </div>
                             <div class="detail-item">
                                 <label>会话类型</label>
                                 <span class="badge" :class="viewingSession.type?.startsWith('qq') ? 'badge-info' : (viewingSession.type === 'cli' ? 'badge-warning' : 'badge-success')">
@@ -7348,6 +7377,7 @@
                     showBindCharacterModal: false,
                     bindCharacterSelectedId: null,
                     isBindingCharacter: false,
+                    isSyncingCharacterCard: false,
                     thinkingCards: [],  // 进度卡片列表
                     showThinkingCard: localStorage.getItem('showThinkingCard') === 'true',  // 是否显示进度卡片（默认关闭）
                     orphanCards: {},  // 找不到父消息的孤儿卡片（按 parentMsgId 分组）
@@ -7356,7 +7386,7 @@
                     isChatListCollapsed: localStorage.getItem('nbot_chat_list_collapsed') === 'true',
                     isChatHeaderHidden: localStorage.getItem('nbot_chat_header_hidden') === 'true',
                     showChatViewMenu: false,
-                    showCharacterRuntimePanel: localStorage.getItem('nbot_character_runtime_panel') === 'true',
+                    showCharacterRuntimePanel: false,
                     chatHorizontalMargin: Math.min(300, Math.max(0, parseInt(localStorage.getItem('nbot_chat_horizontal_margin') || '0', 10) || 0)),
                     sessionSwitching: false,
                     sessionSearch: '',

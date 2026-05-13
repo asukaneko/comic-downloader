@@ -4508,6 +4508,52 @@
         .chat-header-title { font-size: 16px; font-weight: 600; }
         .chat-header-subtitle { font-size: 12px; color: var(--text-muted); }
 
+        .chat-session-character,
+        .session-detail-character {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--accent-primary);
+        }
+
+        .session-detail-character {
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .session-detail-character > span {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .character-sync-btn {
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            border: 1px solid rgba(99, 102, 241, 0.32);
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.08);
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.15s ease;
+        }
+
+        .character-sync-btn:hover:not(:disabled) {
+            background: rgba(99, 102, 241, 0.16);
+            border-color: rgba(99, 102, 241, 0.55);
+        }
+
+        .character-sync-btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+
         .character-runtime-float {
             position: absolute;
             top: 72px;
@@ -4996,6 +5042,11 @@
         .chat-view-action:hover {
             color: var(--text-primary);
             background: var(--bg-tertiary);
+        }
+
+        .chat-view-action:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
         }
 
         .messages-container {
@@ -7357,7 +7408,8 @@
 
         /* 电脑端按钮统一大小 */
         .chat-actions .btn,
-        .chat-actions .btn-icon {
+        .chat-actions .btn-icon,
+        .chat-actions .chat-view-menu-button {
             width: 44px;
             height: 44px;
             padding: 0;
