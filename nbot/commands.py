@@ -4026,30 +4026,125 @@ async def handle_private_message(msg):
 # 获取机器人QQ号
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini', encoding='utf-8')
-BOT_UIN = str(config_parser.get('BotConfig', 'bot_uin', fallback=""))
+BOT_UIN = str(config_parser.get('BotConfig', 'bot_uin', fallback="")).strip()
+
+
+def _normalize_qq_id(value) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.endswith(".0") and text[:-2].isdigit():
+        text = text[:-2]
+    return text
+
+
+def _get_value(source, *keys):
+    for key in keys:
+        if isinstance(source, dict) and key in source:
+            return source.get(key)
+        if hasattr(source, key):
+            return getattr(source, key)
+    return None
+
+
+def _bot_uin_candidates(msg=None):
+    candidates = set()
+    for value in (BOT_UIN, bot_id):
+        qq_id = _normalize_qq_id(value)
+        if qq_id:
+            candidates.add(qq_id)
+
+    if msg is not None:
+        for attr in ("self_id", "bot_id", "bot_uin", "login_uin"):
+            qq_id = _normalize_qq_id(getattr(msg, attr, None))
+            if qq_id:
+                candidates.add(qq_id)
+
+        for attr in ("sender", "self", "login_info"):
+            nested = getattr(msg, attr, None)
+            qq_id = _normalize_qq_id(_get_value(nested, "self_id", "bot_id", "user_id", "uin", "qq", "id"))
+            if qq_id:
+                candidates.add(qq_id)
+
+    return candidates
+
+
+def _iter_mention_ids(value):
+    if value is None:
+        return
+
+    if isinstance(value, (list, tuple, set)):
+        for item in value:
+            yield from _iter_mention_ids(item)
+        return
+
+    data = _get_value(value, "data")
+    if data is not None and data is not value:
+        for key in ("qq", "user_id", "uin", "id", "target", "target_id"):
+            qq_id = _normalize_qq_id(_get_value(data, key))
+            if qq_id:
+                yield qq_id
+
+    for key in ("qq", "user_id", "uin", "id", "target", "target_id"):
+        qq_id = _normalize_qq_id(_get_value(value, key))
+        if qq_id:
+            yield qq_id
+
+    if isinstance(value, (str, int, float)):
+        qq_id = _normalize_qq_id(value)
+        if qq_id:
+            yield qq_id
+
+
+def _iter_message_segments(msg):
+    for attr in ("message", "message_chain", "message_array"):
+        segments = getattr(msg, attr, None)
+        if not segments:
+            continue
+        if isinstance(segments, (str, bytes)):
+            continue
+        for segment in segments:
+            yield segment
+
+
+def _is_at_all_enabled(msg, mention_id: str) -> bool:
+    if mention_id.lower() != "all" and mention_id != "全体成员":
+        return False
+    group_id = _normalize_qq_id(getattr(msg, "group_id", None))
+    return bool(group_id and group_id in at_all_group)
 
 
 def is_at_bot(msg) -> bool:
     """检查消息是否@了机器人"""
-    # 方法1: 检查raw_message中是否包含@机器人的QQ号
-    if BOT_UIN and BOT_UIN in msg.raw_message:
-        return True
-    
-    # 方法2: 检查消息是否有at_list属性
-    if hasattr(msg, 'at_list') and msg.at_list:
-        for at in msg.at_list:
-            if str(at) == BOT_UIN:
-                return True
-    
-    # 方法3: 检查消息是否有at属性
-    if hasattr(msg, 'at') and msg.at:
-        if isinstance(msg.at, list):
-            for at in msg.at:
-                if str(at) == BOT_UIN:
-                    return True
-        elif str(msg.at) == BOT_UIN:
+    bot_uins = _bot_uin_candidates(msg)
+    raw_message = str(getattr(msg, "raw_message", "") or "")
+
+    for attr in ("is_at_me", "at_me", "to_me"):
+        if getattr(msg, attr, False):
             return True
-    
+
+    for mention_id in re.findall(r"\[CQ:at[^\]]*(?:qq|id|target)=([^,\]\s]+)", raw_message):
+        mention_id = _normalize_qq_id(mention_id)
+        if mention_id in bot_uins or _is_at_all_enabled(msg, mention_id):
+            return True
+
+    for attr in ("at_list", "at", "mentions", "mention_list"):
+        for mention_id in _iter_mention_ids(getattr(msg, attr, None)):
+            if mention_id in bot_uins or _is_at_all_enabled(msg, mention_id):
+                return True
+
+    for segment in _iter_message_segments(msg):
+        segment_type = str(_get_value(segment, "type", "msg_type") or "").lower()
+        if segment_type not in ("at", "mention"):
+            continue
+        for mention_id in _iter_mention_ids(segment):
+            if mention_id in bot_uins or _is_at_all_enabled(msg, mention_id):
+                return True
+
+    for bot_uin in bot_uins:
+        if bot_uin and bot_uin in raw_message:
+            return True
+
     return False
 
 
