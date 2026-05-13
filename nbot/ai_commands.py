@@ -13,6 +13,102 @@ from nbot.services.chat_service import (
     user_messages,
 )
 
+# 模块级别的 bot 实例引用，用于群聊历史记录功能
+_bot_instance = None
+
+
+def _extract_history_text_item(item):
+    """从历史记录项中提取文本内容"""
+    if isinstance(item, dict):
+        message = item.get("message", {})
+        if isinstance(message, dict):
+            text = message.get("text", "")
+            if text:
+                return text
+            # 处理消息段数组
+            segments = message.get("data", [])
+            if isinstance(segments, list):
+                texts = []
+                for seg in segments:
+                    if isinstance(seg, dict) and seg.get("type") == "text":
+                        seg_data = seg.get("data", {})
+                        if isinstance(seg_data, dict):
+                            texts.append(seg_data.get("text", ""))
+                return " ".join(texts)
+        return str(message)
+    return (
+        getattr(item, "text", None)
+        or getattr(item, "content", None)
+        or ""
+    ).strip()
+
+
+def _history_items_to_text(items):
+    """将历史记录项列表转换为文本格式"""
+    lines = []
+    for item in items:
+        user_id = None
+        nickname = ""
+        if isinstance(item, dict):
+            user_id = item.get("user_id")
+            sender = item.get("sender")
+            if isinstance(sender, dict):
+                nickname = sender.get("nickname", "") or ""
+        else:
+            user_id = getattr(item, "user_id", None)
+            sender = getattr(item, "sender", None)
+            if sender is not None:
+                try:
+                    nickname = sender.nickname
+                except Exception:
+                    if isinstance(sender, dict):
+                        nickname = sender.get("nickname", "") or ""
+        text = _extract_history_text_item(item)
+        uid_str = str(user_id) if user_id is not None else ""
+        name_part = nickname or uid_str
+        lines.append(f"{name_part}: {text}" if name_part else text)
+    return "\n".join(lines)
+
+
+async def get_group_history_items(group_id, count, bot=None):
+    """获取群聊历史消息记录
+
+    Args:
+        group_id: 群ID
+        count: 获取消息数量
+        bot: 可选的 bot 实例，如果不提供则使用模块级别的 _bot_instance
+
+    Returns:
+        消息列表
+    """
+    bot_instance = bot or _bot_instance
+    if not bot_instance:
+        return []
+
+    try:
+        history = await bot_instance.api.get_group_msg_history(
+            group_id,
+            message_seq=0,
+            count=count,
+            reverse_order=True,
+        )
+        if isinstance(history, list):
+            return history
+        if isinstance(history, dict):
+            data = history.get("data")
+            if isinstance(data, list):
+                return data
+            if isinstance(data, dict) and isinstance(data.get("messages"), list):
+                return data["messages"]
+        return []
+    except Exception as e:
+        return []
+
+
+def history_items_to_text(items):
+    """将历史记录项列表转换为文本格式（模块级公开函数）"""
+    return _history_items_to_text(items)
+
 
 def register_ai_commands(
     *,
@@ -33,6 +129,9 @@ def register_ai_commands(
     load_address,
 ):
     """Register AI/session commands that are shared by QQ and Web history."""
+    # 设置模块级别的 bot 实例引用
+    global _bot_instance
+    _bot_instance = bot
 
     def web_data_dir():
         return os.path.join(project_root(), "data", "web")
@@ -451,51 +550,9 @@ def register_ai_commands(
             or ""
         ).strip()
 
-    async def get_group_history_items(group_id, count):
-        history = await bot.api.get_group_msg_history(
-            group_id,
-            message_seq=0,
-            count=count,
-            reverse_order=True,
-        )
-        if isinstance(history, list):
-            return history
-        if isinstance(history, dict):
-            data = history.get("data")
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict) and isinstance(data.get("messages"), list):
-                return data["messages"]
-        return []
-
-    def history_items_to_text(items):
-        lines = []
-        for item in items:
-            user_id = None
-            nickname = ""
-            if isinstance(item, dict):
-                user_id = item.get("user_id")
-                sender = item.get("sender")
-                if isinstance(sender, dict):
-                    nickname = sender.get("nickname", "") or ""
-            else:
-                user_id = getattr(item, "user_id", None)
-                sender = getattr(item, "sender", None)
-                if sender is not None:
-                    try:
-                        nickname = sender.nickname
-                    except Exception:
-                        if isinstance(sender, dict):
-                            nickname = sender.get("nickname", "") or ""
-            text = extract_history_text_item(item)
-            uid_str = str(user_id) if user_id is not None else ""
-            name_part = nickname or uid_str
-            lines.append(f"{name_part}: {text}" if name_part else text)
-        return "\n".join(lines)
-
     async def get_group_today_summary_text(group_id):
         try:
-            items = await get_group_history_items(group_id, 500)
+            items = await get_group_history_items(group_id, 500, bot)
         except Exception as e:
             log.error(f"获取群聊历史失败：{e}")
             return None
@@ -514,7 +571,7 @@ def register_ai_commands(
                 filtered.append(item)
         if not filtered:
             return "今天群里还没有记录到消息喔~"
-        return summarize_group_text(history_items_to_text(filtered))
+        return summarize_group_text(_history_items_to_text(filtered))
 
     async def auto_summary_task():
         log.info("每日自动总结定时任务已启动")
@@ -592,14 +649,14 @@ def register_ai_commands(
         count = max(1, min(count, 500))
 
         try:
-            items = await get_group_history_items(msg.group_id, count)
+            items = await get_group_history_items(msg.group_id, count, bot)
         except Exception as e:
             await msg.reply(text=f"获取群聊历史失败喔：{e}")
             return
         if not items:
             await msg.reply(text="没有获取到群聊历史消息喔~")
             return
-        await msg.reply(text=summarize_group_text(history_items_to_text(items)))
+        await msg.reply(text=summarize_group_text(_history_items_to_text(items)))
 
     @register_command(
         "/summary_today",
@@ -650,36 +707,30 @@ def register_ai_commands(
         group_id_str = str(msg.group_id)
         raw = (getattr(msg, "raw_message", "") or "")[len("/auto_reply"):].strip()
         level = None
-        desired_state = None
-        if raw:
-            parts = raw.split()
-            action = parts[0].lower()
-            if action in {"on", "enable", "start", "开启", "打开"}:
-                desired_state = True
-                parts = parts[1:]
-            elif action in {"off", "disable", "stop", "关闭", "关掉"}:
-                desired_state = False
-                parts = parts[1:]
 
-            level_text = parts[0] if parts else None
-            if level_text is None and desired_state is None:
-                level_text = action
-
-        if raw and level_text is not None:
-            try:
-                level = max(0.0, min(float(level_text), 1.0))
-            except ValueError:
-                await msg.reply(text="格式错误喔，请输入 on/off，或 0~1 之间的小数，例如 0.3 或 0.8")
-                return
-            switch.group_switches.setdefault(group_id_str, {})["auto_reply_level"] = level
-
-            # 设置话痨程度时应保持自动回复开启，避免连续设置 level 反复切换开关。
-            if desired_state is None:
-                desired_state = True
-
-        if desired_state is None:
+        if not raw:
             state = switch.toggle_switch("auto_reply", group_id=group_id_str)
         else:
+            parts = raw.split()
+            action = parts[0].lower()
+            desired_state = True
+            level_text = parts[0]
+
+            if action in {"on", "enable", "start", "开启", "打开"}:
+                desired_state = True
+                level_text = parts[1] if len(parts) > 1 else None
+            elif action in {"off", "disable", "stop", "关闭", "关掉"}:
+                desired_state = False
+                level_text = parts[1] if len(parts) > 1 else None
+
+            if level_text:
+                try:
+                    level = max(0.0, min(float(level_text), 1.0))
+                except ValueError:
+                    await msg.reply(text="格式错误喔，请输入 on/off，或 0~1 之间的小数，例如 0.3 或 0.8")
+                    return
+                switch.group_switches.setdefault(group_id_str, {})["auto_reply_level"] = level
+
             switch.set_switch_state("auto_reply", desired_state, group_id=group_id_str)
             state = desired_state
 
@@ -872,8 +923,13 @@ def register_ai_commands(
             prompt = "没有找到提示词喔~"
         await reply_current_channel(msg, is_group, prompt)
 
-    @register_command("/new", help_text="/new -> 创建新的对话会话 (清空当前对话历史)", category="2")
+    @register_command("/new", help_text="/new -> 创建新的对话会话 (清空当前对话历史)(admin)", category="2", admin_show=True)
     async def handle_new_session(msg, is_group=True):
+        # 权限检查：仅管理员可使用
+        if (str(msg.user_id) not in admin) and is_group:
+            await msg.reply(text="你没有权限喔~")
+            return
+
         if is_group:
             group_id = getattr(msg, "group_id", None)
             chat_id = getattr(msg, "chat_id", None)
@@ -919,10 +975,16 @@ def register_ai_commands(
     @register_command(
         "/character",
         "/char",
-        help_text="/character -> 查看/切换角色\n/character list -> 列出角色\n/character <编号|id|名称> -> 切换角色",
+        help_text="/character -> 查看/切换角色(admin)\n/character list -> 列出角色\n/character <编号|id|名称> -> 切换角色",
         category="2",
+        admin_show=True,
     )
     async def handle_character_switch(msg, is_group=True):
+        # 权限检查：仅管理员可使用
+        if (str(msg.user_id) not in admin) and is_group:
+            await msg.reply(text="你没有权限喔~")
+            return
+
         raw = (getattr(msg, "raw_message", "") or "").strip()
         parts = raw.split(maxsplit=1)
         arg = parts[1].strip() if len(parts) > 1 else ""
@@ -972,10 +1034,16 @@ def register_ai_commands(
 
     @register_command(
         "/model",
-        help_text="/model -> 查看当前模型\n/model <编号> -> 切换到指定模型\n/model list -> 列出所有可用模型",
+        help_text="/model -> 查看当前模型(admin)\n/model <编号> -> 切换到指定模型\n/model list -> 列出所有可用模型",
         category="2",
+        admin_show=True,
     )
     async def handle_model_switch(msg, is_group=True):
+        # 权限检查：仅管理员可使用
+        if str(msg.user_id) not in admin:
+            await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
+            return
+
         data_dir = os.path.join("data", "web")
         models_file = os.path.join(data_dir, "ai_models.json")
 
@@ -1054,10 +1122,16 @@ def register_ai_commands(
 
     @register_command(
         "/resume",
-        help_text="/resume [编号|会话ID|名称] -> 从当前角色的 Web 会话载入到当前频道",
+        help_text="/resume [编号|会话ID|名称] -> 从当前角色的 Web 会话载入到当前频道(admin)",
         category="2",
+        admin_show=True,
     )
     async def handle_resume_session(msg, is_group=True):
+        # 权限检查：仅管理员可使用
+        if str(msg.user_id) not in admin:
+            await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
+            return
+
         raw = (getattr(msg, "raw_message", "") or "").strip()
         parts = raw.split(maxsplit=1)
         arg = parts[1].strip() if len(parts) > 1 else ""
@@ -1118,10 +1192,16 @@ def register_ai_commands(
 
     @register_command(
         "/push",
-        help_text="/push -> 将当前频道会话上传到 /resume 绑定的 Web 会话",
+        help_text="/push -> 将当前频道会话上传到 /resume 绑定的 Web 会话(admin)",
         category="2",
+        admin_show=True,
     )
     async def handle_push_session(msg, is_group=True):
+        # 权限检查：仅管理员可使用
+        if str(msg.user_id) not in admin:
+            await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
+            return
+
         info = current_qq_session_info(msg, is_group)
         bindings = load_resume_bindings()
         binding = bindings.get(info["session_id"])

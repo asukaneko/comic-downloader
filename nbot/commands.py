@@ -4386,6 +4386,24 @@ async def dispatch_message(msg, is_group: bool):
             atts = [{"type": "image", "url": image_url, "source": "qq"}] if image_url else []
             trigger = "at bot" if at_bot else f"auto_reply level={auto_reply_level:.2f}"
             _log.info(f"Processing group message ({trigger}) from {user_id} in {group_id}: {content[:50]}..., image: {bool(image_url)}")
+
+            # 如果是 auto_reply 模式（非@机器人），获取群聊最近消息作为上下文
+            if not at_bot and auto_reply_enabled and group_id:
+                try:
+                    from nbot.ai_commands import get_group_history_items, history_items_to_text
+
+                    # 获取最近30条群聊消息作为上下文
+                    history_items = await get_group_history_items(int(group_id), 30)
+                    if history_items:
+                        # 格式化历史消息为文本
+                        history_text = history_items_to_text(history_items)
+                        # 在用户消息前添加群聊上下文，让AI能够理解对话背景
+                        user_prefix = f"用户{user_id}说："
+                        content = f"[群聊最近消息上下文]\n{history_text}\n[当前消息]\n{user_prefix}{content}"
+                        _log.info(f"Added group chat context with {len(history_items)} messages for auto_reply")
+                except Exception as ctx_err:
+                    _log.warning(f"Failed to get group history for context: {ctx_err}")
+
             response = await loop.run_in_executor(None, do_chat, content, None, group_id, user_id, False, None, None, atts)
             if response:
                 _log.info(f"Sending group reply: {response[:50]}...")
