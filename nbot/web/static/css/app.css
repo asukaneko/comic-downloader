@@ -16654,3 +16654,243 @@
         grid-template-columns: 1fr;
     }
 }
+
+@media (max-width: 768px) {
+    .personality-page {
+        min-width: 0;
+    }
+
+    .personality-page .personality-layout {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 14px !important;
+    }
+
+    .personality-page .editor-card,
+    .personality-page .personality-side-panel,
+    .personality-page .card,
+    .personality-page .card-body {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .personality-page .editor-card .card-body,
+    .personality-page .personality-side-panel > .card .card-body {
+        overflow-x: hidden;
+        padding: 12px !important;
+    }
+
+    .personality-page .editor-topbar {
+        position: sticky;
+        top: 0;
+        align-items: flex-start;
+    }
+
+    .personality-page .editor-topbar-left {
+        width: 100%;
+    }
+
+    .personality-page .editor-breadcrumb {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .personality-page .editor-breadcrumb-root,
+    .personality-page .editor-breadcrumb-sep {
+        display: none;
+    }
+
+    .personality-page .editor-breadcrumb-name {
+        font-size: 14px;
+        max-width: 100%;
+    }
+
+    .personality-page .editor-topbar-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+    }
+
+    .personality-page .editor-topbar-actions .btn,
+    .personality-page .editor-topbar-actions .dropdown,
+    .personality-page .editor-topbar-actions .dropdown > .btn {
+        width: 100%;
+        min-width: 0;
+        justify-content: center;
+    }
+
+    .personality-page .form-section {
+        padding: 14px;
+        margin-bottom: 12px;
+    }
+
+    .personality-page .form-row {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .personality-page .form-row .form-group {
+        flex: 1 1 auto !important;
+        width: 100%;
+    }
+
+    .personality-page .tag-input {
+        min-height: 44px;
+    }
+
+    .personality-page .portrait-upload-row {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+
+    .personality-page .portrait-frame {
+        width: min(100%, 220px);
+        height: auto;
+        aspect-ratio: 3 / 4;
+        margin: 0 auto;
+    }
+
+    .personality-page .portrait-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .personality-page .portrait-actions .btn {
+        width: 100% !important;
+        margin: 0 !important;
+        min-height: 38px;
+    }
+
+    .personality-page .textarea-generate-btn {
+        position: static;
+        width: 100%;
+        margin-bottom: 8px;
+        min-height: 34px;
+    }
+
+    .personality-page .textarea-wrap .form-textarea {
+        padding-bottom: 10px;
+    }
+
+    .personality-page .state-card-grid,
+    .personality-page .mood-selector {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-page .active-personality-layout,
+    .personality-page .glass-content {
+        flex-direction: column;
+    }
+
+    .personality-page .active-personality-portrait-side,
+    .personality-page .glass-avatar-card {
+        width: min(100%, 220px);
+        height: auto;
+        aspect-ratio: 3 / 4;
+        margin: 0 auto;
+    }
+
+    .personality-page .active-personality-actions,
+    .personality-page .glass-actions {
+        flex-direction: column;
+    }
+
+    .personality-page .character-grid-glass {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+    }
+
+    .personality-page .glass-card-grid {
+        border-radius: 14px;
+    }
+
+    .personality-page .glass-card-info {
+        padding: 12px;
+        padding-top: 0;
+    }
+
+    .personality-page .glass-card-actions,
+    .personality-page .glass-card-list-actions {
+        gap: 6px;
+    }
+
+    .personality-page .glass-btn-small {
+        min-width: 36px;
+        min-height: 36px;
+        padding: 7px 8px;
+    }
+
+    .personality-page .glass-card-list {
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .personality-page .glass-card-list-actions {
+        flex-direction: column;
+    }
+
+    .personality-page .pagination-controls {
+        flex-wrap: wrap;
+    }
+
+    .character-fullscreen-modal {
+        width: 100vw;
+        height: 100dvh;
+        border-radius: 0;
+    }
+
+    .character-fullscreen-header {
+        align-items: stretch;
+        padding: 12px;
+    }
+
+    .character-fullscreen-header > div {
+        width: 100%;
+        min-width: 0;
+        flex-wrap: wrap;
+    }
+
+    .fullscreen-search {
+        width: 100%;
+    }
+
+    .character-fullscreen-body {
+        padding: 12px;
+    }
+
+    .fullscreen-glass-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+    }
+
+    .fullscreen-glass-card {
+        border-radius: 14px;
+    }
+}
+
+@media (max-width: 480px) {
+    .personality-page .editor-topbar-actions {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-page .character-grid-glass {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-page .glass-card-list {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr);
+    }
+
+    .personality-page .glass-card-list-actions {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        justify-content: flex-end;
+    }
+
+    .fullscreen-glass-grid {
+        grid-template-columns: 1fr;
+    }
+}

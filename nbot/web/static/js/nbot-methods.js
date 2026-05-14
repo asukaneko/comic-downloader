@@ -9174,6 +9174,17 @@ def main(params):
                     const currentMessage = this.currentMessages[msgIdx];
                     currentMessage.content = (currentMessage.content || '') + text;
                     currentMessage.is_streaming = isStreaming;
+                    if (text) {
+                        this.isTyping = false;
+                        const messageSessionId = currentMessage.session_id || this.streamMessageSessions?.[messageId];
+                        if (!this.loadingSessionId || this.loadingSessionId === messageSessionId) {
+                            this.isLoading = false;
+                            this.loadingSessionId = null;
+                            this.loadingStartTime = null;
+                            localStorage.removeItem('nbot_loading_session_id');
+                            localStorage.removeItem('nbot_loading_start_time');
+                        }
+                    }
                     if (!isStreaming) {
                         currentMessage.stream_complete = true;
                     }
@@ -9208,6 +9219,13 @@ def main(params):
                     const normalizedText = this.normalizeStreamChunk(messageId, text);
                     const chars = Array.from(normalizedText || '');
                     if (!chars.length) return;
+                    const msg = this.currentMessages.find(m => m.id === messageId);
+                    if (msg && !(msg.content || '').length) {
+                        const firstPaintCount = Math.min(chars.length, 16);
+                        this.appendStreamText(messageId, chars.splice(0, firstPaintCount).join(''), true);
+                        this.scheduleStreamScroll(true);
+                    }
+                    if (!chars.length) return;
                     if (!this.streamTypeQueues[messageId]) {
                         this.streamTypeQueues[messageId] = [];
                     }
@@ -9222,11 +9240,11 @@ def main(params):
                         const queue = this.streamTypeQueues[messageId] || [];
                         if (queue.length) {
                             // 动态调整每次取字符数，避免队列积压
-                            let takeCount = 2;
-                            if (queue.length > 200) takeCount = 12;
-                            else if (queue.length > 100) takeCount = 8;
-                            else if (queue.length > 50) takeCount = 5;
-                            else if (queue.length > 20) takeCount = 3;
+                            let takeCount = 8;
+                            if (queue.length > 500) takeCount = 80;
+                            else if (queue.length > 200) takeCount = 48;
+                            else if (queue.length > 100) takeCount = 32;
+                            else if (queue.length > 50) takeCount = 18;
 
                             const nextText = queue.splice(0, takeCount).join('');
                             this.appendStreamText(messageId, nextText, true);
@@ -9238,7 +9256,7 @@ def main(params):
                         if (this.streamEndPending[messageId]) {
                             this.finishStreamMessage(messageId);
                         }
-                    }, 10);
+                    }, 16);
                 },
 
                 scheduleStreamScroll(force = false) {
@@ -10025,7 +10043,7 @@ def main(params):
                 },
 
                 isStreamAwaiting(msg) {
-                    return !!(msg && msg.is_streaming && !(msg.content || '').length);
+                    return !!(msg && msg.is_streaming && !(msg.content || '').length && !(this.streamTypeQueues[msg.id] || []).length);
                 },
 
                 renderStreamingHtml(content) {

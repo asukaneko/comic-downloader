@@ -1235,6 +1235,7 @@ def stream_send_response(
                 room=session_id,
             )
             chunk_count += 1
+            server.socketio.sleep(0)
 
         _log.info(f"[Stream] 已发送 {chunk_count} 个 chunk")
 

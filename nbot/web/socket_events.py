@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import uuid
 
 from flask import request
 from flask_socketio import emit, join_room, leave_room
@@ -93,6 +94,72 @@ def register_socket_events(server):
             visible_sessions[request.sid] = session_id
         else:
             visible_sessions.pop(request.sid, None)
+
+    @server.socketio.on("debug_stream_demo")
+    def handle_debug_stream_demo(data):
+        """Emit a synthetic stream to the caller for frontend timing tests."""
+        payload = data or {}
+        target_sid = request.sid
+        text = str(payload.get("text") or "").strip()
+        if not text:
+            text = (
+                "This is a synthetic streaming demo. "
+                "Each fragment should appear in the chat bubble as it arrives, "
+                "and the skeleton should disappear after the first visible token. "
+                "If everything arrives at once, the flush or frontend queue is still blocked."
+            )
+
+        try:
+            chunk_size = int(payload.get("chunk_size") or 4)
+        except (TypeError, ValueError):
+            chunk_size = 4
+        try:
+            delay_ms = int(payload.get("delay_ms") or 60)
+        except (TypeError, ValueError):
+            delay_ms = 60
+
+        chunk_size = max(1, min(chunk_size, 80))
+        delay_seconds = max(0, min(delay_ms, 2000)) / 1000
+        session_id = str(payload.get("session_id") or f"debug-stream-{target_sid}")
+        message_id = str(uuid.uuid4())
+        message = {
+            "id": message_id,
+            "role": "assistant",
+            "sender": "Stream Demo",
+            "content": "",
+            "timestamp": "",
+            "session_id": session_id,
+        }
+
+        def run_demo_stream():
+            server.socketio.emit(
+                "ai_stream_start",
+                {"session_id": session_id, "message": message},
+                room=target_sid,
+            )
+            server.socketio.sleep(0)
+
+            for offset in range(0, len(text), chunk_size):
+                chunk = text[offset : offset + chunk_size]
+                server.socketio.emit(
+                    "ai_stream_chunk",
+                    {
+                        "session_id": session_id,
+                        "message_id": message_id,
+                        "chunk": chunk,
+                        "is_end": False,
+                    },
+                    room=target_sid,
+                )
+                server.socketio.sleep(delay_seconds)
+
+            server.socketio.emit(
+                "ai_stream_end",
+                {"session_id": session_id, "message_id": message_id, "is_end": True},
+                room=target_sid,
+            )
+
+        server.socketio.start_background_task(run_demo_stream)
 
     @server.socketio.on("send_message")
     def handle_send_message(data):

@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NekoBot Stream Demo</title>
+    <script src="vendor/socket.io.min.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0d1117;
+            --panel: #161b22;
+            --panel-2: #21262d;
+            --border: #30363d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --accent: #58a6ff;
+            --ok: #3fb950;
+            --danger: #f85149;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+        }
+
+        main {
+            width: min(1080px, 100%);
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            gap: 16px;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 22px;
+            letter-spacing: 0;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--danger);
+        }
+
+        .dot.ok { background: var(--ok); }
+
+        .grid {
+            display: grid;
+            grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+            gap: 16px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .panel-title {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 700;
+        }
+
+        .panel-body {
+            padding: 16px;
+        }
+
+        label {
+            display: grid;
+            gap: 6px;
+            margin-bottom: 12px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            background: var(--panel-2);
+            color: var(--text);
+            padding: 10px 12px;
+            font: inherit;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+            line-height: 1.5;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        button {
+            border: 0;
+            border-radius: 7px;
+            background: var(--accent);
+            color: #08111f;
+            min-height: 40px;
+            padding: 9px 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: var(--panel-2);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .chat {
+            min-height: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            width: min(100%, 760px);
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--panel-2);
+            line-height: 1.65;
+            white-space: normal;
+        }
+
+        .meta {
+            color: var(--muted);
+            font-size: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .body p {
+            margin: 0 0 10px;
+        }
+
+        .body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1em;
+            margin-left: 2px;
+            vertical-align: -2px;
+            background: var(--accent);
+            animation: blink 1s steps(2, start) infinite;
+        }
+
+        .skeleton {
+            display: grid;
+            gap: 10px;
+        }
+
+        .line {
+            height: 12px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #242c37, #364252, #242c37);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s infinite;
+        }
+
+        .line.short { width: 35%; }
+        .line.mid { width: 68%; }
+        .line.long { width: 92%; }
+
+        .log {
+            height: 260px;
+            overflow: auto;
+            margin: 0;
+            padding: 12px;
+            background: #090d13;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            color: #c9d1d9;
+            font: 12px/1.5 Consolas, "Cascadia Code", monospace;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .notice {
+            display: none;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border: 1px solid rgba(88, 166, 255, 0.35);
+            border-radius: 7px;
+            background: rgba(88, 166, 255, 0.1);
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .notice.active { display: block; }
+        .notice a { color: var(--accent); }
+
+        @keyframes shimmer {
+            to { background-position-x: -200%; }
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        @media (max-width: 820px) {
+            main { padding: 14px; }
+            .grid { grid-template-columns: 1fr; }
+            .row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <h1>流式传输测试 Demo</h1>
+        <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">连接中...</span></div>
+    </header>
+
+    <div class="grid">
+        <section class="panel">
+            <div class="panel-title">测试参数</div>
+            <div class="panel-body">
+                <div id="fileNotice" class="notice">
+                    You opened this page through <code>file://</code>. The easiest path is opening
+                    <a id="serverPageLink" href="http://127.0.0.1:5000/static/stream-demo.html">http://127.0.0.1:5000/static/stream-demo.html</a>
+                    after logging in. If you keep using file mode, paste the login token below.
+                </div>
+                <label>
+                    测试文本
+                    <textarea id="textInput">这是一段用于测试流式传输的内容。正常情况下，点击开始后，骨架动画会在第一个片段到达时立刻消失，文字会一段一段显示，而不是等一整段生成完成后才突然出现。你可以把 chunk 调小、延迟调大，更容易观察流式效果。</textarea>
+                </label>
+                <div class="row">
+                    <label>
+                        chunk 大小
+                        <input id="chunkSize" type="number" min="1" max="80" value="4">
+                    </label>
+                    <label>
+                        延迟 ms
+                        <input id="delayMs" type="number" min="0" max="2000" value="80">
+                    </label>
+                </div>
+                <label>
+                    Server origin
+                    <input id="serverOrigin" type="text" value="http://127.0.0.1:5000" placeholder="http://127.0.0.1:5000">
+                </label>
+                <label>
+                    Auth token
+                    <input id="authTokenInput" type="text" placeholder="同源打开会自动读取；file:// 打开时可粘贴 localStorage auth_token">
+                </label>
+                <div class="row">
+                    <button id="startBtn">开始测试</button>
+                    <button id="reconnectBtn" class="secondary">重连</button>
+                    <button id="clearBtn" class="secondary">清空</button>
+                </div>
+                <p class="hint">需要先在主站登录，因为 Socket.IO 会读取同源的登录 token。页面地址：<code>/static/stream-demo.html</code></p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <div class="panel-title">渲染结果</div>
+            <div class="panel-body">
+                <div id="chat" class="chat"></div>
+            </div>
+        </section>
+    </div>
+
+    <section class="panel">
+        <div class="panel-title">事件日志</div>
+        <div class="panel-body">
+            <pre id="log" class="log"></pre>
+        </div>
+    </section>
+</main>
+
+<script>
+    const state = {
+        socket: null,
+        messageId: null,
+        sessionId: null,
+        content: '',
+        queue: [],
+        timer: null,
+        streamStartAt: 0,
+        firstChunkAt: 0,
+        firstPaintAt: 0,
+        streaming: false,
+    };
+
+    const chat = document.getElementById('chat');
+    const logEl = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+    const reconnectBtn = document.getElementById('reconnectBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const serverOriginInput = document.getElementById('serverOrigin');
+    const authTokenInput = document.getElementById('authTokenInput');
+    const fileNotice = document.getElementById('fileNotice');
+    const serverPageLink = document.getElementById('serverPageLink');
+
+    const isFileMode = window.location.protocol === 'file:';
+
+    function getCookie(name) {
+        return document.cookie
+            .split(';')
+            .map(part => part.trim())
+            .find(part => part.startsWith(name + '='))
+            ?.slice(name.length + 1) || '';
+    }
+
+    function getServerOrigin() {
+        if (!isFileMode && window.location.origin && window.location.origin !== 'null') {
+            return window.location.origin;
+        }
+        return (serverOriginInput.value || 'http://127.0.0.1:5000').replace(/\/+$/, '');
+    }
+
+    function getAuthToken() {
+        return (authTokenInput.value || localStorage.getItem('auth_token') || decodeURIComponent(getCookie('nbot_auth_token')) || '').trim();
+    }
+
+    function log(message) {
+        const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logEl.textContent += line + '\n';
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function renderParagraphs(text) {
+        if (!text) return '';
+        return text
+            .replace(/\r\n/g, '\n')
+            .split(/\n{2,}/)
+            .map(part => `<p>${escapeHtml(part).replace(/\n/g, '<br>')}</p>`)
+            .join('');
+    }
+
+    function render() {
+        if (!state.messageId) {
+            chat.innerHTML = '<div class="hint">点击“开始测试”后这里会显示流式气泡。</div>';
+            return;
+        }
+
+        const elapsed = state.streamStartAt ? Math.round(performance.now() - state.streamStartAt) : 0;
+        const firstPaint = state.firstPaintAt ? Math.round(state.firstPaintAt - state.streamStartAt) : '-';
+        const body = state.content
+            ? `<div class="body">${renderParagraphs(state.content)}${state.streaming ? '<span class="cursor"></span>' : ''}</div>`
+            : `<div class="skeleton"><div class="line short"></div><div class="line mid"></div><div class="line long"></div></div>`;
+
+        chat.innerHTML = `
+            <article class="message">
+                <div class="meta">
+                    <span>message: ${escapeHtml(state.messageId.slice(0, 8))}</span>
+                    <span>elapsed: ${elapsed}ms</span>
+                    <span>first paint: ${firstPaint}ms</span>
+                </div>
+                ${body}
+            </article>
+        `;
+    }
+
+    function appendText(text) {
+        state.content += text;
+        if (!state.firstPaintAt && state.content) {
+            state.firstPaintAt = performance.now();
+            log(`first paint after ${Math.round(state.firstPaintAt - state.streamStartAt)}ms`);
+        }
+        render();
+    }
+
+    function enqueueText(text) {
+        const chars = Array.from(text || '');
+        if (!chars.length) return;
+
+        if (!state.content) {
+            appendText(chars.splice(0, Math.min(chars.length, 16)).join(''));
+        }
+
+        if (!chars.length) return;
+        state.queue.push(...chars);
+        scheduleType();
+    }
+
+    function scheduleType() {
+        if (state.timer) return;
+        state.timer = setTimeout(() => {
+            state.timer = null;
+            if (!state.queue.length) return;
+
+            let takeCount = 8;
+            if (state.queue.length > 500) takeCount = 80;
+            else if (state.queue.length > 200) takeCount = 48;
+            else if (state.queue.length > 100) takeCount = 32;
+            else if (state.queue.length > 50) takeCount = 18;
+
+            appendText(state.queue.splice(0, takeCount).join(''));
+            scheduleType();
+        }, 16);
+    }
+
+    function resetDemo() {
+        if (state.timer) clearTimeout(state.timer);
+        state.messageId = null;
+        state.sessionId = null;
+        state.content = '';
+        state.queue = [];
+        state.timer = null;
+        state.streamStartAt = 0;
+        state.firstChunkAt = 0;
+        state.firstPaintAt = 0;
+        state.streaming = false;
+        render();
+    }
+
+    function connect() {
+        if (state.socket) {
+            state.socket.removeAllListeners();
+            state.socket.disconnect();
+        }
+
+        const origin = getServerOrigin();
+        const token = getAuthToken();
+        if (!token) {
+            statusDot.classList.remove('ok');
+            statusText.textContent = '缺少登录 token';
+            startBtn.disabled = true;
+            log(`missing auth token; open ${origin}/dashboard first, or paste localStorage auth_token`);
+            return;
+        }
+
+        state.socket = io(origin, {
+            path: '/socket.io',
+            transports: ['polling', 'websocket'],
+            auth: { token },
+            upgrade: true,
+        });
+
+        state.socket.on('connect', () => {
+            statusDot.classList.add('ok');
+            statusText.textContent = `已连接 ${state.socket.id}`;
+            startBtn.disabled = false;
+            log(`socket connected to ${origin}`);
+        });
+
+        state.socket.on('disconnect', () => {
+            statusDot.classList.remove('ok');
+            statusText.textContent = '已断开';
+            startBtn.disabled = true;
+            log('socket disconnected');
+        });
+
+        state.socket.on('connect_error', (err) => {
+            statusDot.classList.remove('ok');
+            statusText.textContent = '连接失败';
+            startBtn.disabled = true;
+            log(`connect_error: ${err.message || err}; check token and server origin ${origin}`);
+        });
+
+        state.socket.on('ai_stream_start', (data) => {
+            state.streamStartAt = performance.now();
+            state.messageId = data?.message?.id || '';
+            state.sessionId = data?.session_id || '';
+            state.content = '';
+            state.queue = [];
+            state.firstChunkAt = 0;
+            state.firstPaintAt = 0;
+            state.streaming = true;
+            render();
+            log(`stream_start session=${state.sessionId} message=${state.messageId}`);
+        });
+
+        state.socket.on('ai_stream_chunk', (data) => {
+            if (data?.message_id !== state.messageId) return;
+            if (!state.firstChunkAt) {
+                state.firstChunkAt = performance.now();
+                log(`first chunk after ${Math.round(state.firstChunkAt - state.streamStartAt)}ms`);
+            }
+            log(`chunk len=${String(data.chunk || '').length} text="${String(data.chunk || '').slice(0, 24)}"`);
+            enqueueText(data.chunk || '');
+        });
+
+        state.socket.on('ai_stream_end', (data) => {
+            if (data?.message_id !== state.messageId) return;
+            if (state.queue.length) {
+                appendText(state.queue.splice(0).join(''));
+            }
+            state.streaming = false;
+            render();
+            log(`stream_end after ${Math.round(performance.now() - state.streamStartAt)}ms`);
+        });
+    }
+
+    startBtn.addEventListener('click', () => {
+        if (!state.socket || !state.socket.connected) {
+            log('socket is not connected');
+            return;
+        }
+        resetDemo();
+        state.socket.emit('debug_stream_demo', {
+            text: document.getElementById('textInput').value,
+            chunk_size: Number(document.getElementById('chunkSize').value) || 4,
+            delay_ms: Number(document.getElementById('delayMs').value) || 80,
+        });
+        log('debug_stream_demo emitted');
+    });
+
+    clearBtn.addEventListener('click', () => {
+        resetDemo();
+        logEl.textContent = '';
+    });
+
+    reconnectBtn.addEventListener('click', () => {
+        connect();
+    });
+
+    serverOriginInput.addEventListener('change', () => {
+        const origin = getServerOrigin();
+        serverPageLink.href = `${origin}/static/stream-demo.html`;
+        serverPageLink.textContent = `${origin}/static/stream-demo.html`;
+    });
+
+    startBtn.disabled = true;
+    resetDemo();
+    if (isFileMode) {
+        fileNotice.classList.add('active');
+        const origin = getServerOrigin();
+        serverPageLink.href = `${origin}/static/stream-demo.html`;
+        serverPageLink.textContent = `${origin}/static/stream-demo.html`;
+        log('file mode detected; same-origin login token is unavailable unless you paste it');
+    } else {
+        serverOriginInput.value = window.location.origin;
+    }
+
+    const existingToken = getAuthToken();
+    if (existingToken) {
+        authTokenInput.value = existingToken;
+    }
+
+    if (typeof io === 'undefined') {
+        statusText.textContent = 'Socket.IO 未加载';
+        log('socket.io client failed to load; open this page via /static/stream-demo.html or keep vendor/socket.io.min.js beside it');
+    } else {
+        connect();
+    }
+</script>
+</body>
+</html>
