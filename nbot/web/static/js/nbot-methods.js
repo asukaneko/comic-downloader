@@ -9137,10 +9137,12 @@ def main(params):
                         delete this.streamTypeTimers[messageId];
                         const queue = this.streamTypeQueues[messageId] || [];
                         if (queue.length) {
-                            let takeCount = 1;
-                            if (queue.length > 160) takeCount = 4;
-                            else if (queue.length > 80) takeCount = 3;
-                            else if (queue.length > 40) takeCount = 2;
+                            // 动态调整每次取字符数，避免队列积压
+                            let takeCount = 2;
+                            if (queue.length > 200) takeCount = 12;
+                            else if (queue.length > 100) takeCount = 8;
+                            else if (queue.length > 50) takeCount = 5;
+                            else if (queue.length > 20) takeCount = 3;
 
                             const nextText = queue.splice(0, takeCount).join('');
                             this.appendStreamText(messageId, nextText, true);
@@ -9152,7 +9154,7 @@ def main(params):
                         if (this.streamEndPending[messageId]) {
                             this.finishStreamMessage(messageId);
                         }
-                    }, 18);
+                    }, 10);
                 },
 
                 scheduleStreamScroll(force = false) {
@@ -9168,6 +9170,13 @@ def main(params):
                     const msgIdx = this.currentMessages.findIndex(m => m.id === messageId);
                     const messageSessionId = msgIdx !== -1 ? this.currentMessages[msgIdx].session_id : null;
                     const queue = this.streamTypeQueues[messageId] || [];
+                    // 如果队列里还有大量未排内容，不要一次性排完，让 scheduleStreamType 继续逐步排
+                    if (queue.length > 20) {
+                        // 队列还很长，保持 is_streaming=true，加快排版速度
+                        this.streamEndPending[messageId] = true;
+                        this.scheduleStreamType(messageId);
+                        return;
+                    }
                     if (queue.length) {
                         this.appendStreamText(messageId, queue.splice(0).join(''), true);
                     }
