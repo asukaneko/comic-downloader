@@ -5548,9 +5548,66 @@
             padding: 8px 12px;
         }
 
-        /* 表格间距 */
+        /* 表格样式 */
+        .markdown-body .table-wrapper {
+            margin: 12px 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .markdown-body .table-wrapper::-webkit-scrollbar {
+            height: 6px;
+        }
+        .markdown-body .table-wrapper::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .markdown-body .table-wrapper::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
         .markdown-body table {
-            margin: 10px 0;
+            margin: 0 !important;
+            border-collapse: collapse;
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+        .markdown-body table thead {
+            background: rgba(255, 255, 255, 0.08);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        .markdown-body table thead th {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .markdown-body table th,
+        .markdown-body table td {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            text-align: left;
+            vertical-align: top;
+            white-space: normal;
+            word-break: break-word;
+        }
+        .markdown-body table th:empty,
+        .markdown-body table td:empty {
+            color: var(--text-secondary);
+        }
+        .markdown-body table tbody tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        .markdown-body table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .markdown-body table th[align="center"],
+        .markdown-body table td[align="center"] {
+            text-align: center;
+        }
+        .markdown-body table th[align="right"],
+        .markdown-body table td[align="right"] {
+            text-align: right;
         }
 
         /* 分割线间距 */

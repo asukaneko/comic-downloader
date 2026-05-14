@@ -9981,7 +9981,7 @@ def main(params):
                     template.innerHTML = html || '';
 
                     const blockedTags = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form']);
-                    const allowedAttrs = new Set(['class', 'id', 'href', 'src', 'alt', 'title', 'target', 'rel', 'colspan', 'rowspan']);
+                    const allowedAttrs = new Set(['class', 'id', 'href', 'src', 'alt', 'title', 'target', 'rel', 'colspan', 'rowspan', 'align', 'style', 'scope', 'width']);
                     const safeUrl = (value) => {
                         if (!value) return true;
                         const trimmed = String(value).trim().toLowerCase();
@@ -10033,10 +10033,13 @@ def main(params):
                     });
                     
                     try {
+                        // 在 Markdown 源码级修复表格分隔行（处理 AI 输出分隔行列数不一致的情况）
                         const tildePlaceholder = 'NBOT_TILDE_PLACEHOLDER_8f4d9c2a';
-                        const markdownSource = options.disableStrikethrough
-                            ? String(content).replace(/~/g, tildePlaceholder)
-                            : content;
+                        let markdownSource = this.normalizeMarkdownTables(
+                            options.disableStrikethrough
+                                ? String(content).replace(/~/g, tildePlaceholder)
+                                : content
+                        );
                         let html = marked.parse(markdownSource);
                         if (options.disableStrikethrough) {
                             html = html.replaceAll(tildePlaceholder, '~');
@@ -10061,11 +10064,171 @@ def main(params):
                             }
                         );
                         
-                        return this.sanitizeRenderedHtml(html);
+                        let result = this.sanitizeRenderedHtml(html);
+                        result = this.fixMarkdownTables(result);
+                        return result;
                     } catch (e) {
                         console.error('Markdown parse error:', e);
                         return this.escapeHtml(content);
                     }
+                },
+
+                /**
+                 * 在 Markdown 源码级别修复表格分隔行
+                 */
+                normalizeMarkdownTables(md) {
+                    if (!md || typeof md !== 'string') return md;
+                    const lines = md.split('\n');
+                    const result = [];
+                    let i = 0;
+                    while (i < lines.length) {
+                        const line = lines[i];
+                        const isPipeLine = line.includes('|');
+                        const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+                        const isSeparatorLine = (l) => {
+                            let t = l.trim();
+                            if (t.startsWith('|')) t = t.slice(1);
+                            if (t.endsWith('|')) t = t.slice(0, -1);
+                            t = t.trim();
+                            const parts = t.split('|').map(s => s.trim());
+                            return parts.length > 0 && parts.every(p => /^:?[-]{3,}:?$/.test(p));
+                        };
+                        if (isPipeLine && isSeparatorLine(nextLine)) {
+                            const tableLines = [line];
+                            let j = i + 1;
+                            tableLines.push(nextLine);
+                            j++;
+                            while (j < lines.length && lines[j].includes('|')) {
+                                tableLines.push(lines[j]);
+                                j++;
+                            }
+                            const fixed = this.fixTableBlock(tableLines);
+                            result.push(...fixed);
+                            i = j;
+                        } else {
+                            result.push(line);
+                            i++;
+                        }
+                    }
+                    return result.join('\n');
+                },
+
+                fixTableBlock(tableLines) {
+                    if (tableLines.length < 2) return tableLines;
+                    const parseCols = (line) => {
+                        let trimmed = line.trim();
+                        if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+                        if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+                        return trimmed.split('|').map(c => c.trim());
+                    };
+                    let maxCols = 0;
+                    const parsed = tableLines.map(line => {
+                        const cols = parseCols(line);
+                        if (cols.length > maxCols) maxCols = cols.length;
+                        return cols;
+                    });
+                    if (maxCols === 0) return tableLines;
+                    return parsed.map((cols, idx) => {
+                        if (idx === 1) {
+                            const fixed = [...cols];
+                            while (fixed.length < maxCols) fixed.push('---');
+                            return '| ' + fixed.slice(0, maxCols).join(' | ') + ' |';
+                        } else {
+                            const fixed = [...cols];
+                            while (fixed.length < maxCols) fixed.push('');
+                            return '| ' + fixed.slice(0, maxCols).join(' | ') + ' |';
+                        }
+                    });
+                },
+
+                /**
+                 * 修复 Markdown 渲染后的表格
+                 * 3. 处理多余的空白列
+                 */
+                fixMarkdownTables(html) {
+                    if (!html || typeof html !== 'string') return html;
+                    if (!/<table/i.test(html)) return html;
+
+                    const doc = document.createElement('template');
+                    doc.innerHTML = html;
+
+                    const tables = doc.content.querySelectorAll('table');
+                    tables.forEach(table => {
+                        // 获取表头 (thead) 中的所有行和表体 (tbody) 中的所有行
+                        const allRows = table.querySelectorAll('tr');
+                        if (allRows.length === 0) return;
+
+                        // 计算最大列数（基于所有行中最大的 th/td 数）
+                        let maxCols = 0;
+                        const rowCells = [];
+                        allRows.forEach(row => {
+                            const cells = row.querySelectorAll('th, td');
+                            let cellCount = 0;
+                            cells.forEach(cell => {
+                                const colspan = parseInt(cell.getAttribute('colspan') || '1');
+                                cellCount += colspan;
+                            });
+                            rowCells.push({ row, cells, cellCount });
+                            if (cellCount > maxCols) maxCols = cellCount;
+                        });
+
+                        if (maxCols === 0) return;
+
+                        // 补全每行不足的列
+                        rowCells.forEach(({ row, cells, cellCount }) => {
+                            if (cellCount < maxCols) {
+                                const diff = maxCols - cellCount;
+                                const cellTag = row.closest('thead') ? 'th' : 'td';
+                                for (let i = 0; i < diff; i++) {
+                                    const emptyCell = document.createElement(cellTag);
+                                    emptyCell.textContent = '';
+                                    emptyCell.style.opacity = '0.3';
+                                    row.appendChild(emptyCell);
+                                }
+                            }
+                            // 同时移除超出最大列数的多余空白列（常见于只含空格的 th/td）
+                            // 仅当该行有多余的 <th> 或 <td> 且其数量明显不合理时才处理
+                            const actualCells = row.querySelectorAll('th, td');
+                            if (actualCells.length > maxCols) {
+                                // 收集只在尾部完全空白的单元格
+                                const toRemove = [];
+                                for (let i = actualCells.length - 1; i >= maxCols; i--) {
+                                    const cell = actualCells[i];
+                                    const text = (cell.textContent || '').trim();
+                                    const colspan = parseInt(cell.getAttribute('colspan') || '1');
+                                    if (text === '' && colspan === 1) {
+                                        toRemove.push(cell);
+                                    } else {
+                                        break; // 遇到有内容的单元格就停止
+                                    }
+                                }
+                                toRemove.forEach(cell => cell.remove());
+                            }
+                        });
+
+                        // 对于没有 thead 但有分隔行的表格（marked 可能将分隔行识别为普通行），
+                        // 尝试检测第二行是否全为 --- 类型数据（分隔行），若是则将其转换为 thead
+                        const hasThead = !!table.querySelector('thead');
+                        const thead = table.querySelector('thead');
+                        if (!hasThead && allRows.length >= 2) {
+                            // 检查第一行是否全为 th（marked 有些情况会把表头行放进 tbody）
+                            const firstRowCells = allRows[0].querySelectorAll('th');
+                            if (firstRowCells.length > 0) {
+                                // 将这些 th 保留在 tbody 也没问题，marked 已正确处理
+                                // 但确保它们不在分隔行逻辑中被覆盖
+                            }
+                        }
+
+                        // 包裹 table-wrapper
+                        if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
+                            const wrapper = document.createElement('div');
+                            wrapper.className = 'table-wrapper';
+                            table.parentNode.insertBefore(wrapper, table);
+                            wrapper.appendChild(table);
+                        }
+                    });
+
+                    return doc.innerHTML;
                 },
                 
                 getAttachmentIcon(type) {
