@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if error %}链接失效{% else %}{{ session_name }} - 公开会话{% endif %}</title>
     <link rel="icon" type="image/png" href="/static/neko.png">
+    <link rel="stylesheet" href="/static/vendor/styles/highlight-github-dark.min.css">
+    <script src="/static/vendor/marked.min.js"></script>
+    <script src="/static/vendor/highlight.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -226,30 +229,207 @@
             font-size: 14px;
             line-height: 1.7;
             color: #e2e8f0;
-            white-space: pre-wrap;
             word-break: break-word;
         }
 
-        .message-body code {
+        .message-body.markdown-body p {
+            margin-bottom: 8px;
+        }
+
+        .message-body.markdown-body p:last-child {
+            margin-bottom: 0;
+        }
+
+        .message-body.markdown-body ul,
+        .message-body.markdown-body ol {
+            margin-top: 6px;
+            margin-bottom: 6px;
+            padding-left: 20px;
+        }
+
+        .message-body.markdown-body li {
+            margin-bottom: 4px;
+        }
+
+        .message-body.markdown-body h1,
+        .message-body.markdown-body h2,
+        .message-body.markdown-body h3,
+        .message-body.markdown-body h4,
+        .message-body.markdown-body h5,
+        .message-body.markdown-body h6 {
+            margin-top: 12px;
+            margin-bottom: 8px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        .message-body.markdown-body h1:first-child,
+        .message-body.markdown-body h2:first-child,
+        .message-body.markdown-body h3:first-child {
+            margin-top: 0;
+        }
+
+        .message-body.markdown-body h1 { font-size: 1.5em; border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding-bottom: 8px; }
+        .message-body.markdown-body h2 { font-size: 1.3em; border-bottom: 1px solid rgba(148, 163, 184, 0.2); padding-bottom: 6px; }
+        .message-body.markdown-body h3 { font-size: 1.15em; }
+        .message-body.markdown-body h4 { font-size: 1em; }
+        .message-body.markdown-body h5 { font-size: 0.9em; }
+        .message-body.markdown-body h6 { font-size: 0.85em; color: #94a3b8; }
+
+        .message-body.markdown-body code {
             background: rgba(15, 23, 42, 0.8);
             padding: 2px 6px;
             border-radius: 4px;
             font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
+            font-size: 0.9em;
             color: #f472b6;
         }
 
-        .message-body pre {
+        .message-body.markdown-body pre {
             background: rgba(15, 23, 42, 0.8);
             padding: 12px;
             border-radius: 8px;
             overflow-x: auto;
             margin: 8px 0;
+            border: 1px solid rgba(148, 163, 184, 0.1);
         }
 
-        .message-body pre code {
+        .message-body.markdown-body pre code {
             background: none;
             padding: 0;
+            border-radius: 0;
+            color: inherit;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .message-body.markdown-body blockquote {
+            margin: 8px 0;
+            padding: 8px 12px;
+            border-left: 4px solid #3b82f6;
+            background: rgba(59, 130, 246, 0.08);
+            border-radius: 0 8px 8px 0;
+            color: #cbd5e1;
+        }
+
+        .message-body.markdown-body hr {
+            margin: 12px 0;
+            border: 0;
+            border-top: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .message-body.markdown-body .table-wrapper {
+            margin: 12px 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 8px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+        }
+
+        .message-body.markdown-body .table-wrapper::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .message-body.markdown-body .table-wrapper::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .message-body.markdown-body .table-wrapper::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 3px;
+        }
+
+        .message-body.markdown-body table {
+            margin: 0 !important;
+            border-collapse: collapse;
+            font-size: 0.9em;
+            white-space: nowrap;
+            width: 100%;
+        }
+
+        .message-body.markdown-body table thead {
+            background: rgba(255, 255, 255, 0.08);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .message-body.markdown-body table thead th {
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .message-body.markdown-body table th,
+        .message-body.markdown-body table td {
+            padding: 8px 12px;
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            text-align: left;
+            vertical-align: top;
+            white-space: normal;
+            word-break: break-word;
+        }
+
+        .message-body.markdown-body table tbody tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .message-body.markdown-body table tbody tr:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .message-body.markdown-body img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin: 8px 0;
+        }
+
+        .message-body.markdown-body a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+
+        .message-body.markdown-body a:hover {
+            text-decoration: underline;
+        }
+
+        /* 代码块复制按钮样式 */
+        .code-wrap {
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 8px 0;
+        }
+
+        .code-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            background: rgba(15, 23, 42, 0.8);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+            font-size: 12px;
+        }
+
+        .code-lang {
+            color: #60a5fa;
+            font-weight: 500;
+        }
+
+        .code-copy-btn {
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            transition: all .15s;
+            font-family: inherit;
+        }
+
+        .code-copy-btn:hover {
+            background: rgba(148, 163, 184, 0.15);
+            color: #e2e8f0;
         }
 
         .footer {
@@ -370,7 +550,7 @@
                         <span class="message-time">{{ msg.timestamp[:16] if msg.timestamp else '' }}</span>
                         {% endif %}
                     </div>
-                    <div class="message-body">{{ msg.content }}</div>
+                    <div class="message-body markdown-body" data-msg-index="{{ loop.index0 }}">{{ msg.content }}</div>
                 </div>
             </div>
             {% endfor %}
@@ -382,12 +562,321 @@
     </div>
     {% endif %}
     <script>
+        // 通过事件委托处理代码复制按钮点击（避免 onclick 被 sanitizer 移除）
+        document.addEventListener('click', function(e) {
+            var btn = e.target.closest('.code-copy-btn');
+            if (!btn) return;
+            var codeId = btn.getAttribute('data-code-id');
+            if (!codeId) return;
+            var pre = document.getElementById(codeId);
+            if (!pre) return;
+            var text = pre.innerText;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    btn.innerHTML = '已复制';
+                    setTimeout(function () { btn.innerHTML = '复制'; }, 2000);
+                }).catch(function () {
+                    fallbackCopyText(text, btn);
+                });
+            } else {
+                fallbackCopyText(text, btn);
+            }
+        });
+
+        function fallbackCopyText(text, btn) {
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            textarea.style.top = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                var successful = document.execCommand('copy');
+                if (successful && btn) {
+                    btn.innerHTML = '已复制';
+                    setTimeout(function () { btn.innerHTML = '复制'; }, 2000);
+                }
+            } catch (err) {}
+            document.body.removeChild(textarea);
+        }
+
+        // 在 Markdown 源码级别修复表格分隔行
+        function normalizeMarkdownTables(md) {
+            if (!md || typeof md !== 'string') return md;
+            const lines = md.split('\n');
+            const result = [];
+            let i = 0;
+            while (i < lines.length) {
+                const line = lines[i];
+                const isPipeLine = line.includes('|');
+                const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
+                const isSeparatorLine = (l) => {
+                    let t = l.trim();
+                    if (t.startsWith('|')) t = t.slice(1);
+                    if (t.endsWith('|')) t = t.slice(0, -1);
+                    t = t.trim();
+                    const parts = t.split('|').map(s => s.trim());
+                    return parts.length > 0 && parts.every(p => /^:?[-]{3,}:?$/.test(p));
+                };
+                if (isPipeLine && isSeparatorLine(nextLine)) {
+                    const tableLines = [line];
+                    let j = i + 1;
+                    tableLines.push(nextLine);
+                    j++;
+                    while (j < lines.length && lines[j].includes('|')) {
+                        tableLines.push(lines[j]);
+                        j++;
+                    }
+                    const fixed = fixTableBlock(tableLines);
+                    result.push(...fixed);
+                    i = j;
+                } else {
+                    result.push(line);
+                    i++;
+                }
+            }
+            return result.join('\n');
+        }
+
+        function fixTableBlock(tableLines) {
+            if (tableLines.length < 2) return tableLines;
+            const parseCols = (line) => {
+                let trimmed = line.trim();
+                if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+                if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1);
+                return trimmed.split('|').map(c => c.trim());
+            };
+            let maxCols = 0;
+            const parsed = tableLines.map(line => {
+                const cols = parseCols(line);
+                if (cols.length > maxCols) maxCols = cols.length;
+                return cols;
+            });
+            if (maxCols === 0) return tableLines;
+            return parsed.map((cols, idx) => {
+                if (idx === 1) {
+                    const fixed = [...cols];
+                    while (fixed.length < maxCols) fixed.push('---');
+                    return '| ' + fixed.slice(0, maxCols).join(' | ') + ' |';
+                } else {
+                    const fixed = [...cols];
+                    while (fixed.length < maxCols) fixed.push('');
+                    return '| ' + fixed.slice(0, maxCols).join(' | ') + ' |';
+                }
+            });
+        }
+
+        // 修复 Markdown 渲染后的表格
+        // 1. 补全每行不足的列
+        // 2. 移除超出最大列数的多余空白列
+        // 3. 处理没有 thead 但有分隔行的情况
+        function fixMarkdownTables(html) {
+            if (!html || typeof html !== 'string') return html;
+            if (!/<table/i.test(html)) return html;
+
+            const doc = document.createElement('template');
+            doc.innerHTML = html;
+
+            const tables = doc.content.querySelectorAll('table');
+            tables.forEach(table => {
+                // 获取表头 (thead) 中的所有行和表体 (tbody) 中的所有行
+                const allRows = table.querySelectorAll('tr');
+                if (allRows.length === 0) return;
+
+                // 计算最大列数（基于所有行中最大的 th/td 数）
+                let maxCols = 0;
+                const rowCells = [];
+                allRows.forEach(row => {
+                    const cells = row.querySelectorAll('th, td');
+                    let cellCount = 0;
+                    cells.forEach(cell => {
+                        const colspan = parseInt(cell.getAttribute('colspan') || '1');
+                        cellCount += colspan;
+                    });
+                    rowCells.push({ row, cells, cellCount });
+                    if (cellCount > maxCols) maxCols = cellCount;
+                });
+
+                if (maxCols === 0) return;
+
+                // 补全每行不足的列
+                rowCells.forEach(({ row, cells, cellCount }) => {
+                    if (cellCount < maxCols) {
+                        const diff = maxCols - cellCount;
+                        const cellTag = row.closest('thead') ? 'th' : 'td';
+                        for (let i = 0; i < diff; i++) {
+                            const emptyCell = document.createElement(cellTag);
+                            emptyCell.textContent = '';
+                            emptyCell.style.opacity = '0.3';
+                            row.appendChild(emptyCell);
+                        }
+                    }
+                    // 同时移除超出最大列数的多余空白列（常见于只含空格的 th/td）
+                    // 仅当该行有多余的 <th> 或 <td> 且其数量明显不合理时才处理
+                    const actualCells = row.querySelectorAll('th, td');
+                    if (actualCells.length > maxCols) {
+                        // 收集只在尾部完全空白的单元格
+                        const toRemove = [];
+                        for (let i = actualCells.length - 1; i >= maxCols; i--) {
+                            const cell = actualCells[i];
+                            const text = (cell.textContent || '').trim();
+                            const colspan = parseInt(cell.getAttribute('colspan') || '1');
+                            if (text === '' && colspan === 1) {
+                                toRemove.push(cell);
+                            } else {
+                                break; // 遇到有内容的单元格就停止
+                            }
+                        }
+                        toRemove.forEach(cell => cell.remove());
+                    }
+                });
+
+                // 对于没有 thead 但有分隔行的表格（marked 可能将分隔行识别为普通行），
+                // 尝试检测第二行是否全为 --- 类型数据（分隔行），若是则将其转换为 thead
+                const hasThead = !!table.querySelector('thead');
+                if (!hasThead && allRows.length >= 2) {
+                    // 检查第一行是否全为 th（marked 有些情况会把表头行放进 tbody）
+                    const firstRowCells = allRows[0].querySelectorAll('th');
+                    if (firstRowCells.length > 0) {
+                        // 将这些 th 保留在 tbody 也没问题，marked 已正确处理
+                        // 但确保它们不在分隔行逻辑中被覆盖
+                    }
+                }
+
+                // 包裹 table-wrapper
+                if (!table.parentElement || !table.parentElement.classList.contains('table-wrapper')) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'table-wrapper';
+                    table.parentNode.insertBefore(wrapper, table);
+                    wrapper.appendChild(table);
+                }
+            });
+
+            return doc.innerHTML;
+        }
+
+        // HTML 转义
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 对渲染后的 HTML 进行安全过滤
+        function sanitizeRenderedHtml(html) {
+            const template = document.createElement('template');
+            template.innerHTML = html || '';
+
+            const blockedTags = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form']);
+            const allowedAttrs = new Set(['class', 'id', 'href', 'src', 'alt', 'title', 'target', 'rel', 'colspan', 'rowspan', 'align', 'style', 'scope', 'width', 'data-code-id']);
+            const safeUrl = function(value) {
+                if (!value) return true;
+                const trimmed = String(value).trim().toLowerCase();
+                return !trimmed.startsWith('javascript:') && !trimmed.startsWith('data:text/html');
+            };
+
+            template.content.querySelectorAll('*').forEach(function(node) {
+                if (blockedTags.has(node.tagName.toLowerCase())) {
+                    node.remove();
+                    return;
+                }
+
+                Array.from(node.attributes).forEach(function(attr) {
+                    const name = attr.name.toLowerCase();
+                    if (name.startsWith('on') || !allowedAttrs.has(name) || !safeUrl(attr.value)) {
+                        node.removeAttribute(attr.name);
+                    }
+                });
+
+                if (node.tagName.toLowerCase() === 'a') {
+                    node.setAttribute('rel', 'noopener noreferrer');
+                }
+            });
+
+            return template.innerHTML;
+        }
+
+        // 渲染 Markdown 内容
+        function renderMarkdown(content) {
+            if (!content) return '';
+
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                headerIds: false,
+                mangle: false,
+                highlight: function(code, lang) {
+                    if (lang && hljs.getLanguage(lang)) {
+                        try {
+                            return hljs.highlight(code, { language: lang }).value;
+                        } catch (e) {
+                            return escapeHtml(code);
+                        }
+                    }
+                    try {
+                        return hljs.highlightAuto(code).value;
+                    } catch (e) {
+                        return escapeHtml(code);
+                    }
+                }
+            });
+
+            try {
+                // 在 Markdown 源码级修复表格分隔行，同时忽略 ~ 符号（防止被识别为删除线）
+                const tildePlaceholder = 'NBOT_TILDE_PLACEHOLDER_8f4d9c2a';
+                let markdownSource = normalizeMarkdownTables(
+                    String(content).replace(/~/g, tildePlaceholder)
+                );
+                let html = marked.parse(markdownSource);
+                html = html.replaceAll(tildePlaceholder, '~');
+
+                // 给每个代码块包裹 header + 复制按钮（不使用 onclick，避免被 sanitizer 移除）
+                let blockIndex = 0;
+                html = html.replace(
+                    /<pre><code class="language-(\w+)">([\s\S]*?)<\/code><\/pre>/g,
+                    function(match, lang, code) {
+                        const id = 'cb_' + Date.now() + '_' + (blockIndex++);
+                        return '<div class="code-wrap">' +
+                            '<div class="code-header">' +
+                            '<span class="code-lang">' + lang + '</span>' +
+                            '<button class="code-copy-btn" data-code-id="' + id + '">复制</button>' +
+                            '</div>' +
+                            '<pre id="' + id + '"><code class="language-' + lang + '">' + code + '</code></pre>' +
+                            '</div>';
+                    }
+                );
+
+                html = sanitizeRenderedHtml(html);
+                html = fixMarkdownTables(html);
+                return html;
+            } catch (e) {
+                console.error('Markdown parse error:', e);
+                return escapeHtml(content).replace(/\n/g, '<br>');
+            }
+        }
+
+        // 通过 tojson 安全注入消息内容，避免 HTML 转义问题
+        var messageContents = [
+            {% for msg in messages %}{{ msg.content | tojson }},{% endfor %}
+        ];
+
         document.addEventListener('DOMContentLoaded', () => {
+            // 渲染所有 Markdown 消息
+            document.querySelectorAll('.message-body[data-msg-index]').forEach(el => {
+                var idx = parseInt(el.getAttribute('data-msg-index'), 10);
+                if (!isNaN(idx) && messageContents[idx] !== undefined) {
+                    el.innerHTML = renderMarkdown(messageContents[idx]);
+                }
+            });
+
             const userAvatar = localStorage.getItem('userAvatar');
             if (userAvatar) {
                 document.querySelectorAll('.message.user .message-avatar').forEach(avatarDiv => {
                     if (avatarDiv.querySelector('svg') && !avatarDiv.querySelector('img')) {
-                        avatarDiv.innerHTML = `<img src="${userAvatar}" alt="用户头像" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+                        avatarDiv.innerHTML = '<img src="' + userAvatar + '" alt="用户头像" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
                     }
                 });
             }
