@@ -476,6 +476,28 @@
             .header-info h1 {
                 font-size: 17px;
             }
+
+            /* 移动端表格：禁止文字竖排，允许横向滚动 */
+            .message-body.markdown-body .table-wrapper {
+                margin-left: -8px;
+                margin-right: -8px;
+                width: calc(100% + 16px);
+                max-width: calc(100% + 16px);
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .message-body.markdown-body table {
+                white-space: nowrap;
+                min-width: max-content;
+            }
+
+            .message-body.markdown-body table th,
+            .message-body.markdown-body table td {
+                white-space: nowrap;
+                word-break: keep-all;
+                overflow-wrap: normal;
+            }
         }
     </style>
 </head>

@@ -5381,7 +5381,20 @@
             box-shadow: 
                 0 8px 32px rgba(0, 0, 0, 0.3),
                 inset 0 1px 0 rgba(255, 255, 255, 0.08);
-            overflow: hidden;
+        }
+
+        /* 表格区域允许横向溢出滚动，不受 overflow:hidden 裁剪 */
+        .message-content .markdown-body .table-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 非表格内容保持不溢出 */
+        .message-content .markdown-body > *:not(.table-wrapper):not(.code-wrap) {
+            max-width: 100%;
+            overflow-wrap: break-word;
         }
 
         /* 顶部高光效果 */
@@ -5838,6 +5851,28 @@
                 padding: 10px 12px;
                 font-size: 13px;
             }
+
+            /* 移动端表格：禁止文字竖排，允许横向滚动 */
+            .message-content .markdown-body .table-wrapper {
+                margin-left: -12px;
+                margin-right: -12px;
+                width: calc(100% + 24px);
+                max-width: calc(100% + 24px);
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .message-content .markdown-body table {
+                white-space: nowrap;
+                min-width: max-content;
+            }
+
+            .message-content .markdown-body table th,
+            .message-content .markdown-body table td {
+                white-space: nowrap;
+                word-break: keep-all;
+                overflow-wrap: normal;
+            }
         }
 
         @media (max-width: 480px) {
@@ -5845,6 +5880,13 @@
                 max-width: 90%;
                 padding: 8px 10px;
                 font-size: 12px;
+            }
+
+            .message-content .markdown-body .table-wrapper {
+                margin-left: -10px;
+                margin-right: -10px;
+                width: calc(100% + 20px);
+                max-width: calc(100% + 20px);
             }
         }
 
