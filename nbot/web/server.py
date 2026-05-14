@@ -42,6 +42,7 @@ from nbot.web.routes import (
     register_channel_routes,
     register_character_routes,
     register_config_legacy_routes,
+    register_config_transfer_routes,
     register_file_routes,
     register_heartbeat_routes,
     register_knowledge_routes,
@@ -2340,6 +2341,7 @@ class WebChatServer:
         register_workspace_shared_routes(self.app, self)
         register_workspace_misc_routes(self.app, self)
         register_config_legacy_routes(self.app, self)
+        register_config_transfer_routes(self.app, self)
 
     def _extract_request_token(self) -> str:
         """Extract auth token from request."""

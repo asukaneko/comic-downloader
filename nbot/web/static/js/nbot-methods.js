@@ -8902,6 +8902,90 @@ def main(params):
                     }
                 },
 
+                async exportAllConfig() {
+                    if (!this.configExportPassword) {
+                        this.showToast('请输入导出密码', 'error');
+                        return;
+                    }
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post('/api/config-transfer/export', {
+                            password: this.configExportPassword
+                        }, { responseType: 'blob' });
+                        const blob = new Blob([res.data], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        const disposition = res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition']);
+                        const match = disposition && disposition.match(/filename="?([^"]+)"?/);
+                        link.href = url;
+                        link.download = match ? match[1] : `nbot-config-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.nbotcfg`;
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        URL.revokeObjectURL(url);
+                        this.showToast('加密配置包已导出', 'success');
+                    } catch (e) {
+                        this.showToast('导出失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                triggerConfigImport() {
+                    if (!this.configImportPassword) {
+                        this.showToast('请输入配置包密码', 'error');
+                        return;
+                    }
+                    if (this.$refs.configImportInput) {
+                        this.$refs.configImportInput.value = '';
+                        this.$refs.configImportInput.click();
+                    }
+                },
+
+                async handleConfigImportFile(event) {
+                    const file = event.target.files && event.target.files[0];
+                    if (!file) return;
+                    if (!this.configImportPassword) {
+                        this.showToast('请输入配置包密码', 'error');
+                        return;
+                    }
+                    this.configImportFileName = file.name;
+                    this.isLoading = true;
+                    try {
+                        const form = new FormData();
+                        form.append('file', file);
+                        form.append('password', this.configImportPassword);
+                        form.append('overwrite', 'true');
+                        const res = await api.post('/api/config-transfer/import', form, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        const imported = res.data?.imported || [];
+                        this.showToast(`配置导入完成: ${imported.length} 项`, 'success');
+                        await Promise.all([
+                            this.loadSettings(),
+                            this.loadAIConfig(),
+                            this.loadAIModels(),
+                            this.loadChannels(),
+                            this.loadSkills(),
+                            this.loadTools(),
+                            this.loadPersonality(),
+                            this.loadHeartbeat()
+                        ]);
+                        if (this.showOnboarding) {
+                            await this.updateOnboardingSettings({
+                                completed: true,
+                                skipped: false,
+                                completed_at: new Date().toISOString()
+                            });
+                        }
+                        this.showOnboarding = false;
+                    } catch (e) {
+                        this.showToast('导入失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
                 // Debug Console Functions
                 async sendDebugRequest() {
                     this.isLoading = true;

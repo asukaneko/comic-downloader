@@ -107,6 +107,22 @@
                     <div v-if="onboardingStep === 1" class="onboarding-body">
                         <h3>{{ $t('onboarding.step1_title') }}</h3>
                         <p>{{ $t('onboarding.step1_desc') }}</p>
+                        <div class="config-transfer-panel">
+                            <div class="config-transfer-title">
+                                <i class="fas fa-shield-alt"></i>
+                                一键导入已有配置
+                            </div>
+                            <div class="config-transfer-desc">从旧服务器导出的加密配置包可直接导入，用于快速切换服务器。</div>
+                            <div class="config-transfer-actions">
+                                <input v-model="configImportPassword" class="form-input" type="password" placeholder="配置包密码">
+                                <button class="btn btn-secondary" @click="triggerConfigImport" :disabled="isLoading">
+                                    <i class="fas fa-file-import"></i> 选择并导入
+                                </button>
+                            </div>
+                            <div v-if="configImportFileName" class="form-hint">
+                                已选择: {{ configImportFileName }}
+                            </div>
+                        </div>
                     </div>
                     <div v-else-if="onboardingStep === 2" class="onboarding-body">
                         <h3>{{ $t('onboarding.step2_title') }}</h3>
@@ -4702,6 +4718,35 @@
                                     </div>
                                     <div class="form-hint">删除未被任何角色卡引用的立绘文件，释放磁盘空间</div>
                                 </div>
+                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                                    <label class="form-label">配置迁移</label>
+                                    <div class="config-transfer-panel">
+                                        <div class="config-transfer-title">
+                                            <i class="fas fa-lock"></i>
+                                            加密导出 / 导入全部配置
+                                        </div>
+                                        <div class="config-transfer-desc">用于快速切换服务器。导出内容包含系统设置、AI 模型、API Keys、频道、Skills、Tools、定时任务、人格和聊天记录，不包含登录令牌。</div>
+                                        <div class="grid-2">
+                                            <div class="form-group">
+                                                <label class="form-label">导出密码</label>
+                                                <input v-model="configExportPassword" type="password" class="form-input" placeholder="用于加密配置包">
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">导入密码</label>
+                                                <input v-model="configImportPassword" type="password" class="form-input" placeholder="导出时设置的密码">
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                            <button class="btn btn-primary" @click="exportAllConfig" :disabled="isLoading || !configExportPassword">
+                                                <i class="fas fa-file-export"></i> 一键导出全部配置
+                                            </button>
+                                            <button class="btn btn-secondary" @click="triggerConfigImport" :disabled="isLoading || !configImportPassword">
+                                                <i class="fas fa-file-import"></i> 导入配置包
+                                            </button>
+                                            <span v-if="configImportFileName" class="form-hint">已选择: {{ configImportFileName }}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5308,6 +5353,7 @@
 
         <!-- 隐藏的文件导入input -->
         <input type="file" ref="importPersonalityFile" accept=".json,.zip" style="display: none;" @change="importPersonality"></input>
+        <input type="file" ref="configImportInput" accept=".nbotcfg,.json,application/json" style="display: none;" @change="handleConfigImportFile"></input>
 
         <!-- 批量导入角色卡文件input -->
         <input type="file" ref="bulkImportPersonalitiesFile" accept=".zip" style="display: none;" @change="bulkImportPersonalities"></input>
@@ -8035,6 +8081,9 @@
                             skipped_at: null
                         }
                     },
+                    configExportPassword: '',
+                    configImportPassword: '',
+                    configImportFileName: '',
                     
                     // UI State
                     toasts: [],

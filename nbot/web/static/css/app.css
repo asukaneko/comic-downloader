@@ -16618,3 +16618,39 @@
                 font-size: 16px;
             }
         }
+.config-transfer-panel {
+    margin-top: 14px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+}
+
+.config-transfer-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+}
+
+.config-transfer-desc {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.config-transfer-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+@media (max-width: 640px) {
+    .config-transfer-actions {
+        grid-template-columns: 1fr;
+    }
+}
