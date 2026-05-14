@@ -96,11 +96,36 @@ after_turn
 ├── 应用状态变化 (state_machine.apply)
 │   ├── 更新角色状态
 │   └── 更新关系状态
+├── 周期 AI 状态评估 (auto_state.update_state_from_recent_turns)
+│   ├── 每 6 回合汇总近期对话
+│   ├── 调用当前 AI 输出情绪/关系增量
+│   └── 限幅后应用到状态与六维关系
 ├── 保存状态
 │   ├── state_repo.save
 │   └── relationship_repo.save
 └── 记忆抽取 (memory_service.extract_and_save_if_needed)
 ```
+
+### 自动状态评估
+
+`after_turn` 中除了每轮的 `StateMachine` 外，还会接入 `AutoState`：
+
+- 按 `character_id + scope_id + target_id` 独立计数，互不串扰
+- 实际计数键会同时纳入 `target_id`、`session_id` / `conversation_id`、`scope_id`，避免不同角色、用户、会话混在一起
+- 遇到错误回复、heartbeat、`skip_auto_memory` 或 `skip_auto_state` 标记时不会计入缓冲
+- 累积 6 回合用户消息与角色回复后触发
+- 调用当前运行时 AI 配置，请模型只返回 JSON
+- 支持调整 `mood`、`mood_intensity_delta`、`energy_delta`
+- 支持调整六维关系：`affection`、`trust`、`familiarity`、`dependency`、`security`、`jealousy`
+- 写回前会限制情绪强度在 `0.0-1.0`、关系值在 `0-100`，并限制单次变化幅度
+
+可以通过环境变量关闭：
+
+```bash
+NBOT_AUTO_CHARACTER_STATE_ENABLED=0
+```
+
+也可以在 `data/settings.json` 的 `features.auto_character_state` 中关闭。
 
 ### 代码示例
 
@@ -246,4 +271,5 @@ class AIPipeline:
 
 - **状态缓存**: repository 内部有缓存机制，避免频繁文件 IO
 - **记忆检索**: 限制返回数量（默认 8 条）
+- **周期评估**: AutoState 每 6 回合才调用一次模型，避免每轮额外增加延迟
 - **异步友好**: 不阻塞主线程，可在异步环境中使用

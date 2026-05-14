@@ -7,7 +7,7 @@
 实时情感引擎是一个独立的角色模拟层，位于 AI Pipeline 中间，负责：
 
 - **before_turn**: 读取角色卡、状态、关系、记忆，分析用户输入信号，生成 ReactionPlan，编译提示词
-- **after_turn**: 更新情绪、关系，写入事件，抽取记忆
+- **after_turn**: 更新情绪、关系，保存状态，抽取记忆；每 6 回合触发一次 AI 自动状态评估
 
 ```
 ChatRequest
@@ -26,11 +26,13 @@ CharacterRuntime.before_turn()
 模型调用 / 工具调用
   ↓
 CharacterRuntime.after_turn()
-  ├── 更新情绪
-  ├── 更新关系
-  ├── 写入事件
-  ├── 抽取记忆
-  └── 保存运行时状态
+  ├── StateMachine 每轮更新情绪/关系
+  ├── AutoState 每 6 回合 AI 更新情绪强度/六维关系
+  ├── 保存运行时状态与关系状态
+  └── 角色记忆服务抽取
+  ↓
+Pipeline AutoMemory
+  └── 每 6 回合总结长期记忆
   ↓
 ChatResponse
 ```
@@ -73,6 +75,10 @@ CharacterRuntime 是角色模拟的编排中心，协调各个模块完成角色
 - **数值边界**: 所有关系值在 0-100 范围内
 - **每轮变化限幅**: 避免暴涨暴跌
 
+### 5.1 自动状态评估
+
+`auto_state.py` 会像自动记忆一样按角色、会话和目标用户维度累计对话，并继承 heartbeat、错误回复、跳过标记等过滤条件。每 6 回合调用当前 AI 模型，让模型根据最近互动输出 `mood`、`mood_intensity_delta`、`energy_delta` 和六维关系增量。系统会在写回前做边界校验和限幅，所以它用于补足每轮规则过于保守的问题，而不是让关系值瞬间跳变。
+
 ### 6. 信号分析器 ([policies.md](./policies.md))
 
 分析用户输入中的情绪信号，为 ReactionPlanner 和 StateMachine 提供输入。
@@ -95,6 +101,7 @@ nbot/character/
 ├── prompt_stack.py      # 动态提示词栈
 ├── prompt_builder.py    # 提示词构建器
 ├── runtime.py           # 运行时引擎
+├── auto_state.py        # 6 回合 AI 状态评估
 ├── planner.py           # 反应计划生成器
 ├── state_machine.py     # 状态机
 ├── policies.py          # 信号分析器

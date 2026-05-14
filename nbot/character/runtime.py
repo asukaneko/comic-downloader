@@ -130,6 +130,28 @@ class CharacterRuntime:
             assistant_message=getattr(result, "final_content", ""),
         )
 
+        try:
+            from nbot.character.auto_state import update_state_from_recent_turns
+
+            new_state, new_relationship, auto_state_changed = update_state_from_recent_turns(
+                profile=turn_context.profile,
+                state=new_state,
+                relationship=new_relationship,
+                user_message=getattr(chat_request, "content", ""),
+                assistant_message=getattr(result, "final_content", ""),
+                metadata=getattr(chat_request, "metadata", {}) or {},
+                conversation_id=getattr(chat_request, "conversation_id", "") or "",
+                result_error=getattr(result, "error", None),
+            )
+            if auto_state_changed:
+                _log.debug(
+                    "[CharacterRuntime] auto state adjustment applied: mood=%s intensity=%s",
+                    new_state.mood,
+                    new_state.mood_intensity,
+                )
+        except Exception as exc:
+            _log.warning("[CharacterRuntime] auto state adjustment failed: %s", exc, exc_info=True)
+
         _log.debug(
             "[CharacterRuntime] after_turn: old_rel=%s new_rel=%s state_repo=%s rel_repo=%s",
             {
