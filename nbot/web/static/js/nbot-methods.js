@@ -9167,8 +9167,12 @@ def main(params):
                 },
 
                 finishStreamMessage(messageId) {
-                    const msgIdx = this.currentMessages.findIndex(m => m.id === messageId);
-                    const messageSessionId = msgIdx !== -1 ? this.currentMessages[msgIdx].session_id : null;
+                    // 优先使用流式消息映射（防止切会话后 currentMessages 里找不到）
+                    const messageSessionId =
+                        this.streamMessageSessions?.[messageId]
+                        || (this.currentMessages.findIndex(m => m.id === messageId) !== -1
+                            ? this.currentMessages[this.currentMessages.findIndex(m => m.id === messageId)].session_id
+                            : null);
                     const queue = this.streamTypeQueues[messageId] || [];
                     // 如果队列里还有大量未排内容，不要一次性排完，让 scheduleStreamType 继续逐步排
                     if (queue.length > 20) {
@@ -9186,6 +9190,7 @@ def main(params):
                     }
                     delete this.streamTypeQueues[messageId];
                     delete this.streamEndPending[messageId];
+                    delete this.streamMessageSessions?.[messageId];
                     this.appendStreamText(messageId, '', false);
                     if (messageSessionId && this.activeStreamMessages[messageSessionId] === messageId) {
                         delete this.activeStreamMessages[messageSessionId];
@@ -9197,17 +9202,18 @@ def main(params):
                         }, 15000);
                     }
                     this.scheduleStreamScroll(true);
-                    // 只有当没有新消息正在处理时才重置加载状态
-                    // 如果 loadingSessionId 已被新消息设置，说明用户已发送新消息，不应重置
-                    if (!this.loadingSessionId) {
+                    // 当前消息完成时清理 loading 状态；但不覆盖已经属于新消息的 loadingSessionId
+                    const shouldClearLoading =
+                        !this.loadingSessionId || this.loadingSessionId === messageSessionId;
+                    if (shouldClearLoading) {
                         this.isTyping = false;
                         this.isLoading = false;
+                        this.loadingSessionId = null;
                         this.loadingStartTime = null;
                         localStorage.removeItem('nbot_loading_session_id');
                         localStorage.removeItem('nbot_loading_start_time');
                     }
                     // 流式输出完全结束后，触发待发送队列处理下一条消息
-                    // 使用 fallback 确保即使 messageSessionId 为空也能触发
                     const triggerSessionId = messageSessionId || this.currentSession?.id;
                     if (triggerSessionId) {
                         this.$nextTick(() => this.processPendingQueue(triggerSessionId));
@@ -9495,6 +9501,8 @@ def main(params):
                             const msg = { ...data.message, content: '', is_streaming: true };
                             this.activeStreamMessages[data.session_id] = data.message.id;
                             delete this.completedStreamMessages[data.session_id];
+                            if (!this.streamMessageSessions) this.streamMessageSessions = {};
+                            this.streamMessageSessions[data.message.id] = data.session_id;
                             this.streamTypeQueues[data.message.id] = [];
                             this.streamEndPending[data.message.id] = false;
                             if (this.streamTypeTimers[data.message.id]) {
@@ -9526,6 +9534,8 @@ def main(params):
                                 console.log('[Stream] 未找到消息，创建占位消息:', data.message_id);
                                 const fallbackMessageId = data.message_id || `stream-${Date.now()}`;
                                 this.activeStreamMessages[data.session_id] = fallbackMessageId;
+                                if (!this.streamMessageSessions) this.streamMessageSessions = {};
+                                this.streamMessageSessions[fallbackMessageId] = data.session_id;
                                 this.currentMessages.push({
                                     id: fallbackMessageId,
                                     role: 'assistant',
