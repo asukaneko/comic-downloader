@@ -4347,6 +4347,11 @@ async def dispatch_message(msg, is_group: bool):
     for commands, handler in command_handlers.items():
         for cmd in commands:
             if raw_msg.startswith(cmd):
+                # 确保是完整命令匹配，而非前缀匹配
+                # 命令后必须是空格、换行、或字符串结尾
+                rest = raw_msg[len(cmd):]
+                if rest and not rest.startswith((' ', '\n', '\r')):
+                    continue
                 try:
                     await handler(msg, is_group)
                 except Exception as e:
