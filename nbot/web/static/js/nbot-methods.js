@@ -9352,6 +9352,73 @@ def main(params):
                     }
                 },
 
+                forceFinishStreamMessage(messageId, finalMessage = {}) {
+                    if (!messageId) return false;
+                    const msgIdx = this.currentMessages.findIndex(m => m.id === messageId);
+                    if (msgIdx === -1) return false;
+
+                    if (this.streamTypeTimers[messageId]) {
+                        clearTimeout(this.streamTypeTimers[messageId]);
+                        delete this.streamTypeTimers[messageId];
+                    }
+                    delete this.streamTypeQueues[messageId];
+                    delete this.streamEndPending[messageId];
+
+                    const existingMessage = this.currentMessages[msgIdx];
+                    Object.assign(existingMessage, finalMessage, {
+                        id: existingMessage.id,
+                        content: finalMessage.content ?? existingMessage.content ?? '',
+                        is_streaming: false,
+                        stream_complete: true,
+                        thinking_cards: finalMessage.thinking_cards || existingMessage.thinking_cards || [],
+                        change_cards: finalMessage.change_cards || existingMessage.change_cards || [],
+                        attachments: finalMessage.attachments || existingMessage.attachments || []
+                    });
+
+                    const messageSessionId =
+                        finalMessage.session_id
+                        || existingMessage.session_id
+                        || this.streamMessageSessions?.[messageId]
+                        || this.currentSession?.id;
+                    delete this.streamMessageSessions?.[messageId];
+                    if (messageSessionId && this.activeStreamMessages[messageSessionId] === messageId) {
+                        delete this.activeStreamMessages[messageSessionId];
+                    }
+                    if (messageSessionId) {
+                        this.completedStreamMessages[messageSessionId] = messageId;
+                    }
+
+                    this.isTyping = false;
+                    if (!this.loadingSessionId || this.loadingSessionId === messageSessionId) {
+                        this.isLoading = false;
+                        this.loadingSessionId = null;
+                        this.loadingStartTime = null;
+                        localStorage.removeItem('nbot_loading_session_id');
+                        localStorage.removeItem('nbot_loading_start_time');
+                    }
+                    this.scheduleStreamScroll(true);
+                    return true;
+                },
+
+                reconcileFinalStreamMessage(sessionId, finalMessage = {}) {
+                    if (!sessionId || !finalMessage || finalMessage.role !== 'assistant') return false;
+                    const directId = finalMessage.id;
+                    if (directId && this.currentMessages.some(m => m.id === directId && (m.is_streaming || this.streamEndPending[directId]))) {
+                        return this.forceFinishStreamMessage(directId, finalMessage);
+                    }
+
+                    const activeMessageId = this.activeStreamMessages[sessionId];
+                    if (activeMessageId && this.currentMessages.some(m => m.id === activeMessageId)) {
+                        return this.forceFinishStreamMessage(activeMessageId, finalMessage);
+                    }
+
+                    const completedMessageId = this.completedStreamMessages[sessionId];
+                    if (completedMessageId && this.currentMessages.some(m => m.id === completedMessageId)) {
+                        return this.forceFinishStreamMessage(completedMessageId, finalMessage);
+                    }
+                    return false;
+                },
+
                 // Socket.io
                 initSocket() {
                     socket.on('connect', () => {
@@ -9400,6 +9467,16 @@ def main(params):
                             (msg.session_id === this.currentSession.id || !msg.session_id);
                         
                         if (isCurrentSession) {
+                            const messageSessionId = msg.session_id || this.currentSession?.id;
+                            if (
+                                msg.role === 'assistant'
+                                && !msg.is_progress_message
+                                && !msg.file
+                                && this.reconcileFinalStreamMessage(messageSessionId, msg)
+                            ) {
+                                this.$nextTick(() => this.scrollToBottom(false));
+                                return;
+                            }
                             // 检查是否有临时ID（用户自己发送的消息）
                             if (msg.tempId) {
                                 // 用服务器返回的消息替换本地临时消息
@@ -9736,6 +9813,12 @@ def main(params):
                         localStorage.removeItem('nbot_loading_session_id');
                         localStorage.removeItem('nbot_loading_start_time');
                         if (this.currentSession && data.session_id === this.currentSession.id) {
+                            const reconciledStream = this.reconcileFinalStreamMessage(data.session_id, data.message);
+                            if (reconciledStream) {
+                                this.$nextTick(() => this.scrollToBottom(false));
+                                this.processPendingQueue(finishedSessionId);
+                                return;
+                            }
                             if (data.message?.content && window.__nbotLive2dComment && this.settings?.features?.live2d !== false) {
                                 const allMsgs = this.currentMessages.filter(m => m.role === 'user' || m.role === 'assistant');
                                 const recent = allMsgs.slice(-10).map(m => ({ role: m.role, content: m.content || '' }));

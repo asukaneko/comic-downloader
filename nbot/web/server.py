@@ -944,6 +944,10 @@ class WebChatServer:
                 return ""
 
             # 方法1: 向量检索
+            default_kb = km.store.load_base("default")
+            if not default_kb or not getattr(default_kb, "documents", None):
+                return ""
+
             results = km.search(query, base_id=None, top_k=max_docs)
 
             # 方法2: 关键词匹配（当向量检索无结果时使用）

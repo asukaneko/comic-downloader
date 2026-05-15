@@ -223,6 +223,7 @@ class AIClient:
             
             if stream:
                 # 流式响应模式
+                headers["Accept"] = "text/event-stream"
                 resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=300)
                 resp.raise_for_status()
                 return self._stream_anthropic_response(resp)
@@ -261,8 +262,11 @@ class AIClient:
             )
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
+            if stream:
+                headers["Accept"] = "text/event-stream"
+                headers["Cache-Control"] = "no-cache"
             payload = build_chat_completion_payload(
                 model or self.model,
                 messages,
@@ -320,7 +324,7 @@ class AIClient:
         """处理流式响应，返回一个生成器"""
         import json
         
-        for line in resp.iter_lines():
+        for line in resp.iter_lines(chunk_size=1):
             if not line:
                 continue
             
@@ -350,7 +354,7 @@ class AIClient:
         import json
         from nbot.services.anthropic_adapter import parse_anthropic_stream_chunk
         
-        for line in resp.iter_lines():
+        for line in resp.iter_lines(chunk_size=1):
             if not line:
                 continue
             

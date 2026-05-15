@@ -387,6 +387,7 @@ class WebCallbacks(PipelineCallbacks):
             {"session_id": self.session_id, "message": message},
             room=self.session_id,
         )
+        self.server.socketio.sleep(0)
 
     def on_stream_chunk(self, ctx: PipelineContext, chunk: str, message_id: str) -> None:
         self.server.socketio.emit(
@@ -399,6 +400,7 @@ class WebCallbacks(PipelineCallbacks):
             },
             room=self.session_id,
         )
+        self.server.socketio.sleep(0)
 
     def on_stream_end(self, ctx: PipelineContext, message_id: str) -> None:
         self.server.socketio.emit(
@@ -410,6 +412,7 @@ class WebCallbacks(PipelineCallbacks):
             },
             room=self.session_id,
         )
+        self.server.socketio.sleep(0)
 
     # ---- 进度 ----
 
@@ -770,6 +773,7 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
     import requests
     from nbot.services.ai import refresh_runtime_ai_config
 
+    stream_started_at = time.perf_counter()
     runtime_ai = refresh_runtime_ai_config()
     base_url = runtime_ai.get("base_url") or ""
     model = runtime_ai.get("model") or ""
@@ -780,6 +784,8 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-cache",
     }
     payload = build_chat_completion_payload(
         model, messages,
@@ -788,8 +794,21 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
         tool_choice="auto" if tools else None,
         stream=True,
     )
+    _log.info(
+        "[StreamTiming] session=%s posting provider request model=%s messages=%s chars=%s tools=%s",
+        session_id,
+        model,
+        len(messages),
+        sum(len(str(msg.get("content", ""))) for msg in messages if isinstance(msg, dict)),
+        bool(tools),
+    )
     resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
     resp.raise_for_status()
+    _log.info(
+        "[StreamTiming] session=%s provider headers after %.3fs",
+        session_id,
+        time.perf_counter() - stream_started_at,
+    )
 
     # chunk 去重：部分提供商返回累积文本而非增量
     content_parts: List[str] = []
@@ -811,7 +830,8 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
                 return raw[overlap:]
         return raw
 
-    for raw_line in resp.iter_lines(decode_unicode=False):
+    first_chunk_logged = False
+    for raw_line in resp.iter_lines(chunk_size=1, decode_unicode=False):
         if stop_event and stop_event.is_set():
             break
         line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
@@ -834,6 +854,13 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
                 if raw:
                     chunk = normalize_chunk(raw)
                     if chunk:
+                        if not first_chunk_logged:
+                            first_chunk_logged = True
+                            _log.info(
+                                "[StreamTiming] session=%s first provider chunk after %.3fs",
+                                session_id,
+                                time.perf_counter() - stream_started_at,
+                            )
                         content_parts.append(chunk)
                         yield {"content": chunk}
             except json.JSONDecodeError:
