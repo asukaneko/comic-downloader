@@ -168,7 +168,6 @@ const NbotMethods = {
                 },
 
                 applyMessageStyles() {
-                    // 创建样式标签
                     let styleEl = document.getElementById('message-custom-styles');
                     if (!styleEl) {
                         styleEl = document.createElement('style');
@@ -180,7 +179,7 @@ const NbotMethods = {
                     const userBubbleColor = this.messageStyle.userBubbleColor || '';
                     const assistantBubbleColor = this.messageStyle.assistantBubbleColor || '';
 
-                    styleEl.textContent = `
+                    let css = `
                         .message-content,
                         .message-content .markdown-body,
                         .message-content .markdown-body p,
@@ -196,9 +195,34 @@ const NbotMethods = {
                         .message-content .markdown-body p:last-child {
                             margin-bottom: 0 !important;
                         }
-                        ${userBubbleColor ? `.message.user .message-content { background: ${userBubbleColor} !important; }` : ''}
-                        ${assistantBubbleColor ? `.message.assistant .message-content { background: ${assistantBubbleColor} !important; }` : ''}
                     `;
+
+                    if (userBubbleColor) {
+                        css += `
+                            .message.user .message-content,
+                            body.has-bg-image .message.user .message-content,
+                            [data-theme="light"] .message.user .message-content,
+                            [data-theme="light"] body.has-bg-image .message.user .message-content {
+                                background: ${userBubbleColor} !important;
+                                border-color: rgba(255, 255, 255, 0.15) !important;
+                                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+                            }
+                        `;
+                    }
+                    if (assistantBubbleColor) {
+                        css += `
+                            .message.assistant .message-content,
+                            body.has-bg-image .message.assistant .message-content,
+                            [data-theme="light"] .message.assistant .message-content,
+                            [data-theme="light"] body.has-bg-image .message.assistant .message-content {
+                                background: ${assistantBubbleColor} !important;
+                                border-color: rgba(255, 255, 255, 0.15) !important;
+                                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+                            }
+                        `;
+                    }
+
+                    styleEl.textContent = css;
                 },
 
                 // 聊天背景设置方法
