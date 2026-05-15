@@ -61,6 +61,28 @@ def _normalize_runtime_timeline_entry(snapshot, timestamp=None):
     return entry
 
 
+def _normalize_proactive_chat_config(config):
+    defaults = {
+        "enabled": False,
+        "interval_minutes": 60,
+        "idle_minutes": 10,
+        "visible_only": True,
+    }
+    if isinstance(config, dict):
+        defaults.update(config)
+    try:
+        defaults["interval_minutes"] = max(1, int(defaults.get("interval_minutes", 60)))
+    except (TypeError, ValueError):
+        defaults["interval_minutes"] = 60
+    try:
+        defaults["idle_minutes"] = max(1, int(defaults.get("idle_minutes", 10)))
+    except (TypeError, ValueError):
+        defaults["idle_minutes"] = 10
+    defaults["enabled"] = bool(defaults.get("enabled", False))
+    defaults["visible_only"] = bool(defaults.get("visible_only", True))
+    return defaults
+
+
 def _skills_prompt_injection_enabled(settings):
     features = (settings or {}).get("features") or {}
     return bool(features.get("skills_prompt_injection", False))
@@ -195,6 +217,7 @@ def register_session_routes(app, server):
                     "favorite": bool(session.get("favorite")),
                     "pinned": bool(session.get("pinned")),
                     "is_public": is_public,
+                    "proactive_chat": _normalize_proactive_chat_config(session.get("proactive_chat")),
                     "character_runtime_timeline": session.get("character_runtime_timeline", []),
                 }
             )
@@ -279,6 +302,7 @@ def register_session_routes(app, server):
             "favorite": bool(data.get("favorite")),
             "pinned": bool(data.get("pinned")),
             "is_public": bool(data.get("is_public")),
+            "proactive_chat": _normalize_proactive_chat_config(data.get("proactive_chat")),
             "character_runtime_timeline": [],
         }
 
@@ -327,6 +351,9 @@ def register_session_routes(app, server):
             return jsonify({"error": "Session not found"}), 404
 
         session["message_count"] = len(session.get("messages", []))
+        session["proactive_chat"] = _normalize_proactive_chat_config(
+            session.get("proactive_chat")
+        )
         return jsonify(session)
 
     @app.route("/api/sessions/<session_id>/debug")
@@ -373,6 +400,10 @@ def register_session_routes(app, server):
             session["favorite"] = bool(data.get("favorite"))
         if "pinned" in data:
             session["pinned"] = bool(data.get("pinned"))
+        if "proactive_chat" in data:
+            session["proactive_chat"] = _normalize_proactive_chat_config(
+                data.get("proactive_chat")
+            )
 
         new_prompt = data.get("system_prompt", session.get("system_prompt", ""))
         if new_prompt != session.get("system_prompt", ""):
@@ -383,6 +414,11 @@ def register_session_routes(app, server):
                 session["messages"].insert(0, {"role": "system", "content": new_prompt})
 
         session_store.set_session(session_id, session)
+        if session.get("proactive_chat", {}).get("enabled"):
+            try:
+                server._start_proactive_chat_loop()
+            except Exception as exc:
+                _log.warning("Failed to start proactive chat loop: %s", exc)
         return jsonify({"success": True, "session": session})
 
     @app.route("/api/sessions/<session_id>/runtime-timeline", methods=["GET"])

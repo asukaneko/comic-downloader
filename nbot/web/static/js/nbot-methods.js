@@ -4502,6 +4502,13 @@ def main(params):
                             character_runtime_snapshot: fullSession.character_runtime_snapshot || session.character_runtime_snapshot || null,
                             archived: fullSession.archived || false,
                             channel_id: fullSession.channel_id || '',
+                            proactive_chat: {
+                                enabled: false,
+                                interval_minutes: 60,
+                                idle_minutes: 10,
+                                visible_only: true,
+                                ...(fullSession.proactive_chat || session.proactive_chat || {})
+                            },
                             messages: fullSession.messages || []
                         };
                         // 重置公开状态
@@ -4880,6 +4887,13 @@ def main(params):
                         tags: session.tags || [],
                         favorite: !!session.favorite,
                         pinned: !!session.pinned,
+                        proactive_chat: {
+                            enabled: false,
+                            interval_minutes: 60,
+                            idle_minutes: 10,
+                            visible_only: true,
+                            ...(session.proactive_chat || {})
+                        },
                         character_runtime_timeline: session.character_runtime_timeline || [],
                     };
                     this.sessionQrCode = '';
@@ -4908,6 +4922,13 @@ def main(params):
                             this.viewingSession = {
                                 ...this.viewingSession,
                                 ...res.data,
+                                proactive_chat: {
+                                    enabled: false,
+                                    interval_minutes: 60,
+                                    idle_minutes: 10,
+                                    visible_only: true,
+                                    ...(res.data.proactive_chat || {})
+                                },
                                 message_count: res.data.message_count || this.viewingSession.message_count,
                             };
                         }
@@ -8927,6 +8948,48 @@ def main(params):
                         this.showToast('设置已保存', 'success');
                     } catch (e) {
                         this.showToast('保存失败', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async saveProactiveChatSettings() {
+                    if (!this.viewingSession?.id) return;
+                    const defaults = {
+                        enabled: false,
+                        interval_minutes: 60,
+                        idle_minutes: 10,
+                        visible_only: true
+                    };
+                    const proactiveChat = {
+                        ...defaults,
+                        ...(this.viewingSession.proactive_chat || {})
+                    };
+                    proactiveChat.interval_minutes = Math.max(1, parseInt(proactiveChat.interval_minutes, 10) || 60);
+                    proactiveChat.idle_minutes = Math.max(1, parseInt(proactiveChat.idle_minutes, 10) || 10);
+                    proactiveChat.enabled = !!proactiveChat.enabled;
+                    proactiveChat.visible_only = !!proactiveChat.visible_only;
+                    this.viewingSession.proactive_chat = proactiveChat;
+
+                    this.isLoading = true;
+                    try {
+                        const res = await api.put(`/api/sessions/${this.viewingSession.id}`, { proactive_chat: proactiveChat });
+                        if (res.data?.session?.proactive_chat) {
+                            this.viewingSession.proactive_chat = {
+                                ...defaults,
+                                ...res.data.session.proactive_chat
+                            };
+                        }
+                        if (this.currentSession?.id === this.viewingSession.id) {
+                            this.currentSession.proactive_chat = { ...this.viewingSession.proactive_chat };
+                        }
+                        const sessionInList = this.sessions.find(s => s.id === this.viewingSession.id);
+                        if (sessionInList) {
+                            sessionInList.proactive_chat = { ...this.viewingSession.proactive_chat };
+                        }
+                        this.showToast('主动聊天设置已保存', 'success');
+                    } catch (e) {
+                        this.showToast('主动聊天设置保存失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
                         this.isLoading = false;
                     }

@@ -347,6 +347,11 @@ class WebCallbacks(PipelineCallbacks):
         ).strip()
 
     def save_assistant_message(self, ctx: PipelineContext, message: Dict) -> None:
+        if ctx.metadata.get("is_proactive_chat"):
+            message["source"] = "proactive_chat"
+            message["is_proactive_chat"] = True
+            if ctx.metadata.get("proactive_chat_triggered_at"):
+                message["proactive_chat_triggered_at"] = ctx.metadata["proactive_chat_triggered_at"]
         self.session_store.append_message(self.session_id, message)
         self._try_auto_name_session()
 
@@ -982,6 +987,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
         chat_request=chat_request,
         adapter=adapter,
         stop_event=stop_event,
+        metadata=dict(chat_request.metadata or {}),
     )
     callbacks = WebCallbacks(
         server=server,

@@ -6151,6 +6151,50 @@
                     </div>
 
                     <!-- 系统提示词 -->
+                    <div class="form-section" v-if="viewingSession.type === 'web' && !viewingSession.read_only && !viewingSession.is_archive">
+                        <div class="form-section-title">
+                            <i class="fas fa-comment-dots" style="color: var(--accent-primary);"></i> 主动聊天
+                        </div>
+                        <div class="proactive-chat-panel">
+                            <div class="proactive-chat-head">
+                                <div>
+                                    <strong>{{ viewingSession.proactive_chat?.enabled ? '已开启' : '已关闭' }}</strong>
+                                    <span>后台会在会话空闲后，让角色自然发起一条简短消息。</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="viewingSession.proactive_chat.enabled">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                            <div class="proactive-chat-grid">
+                                <label>
+                                    <span>检查间隔</span>
+                                    <select v-model.number="viewingSession.proactive_chat.interval_minutes" class="form-select">
+                                        <option :value="15">15 分钟</option>
+                                        <option :value="30">30 分钟</option>
+                                        <option :value="60">1 小时</option>
+                                        <option :value="120">2 小时</option>
+                                        <option :value="360">6 小时</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    <span>空闲多久后可触发</span>
+                                    <input v-model.number="viewingSession.proactive_chat.idle_minutes" type="number" min="1" class="form-input">
+                                </label>
+                            </div>
+                            <label class="proactive-chat-check">
+                                <input type="checkbox" v-model="viewingSession.proactive_chat.visible_only">
+                                <span>只对当前打开的 Web 聊天页生效</span>
+                            </label>
+                            <div class="proactive-chat-actions">
+                                <button class="btn btn-primary btn-small" @click="saveProactiveChatSettings" :disabled="isLoading">
+                                    <i class="fas fa-save"></i> 保存设置
+                                </button>
+                                <span class="form-hint">默认关闭；保存开启后无需重启服务。</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-section" v-if="viewingSession.system_prompt">
                         <div class="form-section-title">系统提示词</div>
                         <div class="code-block">

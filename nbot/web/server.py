@@ -474,6 +474,7 @@ class WebChatServer:
 
         # Heartbeat 调度器
         self.heartbeat_job = None
+        self.proactive_chat_thread: Optional[threading.Thread] = None
         self.scheduled_tasks: List[Dict[str, Any]] = []
         self.scheduled_task_jobs: Dict[str, Any] = {}
         self.running_task_ids: set = set()
@@ -569,6 +570,7 @@ class WebChatServer:
                     self._initialize_ai_client()
                 self._init_workflow_scheduler()
                 self._init_custom_task_scheduler()
+                self._start_proactive_chat_loop()
                 # 检查并重建知识库索引（如有需要）
                 self._check_knowledge_index()
                 # 自动启动飞书长连接频道
@@ -598,6 +600,208 @@ class WebChatServer:
             return f"{hours}小时{minutes}分钟"
         else:
             return f"{minutes}分钟"
+
+    def _get_proactive_chat_config(self) -> Dict[str, Any]:
+        default_prompt = (
+            "你正在一个 Web 会话里主动开口。请根据当前上下文，以角色本身的语气自然发起一条简短消息。"
+            "可以关心近况、延续上一轮话题、提出一个轻量问题，或分享一个贴合关系的小观察。"
+            "不要提到定时任务、系统触发、主动聊天功能或这段指令。"
+        )
+        config = {
+            "enabled": False,
+            "interval_minutes": 60,
+            "idle_minutes": 10,
+            "visible_only": True,
+            "prompt": default_prompt,
+        }
+        try:
+            config["interval_minutes"] = max(1, int(config.get("interval_minutes", 60)))
+        except (TypeError, ValueError):
+            config["interval_minutes"] = 60
+        try:
+            config["idle_minutes"] = max(1, int(config.get("idle_minutes", 10)))
+        except (TypeError, ValueError):
+            config["idle_minutes"] = 10
+        config["enabled"] = bool(config.get("enabled", False))
+        config["visible_only"] = bool(config.get("visible_only", True))
+        if not str(config.get("prompt") or "").strip():
+            config["prompt"] = default_prompt
+        return config
+
+    def _get_session_proactive_chat_config(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        config = self._get_proactive_chat_config()
+        saved = session.get("proactive_chat")
+        if isinstance(saved, dict):
+            config.update(saved)
+        try:
+            config["interval_minutes"] = max(1, int(config.get("interval_minutes", 60)))
+        except (TypeError, ValueError):
+            config["interval_minutes"] = 60
+        try:
+            config["idle_minutes"] = max(1, int(config.get("idle_minutes", 10)))
+        except (TypeError, ValueError):
+            config["idle_minutes"] = 10
+        config["enabled"] = bool(config.get("enabled", False))
+        config["visible_only"] = bool(config.get("visible_only", True))
+        if not str(config.get("prompt") or "").strip():
+            config["prompt"] = self._get_proactive_chat_config()["prompt"]
+        return config
+
+    def _start_proactive_chat_loop(self):
+        if self.proactive_chat_thread and self.proactive_chat_thread.is_alive():
+            return
+
+        def run():
+            _log.info("[ProactiveChat] session-level scanner started")
+            self.socketio.sleep(60)
+            while True:
+                try:
+                    self._execute_proactive_chat_tick()
+                except Exception as exc:
+                    _log.error("[ProactiveChat] tick failed: %s", exc, exc_info=True)
+                self.socketio.sleep(60)
+
+        self.proactive_chat_thread = threading.Thread(
+            target=run,
+            name="web-proactive-chat",
+            daemon=True,
+        )
+        self.proactive_chat_thread.start()
+
+    def _execute_proactive_chat_tick(self):
+        session_ids = self._get_proactive_chat_target_session_ids()
+        if not session_ids:
+            return
+
+        now = datetime.now()
+        for session_id in session_ids:
+            session = self.session_store.get_session(session_id)
+            if not session or session.get("read_only") or session.get("archived"):
+                continue
+            if session.get("type", "web") != "web":
+                continue
+            if session_id in self.stop_events:
+                continue
+            config = self._get_session_proactive_chat_config(session)
+            if not config.get("enabled"):
+                continue
+            if config.get("visible_only", True) and session_id not in set(self.visible_web_sessions.values()):
+                continue
+            if self._proactive_chat_has_unanswered_reply(session):
+                continue
+            if not self._proactive_chat_session_is_due(session, now, config):
+                continue
+
+            session["proactive_chat_last_run"] = now.isoformat()
+            session["proactive_chat_pending_since"] = now.isoformat()
+            self.session_store.set_session(session_id, session)
+            _log.info("[ProactiveChat] triggering session %s", session_id[:8])
+            self._trigger_ai_response(
+                session_id,
+                str(config.get("prompt") or ""),
+                "system",
+                [],
+                None,
+                {
+                    "source": "proactive_chat",
+                    "is_proactive_chat": True,
+                    "proactive_chat_triggered_at": now.isoformat(),
+                },
+            )
+
+    def _get_proactive_chat_target_session_ids(self) -> List[str]:
+        return [
+            session_id
+            for session_id, session in self.sessions.items()
+            if session.get("type", "web") == "web"
+            and not session.get("archived")
+            and not session.get("read_only")
+            and isinstance(session.get("proactive_chat"), dict)
+            and session.get("proactive_chat", {}).get("enabled")
+        ]
+
+    def _proactive_chat_session_is_due(
+        self, session: Dict[str, Any], now: datetime, config: Dict[str, Any]
+    ) -> bool:
+        last_activity = self._get_session_last_activity(session)
+        if not last_activity:
+            return False
+
+        idle_seconds = config["idle_minutes"] * 60
+        if (now - last_activity).total_seconds() < idle_seconds:
+            return False
+
+        last_run = self._parse_iso_datetime(session.get("proactive_chat_last_run"))
+        interval_seconds = config["interval_minutes"] * 60
+        if last_run and (now - last_run).total_seconds() < interval_seconds:
+            return False
+
+        return True
+
+    def _proactive_chat_has_unanswered_reply(self, session: Dict[str, Any]) -> bool:
+        messages = [
+            message
+            for message in session.get("messages", [])
+            if isinstance(message, dict) and message.get("role") != "system"
+        ]
+        pending_since = self._parse_iso_datetime(session.get("proactive_chat_pending_since"))
+        if pending_since:
+            if not self._has_user_message_after(messages, pending_since):
+                return True
+            session.pop("proactive_chat_pending_since", None)
+
+        for idx in range(len(messages) - 1, -1, -1):
+            message = messages[idx]
+            if message.get("role") != "assistant":
+                continue
+            if not message.get("is_proactive_chat") and message.get("source") != "proactive_chat":
+                continue
+            return not any(
+                later.get("role") == "user"
+                for later in messages[idx + 1 :]
+                if isinstance(later, dict)
+            )
+
+        return False
+
+    def _has_user_message_after(
+        self, messages: List[Dict[str, Any]], timestamp: datetime
+    ) -> bool:
+        for message in messages:
+            if message.get("role") != "user":
+                continue
+            message_time = self._parse_iso_datetime(message.get("timestamp"))
+            if message_time and message_time > timestamp:
+                return True
+        return False
+
+    def _get_session_last_activity(self, session: Dict[str, Any]) -> Optional[datetime]:
+        latest = None
+        for message in session.get("messages", []):
+            if message.get("role") == "system":
+                continue
+            timestamp = self._parse_iso_datetime(message.get("timestamp"))
+            if timestamp and (latest is None or timestamp > latest):
+                latest = timestamp
+        return latest
+
+    @staticmethod
+    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if isinstance(value, (int, float)):
+            try:
+                return datetime.fromtimestamp(value)
+            except (OverflowError, OSError, ValueError):
+                return None
+        try:
+            text = str(value).strip().replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(text)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone().replace(tzinfo=None)
+            return parsed
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _hash_token(token: str) -> str:
@@ -2424,6 +2628,7 @@ class WebChatServer:
         sender: str,
         attachments=None,
         parent_message_id=None,
+        metadata=None,
     ):
         """?? AI ????????"""
         adapter = _resolve_web_adapter(self.web_channel_adapter)
@@ -2433,6 +2638,7 @@ class WebChatServer:
             sender=sender,
             attachments=attachments,
             parent_message_id=parent_message_id,
+            metadata=metadata,
         )
         self.agent_service.process(chat_request, adapter=adapter)
 

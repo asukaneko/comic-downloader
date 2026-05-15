@@ -8348,6 +8348,82 @@
             background: var(--bg-tertiary);
         }
 
+        .proactive-chat-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-secondary);
+        }
+
+        .proactive-chat-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .proactive-chat-head > div {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .proactive-chat-head strong {
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .proactive-chat-head span,
+        .proactive-chat-check span {
+            color: var(--text-secondary);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .proactive-chat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .proactive-chat-grid label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .proactive-chat-grid label > span {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .proactive-chat-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .proactive-chat-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 640px) {
+            .proactive-chat-head {
+                align-items: flex-start;
+            }
+
+            .proactive-chat-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
         @media (max-width: 1180px) {
             .sessions-card-header {
                 flex-direction: column;
