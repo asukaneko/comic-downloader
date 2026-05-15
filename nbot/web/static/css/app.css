@@ -704,6 +704,54 @@
             color: var(--text-primary);
         }
 
+        .session-title-display {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin: -4px -8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            width: 100%;
+            text-align: left;
+        }
+        .session-title-display:hover {
+            background: var(--bg-secondary, rgba(255,255,255,0.05));
+            border-color: var(--border-color, rgba(255,255,255,0.1));
+        }
+        .session-title-display span {
+            display: inline;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .session-title-display .fa-edit {
+            font-size: 12px;
+            color: var(--text-muted);
+            opacity: 0;
+            transition: opacity 0.15s;
+            flex-shrink: 0;
+        }
+        .session-title-display:hover .fa-edit {
+            opacity: 1;
+        }
+        .session-title-editor {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .session-title-input {
+            flex: 1;
+            min-width: 0;
+        }
+
         .code-block {
             background: var(--bg-tertiary);
             border: 1px solid var(--border-color);
@@ -4506,6 +4554,45 @@
 
         .chat-header-info { display: flex; align-items: center; gap: 12px; }
         .chat-header-title { font-size: 16px; font-weight: 600; }
+        .chat-header-title-editable {
+            cursor: pointer;
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin: -2px -6px;
+            transition: background 0.15s;
+        }
+        .chat-header-title-editable:hover {
+            background: var(--bg-tertiary, rgba(255,255,255,0.08));
+        }
+        .chat-title-edit-icon {
+            font-size: 11px;
+            margin-left: 6px;
+            opacity: 0;
+            transition: opacity 0.15s;
+            color: var(--text-muted);
+        }
+        .chat-header-title-editable:hover .chat-title-edit-icon {
+            opacity: 1;
+        }
+        .chat-header-title-edit {
+            display: flex;
+            align-items: center;
+        }
+        .chat-title-input {
+            font-size: 16px;
+            font-weight: 600;
+            background: var(--bg-tertiary, rgba(255,255,255,0.08));
+            border: 1px solid var(--accent-primary, #6c5ce7);
+            border-radius: 4px;
+            color: var(--text-primary);
+            padding: 2px 8px;
+            outline: none;
+            width: 260px;
+            max-width: 40vw;
+        }
+        .chat-title-input:focus {
+            box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.25);
+        }
         .chat-header-subtitle { font-size: 12px; color: var(--text-muted); }
 
         .chat-session-character,

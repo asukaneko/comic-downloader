@@ -48,6 +48,34 @@ except ImportError:
 _log = logging.getLogger(__name__)
 
 
+def _resolve_session_character_name(server, session: Dict) -> str:
+    if not isinstance(session, dict):
+        session = {}
+
+    sender_name = str(session.get("sender_name") or "").strip()
+    if sender_name:
+        return sender_name
+
+    character_id = str(session.get("character_id") or "").strip()
+    if character_id:
+        try:
+            from nbot.character.repository import ProfileRepository
+
+            base_dir = getattr(server, "base_dir", None) or os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..")
+            )
+            profile = ProfileRepository(base_dir).get(character_id)
+            if profile and profile.name:
+                return str(profile.name).strip()
+        except Exception:
+            pass
+
+    personality = getattr(server, "personality", {}) or {}
+    if isinstance(personality, dict):
+        return str(personality.get("name") or "").strip()
+    return ""
+
+
 def _feature_enabled(server, name: str, default: bool = True) -> bool:
     settings = getattr(server, "settings", {}) or {}
     features = settings.get("features")
@@ -466,7 +494,7 @@ class WebCallbacks(PipelineCallbacks):
         target_id = ""
         session = self.session_store.get_session(self.session_id)
         if session:
-            character_name = session.get("character_id") or session.get("sender_name", "")
+            character_name = _resolve_session_character_name(self.server, session)
             target_id = session.get("user_id") or session.get("qq_id") or ""
         # 只有拿不到会话时才回退到全局角色，避免旧会话被当前设置污染。
         if not session and not character_name:

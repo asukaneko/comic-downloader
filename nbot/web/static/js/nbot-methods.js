@@ -4501,6 +4501,8 @@ def main(params):
                             prompt_stack_debug: fullSession.prompt_stack_debug || session.prompt_stack_debug || [],
                             character_runtime_snapshot: fullSession.character_runtime_snapshot || session.character_runtime_snapshot || null,
                             archived: fullSession.archived || false,
+                            is_archive: fullSession.is_archive || false,
+                            read_only: fullSession.read_only || false,
                             channel_id: fullSession.channel_id || '',
                             proactive_chat: {
                                 enabled: false,
@@ -4815,6 +4817,84 @@ def main(params):
                     }
                 },
 
+                startSessionTitleEdit() {
+                    if (!this.viewingSession) return;
+                    this.editingSessionTitle = this.viewingSession.name || '';
+                    this.isEditingSessionTitle = true;
+                    this.$nextTick(() => {
+                        const input = this.$refs.sessionTitleInput;
+                        if (input) {
+                            input.focus();
+                            input.select();
+                        }
+                    });
+                },
+
+                async saveSessionTitle() {
+                    if (!this.isEditingSessionTitle || !this.viewingSession) return;
+                    const newTitle = this.editingSessionTitle.trim();
+                    if (!newTitle) {
+                        this.showToast('会话标题不能为空', 'warning');
+                        return;
+                    }
+                    if (newTitle === this.viewingSession.name) {
+                        this.isEditingSessionTitle = false;
+                        return;
+                    }
+                    try {
+                        await this.updateSessionMeta(this.viewingSession, { name: newTitle });
+                        this.isEditingSessionTitle = false;
+                        this.showToast('会话标题已更新', 'success');
+                    } catch (e) {
+                        console.error('更新会话标题失败:', e);
+                        this.showToast('更新标题失败', 'error');
+                    }
+                },
+
+                cancelSessionTitleEdit() {
+                    this.isEditingSessionTitle = false;
+                    this.editingSessionTitle = '';
+                },
+
+                startChatTitleEdit() {
+                    if (!this.currentSession) return;
+                    this.editingChatTitle = this.currentSession.name || '';
+                    this.isEditingChatTitle = true;
+                    this.$nextTick(() => {
+                        const input = this.$refs.chatTitleInput;
+                        if (input) {
+                            input.focus();
+                            input.select();
+                        }
+                    });
+                },
+
+                async saveChatTitle() {
+                    if (!this.isEditingChatTitle || !this.currentSession) return;
+                    const newTitle = this.editingChatTitle.trim();
+                    if (!newTitle) {
+                        this.showToast('会话标题不能为空', 'warning');
+                        return;
+                    }
+                    if (newTitle === this.currentSession.name) {
+                        this.isEditingChatTitle = false;
+                        return;
+                    }
+                    try {
+                        await this.updateSessionMeta(this.currentSession, { name: newTitle });
+                        this.isEditingChatTitle = false;
+                        this.showToast('会话标题已更新', 'success');
+                    } catch (e) {
+                        console.error('更新会话标题失败:', e);
+                        this.showToast('更新标题失败', 'error');
+                    }
+                },
+
+                cancelChatTitleEdit() {
+                    this.isEditingChatTitle = false;
+                    this.editingChatTitle = '';
+                },
+
                 async toggleSessionFavorite(session) {
                     try {
                         await this.updateSessionMeta(session, { favorite: !session.favorite });
@@ -4883,6 +4963,8 @@ def main(params):
                         message_count: session.message_count || 0,
                         system_prompt: session.system_prompt || '',
                         archived: session.archived || false,
+                        is_archive: session.is_archive || false,
+                        read_only: session.read_only || false,
                         channel_id: session.channel_id || '',
                         tags: session.tags || [],
                         favorite: !!session.favorite,

@@ -36,6 +36,34 @@ def _normalize_tags(tags):
     return normalized
 
 
+def _resolve_session_character_name(server, session):
+    if not isinstance(session, dict):
+        session = {}
+
+    sender_name = str(session.get("sender_name") or "").strip()
+    if sender_name:
+        return sender_name
+
+    character_id = str(session.get("character_id") or "").strip()
+    if character_id:
+        try:
+            from nbot.character.repository import ProfileRepository
+
+            base_dir = getattr(server, "base_dir", None) or os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..", "..")
+            )
+            profile = ProfileRepository(base_dir).get(character_id)
+            if profile and profile.name:
+                return str(profile.name).strip()
+        except Exception:
+            pass
+
+    personality = getattr(server, "personality", {}) or {}
+    if isinstance(personality, dict):
+        return str(personality.get("name") or "").strip()
+    return ""
+
+
 def _runtime_snapshot_signature(snapshot):
     if not isinstance(snapshot, dict):
         return {}
@@ -1028,8 +1056,14 @@ def register_session_routes(app, server):
         if not non_system:
             return jsonify({"success": False, "error": "没有可总结的对话内容"}), 400
 
-        character_name = session.get("character_id") or session.get("sender_name", "")
+        character_name = _resolve_session_character_name(server, session)
         user_name = session.get("user_id", "")
+        memory_target_id = (
+            session.get("user_id")
+            or session.get("qq_id")
+            or session.get("target_id")
+            or ""
+        )
 
         conversation_text = "\n".join(
             [
@@ -1099,7 +1133,7 @@ def register_session_routes(app, server):
                                 continue
                             if server.prompt_manager.add_memory(
                                 title, content,
-                                session_id,
+                                memory_target_id,
                                 None,
                                 item.get("type", "long"),
                                 7,

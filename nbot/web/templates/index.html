@@ -1042,8 +1042,21 @@
                                             <i :class="currentSession.type?.startsWith('qq') ? 'fab fa-qq' : (currentSession.type === 'cli' ? 'fas fa-terminal' : 'fas fa-comment')" style="color: white;"></i>
                                         </div>
                                         <div>
-                                            <div class="chat-header-title">
+                                            <div v-if="isEditingChatTitle" class="chat-header-title-edit">
+                                                <input
+                                                    ref="chatTitleInput"
+                                                    v-model="editingChatTitle"
+                                                    type="text"
+                                                    class="chat-title-input"
+                                                    maxlength="120"
+                                                    @keydown.enter.prevent="saveChatTitle"
+                                                    @keydown.esc.prevent="cancelChatTitleEdit"
+                                                    @blur="saveChatTitle"
+                                                >
+                                            </div>
+                                            <div v-else class="chat-header-title chat-header-title-editable" @click="startChatTitleEdit" title="点击修改会话标题">
                                                 {{ currentSession.name }}
+                                                <i class="fas fa-pen chat-title-edit-icon"></i>
                                                 <span v-if="currentSession.is_archive" class="badge badge-warning" style="margin-left: 8px; font-size: 11px;">归档</span>
                                                 <span v-if="currentSession.read_only" class="badge badge-info" style="margin-left: 4px; font-size: 11px;">只读</span>
                                             </div>
@@ -6100,7 +6113,33 @@
                             </div>
                             <div class="detail-item">
                                 <label>会话名称</label>
-                                <span>{{ viewingSession.name }}</span>
+                                <div v-if="isEditingSessionTitle" class="session-title-editor">
+                                    <input
+                                        ref="sessionTitleInput"
+                                        v-model="editingSessionTitle"
+                                        type="text"
+                                        class="form-input session-title-input"
+                                        maxlength="120"
+                                        @keydown.enter.prevent="saveSessionTitle"
+                                        @keydown.esc.prevent="cancelSessionTitleEdit"
+                                        @blur="saveSessionTitle"
+                                    >
+                                    <button class="icon-btn" @mousedown.prevent @click="saveSessionTitle" title="保存">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="icon-btn" @mousedown.prevent @click="cancelSessionTitleEdit" title="取消">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <button
+                                    v-else
+                                    class="session-title-display"
+                                    @click="startSessionTitleEdit"
+                                    title="点击修改会话标题"
+                                >
+                                    <span>{{ viewingSession.name }}</span>
+                                    <i class="fas fa-edit"></i>
+                                </button>
                             </div>
                             <div class="detail-item" v-if="viewingSession.sender_name">
                                 <label>绑定角色</label>
@@ -8150,6 +8189,10 @@
                     editingSession: {},
                     showSessionDetailsModal: false,
                     viewingSession: null,
+                    isEditingSessionTitle: false,
+                    editingSessionTitle: '',
+                    isEditingChatTitle: false,
+                    editingChatTitle: '',
                     sessionQrCode: '',
                     sessionShareUrl: '',
                     isLoadingQrCode: false,
