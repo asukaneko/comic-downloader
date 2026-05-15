@@ -14638,6 +14638,31 @@
         }
         .toast.info i { color: #3b82f6; }
 
+        /* 浅色模式 Toast 适配 */
+        [data-theme="light"] .toast {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 252, 0.96) 100%);
+            border: 1px solid rgba(203, 213, 225, 0.6);
+            box-shadow: 0 8px 24px rgba(31, 41, 55, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        [data-theme="light"] .toast.success {
+            border-left: 3px solid #10b981;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(236, 253, 245, 0.96) 100%);
+        }
+        [data-theme="light"] .toast.success i { color: #059669; }
+
+        [data-theme="light"] .toast.error {
+            border-left: 3px solid #ef4444;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(254, 242, 242, 0.96) 100%);
+        }
+        [data-theme="light"] .toast.error i { color: #dc2626; }
+
+        [data-theme="light"] .toast.info {
+            border-left: 3px solid #3b82f6;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(239, 246, 255, 0.96) 100%);
+        }
+        [data-theme="light"] .toast.info i { color: #2563eb; }
+
         /* Loading */
         .loading {
             display: inline-flex;
