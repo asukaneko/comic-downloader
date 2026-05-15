@@ -6,7 +6,13 @@
     <title>NekoBot Dashboard</title>
     <link rel="icon" type="image/png" href="/static/neko.png">
     <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="apple-touch-icon" href="/static/neko.png">
     <meta name="theme-color" content="#111827">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="NekoBot">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
     <script src="/static/vendor/socket.io.min.js"></script>
     <script src="/static/vendor/vue.global.prod.js"></script>
     <script src="/static/vendor/vue-router.global.prod.js"></script>
@@ -24,6 +30,15 @@
     </script>
     <link rel="stylesheet" href="/static/css/boot.css">
     <link rel="stylesheet" href="/static/css/app.css">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                    console.warn('SW registration failed:', err);
+                });
+            });
+        }
+    </script>
 </head>
 <body>
     <div id="boot-overlay">

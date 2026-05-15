@@ -1706,6 +1706,12 @@ const NbotMethods = {
                     // 更新图表颜色
                     this.updateChartColors();
 
+                    // 动态更新 theme-color meta 标签
+                    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+                    if (themeColorMeta) {
+                        themeColorMeta.setAttribute('content', this.themeSettings.mode === 'light' ? '#f5f7fb' : '#111827');
+                    }
+
                     // 更新所有滑块进度条（如果主题面板打开）
                     this.$nextTick(() => {
                         const modalBody = document.querySelector('.modal-overlay .modal-body');

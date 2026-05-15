@@ -1,22 +1,52 @@
 {
-  "name": "NekoBot",
-  "short_name": "NekoBot",
-  "description": "NekoBot Web Dashboard",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#111827",
-  "icons": [
-    {
-      "src": "/static/neko.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/static/neko.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+    "name": "NekoBot",
+    "short_name": "NekoBot",
+    "description": "NekoBot AI 聊天助手",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#111827",
+    "theme_color": "#111827",
+    "categories": ["utilities", "social"],
+    "icons": [
+        {
+            "src": "/static/neko.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/neko.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/static/neko.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "/static/neko.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "新对话",
+            "short_name": "新对话",
+            "url": "/?action=new-chat",
+            "icons": [
+                {
+                    "src": "/static/neko.png",
+                    "sizes": "96x96",
+                    "type": "image/png"
+                }
+            ]
+        }
+    ]
 }

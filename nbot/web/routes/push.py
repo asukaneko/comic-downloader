@@ -119,19 +119,24 @@ def send_web_push(
 def register_push_routes(app, server):
     @app.route("/sw.js")
     def service_worker():
-        return send_from_directory(
+        response = send_from_directory(
             server.static_folder,
             "sw.js",
             mimetype="application/javascript",
         )
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
 
     @app.route("/manifest.webmanifest")
     def web_manifest():
-        return send_from_directory(
+        response = send_from_directory(
             server.static_folder,
             "manifest.webmanifest",
             mimetype="application/manifest+json",
         )
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
 
     @app.get("/api/push/public-key")
     def push_public_key():
