@@ -528,6 +528,12 @@ class WebCallbacks(PipelineCallbacks):
         """AI 响应完成后的回调，兜底触发自动命名，并回写实时 system_prompt"""
         self._try_auto_name_session()
         self._update_session_system_prompt(ctx)
+        # 主动聊天回复完成后，清除 pending 状态，允许下次定时触发
+        if ctx.metadata.get("is_proactive_chat"):
+            session = self.session_store.get_session(self.session_id)
+            if session and session.get("proactive_chat_pending_since"):
+                session.pop("proactive_chat_pending_since", None)
+                self.session_store.set_session(self.session_id, session)
 
     def _update_session_system_prompt(self, ctx: PipelineContext):
         """将 PromptStack 合成后的实时 system_prompt 回写到 session，供前端 i 按钮查看"""

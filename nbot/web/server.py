@@ -739,28 +739,29 @@ class WebChatServer:
         return True
 
     def _proactive_chat_has_unanswered_reply(self, session: Dict[str, Any]) -> bool:
-        messages = [
-            message
-            for message in session.get("messages", [])
-            if isinstance(message, dict) and message.get("role") != "system"
-        ]
+        # 如果主动聊天正在等待 AI 回复（pending_since 存在且 AI 尚未回复），跳过
         pending_since = self._parse_iso_datetime(session.get("proactive_chat_pending_since"))
         if pending_since:
-            if not self._has_user_message_after(messages, pending_since):
-                return True
-            session.pop("proactive_chat_pending_since", None)
-
-        for idx in range(len(messages) - 1, -1, -1):
-            message = messages[idx]
-            if message.get("role") != "assistant":
-                continue
-            if not message.get("is_proactive_chat") and message.get("source") != "proactive_chat":
-                continue
-            return not any(
-                later.get("role") == "user"
-                for later in messages[idx + 1 :]
-                if isinstance(later, dict)
+            messages = [
+                message
+                for message in session.get("messages", [])
+                if isinstance(message, dict) and message.get("role") != "system"
+            ]
+            # 检查 pending_since 之后是否有 AI 回复（主动聊天的回复）
+            has_assistant_reply = any(
+                isinstance(msg, dict)
+                and msg.get("role") == "assistant"
+                and (msg.get("is_proactive_chat") or msg.get("source") == "proactive_chat")
+                and self._parse_iso_datetime(msg.get("timestamp"))
+                and self._parse_iso_datetime(msg.get("timestamp")) >= pending_since
+                for msg in messages
             )
+            if has_assistant_reply:
+                # AI 已回复，清除 pending 状态
+                session.pop("proactive_chat_pending_since", None)
+            else:
+                # AI 尚未回复，跳过本次触发
+                return True
 
         return False
 

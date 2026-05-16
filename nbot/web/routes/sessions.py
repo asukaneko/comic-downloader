@@ -1029,6 +1029,13 @@ def register_session_routes(app, server):
 
             session_store.replace_messages(session_id, new_messages)
 
+            # 更新主动聊天计时，防止压缩后因消息时间戳变旧而立即触发主动聊天
+            session = session_store.get_session(session_id)
+            if session and isinstance(session.get("proactive_chat"), dict) and session["proactive_chat"].get("enabled"):
+                session["proactive_chat_last_run"] = datetime.now().isoformat()
+                session.pop("proactive_chat_pending_since", None)
+                session_store.set_session(session_id, session)
+
             _log.info(
                 f"[Compress] 上下文压缩完成: {session_id[:8]}... ({len(messages_to_compress)} 条消息被压缩，已归档到 {archive['id'][:8]}...)"
             )
