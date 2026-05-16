@@ -22,6 +22,87 @@ def allowed_image_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_IMAGE_EXTENSIONS
 
 
+def _format_first_message_memories(server, character_name="", target_id=""):
+    character_names = []
+    character_name = str(character_name or "").strip()
+    target_id = str(target_id or "").strip()
+
+    if character_name:
+        character_names.append(character_name)
+
+    session = None
+    if target_id:
+        session = (getattr(server, "sessions", {}) or {}).get(target_id)
+        if not session:
+            try:
+                from nbot.web.sessions_db import get_session as get_session_from_db
+
+                session = get_session_from_db(getattr(server, "data_dir", ""), target_id)
+            except Exception:
+                session = None
+
+    if isinstance(session, dict):
+        for key in ("sender_name", "character_id"):
+            value = str(session.get(key) or "").strip()
+            if value and value not in character_names:
+                character_names.append(value)
+
+    personality = getattr(server, "personality", {}) or {}
+    if isinstance(personality, dict):
+        value = str(personality.get("name") or "").strip()
+        if value and value not in character_names:
+            character_names.append(value)
+
+    if not character_names and not target_id:
+        return "", 0
+
+    try:
+        from nbot.core.prompt import prompt_manager
+
+        memories = []
+        seen_ids = set()
+
+        def add_memories(items):
+            for memory in items or []:
+                key = memory.get("id") or (
+                    memory.get("title"),
+                    memory.get("content"),
+                    memory.get("target_id"),
+                    memory.get("character_name"),
+                )
+                if key in seen_ids:
+                    continue
+                seen_ids.add(key)
+                memories.append(memory)
+
+        for candidate_name in character_names:
+            add_memories(prompt_manager.get_memories(None, None, candidate_name))
+
+        if target_id:
+            add_memories(prompt_manager.get_memories(target_id, None, None))
+    except Exception as exc:
+        _log.debug("Failed to load memories for first message generation: %s", exc)
+        return "", 0
+
+    if not memories:
+        return "", 0
+
+    lines = [
+        "",
+        "当前已有的对应角色记忆（生成开场白时自然参考，不要直说这些记忆来自系统注入）：",
+    ]
+    for memory in memories[:8]:
+        title = str(memory.get("title") or "").strip()
+        summary = str(memory.get("summary") or memory.get("content") or "").strip()
+        if title and summary:
+            lines.append(f"- {title}: {summary[:180]}")
+        elif title:
+            lines.append(f"- {title}")
+        elif summary:
+            lines.append(f"- {summary[:180]}")
+    return "\n".join(lines), len(memories)
+
+
 def _role_card_platform_url(server):
     url = getattr(server, "settings", {}).get("role_card_platform_url", "") if hasattr(server, "settings") else ""
     if not str(url).strip():
@@ -742,6 +823,8 @@ def register_personality_routes(app, server):
         basic_info = data.get("basicInfo", "")
         personality = data.get("personality", "")
         scenario = data.get("scenario", "")
+        target_id = data.get("target_id") or data.get("session_id") or ""
+        memory_context, memory_count = _format_first_message_memories(server, name, target_id)
 
         if not name:
             return jsonify({"success": False, "error": "请先填写角色名称"}), 400
@@ -753,6 +836,15 @@ def register_personality_routes(app, server):
             char_context += f"\n性格特点：{personality}"
         if scenario:
             char_context += f"\n背景设定：{scenario}"
+
+        if memory_context:
+            char_context += memory_context
+        _log.info(
+            "[FirstMessage] generating with %d memories: character=%s target=%s",
+            memory_count,
+            name,
+            target_id or "-",
+        )
 
         try:
             response = server.ai_client.chat_completion(
@@ -769,6 +861,11 @@ def register_personality_routes(app, server):
                             "- 30-80字\n"
                             "- 不同风格各不同，不要每次都生成类似的\n"
                             "- 直接返回开场白，不要引号或解释"
+                            "-------------------------------------\n"
+                            "如果下面的角色上下文中包含“当前已有的对应角色记忆”，"
+                            "你必须根据这些记忆来写开场白：至少自然融入1-2个具体记忆事实、关系状态或共同经历。并且以最新的记忆优先"
+                            "不要写成泛泛的初次见面寒暄；不要说明你读取了记忆或提到系统注入。"
+                            "如果没有记忆，再只依据角色设定和场景生成。"
                         ),
                     },
                     {

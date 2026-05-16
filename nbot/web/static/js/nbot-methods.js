@@ -10969,6 +10969,7 @@ def main(params):
                         );
                         const res = await api.post('/api/personality/ai-generate-first-message', {
                             name: charName,
+                            target_id: this.currentSession?.id || '',
                             basicInfo: matchedPreset?.basicInfo || this.personality.basicInfo || '',
                             personality: matchedPreset?.personality || this.personality.personality || '',
                             scenario: this.currentSession?.scenario || matchedPreset?.scenario || this.personality.scenario || '',
