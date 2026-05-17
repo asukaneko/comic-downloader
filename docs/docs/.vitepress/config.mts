@@ -123,6 +123,7 @@ export default defineConfig({
                 { text: 'model_adapter - 模型适配', link: '/guide/nbot/core/model_adapter.md' },
                 { text: 'workspace - 工作区', link: '/guide/nbot/core/workspace.md' },
                 { text: 'workflow - 工作流', link: '/guide/nbot/core/workflow.md' },
+                { text: 'token_stats - Token用量统计', link: '/guide/nbot/core/token_stats.md' },
               ]
             },
             {
@@ -176,6 +177,7 @@ export default defineConfig({
               items: [
                 { text: 'server - 服务入口', link: '/guide/nbot/web/server.md' },
                 { text: 'routes - API路由', link: '/guide/nbot/web/routes.md' },
+                { text: 'file_gateway - 文件网关', link: '/guide/nbot/web/file_gateway.md' },
               ]
             },
           ]
