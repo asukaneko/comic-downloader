@@ -586,11 +586,61 @@ def register_session_routes(app, server):
             raise ValueError("invalid session type")
         return new_id, session
 
+    def _merge_session_with_archive(session):
+        """将归档会话的消息拼到主会话前面，导出完整对话历史。"""
+        archive_id = session.get("archive_session_id")
+        if not archive_id:
+            return session
+
+        archive = session_store.get_session(archive_id)
+        if not archive:
+            archive = get_session_from_db(server.data_dir, archive_id)
+        if not archive:
+            return session
+
+        archive_messages = archive.get("messages", [])
+        if not archive_messages:
+            return session
+
+        # 只取归档中的实际对话消息，排除 system prompt / summary / divider 标记
+        meaningful = [
+            m for m in archive_messages
+            if m.get("role") != "system"
+            or m.get("id", "").startswith("archive_divider_")
+        ]
+
+        if not meaningful:
+            return session
+
+        main_messages = list(session.get("messages", []))
+        # 去掉主会话的 system prompt（如果有），用归档或主会话的保留一个即可
+        main_system_idx = -1
+        archive_system_idx = -1
+        for i, m in enumerate(meaningful):
+            if m.get("role") == "system":
+                archive_system_idx = i
+                break
+        for i, m in enumerate(main_messages):
+            if m.get("role") == "system":
+                main_system_idx = i
+                break
+
+        # 归档中的 system 消息只保留 divider，去掉纯 system prompt
+        if archive_system_idx >= 0:
+            msg = meaningful[archive_system_idx]
+            if not str(msg.get("id", "")).startswith("archive_divider_"):
+                meaningful.pop(archive_system_idx)
+
+        merged = dict(session)
+        merged["messages"] = meaningful + main_messages
+        return merged
+
     @app.route("/api/sessions/<session_id>/export")
     def export_session(session_id):
         session = _get_web_session(session_id)
         if not session:
             return jsonify({"error": "Session not found"}), 404
+        session = _merge_session_with_archive(session)
         return jsonify(_export_session_payload([session]))
 
     @app.route("/api/sessions/export")
@@ -601,11 +651,11 @@ def register_session_routes(app, server):
             for sid in ids:
                 session = _get_web_session(sid)
                 if session:
-                    sessions.append(session)
+                    sessions.append(_merge_session_with_archive(session))
         else:
             for sid, session in (server.sessions or {}).items():
                 if is_web_visible_session(sid, session):
-                    sessions.append(session)
+                    sessions.append(_merge_session_with_archive(session))
         return jsonify(_export_session_payload(sessions))
 
     @app.route("/api/sessions/import", methods=["POST"])

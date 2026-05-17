@@ -3402,7 +3402,7 @@ def main(params):
                 async exportSelectedOrVisibleSessions() {
                     const source = this.selectedSessions.length > 0
                         ? this.sessions.filter(s => this.selectedSessions.includes(s.id))
-                        : this.managedSessions;
+                        : this.sessions.filter(s => s.type !== 'cli');
                     const ids = source.map(s => s.id).filter(Boolean);
                     if (!ids.length) {
                         this.showToast('没有可导出的会话', 'warning');
