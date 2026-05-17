@@ -2092,12 +2092,33 @@ def _execute_workspace_tool(tool_name: str, arguments: Dict[str, Any],
                 file_path = workspace_manager.get_file_path(session_id, filename)
             
             if file_path and os.path.exists(file_path):
+                gateway_urls = {}
+                try:
+                    from nbot.web.file_gateway import build_file_gateway_urls
+                    from nbot.web.server import WebChatServer
+
+                    server = (context or {}).get("server") or WebChatServer.get_instance()
+                    if server:
+                        gateway_urls = build_file_gateway_urls(
+                            server,
+                            file_path,
+                            filename=os.path.basename(filename),
+                            absolute=True,
+                        )
+                except Exception:
+                    gateway_urls = {}
+
                 return {
                     "success": True,
                     "action": "send_file",
                     "filename": filename,
                     "scope": scope,
                     "path": file_path,
+                    "_file_path": file_path,
+                    "_file_name": os.path.basename(filename),
+                    "url": gateway_urls.get("url", ""),
+                    "download_url": gateway_urls.get("download_url", ""),
+                    "preview_url": gateway_urls.get("preview_url", ""),
                     "size": os.path.getsize(file_path),
                     "message": f"文件 '{filename}' ({'共享工作区' if is_shared else '私有工作区'}) 已发送给用户，无需再次提及文件路径或内容。"
                 }

@@ -360,6 +360,61 @@ def parse_tool_calls(message: Dict[str, Any]) -> List[Dict[str, Any]]:
     return parsed_calls
 
 
+def normalize_usage_dict(usage: Optional[Dict[str, Any]]) -> Dict[str, int]:
+    """Normalize provider usage fields to OpenAI-style token counters."""
+    if not isinstance(usage, dict) or not usage:
+        return {}
+
+    def _int_value(*keys: str) -> int:
+        for key in keys:
+            value = usage.get(key)
+            if value is None:
+                continue
+            try:
+                return max(0, int(value))
+            except (TypeError, ValueError):
+                continue
+        return 0
+
+    def _nested_int(container_key: str, key: str) -> int:
+        container = usage.get(container_key)
+        if not isinstance(container, dict):
+            return 0
+        try:
+            return max(0, int(container.get(key) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    prompt_tokens = _int_value("prompt_tokens", "input_tokens", "prompt_token_count")
+    completion_tokens = _int_value(
+        "completion_tokens",
+        "output_tokens",
+        "completion_token_count",
+        "generated_tokens",
+    )
+    total_tokens = _int_value("total_tokens", "total_token_count")
+    if not total_tokens:
+        total_tokens = prompt_tokens + completion_tokens
+
+    normalized = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+    }
+
+    cached_tokens = _int_value("cached_tokens") or _nested_int(
+        "prompt_tokens_details", "cached_tokens"
+    )
+    reasoning_tokens = _int_value("reasoning_tokens") or _nested_int(
+        "completion_tokens_details", "reasoning_tokens"
+    )
+    if cached_tokens:
+        normalized["cached_tokens"] = cached_tokens
+    if reasoning_tokens:
+        normalized["reasoning_tokens"] = reasoning_tokens
+    return normalized
+
+
 def normalize_chat_completion_data(
     data: Dict[str, Any],
     *,
@@ -387,7 +442,7 @@ def normalize_chat_completion_data(
         if parsed_calls:
             tool_calls = parsed_calls
 
-    usage = data.get("usage") or {}
+    usage = normalize_usage_dict(data.get("usage") or {})
     return NormalizedModelResponse(
         content=content,
         finish_reason=finish_reason,

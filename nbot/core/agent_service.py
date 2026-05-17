@@ -42,6 +42,7 @@ class ToolLoopResult:
     stopped: bool = False
     iterations: int = 0
     consecutive_errors: int = 0
+    usage: Dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -340,6 +341,25 @@ def should_stop_tool_loop(
     )
 
 
+def _merge_usage(target: Dict[str, int], usage: Any) -> None:
+    if not isinstance(usage, dict) or not usage:
+        return
+    try:
+        from nbot.core.model_adapter import normalize_usage_dict
+
+        usage = normalize_usage_dict(usage)
+    except Exception:
+        usage = dict(usage)
+
+    for key, value in usage.items():
+        try:
+            amount = int(value)
+        except (TypeError, ValueError):
+            continue
+        if amount:
+            target[key] = int(target.get(key, 0)) + amount
+
+
 def run_tool_call_loop(
     initial_messages: List[Dict[str, Any]],
     model_call: Callable[..., Dict[str, Any]],
@@ -355,10 +375,15 @@ def run_tool_call_loop(
     tool_messages = copy.deepcopy(initial_messages)
     final_content = ""
     consecutive_errors = 0
+    usage_total: Dict[str, int] = {}
+
+    def _result(**kwargs) -> ToolLoopResult:
+        kwargs.setdefault("usage", dict(usage_total))
+        return ToolLoopResult(**kwargs)
 
     for iteration in range(max_iterations):
         if stop_event and stop_event.is_set():
-            return ToolLoopResult(
+            return _result(
                 tool_messages=tool_messages,
                 stopped=True,
                 iterations=iteration,
@@ -371,20 +396,21 @@ def run_tool_call_loop(
         try:
             response = model_call(tool_messages, stop_event=stop_event)
         except StopIteration:
-            return ToolLoopResult(
+            return _result(
                 tool_messages=tool_messages,
                 stopped=True,
                 iterations=iteration,
                 consecutive_errors=consecutive_errors,
             )
         except ToolLoopExit as exc:
-            return ToolLoopResult(
+            return _result(
                 final_content=exc.final_content,
                 tool_messages=tool_messages,
                 iterations=iteration + 1,
                 consecutive_errors=consecutive_errors,
             )
 
+        _merge_usage(usage_total, response.get("usage"))
         tool_calls = response.get("tool_calls") or []
         thinking_content = response.get("thinking_content") or response.get("content", "")
 
@@ -417,7 +443,7 @@ def run_tool_call_loop(
                         tool_call, thinking_content, iteration, tool_messages
                     )
                 except ToolLoopExit as exc:
-                    return ToolLoopResult(
+                    return _result(
                         final_content=exc.final_content,
                         tool_messages=tool_messages,
                         iterations=iteration + 1,
@@ -454,14 +480,14 @@ def run_tool_call_loop(
         if finish_reason == "content_filter":
             _log.warning("[AgentLoop] 内容被安全策略过滤 (content_filter)")
             if final_content:
-                return ToolLoopResult(
+                return _result(
                     final_content=final_content,
                     tool_messages=tool_messages,
                     iterations=iteration + 1,
                     consecutive_errors=consecutive_errors,
                 )
             else:
-                return ToolLoopResult(
+                return _result(
                     final_content="抱歉，我的回答触发了内容安全过滤，请换个话题试试。",
                     tool_messages=tool_messages,
                     iterations=iteration + 1,
@@ -478,7 +504,7 @@ def run_tool_call_loop(
         ):
             if final_content.rstrip().endswith("break"):
                 final_content = final_content.rstrip()[:-5].rstrip()
-            return ToolLoopResult(
+            return _result(
                 final_content=final_content,
                 tool_messages=tool_messages,
                 iterations=iteration + 1,
@@ -498,7 +524,7 @@ def run_tool_call_loop(
                 final_content = message.get("content", "")
                 break
 
-    return ToolLoopResult(
+    return _result(
         final_content=final_content,
         tool_messages=tool_messages,
         iterations=max_iterations,

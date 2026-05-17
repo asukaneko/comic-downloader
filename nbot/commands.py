@@ -4107,6 +4107,27 @@ def _iter_message_segments(msg):
             yield segment
 
 
+def _extract_image_url_from_segment(segment) -> str:
+    segment_type = str(_get_value(segment, "type", "msg_type") or "").lower()
+    if segment_type != "image":
+        return ""
+
+    data = _get_value(segment, "data") or segment
+    image_url = _get_value(data, "url", "file_url", "src")
+    return str(image_url or "").strip()
+
+
+def _extract_image_url_from_cq(raw_message: str) -> str:
+    if not raw_message:
+        return ""
+
+    for block in re.findall(r"\[CQ:image[^\]]*\]", raw_message):
+        match = re.search(r"(?:^|,)url=([^,\]]+)", block)
+        if match:
+            return html.unescape(match.group(1)).strip()
+    return ""
+
+
 def _is_at_all_enabled(msg, mention_id: str) -> bool:
     if mention_id.lower() != "all" and mention_id != "全体成员":
         return False
@@ -4330,10 +4351,18 @@ async def dispatch_message(msg, is_group: bool):
 
     # 如果上面获取失败，尝试解析 CQ 码
     if not image_url:
-        import re
-        image_match = re.search(r'\[CQ:image[^,]*url=(https?://[^,\]]+)', raw_msg)
-        if image_match:
-            image_url = image_match.group(1)
+        try:
+            for segment in _iter_message_segments(msg):
+                image_url = _extract_image_url_from_segment(segment)
+                if image_url:
+                    _log.info(f"浠?message segment 鑾峰彇鍥剧墖 URL: {image_url[:50]}...")
+                    break
+        except Exception as e:
+            _log.warning(f"鏃犳硶浠?message segments 鑾峰彇鍥剧墖 URL: {e}")
+
+    if not image_url:
+        image_url = _extract_image_url_from_cq(raw_msg)
+        if image_url:
             _log.info(f"从 CQ 码解析图片 URL: {image_url[:50]}...")
 
     # 检测并保存用户上传的文件到工作区

@@ -242,7 +242,12 @@ def register_socket_events(server):
                             "name": att.get("name", "unknown"),
                             "type": att.get("type", ""),
                             "size": att.get("size", 0),
+                            "source": att.get("source", "web"),
+                            "path": att.get("path", ""),
                             "url": att.get("url", att.get("path", "")),
+                            "download_url": att.get("download_url", ""),
+                            "preview_url": att.get("preview_url", ""),
+                            "data": att.get("data", ""),
                             "content": att.get("content"),
                             "preview": att.get("preview")
                             if att.get("type", "").startswith("image/")

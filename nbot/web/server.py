@@ -2600,6 +2600,8 @@ class WebChatServer:
 
             if path in public_api_paths:
                 return None
+            if path.startswith("/api/files/gateway/"):
+                return None
             if path.startswith("/api/channels/telegram/") and path.endswith("/webhook"):
                 return None
 

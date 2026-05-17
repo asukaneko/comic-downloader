@@ -24,6 +24,7 @@ from nbot.core.chat_models import ChatRequest, ChatResponse
 
 _log = logging.getLogger(__name__)
 
+
 # ============================================================================
 # 数据类
 # ============================================================================
@@ -919,6 +920,7 @@ class AIPipeline:
             return
 
         loop_result = execution_result.loop_result
+        ctx.usage = dict(loop_result.usage or {})
 
         if loop_result.stopped:
             ctx.stopped_prematurely = True
@@ -945,7 +947,20 @@ class AIPipeline:
                 if ctx.stop_event and ctx.stop_event.is_set():
                     break
 
-                chunk = event.get("content", "") if isinstance(event, dict) else str(event)
+                if isinstance(event, dict):
+                    usage = {}
+                    try:
+                        from nbot.core.model_adapter import normalize_usage_dict
+
+                        usage = normalize_usage_dict(event.get("usage"))
+                    except Exception:
+                        if isinstance(event.get("usage"), dict):
+                            usage = dict(event.get("usage"))
+                    if usage:
+                        ctx.usage = usage
+                    chunk = event.get("content", "")
+                else:
+                    chunk = str(event)
                 if not chunk:
                     continue
 

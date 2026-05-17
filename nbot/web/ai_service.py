@@ -120,12 +120,14 @@ def _build_channel_assistant_message(
     session_id: str,
     adapter=None,
     sender: str = "AI",
+    metadata: Optional[Dict] = None,
 ):
     channel_adapter = adapter or get_channel_adapter("web") or WebChannelAdapter()
     return channel_adapter.build_assistant_message(
         chat_response,
         conversation_id=session_id,
         sender=sender,
+        metadata=metadata,
     )
 
 
@@ -332,6 +334,27 @@ class WebProgressReporter:
     def on_waiting_confirmation(self, ctx, command: str, request_id: str) -> None:
         pass
 
+    def on_send_file(self, ctx, file_path: str, filename: str) -> None:
+        if not file_path or not os.path.isfile(file_path):
+            return
+        try:
+            from nbot.web.file_gateway import build_file_metadata
+
+            file_name = filename or os.path.basename(file_path)
+            file_meta = build_file_metadata(self.server, file_path, filename=file_name)
+            message = _build_channel_assistant_message(
+                ChatResponse(final_content=f"[File: {file_name}]"),
+                session_id=self.session_id,
+                sender="AI",
+                metadata={"file": file_meta},
+            )
+            session = self.session_store.get_session(self.session_id)
+            if session:
+                self.session_store.append_message(self.session_id, message)
+            self.server.socketio.emit("new_message", message, room=self.session_id)
+        except Exception as exc:
+            _log.warning("[FileGateway] failed to emit file card: %s", exc)
+
     def dispose(self):
         """清理卡片资源。"""
         self.progress_card = None
@@ -500,7 +523,11 @@ class WebCallbacks(PipelineCallbacks):
         if not session and not character_name:
             character_name = getattr(self.server, "personality", {}).get("name", "")
 
-        context = {"session_id": self.session_id, "session_type": "web"}
+        context = {
+            "session_id": self.session_id,
+            "session_type": "web",
+            "server": self.server,
+        }
         if target_id:
             context["target_id"] = str(target_id)
             context["user_id"] = str(target_id)
@@ -692,7 +719,24 @@ class WebCallbacks(PipelineCallbacks):
 
         try:
             file_path = None
-            if path_to_use.startswith("/static/"):
+            if path_to_use.startswith("/api/files/gateway/"):
+                try:
+                    from nbot.web.file_gateway import verify_file_token
+
+                    token = path_to_use.split("/api/files/gateway/", 1)[1].split("?", 1)[0].split("/preview", 1)[0]
+                    payload = verify_file_token(self.server, token)
+                    file_path = payload.get("path")
+                except Exception:
+                    file_path = None
+            elif os.path.isabs(path_to_use):
+                try:
+                    from nbot.web.file_gateway import is_allowed_file_path
+
+                    if is_allowed_file_path(self.server, path_to_use):
+                        file_path = path_to_use
+                except Exception:
+                    file_path = None
+            elif path_to_use.startswith("/static/"):
                 file_path = os.path.join(
                     self.server.static_folder,
                     path_to_use.replace("/static/", ""),
@@ -810,6 +854,7 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
 def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, stop_event=None):
     """Web 频道的 provider 级流式实现，含 chunk 去重。"""
     import requests
+    from nbot.core.model_adapter import normalize_usage_dict
     from nbot.services.ai import refresh_runtime_ai_config
 
     stream_started_at = time.perf_counter()
@@ -826,13 +871,18 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
         "Accept": "text/event-stream",
         "Cache-Control": "no-cache",
     }
-    payload = build_chat_completion_payload(
-        model, messages,
-        base_url=base_url, provider_type=provider_type,
-        tools=tools if tools else None,
-        tool_choice="auto" if tools else None,
-        stream=True,
-    )
+    def _build_stream_payload(include_usage: bool = True):
+        extra_body = {"stream_options": {"include_usage": True}} if include_usage else None
+        return build_chat_completion_payload(
+            model, messages,
+            base_url=base_url, provider_type=provider_type,
+            tools=tools if tools else None,
+            tool_choice="auto" if tools else None,
+            stream=True,
+            extra_body=extra_body,
+        )
+
+    payload = _build_stream_payload(include_usage=True)
     _log.info(
         "[StreamTiming] session=%s posting provider request model=%s messages=%s chars=%s tools=%s",
         session_id,
@@ -842,7 +892,15 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
         bool(tools),
     )
     resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError:
+        if resp.status_code in (400, 422) and payload.get("stream_options"):
+            payload = _build_stream_payload(include_usage=False)
+            resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
+            resp.raise_for_status()
+        else:
+            raise
     _log.info(
         "[StreamTiming] session=%s provider headers after %.3fs",
         session_id,
@@ -880,6 +938,9 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
                 break
             try:
                 data = json.loads(data_str)
+                usage = normalize_usage_dict(data.get("usage"))
+                if usage:
+                    yield {"usage": usage}
                 choices = data.get("choices") or []
                 if not choices:
                     continue
@@ -1078,10 +1139,12 @@ def _update_web_token_stats(server, usage: dict, session_id: str):
         get_token_stats_manager().record_usage(
             usage.get("prompt_tokens", 0),
             usage.get("completion_tokens", 0),
+            total_tokens=usage.get("total_tokens", 0),
             model=getattr(server, "ai_model", "") or "",
             session_id=session_id,
             channel_type="web",
             user_id=session_id,
+            source="web",
         )
     except Exception:
         pass

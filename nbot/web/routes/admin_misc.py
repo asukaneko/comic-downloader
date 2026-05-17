@@ -108,7 +108,8 @@ def register_admin_misc_routes(app, server):
                 "message_count": 0, "avg_tokens_per_msg": 0,
                 "estimated_cost": "0.00", "active_sessions": 0,
                 "avg_response_time": "0", "history": [],
-                "sessions": {}, "models": {},
+                "recent_records": [], "records": [],
+                "sessions": {}, "models": {}, "users": {},
             })
 
     @app.route("/api/tokens/rankings")

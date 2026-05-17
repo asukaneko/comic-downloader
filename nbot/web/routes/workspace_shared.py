@@ -2,6 +2,7 @@ import os
 from urllib.parse import unquote
 
 from flask import jsonify, request
+from nbot.web.file_gateway import build_file_gateway_urls
 
 
 def register_workspace_shared_routes(app, server):
@@ -36,6 +37,11 @@ def register_workspace_shared_routes(app, server):
         if not os.path.exists(file_path):
             return jsonify({"error": "File not found"}), 404
 
+        gateway_urls = build_file_gateway_urls(
+            server,
+            file_path,
+            filename=os.path.basename(filename),
+        )
         ext = os.path.splitext(filename.lower())[1]
         image_exts = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"]
         if ext in image_exts:
@@ -44,7 +50,9 @@ def register_workspace_shared_routes(app, server):
                     "success": True,
                     "type": "image",
                     "filename": filename,
-                    "url": f"/api/workspace/shared/files/{filename}",
+                    "url": gateway_urls["url"],
+                    "download_url": gateway_urls["download_url"],
+                    "preview_url": gateway_urls["preview_url"],
                 }
             )
 
@@ -58,6 +66,9 @@ def register_workspace_shared_routes(app, server):
                     "type": parse_result.get("type", "text"),
                     "content": parse_result.get("content", ""),
                     "filename": filename,
+                    "url": gateway_urls["url"],
+                    "download_url": gateway_urls["download_url"],
+                    "preview_url": gateway_urls["preview_url"],
                     "extracted_length": parse_result.get("extracted_length", 0),
                     "original_length": parse_result.get("original_length", 0),
                     "truncated": parse_result.get("truncated", False),

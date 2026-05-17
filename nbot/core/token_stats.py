@@ -7,6 +7,7 @@
 import json
 import os
 import threading
+import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +51,7 @@ class TokenStatsManager:
             "sessions": {},
             "models": {},
             "users": {},
+            "records": [],
         }
         self._load()
 
@@ -96,6 +98,8 @@ class TokenStatsManager:
             self._stats["sessions"] = saved.get("sessions", {})
             self._stats["models"] = saved.get("models", {})
             self._stats["users"] = saved.get("users", {})
+            records = saved.get("records", [])
+            self._stats["records"] = records if isinstance(records, list) else []
 
     def _save(self):
         """持久化到磁盘（调用前需持有锁）。"""
@@ -149,6 +153,19 @@ class TokenStatsManager:
 
         return sorted(result, key=lambda x: x["date"])
 
+    @staticmethod
+    def _filter_records(records: List[Dict], date_range: str) -> List[Dict]:
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        if date_range == "today":
+            return [r for r in records if r.get("date") == today_str]
+        if date_range == "7d":
+            cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+            return [r for r in records if (r.get("date") or "") >= cutoff]
+        if date_range == "30d":
+            cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+            return [r for r in records if (r.get("date") or "") >= cutoff]
+        return list(records)
+
     # ------------------------------------------------------------------
     # 记录用量
     # ------------------------------------------------------------------
@@ -158,19 +175,36 @@ class TokenStatsManager:
         prompt_tokens: int,
         completion_tokens: int,
         *,
+        total_tokens: Optional[int] = None,
         model: str = "",
         session_id: str = "",
         channel_type: str = "web",
         user_id: str = "",
+        source: str = "api",
+        duration_ms: Optional[float] = None,
     ):
         """记录一次 AI 调用用量。"""
-        if not prompt_tokens and not completion_tokens:
+        try:
+            prompt_tokens = max(0, int(prompt_tokens or 0))
+            completion_tokens = max(0, int(completion_tokens or 0))
+            total_tokens = max(
+                0,
+                int(
+                    total_tokens
+                    if total_tokens is not None
+                    else prompt_tokens + completion_tokens
+                ),
+            )
+        except (TypeError, ValueError):
             return
 
-        total_tokens = prompt_tokens + completion_tokens
+        if not total_tokens:
+            return
+
         cost = _estimate_cost(model or "default", prompt_tokens, completion_tokens)
         today_str = datetime.now().strftime("%Y-%m-%d")
         current_month = datetime.now().strftime("%Y-%m")
+        timestamp = datetime.now().isoformat(timespec="seconds")
 
         with self._lock:
             stats = self._stats
@@ -197,7 +231,7 @@ class TokenStatsManager:
                 today_entry["input"] += prompt_tokens
                 today_entry["output"] += completion_tokens
                 today_entry["total"] += total_tokens
-                today_entry["message_count"] = today_entry.get("message_count", 0) + 2
+                today_entry["message_count"] = today_entry.get("message_count", 0) + 1
                 today_entry["cost"] = (float(today_entry.get("cost", 0) or 0) + cost)
             else:
                 stats["history"].append({
@@ -205,7 +239,7 @@ class TokenStatsManager:
                     "input": prompt_tokens,
                     "output": completion_tokens,
                     "total": total_tokens,
-                    "message_count": 2,
+                    "message_count": 1,
                     "cost": cost,
                 })
 
@@ -223,7 +257,7 @@ class TokenStatsManager:
                 s["input"] += prompt_tokens
                 s["output"] += completion_tokens
                 s["total"] += total_tokens
-                s["message_count"] = s.get("message_count", 0) + 2
+                s["message_count"] = s.get("message_count", 0) + 1
 
             # 模型维度
             if model:
@@ -234,7 +268,7 @@ class TokenStatsManager:
                 m["input"] += prompt_tokens
                 m["output"] += completion_tokens
                 m["total"] += total_tokens
-                m["message_count"] = m.get("message_count", 0) + 2
+                m["message_count"] = m.get("message_count", 0) + 1
                 m["cost"] = float(m.get("cost", 0) or 0) + cost
 
             # 用户维度
@@ -247,7 +281,32 @@ class TokenStatsManager:
                 u["input"] += prompt_tokens
                 u["output"] += completion_tokens
                 u["total"] += total_tokens
-                u["message_count"] = u.get("message_count", 0) + 2
+                u["message_count"] = u.get("message_count", 0) + 1
+
+            record = {
+                "id": str(uuid.uuid4()),
+                "timestamp": timestamp,
+                "date": today_str,
+                "model": model or "unknown",
+                "session_id": session_id,
+                "channel_type": channel_type,
+                "user_id": str(user_id or ""),
+                "input": prompt_tokens,
+                "output": completion_tokens,
+                "total": total_tokens,
+                "cost": round(cost, 6),
+                "source": source or channel_type or "api",
+            }
+            if duration_ms is not None:
+                try:
+                    record["duration_ms"] = max(0.0, float(duration_ms))
+                except (TypeError, ValueError):
+                    pass
+
+            records = stats.setdefault("records", [])
+            records.append(record)
+            if len(records) > 5000:
+                stats["records"] = records[-5000:]
 
             self._save()
 
@@ -260,8 +319,18 @@ class TokenStatsManager:
         with self._lock:
             stats = self._stats
             history = list(stats.get("history", []))
+            records = list(stats.get("records", []))
+            sessions = dict(stats.get("sessions", {}))
+            models = dict(stats.get("models", {}))
+            users = dict(stats.get("users", {}))
 
         today_str = datetime.now().strftime("%Y-%m-%d")
+        records = self._filter_records(records, date_range)
+        recent_records = sorted(
+            records,
+            key=lambda item: item.get("timestamp", ""),
+            reverse=True,
+        )[:100]
 
         if date_range == "today":
             history = [h for h in history if h.get("date") == today_str]
@@ -281,8 +350,11 @@ class TokenStatsManager:
                     "active_sessions": len(stats.get("sessions", {})),
                     "avg_response_time": "0",
                     "history": [],
-                    "sessions": stats.get("sessions", {}),
-                    "models": stats.get("models", {}),
+                    "recent_records": recent_records,
+                    "records": recent_records,
+                    "sessions": sessions,
+                    "models": models,
+                    "users": users,
                 }
         elif date_range == "7d":
             cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -294,16 +366,28 @@ class TokenStatsManager:
         # 汇总
         total_input = sum(h.get("input", 0) for h in history)
         total_output = sum(h.get("output", 0) for h in history)
-        total_tokens = total_input + total_output
+        total_tokens = sum(h.get("total", h.get("input", 0) + h.get("output", 0)) for h in history)
         message_count = sum(h.get("message_count", 0) for h in history)
         total_cost = sum(float(h.get("cost", 0) or 0) for h in history)
-
-        # 活跃会话（所选范围内）
-        with self._lock:
-            sessions = stats.get("sessions", {})
-            models = stats.get("models", {})
-
-        active_sessions = len(sessions) if sessions else 0
+        durations = []
+        for record in records:
+            try:
+                duration = float(record.get("duration_ms", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if duration > 0:
+                durations.append(duration)
+        avg_response_time = (
+            f"{(sum(durations) / len(durations) / 1000):.1f}"
+            if durations
+            else "0"
+        )
+        active_session_ids = {
+            r.get("session_id")
+            for r in records
+            if r.get("session_id")
+        }
+        active_sessions = len(active_session_ids) if active_session_ids else len(sessions)
 
         return {
             "today": stats.get("today", 0),
@@ -316,10 +400,13 @@ class TokenStatsManager:
             "avg_tokens_per_msg": round(total_tokens / message_count) if message_count > 0 else 0,
             "estimated_cost": f"{total_cost:.2f}",
             "active_sessions": active_sessions,
-            "avg_response_time": "1.2",
+            "avg_response_time": avg_response_time,
             "history": history,
+            "recent_records": recent_records,
+            "records": recent_records,
             "sessions": sessions,
             "models": models,
+            "users": users,
         }
 
     # ------------------------------------------------------------------
@@ -337,10 +424,19 @@ class TokenStatsManager:
             result = []
             for key, val in items.items():
                 name = key if name_key is None else val.get(name_key, key)
-                result.append({
+                entry = {
                     "name": str(name)[:32],
                     "value": val.get("total", 0) if isinstance(val, dict) else val,
-                })
+                }
+                if isinstance(val, dict):
+                    entry.update({
+                        "input": val.get("input", 0),
+                        "output": val.get("output", 0),
+                        "message_count": val.get("message_count", 0),
+                        "cost": float(val.get("cost", 0) or 0),
+                        "type": val.get("type", ""),
+                    })
+                result.append(entry)
             result.sort(key=lambda x: x["value"], reverse=True)
             return result[:limit]
 

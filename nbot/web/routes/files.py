@@ -4,10 +4,17 @@ import time
 from flask import jsonify, request, send_from_directory
 
 from nbot.core import WebSessionStore
+from nbot.web.file_gateway import (
+    build_file_gateway_urls,
+    build_file_metadata,
+    register_file_gateway_routes,
+)
 from nbot.web.sessions_db import get_session as get_session_from_db
 
 
 def register_file_routes(app, server, workspace_available, workspace_manager):
+    register_file_gateway_routes(app, server)
+
     session_store = WebSessionStore(
         server.sessions, save_callback=lambda: server._save_data("sessions")
     )
@@ -31,14 +38,20 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
             return jsonify({"success": False, "error": "File not found"}), 404
 
         ext = os.path.splitext(safe_name.lower())[1]
+        gateway_urls = build_file_gateway_urls(
+            server,
+            file_path,
+            filename=safe_name,
+        )
         image_exts = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"]
         if ext in image_exts:
             return jsonify(
                 {
                     "success": True,
                     "type": "image",
-                    "url": f"/static/files/{safe_name}",
-                    "download_url": f"/static/files/{safe_name}",
+                    "url": gateway_urls["url"],
+                    "download_url": gateway_urls["download_url"],
+                    "preview_url": gateway_urls["preview_url"],
                     "safe_name": safe_name,
                 }
             )
@@ -58,8 +71,9 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
                     "success": True,
                     "type": ext[1:],
                     "is_blob": True,
-                    "url": f"/static/files/{safe_name}",
-                    "download_url": f"/static/files/{safe_name}",
+                    "url": gateway_urls["url"],
+                    "download_url": gateway_urls["download_url"],
+                    "preview_url": gateway_urls["preview_url"],
                     "safe_name": safe_name,
                 }
             )
@@ -85,8 +99,9 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
                 "type": parse_result.get("type", "text"),
                 "content": parse_result.get("content", ""),
                 "filename": safe_name,
-                "url": f"/static/files/{safe_name}",
-                "download_url": f"/static/files/{safe_name}",
+                "url": gateway_urls["url"],
+                "download_url": gateway_urls["download_url"],
+                "preview_url": gateway_urls["preview_url"],
                 "safe_name": safe_name,
                 "extracted_length": parse_result.get("extracted_length", 0),
                 "original_length": parse_result.get("original_length", 0),
@@ -148,6 +163,11 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
 
             if save_to_workspace:
                 content = None
+                file_meta = build_file_metadata(
+                    server,
+                    ws_result.get("path", ""),
+                    filename=ws_result.get("filename", file.filename),
+                )
                 if ws_result.get("mime_type", "").startswith("text/") or any(
                     file.filename.lower().endswith(ext)
                     for ext in [".txt", ".md", ".json", ".xml", ".csv"]
@@ -174,7 +194,9 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
                         "success": True,
                         "filename": ws_result.get("filename", file.filename),
                         "path": ws_result.get("path", ""),
-                        "url": f"/api/sessions/{session_id}/workspace/files/{ws_result.get('filename', file.filename)}",
+                        "url": file_meta["url"],
+                        "download_url": file_meta["download_url"],
+                        "preview_url": file_meta["preview_url"],
                         "size": ws_result.get("size", file_size),
                         "content": content,
                         "in_workspace": True,
@@ -194,6 +216,7 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
             os.makedirs(upload_dir, exist_ok=True)
             file_path = os.path.join(upload_dir, unique_name)
             file.save(file_path)
+            file_meta = build_file_metadata(server, file_path, filename=file.filename)
 
             content = None
             try:
@@ -220,8 +243,10 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
                     "success": True,
                     "filename": file.filename,
                     "unique_name": unique_name,
-                    "path": f"/static/uploads/{unique_name}",
-                    "url": f"/static/uploads/{unique_name}",
+                    "path": file_meta["path"],
+                    "url": file_meta["url"],
+                    "download_url": file_meta["download_url"],
+                    "preview_url": file_meta["preview_url"],
                     "size": os.path.getsize(file_path),
                     "content": content,
                     "in_workspace": False,

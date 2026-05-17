@@ -267,7 +267,8 @@ class QQCallbacks(PipelineCallbacks):
             return
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
-        if not prompt_tokens and not completion_tokens:
+        total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+        if not total_tokens:
             return
 
         from nbot.core.token_stats import get_token_stats_manager
@@ -278,10 +279,12 @@ class QQCallbacks(PipelineCallbacks):
         get_token_stats_manager().record_usage(
             prompt_tokens,
             completion_tokens,
+            total_tokens=total_tokens,
             model=model,
             session_id=session_id,
             channel_type=channel_type,
             user_id=session_id,
+            source="qq",
         )
 
     def send_response(

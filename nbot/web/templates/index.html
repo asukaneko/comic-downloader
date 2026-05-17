@@ -4427,7 +4427,7 @@
                                     <i class="fas fa-comments"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">消息数</div>
+                                    <div class="overview-label">调用数</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.message_count || 0) }}</div>
                                     <div class="overview-sub">{{ tokenStats.message_change || '+0' }} 较上期</div>
                                 </div>
@@ -4457,7 +4457,7 @@
                                     <i class="fas fa-chart-line"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">平均 Token/消息</div>
+                                    <div class="overview-label">平均 Token/调用</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.avg_tokens_per_msg || 0) }}</div>
                                     <div class="overview-sub">{{ tokenStats.avg_change || '+0%' }} 较上期</div>
                                 </div>
@@ -4556,15 +4556,17 @@
                                 </button>
                             </div>
                             <div class="card-body" style="padding: 0;">
-                                <div v-if="tokenHistory.length === 0" class="empty-state">
+                                <div v-if="tokenRecords.length === 0" class="empty-state">
                                     <div class="empty-state-icon">📊</div>
-                                    <div class="empty-state-title">暂无历史数据</div>
+                                    <div class="empty-state-title">暂无调用记录</div>
                                 </div>
                                 <table v-else class="data-table">
                                     <thead>
                                         <tr>
-                                            <th>日期</th>
-                                            <th>消息数</th>
+                                            <th>时间</th>
+                                            <th>来源</th>
+                                            <th>模型</th>
+                                            <th>会话</th>
                                             <th>输入 Token</th>
                                             <th>输出 Token</th>
                                             <th>总计</th>
@@ -4572,12 +4574,14 @@
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="record in tokenHistory" :key="record.date">
-                                            <td>{{ record.date }}</td>
-                                            <td>{{ formatNumber(record.message_count || 0) }}</td>
+                                        <tr v-for="record in tokenRecords" :key="record.id || record.timestamp">
+                                            <td>{{ formatFullTime(record.timestamp || record.date) }}</td>
+                                            <td>{{ record.source || record.channel_type || 'api' }}</td>
+                                            <td>{{ record.model || 'unknown' }}</td>
+                                            <td>{{ record.session_id || '-' }}</td>
                                             <td>{{ formatNumber(record.input) }}</td>
                                             <td>{{ formatNumber(record.output) }}</td>
-                                            <td>{{ formatNumber(record.input + record.output) }}</td>
+                                            <td>{{ formatNumber(record.total || (record.input + record.output)) }}</td>
                                             <td>${{ record.cost }}</td>
                                         </tr>
                                     </tbody>
@@ -4645,6 +4649,11 @@
                                     <div class="form-group">
                                         <label class="form-label">机器人 QQ 号</label>
                                         <input v-model="settings.bot_id" type="text" class="form-input">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">公网访问地址</label>
+                                        <input v-model="settings.public_base_url" type="text" class="form-input" placeholder="https://example.com">
+                                        <div class="form-hint">用于 QQ/外部客户端访问签名文件链接；本机使用可留空。</div>
                                     </div>
                                 </div>
                                 <div class="form-group" style="margin-top: 20px;">
@@ -8131,6 +8140,7 @@
                         session_change: '+0'
                     },
                     tokenHistory: [],
+                    tokenRecords: [],
                     tokenFilter: {
                         dateRange: 'today',
                         unit: 'tokens'
@@ -8159,6 +8169,7 @@
                         ws_uri: 'ws://127.0.0.1:3001',
                         master_id: '',
                         bot_id: '',
+                        public_base_url: '',
                         role_card_platform_url: 'http://127.0.0.1:7861',
                         role_card_platform_token: '',
                         features: {

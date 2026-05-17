@@ -2925,6 +2925,7 @@ def main(params):
                         const res = await api.get(`/api/tokens?${params.toString()}`);
                         this.tokenStats = { ...this.tokenStats, ...res.data };
                         this.tokenHistory = res.data.history || [];
+                        this.tokenRecords = res.data.recent_records || res.data.records || [];
                         await this.loadTokenRankings();
                         this.updateTokenTrendChart();
                     } catch (e) {
@@ -2991,7 +2992,7 @@ def main(params):
                         if (this.tokenFilter.unit === 'cost') {
                             return parseFloat(h.cost) || 0;
                         }
-                        return (h.input || 0) + (h.output || 0);
+                        return h.total || ((h.input || 0) + (h.output || 0));
                     });
 
                     const option = {
@@ -3053,13 +3054,25 @@ def main(params):
                 },
 
                 exportTokenData() {
-                    const data = this.tokenHistory.map(h => ({
-                        日期: h.date,
-                        消息数: h.message_count || 0,
-                        输入Token: h.input,
-                        输出Token: h.output,
-                        总计: h.input + h.output,
-                        费用: h.cost
+                    const source = this.tokenRecords && this.tokenRecords.length
+                        ? this.tokenRecords
+                        : this.tokenHistory;
+                    const data = source.map(item => this.tokenRecords && this.tokenRecords.length ? ({
+                        时间: item.timestamp || item.date,
+                        来源: item.source || item.channel_type || 'api',
+                        模型: item.model || 'unknown',
+                        会话: item.session_id || '',
+                        输入Token: item.input || 0,
+                        输出Token: item.output || 0,
+                        总计: item.total || ((item.input || 0) + (item.output || 0)),
+                        费用: item.cost || 0
+                    }) : ({
+                        日期: item.date,
+                        调用数: item.message_count || 0,
+                        输入Token: item.input,
+                        输出Token: item.output,
+                        总计: item.total || ((item.input || 0) + (item.output || 0)),
+                        费用: item.cost
                     }));
 
                     const csv = this.convertToCSV(data);
@@ -3617,6 +3630,10 @@ def main(params):
                                     size: res.data.size,
                                     path: res.data.path,
                                     url: res.data.url || res.data.path,
+                                    download_url: res.data.download_url,
+                                    preview_url: res.data.preview_url,
+                                    source: 'web',
+                                    data: file.type && file.type.startsWith('image/') ? file.data : null,
                                     content: res.data.content,
                                     preview: file.preview || res.data.path
                                 });
@@ -3645,6 +3662,10 @@ def main(params):
                             size: f.size,
                             path: f.path,
                             url: f.url || f.path,
+                            download_url: f.download_url,
+                            preview_url: f.preview_url,
+                            source: f.source || 'web',
+                            data: f.data,
                             preview: f.preview,
                             content: f.content
                         }))]

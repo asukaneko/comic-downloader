@@ -256,8 +256,8 @@ class WebMessageAdapter:
     async def send_file(self, file_path: str, file_name: str = None):
         import base64
         import hashlib
-        import mimetypes
         import time
+        from nbot.web.file_gateway import build_file_metadata
 
         if not os.path.exists(file_path):
             _log.error(f"File not found: {file_path}")
@@ -266,26 +266,11 @@ class WebMessageAdapter:
         if not file_name:
             file_name = os.path.basename(file_path)
 
-        mime_type, _ = mimetypes.guess_type(file_path)
-        if not mime_type:
-            mime_type = "application/octet-stream"
-
-        ext = os.path.splitext(file_path)[1].lower()
-
         try:
             file_size = os.path.getsize(file_path)
         except Exception as e:
             _log.error(f"Failed to read file size for {file_path}: {e}")
             return False
-
-        is_image = mime_type.startswith("image/")
-        is_text = mime_type.startswith("text/") or mime_type in [
-            "application/json",
-            "application/xml",
-            "application/yaml",
-        ]
-        is_video = mime_type.startswith("video/")
-        is_audio = mime_type.startswith("audio/")
 
         files_dir = os.path.join(self.server.static_folder, "files")
         os.makedirs(files_dir, exist_ok=True)
@@ -320,53 +305,41 @@ class WebMessageAdapter:
             try:
                 session = self.session_store.get_session(self.session_id) or {}
                 session_type = session.get("type", "web")
+                file_meta = build_file_metadata(self.server, dest_path, filename=file_name)
                 self.server.workspace_manager.register_file_reference(
                     self.session_id,
                     dest_path,
                     file_name,
                     session_type=session_type,
                     metadata={
-                        "download_url": f"/static/files/{safe_name}",
+                        "download_url": file_meta["download_url"],
+                        "preview_url": file_meta["preview_url"],
                         "source": "web_message_adapter",
                     },
                 )
             except Exception as ref_err:
                 _log.warning(f"Failed to register workspace file reference: {ref_err}")
 
-        download_url = f"/static/files/{safe_name}"
+        file_meta = build_file_metadata(self.server, dest_path, filename=file_name)
         file_info = self.channel_adapter.build_assistant_message(
             ChatResponse(final_content=f"[File: {file_name}]"),
             conversation_id=self.session_id,
             sender="AI",
-            metadata={
-                "file": {
-                    "name": file_name,
-                    "type": mime_type,
-                    "size": file_size,
-                    "is_image": is_image,
-                    "is_text": is_text,
-                    "is_video": is_video,
-                    "is_audio": is_audio,
-                    "extension": ext,
-                    "download_url": download_url,
-                    "url": download_url,
-                    "safe_name": safe_name,
-                }
-            },
+            metadata={"file": {**file_meta, "safe_name": safe_name}},
         )
 
-        if is_image and file_size < 5 * 1024 * 1024:
+        if file_info["file"].get("is_image") and file_size < 5 * 1024 * 1024:
             try:
                 with open(file_path, "rb") as f:
                     file_data = f.read()
                 b64_data = base64.b64encode(file_data).decode("utf-8")
-                file_info["file"]["data"] = f"data:{mime_type};base64,{b64_data}"
+                file_info["file"]["data"] = f"data:{file_info['file']['type']};base64,{b64_data}"
                 file_info["file"]["preview_url"] = file_info["file"]["data"]
             except Exception as e:
                 _log.error(f"Failed to inline image as base64: {e}")
-        elif is_text and file_size < 102400:
+        elif file_info["file"].get("is_text") and file_size < 102400:
             # 对于HTML文件，不显示代码预览，而是显示为可下载的文件卡片
-            if mime_type == "text/html":
+            if file_info["file"].get("type") == "text/html":
                 file_info["file"]["is_html"] = True
             else:
                 try:
@@ -379,5 +352,10 @@ class WebMessageAdapter:
             self.session_store.append_message(self.session_id, file_info)
 
         self.server.socketio.emit("new_message", file_info, room=self.session_id)
-        _log.info(f"Sent file to web session: {file_name} ({mime_type}, {file_size} bytes)")
+        _log.info(
+            "Sent file to web session: %s (%s, %s bytes)",
+            file_name,
+            file_info["file"].get("type", "application/octet-stream"),
+            file_size,
+        )
         return True

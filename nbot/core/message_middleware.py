@@ -19,11 +19,20 @@
 
 import base64
 import logging
+import mimetypes
+import os
 from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
 _log = logging.getLogger(__name__)
+
+
+def _normalize_media_type(att_type: str) -> str:
+    value = str(att_type or "").lower()
+    if "/" in value:
+        return value.split("/", 1)[0]
+    return value
 
 # 支持描述的标准附件类型
 DESCRIBABLE_TYPES = {"image", "video", "audio"}
@@ -104,7 +113,7 @@ class MessagePreprocessor:
         processed_indices = []
 
         for i, att in enumerate(attachments):
-            att_type = att.get("type", "")
+            att_type = _normalize_media_type(att.get("type", ""))
             if att_type not in DESCRIBABLE_TYPES:
                 continue
 
@@ -188,5 +197,54 @@ def _resolve_feishu_attachment(attachment: Dict[str, Any]) -> Optional[str]:
         return None
 
 
+def _resolve_direct_attachment(attachment: Dict[str, Any]) -> Optional[str]:
+    return (
+        attachment.get("data")
+        or attachment.get("url")
+        or attachment.get("download_url")
+        or attachment.get("path")
+    )
+
+
+def _resolve_web_attachment(attachment: Dict[str, Any]) -> Optional[str]:
+    """Web 频道专用附件解析：将本地路径/相对 URL 转为视觉模型可访问的地址。"""
+    data = attachment.get("data")
+    if data:
+        return data
+
+    path = attachment.get("path")
+    if path and os.path.isfile(path):
+        try:
+            mime_type, _ = mimetypes.guess_type(path)
+            mime_type = mime_type or "application/octet-stream"
+            with open(path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            return f"data:{mime_type};base64,{b64}"
+        except Exception as exc:
+            _log.warning("Failed to read web attachment %r as data URL: %s", path, exc)
+
+    url = attachment.get("url") or attachment.get("download_url")
+    if url:
+        if url.startswith("/"):
+            try:
+                from nbot.web.file_gateway import get_public_base_url
+                from nbot.web.server import WebChatServer
+
+                server = WebChatServer.get_instance()
+                if server:
+                    base_url = get_public_base_url(server)
+                    if base_url:
+                        return f"{base_url.rstrip('/')}{url}"
+            except Exception as exc:
+                _log.warning("Failed to resolve base URL for web attachment: %s", exc)
+        return url
+
+    return None
+
+
+AttachmentResolver.register("web", _resolve_web_attachment)
+AttachmentResolver.register("qq", _resolve_direct_attachment)
+AttachmentResolver.register("qq_private", _resolve_direct_attachment)
+AttachmentResolver.register("qq_group", _resolve_direct_attachment)
 AttachmentResolver.register("feishu", _resolve_feishu_attachment)
 AttachmentResolver.register("feishu_ws", _resolve_feishu_attachment)

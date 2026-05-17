@@ -20,8 +20,11 @@ def register_workspace_misc_routes(app, server):
         base_dir = os.path.abspath(server.base_dir)
         allowed_dirs = [
             os.path.join(base_dir, "data", "workspace"),
+            os.path.join(base_dir, "data", "workspaces"),
             os.path.join(base_dir, "data", "web"),
             os.path.join(base_dir, "static", "files"),
+            os.path.join(base_dir, "nbot", "web", "static", "files"),
+            os.path.join(base_dir, "nbot", "web", "static", "uploads"),
         ]
 
         def is_allowed_path(candidate, allowed_dir):
