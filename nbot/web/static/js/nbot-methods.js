@@ -9591,6 +9591,10 @@ def main(params):
                         console.log('Socket connected');
                         this.socketConnected = true;
                         this.updateWebVisibility();
+                        // 重连后自动重新加入当前会话 room，恢复流式传输
+                        if (this.currentSession && this.currentSession.id) {
+                            socket.emit('join_session', { session_id: this.currentSession.id });
+                        }
                     });
                     
                     socket.on('disconnect', () => {

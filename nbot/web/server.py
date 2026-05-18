@@ -3223,14 +3223,19 @@ def create_web_app(config: Dict[str, Any] = None) -> tuple[Flask, SocketIO]:
         else None
     )
 
-    # SocketIO 配置优化：增加稳定性
-    # ping_timeout: 心跳超时时间
-    # ping_interval: 心跳间隔
+    # SocketIO 配置优化：移动端友好
+    # ping_interval: 心跳间隔（秒），缩短以更快检测断开
+    # ping_timeout: 心跳超时，给移动网络更多容错时间
+    # upgrade: 允许从 polling 升级到 websocket
     socketio = SocketIO(
         app,
         async_mode="threading",
         cors_allowed_origins=cors_allowed_origins,
         max_http_buffer_size=100 * 1024 * 1024,
+        ping_interval=15,
+        ping_timeout=30,
+        always_connect=True,
+        upgrade=True,
     )
 
     server = WebChatServer(app, socketio)

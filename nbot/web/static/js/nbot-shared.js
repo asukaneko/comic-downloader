@@ -11,15 +11,17 @@ window.__nbotApi.interceptors.request.use((config) => {
 
 window.__nbotSocket = io(window.location.origin, {
     path: '/socket.io',
-    transports: ['polling', 'websocket'],
+    transports: ['websocket', 'polling'],
     autoConnect: false,
     auth: function (cb) { cb({ token: localStorage.getItem('auth_token') || '' }); },
-    upgrade: true,
+    upgrade: false,
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
-    timeout: 20000
+    reconnectionDelayMax: 10000,
+    timeout: 45000,
+    pingInterval: 15000,
+    pingTimeout: 30000
 });
 
 window.__nbotCopyCodeBlock = function copyCodeBlock(id) {
