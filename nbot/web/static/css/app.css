@@ -16568,7 +16568,7 @@
             .sessions-table tr {
                 position: relative;
                 margin-bottom: 10px;
-                padding: 12px 12px 12px 46px;
+                padding: 12px;
                 border: 1px solid var(--border-color);
                 border-radius: 12px;
                 background: var(--bg-secondary);
@@ -16584,35 +16584,66 @@
             }
 
             .sessions-table td:first-child {
-                position: absolute;
-                left: 12px;
-                top: 16px;
-                width: auto;
+                display: none;
             }
 
+            /* ---- title row: icon + name + pin/star + badges ---- */
             .sessions-table td:nth-child(2) {
-                padding-right: 6px;
+                padding: 0;
             }
 
-            .sessions-table td:nth-child(2) span {
-                display: block;
+            .sessions-table .session-title-row {
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .sessions-table .session-kind-icon {
+                width: 28px;
+                height: 28px;
+                border-radius: 7px;
+                font-size: 13px;
+            }
+
+            .sessions-table .session-icon-toggle {
+                width: 22px;
+                height: 22px;
+                border-radius: 5px;
+                font-size: 11px;
+                order: 10;
+            }
+
+            .sessions-table .session-name-text {
+                flex: 1 1 0;
                 min-width: 0;
-                max-width: 100%;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
                 font-size: 15px;
                 font-weight: 650;
+                color: var(--text-primary);
+                order: 5;
             }
 
+            .sessions-table td:nth-child(2) .badge {
+                order: 10;
+                font-size: 11px;
+                padding: 2px 7px;
+            }
+
+            .sessions-table .session-tags-row {
+                margin: 8px 0 0 0;
+            }
+
+            /* ---- metadata row: character / type / count / time ---- */
             .sessions-table td:nth-child(3),
             .sessions-table td:nth-child(4),
-            .sessions-table td:nth-child(5) {
+            .sessions-table td:nth-child(5),
+            .sessions-table td:nth-child(6) {
                 display: inline-flex;
                 width: auto;
                 align-items: center;
                 margin-top: 8px;
-                margin-right: 10px;
+                margin-right: 12px;
                 color: var(--text-secondary);
                 font-size: 12px;
                 vertical-align: middle;
@@ -16624,38 +16655,28 @@
                 margin-right: 2px;
             }
 
-            .sessions-table td:nth-child(6) {
-                display: block;
-                width: 100%;
-                margin-top: 8px;
-                margin-right: 0;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-
+            /* ---- actions: single row with 3 items ---- */
             .sessions-table td:nth-child(7) {
-                display: grid;
-                grid-template-columns: 1fr;
-                gap: 8px;
+                display: block;
                 margin-top: 12px;
             }
 
             .sessions-table .session-actions {
                 display: grid;
-                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-template-columns: 1fr 1fr auto;
                 gap: 8px;
+                align-items: center;
             }
 
             .sessions-table td:nth-child(7) .btn {
                 width: 100%;
                 margin-left: 0 !important;
-                padding: 8px 10px !important;
-                font-size: 12px !important;
+                padding: 8px 4px !important;
+                font-size: 13px !important;
             }
 
             .sessions-table .session-more-menu summary {
-                width: 100%;
+                width: 36px;
                 height: 34px;
             }
 
