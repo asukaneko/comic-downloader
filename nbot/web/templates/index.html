@@ -1774,11 +1774,26 @@
                                             <th class="sessions-table-check">
                                                 <input type="checkbox" @change="toggleSelectAllSessions" :checked="isAllSessionsSelected && managedSessions.length > 0" :indeterminate="selectedSessions.length > 0 && !isAllSessionsSelected">
                                             </th>
-                                            <th>会话名称</th>
-                                            <th>角色</th>
-                                            <th>类型</th>
-                                            <th>消息数</th>
-                                            <th>创建时间</th>
+                                            <th class="sortable" @click="toggleSessionSort('name')">
+                                                会话名称
+                                                <span class="sort-arrow" v-if="sessionSortKey === 'name'">{{ sessionSortDir === 'asc' ? '▲' : '▼' }}</span>
+                                            </th>
+                                            <th class="sortable" @click="toggleSessionSort('sender_name')">
+                                                角色
+                                                <span class="sort-arrow" v-if="sessionSortKey === 'sender_name'">{{ sessionSortDir === 'asc' ? '▲' : '▼' }}</span>
+                                            </th>
+                                            <th class="sortable" @click="toggleSessionSort('type')">
+                                                类型
+                                                <span class="sort-arrow" v-if="sessionSortKey === 'type'">{{ sessionSortDir === 'asc' ? '▲' : '▼' }}</span>
+                                            </th>
+                                            <th class="sortable" @click="toggleSessionSort('message_count')">
+                                                消息数
+                                                <span class="sort-arrow" v-if="sessionSortKey === 'message_count'">{{ sessionSortDir === 'asc' ? '▲' : '▼' }}</span>
+                                            </th>
+                                            <th class="sortable" @click="toggleSessionSort('created_at')">
+                                                创建时间
+                                                <span class="sort-arrow" v-if="sessionSortKey === 'created_at'">{{ sessionSortDir === 'asc' ? '▲' : '▼' }}</span>
+                                            </th>
                                             <th>操作</th>
                                         </tr>
                                     </thead>
@@ -7648,6 +7663,8 @@
                     sessionSwitching: false,
                     sessionSearch: '',
                     sessionFilter: 'all',
+                    sessionSortKey: 'created_at',
+                    sessionSortDir: 'desc',
                     selectedSessions: [],  // 批量选择的会话
                     showFileMenu: false,  // 文件上传菜单显示状态
                     selectedSenderFilter: '',  // 按角色筛选会话
@@ -8739,8 +8756,16 @@
                     }
                     sessionPool = [...sessionPool].sort((a, b) => {
                         if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-                        if (!!a.favorite !== !!b.favorite) return a.favorite ? -1 : 1;
-                        return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+                        const key = this.sessionSortKey || 'created_at';
+                        const dir = this.sessionSortDir === 'asc' ? 1 : -1;
+                        let va = a[key];
+                        let vb = b[key];
+                        if (va == null) va = '';
+                        if (vb == null) vb = '';
+                        if (typeof va === 'number' && typeof vb === 'number') {
+                            return (va - vb) * dir;
+                        }
+                        return String(va).localeCompare(String(vb), 'zh-CN') * dir;
                     });
                     if (!this.sessionSearch) return sessionPool;
                     const search = this.sessionSearch.toLowerCase();

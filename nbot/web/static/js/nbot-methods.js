@@ -4932,6 +4932,15 @@ def main(params):
                     }
                 },
 
+                toggleSessionSort(key) {
+                    if (this.sessionSortKey === key) {
+                        this.sessionSortDir = this.sessionSortDir === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        this.sessionSortKey = key;
+                        this.sessionSortDir = 'asc';
+                    }
+                },
+
                 async archiveSession(session) {
                     if (!session?.id) return;
                     try {

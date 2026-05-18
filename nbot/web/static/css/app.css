@@ -8248,6 +8248,22 @@
             letter-spacing: 0.5px;
         }
 
+        .data-table th.sortable {
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.15s;
+        }
+
+        .data-table th.sortable:hover {
+            color: var(--text-primary);
+        }
+
+        .sort-arrow {
+            font-size: 10px;
+            margin-left: 4px;
+            opacity: 0.7;
+        }
+
         .data-table tr:hover { background: var(--bg-tertiary); }
 
         .sessions-table .sessions-table-check,
