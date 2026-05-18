@@ -806,7 +806,11 @@ class AIPipeline:
         except Exception as e:
             _log.error(f"Simple model call failed: {e}")
             ctx.error = str(e)
-            ctx.final_content = f"AI 调用失败: {e}"
+            error_str = str(e)
+            if "400" in error_str:
+                ctx.final_content = "请求被模型提供商拒绝"
+            else:
+                ctx.final_content = f"AI 调用失败: {e}"
             return
 
         ctx.final_content = response.get("content", "")
@@ -916,7 +920,10 @@ class AIPipeline:
                 progress.on_done(ctx)
                 return
             ctx.error = error_str
-            ctx.final_content = f"工具循环执行失败: {error_str}"
+            if "400" in error_str:
+                ctx.final_content = "请求被模型提供商拒绝"
+            else:
+                ctx.final_content = f"工具循环执行失败: {error_str}"
             return
 
         loop_result = execution_result.loop_result
@@ -975,9 +982,19 @@ class AIPipeline:
         except Exception as e:
             _log.error(f"Streaming failed: {e}")
             ctx.error = str(e)
-            full_content = full_content or f"流式输出失败: {e}"
+            error_str = str(e)
+            if "400" in error_str:
+                full_content = full_content or "请求被模型提供商拒绝"
+            else:
+                full_content = full_content or f"流式输出失败: {e}"
 
         ctx.final_content = full_content
+        # 流式在首块到达前就失败（如 400），需要创建消息并把错误文本送到前端
+        if full_content and not ctx.streamed_message:
+            msg = {"role": "assistant", "content": "", "id": message_id}
+            callbacks.on_stream_start(ctx, msg)
+            callbacks.on_stream_chunk(ctx, full_content, message_id)
+            ctx.streamed_message = msg
         if ctx.streamed_message:
             ctx.metadata["streamed"] = True
             ctx.metadata["stream_end_pending"] = True
