@@ -2273,11 +2273,14 @@ const NbotMethods = {
                     if (this.personalityTimelineData.length < 2) return;
                     this.stopPersonalityTimelinePlayback();
                     this.personalityTimelinePlaying = true;
+                    const stepCount = Math.max(this.personalityTimelineData.length - 1, 1);
+                    const targetDurationMs = 10000;
+                    const intervalMs = Math.max(90, Math.min(1600, Math.round(targetDurationMs / stepCount)));
                     this.personalityTimelinePlayTimer = setInterval(() => {
                         const maxIndex = this.personalityTimelineData.length - 1;
                         this.personalityTimelineIndex = this.personalityTimelineIndex >= maxIndex ? 0 : this.personalityTimelineIndex + 1;
                         this.updatePersonalityTimelineChart();
-                    }, 1600);
+                    }, intervalMs);
                 },
 
                 stopPersonalityTimelinePlayback() {
