@@ -181,6 +181,11 @@
 
             <!-- Sidebar -->
             <aside v-if="!isChatOnlyMode" class="sidebar" :class="{ collapsed: isSidebarCollapsed, 'mobile-open': isMobileMenuOpen }">
+                <!-- 移动端全屏返回按钮 -->
+                <button class="sidebar-mobile-back" @click="isMobileMenuOpen = false">
+                    <i class="fas fa-arrow-left"></i> 返回
+                </button>
+
                 <!-- Sidebar Toggle Button (Desktop) -->
                 <button class="sidebar-toggle" @click="toggleSidebar" :title="$t('nav.collapse')">
                     <i class="fas fa-chevron-left"></i>

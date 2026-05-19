@@ -240,6 +240,11 @@
             display: block;
         }
 
+        /* 移动端返回按钮，桌面端隐藏 */
+        .sidebar-mobile-back {
+            display: none;
+        }
+
         .sidebar-header {
             padding: 16px;
             border-bottom: 1px solid var(--border-color);
@@ -5995,8 +6000,10 @@
                 left: 0;
                 top: 0;
                 bottom: 0;
+                width: 100vw !important;
                 z-index: 999;
                 transform: translateX(-100%);
+                transition: transform 0.3s ease;
             }
 
             .sidebar.mobile-open {
@@ -6004,7 +6011,7 @@
             }
 
             .sidebar.collapsed {
-                width: 240px;
+                width: 100vw !important;
             }
 
             .sidebar.collapsed .sidebar-title,
@@ -6037,6 +6044,30 @@
                 display: none;
             }
 
+            /* 移动端全屏侧边栏返回按钮 */
+            .sidebar-mobile-back {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 12px 16px;
+                background: transparent;
+                border: none;
+                color: var(--accent-primary);
+                font-size: 16px;
+                cursor: pointer;
+                -webkit-tap-highlight-color: transparent;
+                touch-action: manipulation;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+            .sidebar-mobile-back:active {
+                background: var(--bg-hover);
+            }
+
+            .sidebar-mobile-back i {
+                font-size: 18px;
+            }
+
             /* Mobile Menu Button */
             .mobile-menu-btn {
                 display: flex;
@@ -6060,6 +6091,11 @@
 
             .mobile-menu-btn:active {
                 background: var(--bg-hover);
+            }
+
+            /* 全屏侧边栏无需 overlay */
+            .sidebar-overlay {
+                display: none !important;
             }
 
             .main-content {
