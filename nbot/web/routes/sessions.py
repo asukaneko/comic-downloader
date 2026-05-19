@@ -80,6 +80,8 @@ def _runtime_snapshot_signature(snapshot):
         "jealousy",
         "visible_emotion",
         "hidden_emotion",
+        "message_id",
+        "message_index",
     )
     return {key: snapshot.get(key) for key in keys if key in snapshot}
 
@@ -88,6 +90,28 @@ def _normalize_runtime_timeline_entry(snapshot, timestamp=None):
     entry = _runtime_snapshot_signature(snapshot)
     entry["timestamp"] = timestamp or datetime.now().isoformat()
     return entry
+
+
+def _ensure_runtime_timeline_from_snapshot(session):
+    timeline = session.get("character_runtime_timeline", [])
+    if not isinstance(timeline, list):
+        timeline = []
+
+    if timeline:
+        return timeline, False
+
+    snapshot = session.get("character_runtime_snapshot")
+    if not isinstance(snapshot, dict):
+        return timeline, False
+
+    timestamp = (
+        session.get("updated_at")
+        or session.get("created_at")
+        or datetime.now().isoformat()
+    )
+    timeline = [_normalize_runtime_timeline_entry(snapshot, timestamp)]
+    session["character_runtime_timeline"] = timeline
+    return timeline, True
 
 
 def _normalize_proactive_chat_config(config):
@@ -121,11 +145,60 @@ def _get_base_dir(server):
     return getattr(server, "base_dir", os.getcwd())
 
 
-def _copy_character_runtime_state(server, character_id, source_session_id, target_session_id):
+def _save_character_runtime_snapshot(server, character_id, target_session_id, snapshot):
+    if not character_id or not target_session_id or not isinstance(snapshot, dict):
+        return
+
+    from nbot.character.models import CharacterState, RelationshipState
+    from nbot.character.repository import CharacterStateRepository, RelationshipRepository
+
+    base_dir = _get_base_dir(server)
+    target_scope = f"web:{target_session_id}"
+    now = datetime.now().isoformat()
+
+    state_repo = CharacterStateRepository(base_dir)
+    state_repo.save(
+        CharacterState(
+            character_id=character_id,
+            scope_id=target_scope,
+            mood=snapshot.get("mood", "平静"),
+            mood_intensity=snapshot.get("mood_intensity", 0.5),
+            energy=snapshot.get("energy", 70),
+            updated_at=now,
+        )
+    )
+
+    relationship_repo = RelationshipRepository(base_dir)
+    relationship_repo.save(
+        RelationshipState(
+            character_id=character_id,
+            target_id=target_scope,
+            affection=snapshot.get("affection", 50),
+            trust=snapshot.get("trust", 50),
+            familiarity=snapshot.get("familiarity", 30),
+            dependency=snapshot.get("dependency", 30),
+            security=snapshot.get("security", 50),
+            jealousy=snapshot.get("jealousy", 0),
+            updated_at=now,
+        )
+    )
+
+
+def _copy_character_runtime_state(server, character_id, source_session_id, target_session_id, snapshot=None):
     if not character_id or not source_session_id or not target_session_id:
         return
 
     try:
+        if isinstance(snapshot, dict):
+            snapshot_character_id = str(snapshot.get("character_id") or character_id).strip()
+            _save_character_runtime_snapshot(
+                server,
+                snapshot_character_id or character_id,
+                target_session_id,
+                snapshot,
+            )
+            return
+
         from nbot.character.repository import (
             CharacterStateRepository,
             RelationshipRepository,
@@ -190,6 +263,66 @@ def register_session_routes(app, server):
             -1,
         )
 
+    def _parse_iso_datetime(value):
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _message_timestamp(message):
+        if not isinstance(message, dict):
+            return None
+        return (
+            message.get("timestamp")
+            or message.get("created_at")
+            or message.get("updated_at")
+        )
+
+    def _select_runtime_timeline_for_fork(session, messages, message_index):
+        timeline, _ = _ensure_runtime_timeline_from_snapshot(session)
+        if not timeline:
+            return [], None
+
+        message_ids = {
+            str(msg.get("id"))
+            for msg in messages[: message_index + 1]
+            if isinstance(msg, dict) and msg.get("id")
+        }
+        exact_entries = [
+            entry
+            for entry in timeline
+            if isinstance(entry, dict) and str(entry.get("message_id") or "") in message_ids
+        ]
+        if exact_entries:
+            return exact_entries, deepcopy(exact_entries[-1])
+
+        fork_message = messages[message_index] if 0 <= message_index < len(messages) else {}
+        fork_time = _parse_iso_datetime(_message_timestamp(fork_message))
+        if fork_time:
+            by_time = []
+            for entry in timeline:
+                entry_time = _parse_iso_datetime(entry.get("timestamp") if isinstance(entry, dict) else None)
+                if not entry_time:
+                    continue
+                if entry_time <= fork_time:
+                    by_time.append(entry)
+            if by_time:
+                return by_time, deepcopy(by_time[-1])
+
+        assistant_count = sum(
+            1
+            for msg in messages[: message_index + 1]
+            if isinstance(msg, dict) and msg.get("role") == "assistant"
+        )
+        if assistant_count > 0:
+            selected = timeline[: min(assistant_count, len(timeline))]
+            if selected:
+                return selected, deepcopy(selected[-1])
+
+        return [], None
+
     def _ensure_mutable_session(session_id, session):
         if not session_store.get_session(session_id):
             session_store.set_session(session_id, session)
@@ -215,6 +348,9 @@ def register_session_routes(app, server):
         for sid, session in sessions_data.items():
             if not is_web_visible_session(sid, session):
                 continue
+            timeline, timeline_changed = _ensure_runtime_timeline_from_snapshot(session)
+            if timeline_changed:
+                session_store.set_session(sid, session)
             archived = bool(session.get("archived"))
             # 检查会话是否已公开
             public_id = _generate_public_id(sid)
@@ -247,7 +383,8 @@ def register_session_routes(app, server):
                     "pinned": bool(session.get("pinned")),
                     "is_public": is_public,
                     "proactive_chat": _normalize_proactive_chat_config(session.get("proactive_chat")),
-                    "character_runtime_timeline": session.get("character_runtime_timeline", []),
+                    "character_runtime_snapshot": session.get("character_runtime_snapshot"),
+                    "character_runtime_timeline": timeline,
                 }
             )
 
@@ -455,9 +592,9 @@ def register_session_routes(app, server):
         session = _get_web_session(session_id)
         if not session:
             return jsonify({"error": "Session not found"}), 404
-        timeline = session.get("character_runtime_timeline", [])
-        if not isinstance(timeline, list):
-            timeline = []
+        timeline, changed = _ensure_runtime_timeline_from_snapshot(session)
+        if changed:
+            session_store.set_session(session_id, session)
         return jsonify({"success": True, "timeline": timeline})
 
     @app.route("/api/sessions/<session_id>/runtime-timeline", methods=["POST"])
@@ -709,6 +846,11 @@ def register_session_routes(app, server):
         new_id = str(uuid.uuid4())
         base_name = session.get("name") or f"Session {session_id[:8]}"
         forked_messages = deepcopy(messages[: message_index + 1])
+        fork_timeline, fork_snapshot = _select_runtime_timeline_for_fork(
+            session,
+            messages,
+            message_index,
+        )
         system_prompt = session.get("system_prompt", "")
         if not system_prompt:
             system_msg = next((m for m in forked_messages if m.get("role") == "system"), None)
@@ -732,7 +874,8 @@ def register_session_routes(app, server):
             "sender_avatar": session.get("sender_avatar", ""),
             "sender_portrait": session.get("sender_portrait", ""),
             "scenario": session.get("scenario", ""),
-            "character_runtime_snapshot": deepcopy(session.get("character_runtime_snapshot")),
+            "character_runtime_snapshot": fork_snapshot,
+            "character_runtime_timeline": deepcopy(fork_timeline),
             "forked_from": {
                 "session_id": session_id,
                 "message_id": message_id,
@@ -746,6 +889,7 @@ def register_session_routes(app, server):
             new_session.get("character_id"),
             session_id,
             new_id,
+            snapshot=fork_snapshot,
         )
         if server.WORKSPACE_AVAILABLE and server.workspace_manager:
             server.workspace_manager.get_or_create(

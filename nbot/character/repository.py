@@ -33,11 +33,62 @@ RELATIONSHIP_FIELDS = (
 )
 
 
+RELATIONSHIP_DEFAULTS = {
+    "affection": 50,
+    "trust": 50,
+    "familiarity": 30,
+    "dependency": 30,
+    "security": 50,
+    "jealousy": 0,
+}
+
+
 def _clamp_relationship_value(value: Any, default: int) -> int:
     try:
         return max(0, min(100, int(value)))
     except (TypeError, ValueError):
         return default
+
+
+def _apply_initial_relationship_state(
+    relationship: RelationshipState,
+    initial_state: Optional[Dict[str, Any]],
+) -> None:
+    if not initial_state:
+        return
+
+    for field_name in RELATIONSHIP_FIELDS:
+        if field_name not in initial_state:
+            continue
+        setattr(
+            relationship,
+            field_name,
+            _clamp_relationship_value(
+                initial_state[field_name],
+                getattr(relationship, field_name),
+            ),
+        )
+
+
+def _is_default_relationship(relationship: RelationshipState) -> bool:
+    return all(
+        getattr(relationship, field_name) == default_value
+        for field_name, default_value in RELATIONSHIP_DEFAULTS.items()
+    )
+
+
+def _should_sync_existing_relationship(
+    relationship: RelationshipState,
+    initial_state: Optional[Dict[str, Any]],
+) -> bool:
+    if not initial_state or not _is_default_relationship(relationship):
+        return False
+
+    return any(
+        field_name in initial_state
+        and _clamp_relationship_value(initial_state[field_name], default_value) != default_value
+        for field_name, default_value in RELATIONSHIP_DEFAULTS.items()
+    )
 
 
 class ProfileRepository:
@@ -180,6 +231,15 @@ class RelationshipRepository:
         """
         existing = self.get(character_id, target_id)
         if existing:
+            if _should_sync_existing_relationship(existing, initial_state):
+                _apply_initial_relationship_state(existing, initial_state)
+                self.save(existing)
+                _log.info(
+                    "[RelationshipRepository] get_or_create: synced default rel for %s::%s from initial_state=%s",
+                    character_id,
+                    target_id,
+                    initial_state,
+                )
             _log.debug(
                 "[RelationshipRepository] get_or_create: found existing rel for %s::%s = %s",
                 character_id,
@@ -194,17 +254,7 @@ class RelationshipRepository:
         )
 
         # 从角色卡的 initial_state 中读取关系初始值
-        if initial_state:
-            for field_name in RELATIONSHIP_FIELDS:
-                if field_name in initial_state:
-                    setattr(
-                        rel,
-                        field_name,
-                        _clamp_relationship_value(
-                            initial_state[field_name],
-                            getattr(rel, field_name),
-                        ),
-                    )
+        _apply_initial_relationship_state(rel, initial_state)
 
         _log.info(
             "[RelationshipRepository] get_or_create: created new rel for %s::%s with initial_state=%s -> rel=%s",

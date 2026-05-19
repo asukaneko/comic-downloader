@@ -2093,34 +2093,51 @@ const NbotMethods = {
                     if (!('personalityTimelineChart' in this)) this.personalityTimelineChart = null;
                 },
 
+                getPersonalityTimelineSessionCharacter(session) {
+                    const source = session || {};
+                    return String(
+                        source.sender_name
+                        || source.character_runtime_snapshot?.character_id
+                        || source.character_id
+                        || ''
+                    ).trim();
+                },
+
                 refreshPersonalityTimelineSessions(forceSelect = false) {
                     this.ensurePersonalityTimelineState();
-                    const allSessions = (this.sessions || [])
+                    const currentSession = this.currentSession && !this.currentSession._isTemp && !this.currentSession.archived
+                        ? this.currentSession
+                        : null;
+                    let allSessions = (this.sessions || [])
                         .filter(session => session && !session._isTemp && !session.archived);
+                    if (currentSession && !allSessions.some(session => session.id === currentSession.id)) {
+                        allSessions = [currentSession, ...allSessions];
+                    }
+
                     const characters = Array.from(new Set([
                         ...allSessions
-                            .map(session => String(session?.sender_name || '').trim())
-                            .filter(Boolean),
-                        ...((this.customPersonalityPresets || [])
-                            .map(preset => String(preset?.name || '').trim())
-                            .filter(Boolean)),
-                        String(this.activePersonality?.name || '').trim(),
-                        String(this.personality?.name || '').trim()
+                            .map(session => this.getPersonalityTimelineSessionCharacter(session))
+                            .filter(Boolean)
                     ].filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-CN'));
 
                     this.personalityTimelineCharacters = characters;
+                    if (forceSelect && currentSession) {
+                        const currentCharacter = this.getPersonalityTimelineSessionCharacter(currentSession);
+                        this.personalityTimelineSelectedCharacter = currentCharacter;
+                        this.personalityTimelineSelectedSessionId = currentSession.id;
+                    }
                     if (this.personalityTimelineSelectedCharacter && !characters.includes(this.personalityTimelineSelectedCharacter)) {
                         this.personalityTimelineSelectedCharacter = '';
                     }
 
                     const selectedCharacter = String(this.personalityTimelineSelectedCharacter || '').trim();
                     const matches = allSessions
-                        .filter(session => !selectedCharacter || String(session?.sender_name || '').trim() === selectedCharacter)
+                        .filter(session => !selectedCharacter || this.getPersonalityTimelineSessionCharacter(session) === selectedCharacter)
                         .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
 
                     this.personalityTimelineSessions = matches;
                     const stillExists = matches.some(session => session.id === this.personalityTimelineSelectedSessionId);
-                    const nextSessionId = stillExists && !forceSelect
+                    const nextSessionId = stillExists
                         ? this.personalityTimelineSelectedSessionId
                         : (matches[0]?.id || '');
 
@@ -2160,16 +2177,26 @@ const NbotMethods = {
                         const selectedSession = this.personalityTimelineSessions.find(
                             session => session.id === this.personalityTimelineSelectedSessionId
                         );
-                        const expectedCharacterId = String(
-                            selectedSession?.character_id || selectedSession?.sender_name || this.personalityTimelineSelectedCharacter || ''
-                        ).trim();
-                        const hasTaggedEntries = timeline.some(item => String(item?.character_id || '').trim());
-                        const filteredTimeline = hasTaggedEntries && expectedCharacterId
-                            ? timeline.filter(item => {
-                                const itemCharacterId = String(item?.character_id || '').trim();
-                                return !itemCharacterId || itemCharacterId === expectedCharacterId;
-                            })
-                            : timeline;
+                        let snapshotFallback = selectedSession?.character_runtime_snapshot
+                            || (this.currentSession?.id === this.personalityTimelineSelectedSessionId
+                                ? this.currentSession?.character_runtime_snapshot
+                                : null);
+                        if (!timeline.length && !snapshotFallback) {
+                            try {
+                                const fullSessionRes = await api.get(`/api/sessions/${this.personalityTimelineSelectedSessionId}`);
+                                const fullSession = fullSessionRes.data || {};
+                                snapshotFallback = fullSession.character_runtime_snapshot || null;
+                                if (selectedSession && snapshotFallback) {
+                                    selectedSession.character_runtime_snapshot = snapshotFallback;
+                                }
+                            } catch (sessionError) {
+                                console.warn('Failed to load session runtime snapshot fallback:', sessionError);
+                            }
+                        }
+                        const sessionTimeline = timeline.length
+                            ? timeline
+                            : (snapshotFallback ? [snapshotFallback] : []);
+                        const filteredTimeline = sessionTimeline;
                         this.personalityTimelineData = filteredTimeline.map(item => this.normalizePersonalityTimelinePoint(item));
                         this.personalityTimelineIndex = Math.max(0, this.personalityTimelineData.length - 1);
                         this.$nextTick(() => this.updatePersonalityTimelineChart());

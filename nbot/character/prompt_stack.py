@@ -27,6 +27,38 @@ _DYNAMIC_SECTION_KEYS = (
 )
 
 
+_LEGACY_RUNTIME_SECTION_MARKERS = (
+    "【角色当前状态】",
+    "【与用户的关系】",
+    "与用户的初始关系",
+    "銆愯鑹插綋鍓嶇姸鎬併€",
+    "銆愪笌鐢ㄦ埛鐨勫叧绯",
+    "涓庣敤鎴风殑鍒濆鍏崇郴",
+)
+
+
+def _strip_legacy_inline_sections(prompt: str) -> str:
+    lines = prompt.splitlines()
+    kept = []
+    skipping = False
+
+    for line in lines:
+        stripped = line.strip()
+        if any(marker in stripped for marker in _LEGACY_RUNTIME_SECTION_MARKERS):
+            skipping = True
+            continue
+        if skipping and (
+            stripped.startswith("## ")
+            or stripped.startswith("【")
+            or stripped.startswith("銆?")
+        ):
+            skipping = False
+        if not skipping:
+            kept.append(line)
+
+    return "\n".join(kept)
+
+
 def strip_dynamic_prompt_sections(prompt: str) -> str:
     """Remove runtime PromptStack sections from a persisted base prompt."""
     if not prompt:
@@ -48,6 +80,7 @@ def strip_dynamic_prompt_sections(prompt: str) -> str:
         cleaned,
         flags=re.DOTALL,
     )
+    cleaned = _strip_legacy_inline_sections(cleaned)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
 PromptRole = Literal["system", "developer"]

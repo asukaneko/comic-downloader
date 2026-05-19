@@ -9,8 +9,42 @@ import logging
 from typing import Any, Dict, Optional
 
 from nbot.character.models import CharacterIdentity
+from nbot.character.repository import ProfileRepository
 
 _log = logging.getLogger(__name__)
+
+
+def _get_base_dir(server) -> str:
+    base_dir = getattr(server, "base_dir", None)
+    if base_dir:
+        return base_dir
+
+    import os
+
+    return os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..")
+    )
+
+
+def _resolve_web_character_id(server, session: Dict[str, Any]) -> str:
+    candidates = [
+        session.get("character_id"),
+        session.get("sender_name"),
+        getattr(server, "personality", {}).get("id"),
+        getattr(server, "personality", {}).get("name"),
+    ]
+
+    repo = ProfileRepository(_get_base_dir(server))
+    for candidate in candidates:
+        candidate = str(candidate or "").strip()
+        if candidate and repo.get(candidate):
+            return candidate
+
+    for candidate in candidates:
+        candidate = str(candidate or "").strip()
+        if candidate:
+            return candidate
+    return "default"
 
 
 def get_web_character_context(server, session_store, session_id: str) -> Optional[CharacterIdentity]:
@@ -29,13 +63,7 @@ def get_web_character_context(server, session_store, session_id: str) -> Optiona
         session = {}
 
     # 角色ID：优先从会话中获取，避免全局当前角色切换后污染旧会话
-    character_id = (
-        session.get("character_id")
-        or session.get("sender_name")
-        or getattr(server, "personality", {}).get("id")
-        or getattr(server, "personality", {}).get("name")
-        or "default"
-    )
+    character_id = _resolve_web_character_id(server, session)
 
     # 目标ID：Web 会话标识。关系状态需要按会话隔离，避免新会话继承旧会话的六维进行时。
     target_id = f"web:{session_id}"
@@ -101,13 +129,7 @@ def get_character_runtime_from_server(server):
         from nbot.character.runtime import CharacterRuntime
         from nbot.character.state_machine import StateMachine
 
-        base_dir = getattr(server, "base_dir", None)
-        if not base_dir:
-            import os
-
-            base_dir = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "..", "..", "..")
-            )
+        base_dir = _get_base_dir(server)
 
         profile_repo = ProfileRepository(base_dir)
         personality = getattr(server, "personality", {}) or {}

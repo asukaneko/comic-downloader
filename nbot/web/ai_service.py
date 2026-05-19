@@ -584,6 +584,16 @@ class WebCallbacks(PipelineCallbacks):
             if hasattr(ctx, 'character_turn') and ctx.character_turn:
                 from nbot.character.models import CharacterTurnContext
                 turn = ctx.character_turn
+                messages = session.get("messages", [])
+                assistant_message_id = None
+                assistant_message_index = None
+                if isinstance(messages, list):
+                    for idx in range(len(messages) - 1, -1, -1):
+                        msg = messages[idx]
+                        if isinstance(msg, dict) and msg.get("role") == "assistant":
+                            assistant_message_id = msg.get("id")
+                            assistant_message_index = idx
+                            break
                 snapshot = {
                     "character_id": getattr(turn.profile, "id", None) or getattr(turn.profile, "name", None),
                     "mood": turn.state.mood,
@@ -598,6 +608,8 @@ class WebCallbacks(PipelineCallbacks):
                     "plan_tone": turn.plan.tone,
                     "visible_emotion": turn.plan.visible_emotion,
                     "hidden_emotion": turn.plan.hidden_emotion,
+                    "message_id": assistant_message_id,
+                    "message_index": assistant_message_index,
                 }
                 session["character_runtime_snapshot"] = snapshot
 
@@ -620,17 +632,13 @@ class WebCallbacks(PipelineCallbacks):
                             "jealousy",
                             "visible_emotion",
                             "hidden_emotion",
+                            "message_id",
+                            "message_index",
                         )
                     },
                     "timestamp": datetime.now().isoformat(),
                 }
-                last = timeline[-1] if timeline else None
-                if isinstance(last, dict) and {
-                    k: v for k, v in last.items() if k != "timestamp"
-                } == {k: v for k, v in entry.items() if k != "timestamp"}:
-                    last["timestamp"] = entry["timestamp"]
-                else:
-                    timeline.append(entry)
+                timeline.append(entry)
                 session["character_runtime_timeline"] = timeline[-200:]
 
             self.session_store.set_session(self.session_id, session)
@@ -679,7 +687,7 @@ class WebCallbacks(PipelineCallbacks):
 
             def generate_and_update():
                 try:
-                    new_name = self.server._generate_session_name(recent_msgs)
+                    new_name = self.server._generate_session_name(recent_msgs, session_id=self.session_id)
                     if new_name:
                         session["name"] = new_name
                         session["_last_rename_count"] = total_count

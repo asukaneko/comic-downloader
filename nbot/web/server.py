@@ -2413,9 +2413,34 @@ class WebChatServer:
 
                     progress_card.update(StepType.THINKING, "📝 正在生成会话名称...")
 
-            # 构建提示词
-            personality_name = self.personality.get("name", "")
-            personality_desc = self.personality.get("description", "")
+            # 构建提示词 - 优先使用当前会话的角色信息
+            from nbot.web.ai_service import _resolve_session_character_name
+
+            personality_name = ""
+            personality_desc = ""
+
+            if session_id:
+                session = self.session_store.get_session(session_id)
+                if session:
+                    personality_name = _resolve_session_character_name(self, session)
+                    character_id = session.get("character_id")
+                    if character_id:
+                        try:
+                            from nbot.character.repository import ProfileRepository
+
+                            base_dir = getattr(self, "base_dir", None) or os.path.abspath(
+                                os.path.join(os.path.dirname(__file__), "..", "..")
+                            )
+                            profile = ProfileRepository(base_dir).get(character_id)
+                            if profile:
+                                personality_desc = str(profile.description or "")[:100]
+                        except Exception:
+                            pass
+
+            # 回退到全局配置
+            if not personality_name:
+                personality_name = self.personality.get("name", "")
+                personality_desc = self.personality.get("description", "")
 
             # 提取最近对话作为上下文
             conversation_text = ""
