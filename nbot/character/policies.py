@@ -1,8 +1,9 @@
 """
-信号分析器
+Local user-signal analysis for the character runtime.
 
-分析用户输入中的情绪信号，为 ReactionPlanner 和 StateMachine 提供输入。
-第一版使用关键词规则，后续可替换为 LLM 分析。
+This module keeps the first-pass analysis fully local and deterministic:
+keywords, tone markers, punctuation, softeners, current state, and
+relationship context all contribute to a small set of normalized scores.
 """
 
 import logging
@@ -16,7 +17,7 @@ _log = logging.getLogger(__name__)
 
 @dataclass
 class UserSignals:
-    """用户输入信号分析结果"""
+    """Normalized local interpretation of the user's current message."""
 
     praise_score: float = 0.0
     rejection_score: float = 0.0
@@ -24,6 +25,8 @@ class UserSignals:
     hostility_score: float = 0.0
     care_score: float = 0.0
     intimacy_score: float = 0.0
+    reassurance_score: float = 0.0
+    vulnerability_score: float = 0.0
     question_score: float = 0.0
     command_score: float = 0.0
     sentiment_score: float = 0.0
@@ -42,6 +45,8 @@ class UserSignals:
             "hostility_score": round(self.hostility_score, 2),
             "care_score": round(self.care_score, 2),
             "intimacy_score": round(self.intimacy_score, 2),
+            "reassurance_score": round(self.reassurance_score, 2),
+            "vulnerability_score": round(self.vulnerability_score, 2),
             "question_score": round(self.question_score, 2),
             "command_score": round(self.command_score, 2),
             "sentiment_score": round(self.sentiment_score, 2),
@@ -53,10 +58,9 @@ class UserSignals:
         }
 
 
-# 关键词规则表
 _KEYWORD_RULES = {
     "praise": {
-        "keywords": ["可爱", "好棒", "厉害", "优秀", "真好", "最棒", "最喜欢", "爱你", "厉害了", "好厉害", "真棒", "棒"],
+        "keywords": ["可爱", "好棒", "厉害", "优秀", "真好", "最棒", "最喜欢", "爱你", "真棒"],
         "score": 0.6,
     },
     "rejection": {
@@ -64,11 +68,11 @@ _KEYWORD_RULES = {
         "score": 0.7,
     },
     "affection": {
-        "keywords": ["摸摸", "抱抱", "亲亲", "喜欢你", "想你", "爱你", "贴贴", "蹭蹭", "牵手", "在一起"],
+        "keywords": ["摸摸", "抱抱", "亲亲", "喜欢你", "想你", "爱你", "贴贴", "牵手", "在一起"],
         "score": 0.7,
     },
     "hostility": {
-        "keywords": ["恨你", "去死", "废物", "垃圾", "蠢", "笨蛋", "丑", "恶心"],
+        "keywords": ["恨你", "去死", "废物", "垃圾", "蠢", "笨蛋", "恶心"],
         "score": 0.8,
     },
     "care": {
@@ -79,15 +83,33 @@ _KEYWORD_RULES = {
         "keywords": ["晚安", "早安", "想你了", "陪我", "一起", "永远", "一直", "不会离开"],
         "score": 0.5,
     },
+    "reassurance": {
+        "keywords": ["没事", "别怕", "我在", "不会离开", "我陪你", "别担心", "慢慢来", "没关系"],
+        "score": 0.55,
+    },
+    "vulnerability": {
+        "keywords": ["难过", "害怕", "委屈", "不安", "好累", "好难受", "心情不好", "没安全感"],
+        "score": 0.45,
+    },
 }
 
-_INTENSIFIERS = ["非常", "超级", "特别", "真的", "好", "太", "最", "超", "巨", "绝对"]
-_DOWNTONERS = ["有点", "稍微", "可能", "也许", "大概", "一点"]
+_INTENSIFIERS = ["非常", "超级", "特别", "真的", "好", "太", "最", "超", "绝对"]
+_DOWNTONERS = ["有点", "稍微", "可能", "也许", "大概", "一点", "好像"]
+_SOFTENERS = ["请", "拜托", "可以吗", "好吗", "辛苦你", "麻烦你", "能不能"]
 _APOLOGY_KEYWORDS = ["对不起", "抱歉", "不好意思", "我错了", "别生气", "原谅我"]
-_UNCERTAINTY_KEYWORDS = ["吗", "嘛", "是不是", "可以吗", "行不行", "能不能", "也许", "可能"]
-_PLAYFUL_KEYWORDS = ["嘿嘿", "哈哈", "嘻嘻", "笨蛋", "呆瓜", "逗你", "开玩笑", "略略"]
-_POSITIVE_CATEGORIES = ("praise", "affection", "care", "intimacy")
-_NEGATIVE_CATEGORIES = ("rejection", "hostility")
+_UNCERTAINTY_KEYWORDS = ["吗", "呢", "是不是", "可以吗", "行不行", "能不能", "也许", "可能", "会不会"]
+_PLAYFUL_KEYWORDS = ["哈哈", "嘿嘿", "逗你", "开玩笑", "略略", "哼哼"]
+_COMMAND_PATTERNS = ["帮我", "给我", "去做", "快点", "马上", "立刻", "现在就"]
+_REST_CARE_KEYWORDS = ["休息", "睡觉", "补觉", "放松", "吃饭", "喝水", "别太累", "歇一会"]
+
+_POSITIVE_FIELDS = (
+    "praise_score",
+    "affection_score",
+    "care_score",
+    "intimacy_score",
+    "reassurance_score",
+)
+_NEGATIVE_FIELDS = ("rejection_score", "hostility_score")
 
 
 def _clamp_score(value: float) -> float:
@@ -95,13 +117,18 @@ def _clamp_score(value: float) -> float:
 
 
 def _contains_any(text: str, keywords: List[str]) -> List[str]:
-    """检查文本中是否包含关键词，返回匹配到的关键词列表"""
     text_lower = text.lower()
     return [kw for kw in keywords if kw in text_lower]
 
 
+def _boost_if(value: float, condition: bool, amount: float) -> float:
+    if not condition:
+        return value
+    return _clamp_score(value + amount)
+
+
 class SignalAnalyzer:
-    """用户输入信号分析器"""
+    """Analyze the current user message into local emotional/relational signals."""
 
     def analyze(
         self,
@@ -109,55 +136,54 @@ class SignalAnalyzer:
         state: Optional[CharacterState] = None,
         relationship: Optional[RelationshipState] = None,
     ) -> UserSignals:
-        """分析用户输入中的情绪信号
-
-        Args:
-            user_message: 用户消息文本
-            state: 角色当前状态
-            relationship: 关系状态
-
-        Returns:
-            UserSignals 分析结果
-        """
         signals = UserSignals()
         if not user_message:
             return signals
 
-        # 关键词匹配
         intensity_multiplier = 1.0
         matched_intensifiers = _contains_any(user_message, _INTENSIFIERS)
         matched_downtoners = _contains_any(user_message, _DOWNTONERS)
+        matched_softeners = _contains_any(user_message, _SOFTENERS)
+
         if matched_intensifiers:
             intensity_multiplier += min(0.35, len(matched_intensifiers) * 0.08)
             signals.detected_keywords.extend(matched_intensifiers)
         if matched_downtoners:
             intensity_multiplier -= min(0.25, len(matched_downtoners) * 0.06)
             signals.detected_keywords.extend(matched_downtoners)
+        if matched_softeners:
+            signals.detected_keywords.extend(matched_softeners)
 
         for category, rule in _KEYWORD_RULES.items():
             matched = _contains_any(user_message, rule["keywords"])
-            if matched:
-                score = rule["score"]
-                # 多个关键词叠加，但上限为 1.0
-                adjusted = _clamp_score((score + len(matched) * 0.1) * intensity_multiplier)
-                signals.detected_keywords.extend(matched)
+            if not matched:
+                continue
 
-                if category == "praise":
-                    signals.praise_score = adjusted
-                elif category == "rejection":
-                    signals.rejection_score = adjusted
-                elif category == "affection":
-                    signals.affection_score = adjusted
-                elif category == "hostility":
-                    signals.hostility_score = adjusted
-                elif category == "care":
-                    signals.care_score = adjusted
-                elif category == "intimacy":
-                    signals.intimacy_score = adjusted
+            score = _clamp_score((rule["score"] + len(matched) * 0.1) * intensity_multiplier)
+            signals.detected_keywords.extend(matched)
 
-        # 问号检测
-        if "？" in user_message or "?" in user_message:
-            signals.question_score = 0.5
+            if category == "praise":
+                signals.praise_score = score
+            elif category == "rejection":
+                signals.rejection_score = score
+            elif category == "affection":
+                signals.affection_score = score
+            elif category == "hostility":
+                signals.hostility_score = score
+            elif category == "care":
+                signals.care_score = score
+            elif category == "intimacy":
+                signals.intimacy_score = score
+            elif category == "reassurance":
+                signals.reassurance_score = score
+            elif category == "vulnerability":
+                signals.vulnerability_score = score
+
+        question_marks = user_message.count("?") + user_message.count("？")
+        if question_marks or "吗" in user_message or "呢" in user_message:
+            signals.question_score = _clamp_score(
+                0.25 + question_marks * 0.12 + (0.18 if ("吗" in user_message or "呢" in user_message) else 0.0)
+            )
 
         matched_apologies = _contains_any(user_message, _APOLOGY_KEYWORDS)
         if matched_apologies:
@@ -167,18 +193,22 @@ class SignalAnalyzer:
 
         matched_uncertainty = _contains_any(user_message, _UNCERTAINTY_KEYWORDS)
         if matched_uncertainty or signals.question_score > 0:
-            signals.uncertainty_score = _clamp_score(0.25 + len(matched_uncertainty) * 0.08)
+            signals.uncertainty_score = _clamp_score(
+                0.2 + len(matched_uncertainty) * 0.08 + signals.question_score * 0.35
+            )
             signals.detected_keywords.extend(matched_uncertainty)
 
         matched_playful = _contains_any(user_message, _PLAYFUL_KEYWORDS)
         if matched_playful:
-            signals.playfulness_score = _clamp_score(0.35 + len(matched_playful) * 0.12)
+            signals.playfulness_score = _clamp_score(0.3 + len(matched_playful) * 0.14)
             signals.detected_keywords.extend(matched_playful)
 
-        # 命令式检测
-        command_patterns = ["帮我", "给我", "去做", "快点", "马上"]
-        if any(p in user_message for p in command_patterns):
-            signals.command_score = 0.4
+        command_hits = [pattern for pattern in _COMMAND_PATTERNS if pattern in user_message]
+        if command_hits:
+            raw_command = 0.35 + len(command_hits) * 0.12
+            soften_ratio = min(0.25, len(matched_softeners) * 0.08)
+            signals.command_score = _clamp_score(raw_command - soften_ratio)
+            signals.detected_keywords.extend(command_hits)
 
         exclamation_count = user_message.count("!") + user_message.count("！")
         repeated_mark_count = (
@@ -195,28 +225,91 @@ class SignalAnalyzer:
                 signals.hostility_score,
                 signals.care_score,
                 signals.intimacy_score,
+                signals.reassurance_score,
+                signals.vulnerability_score,
             )
             + min(0.25, exclamation_count * 0.05 + repeated_mark_count * 0.08)
         )
 
-        positive_score = max(getattr(signals, f"{category}_score") for category in _POSITIVE_CATEGORIES)
-        negative_score = max(getattr(signals, f"{category}_score") for category in _NEGATIVE_CATEGORIES)
+        self._apply_state_context(signals, user_message, state)
+        self._apply_relationship_context(signals, relationship)
+        self._soften_or_disambiguate(signals, user_message, matched_softeners)
+
+        positive_score = max(getattr(signals, field_name) for field_name in _POSITIVE_FIELDS)
+        negative_score = max(getattr(signals, field_name) for field_name in _NEGATIVE_FIELDS)
         signals.sentiment_score = max(-1.0, min(1.0, positive_score - negative_score))
 
-        if signals.playfulness_score > 0 and signals.hostility_score > 0:
-            signals.hostility_score *= 0.65
-            signals.rejection_score *= 0.75
-            signals.sentiment_score = max(signals.sentiment_score, -0.2)
+        return signals
 
-        # 关系状态修正：安全感低时，更容易感到不安
-        if relationship and relationship.security < 30:
+    def _apply_state_context(
+        self,
+        signals: UserSignals,
+        user_message: str,
+        state: Optional[CharacterState],
+    ) -> None:
+        if not state:
+            return
+
+        if state.energy <= 35 and any(keyword in user_message for keyword in _REST_CARE_KEYWORDS):
+            signals.care_score = _boost_if(signals.care_score, True, 0.24)
+            signals.reassurance_score = _boost_if(signals.reassurance_score, True, 0.1)
+            if signals.reassurance_score > 0:
+                signals.care_score = _boost_if(signals.care_score, True, 0.18)
+
+        if state.mood in {"受伤", "委屈", "不安"}:
+            if signals.reassurance_score > 0:
+                signals.reassurance_score = _boost_if(signals.reassurance_score, True, 0.12)
+            if signals.care_score > 0:
+                signals.care_score = _boost_if(signals.care_score, True, 0.1)
+            elif signals.reassurance_score > 0:
+                signals.care_score = _boost_if(signals.care_score, True, 0.28)
+
+        if state.mood_intensity >= 0.75 and signals.command_score > 0:
+            signals.command_score = _boost_if(signals.command_score, True, 0.08)
+
+    def _apply_relationship_context(
+        self,
+        signals: UserSignals,
+        relationship: Optional[RelationshipState],
+    ) -> None:
+        if not relationship:
+            return
+
+        if relationship.security < 30:
             if signals.rejection_score > 0:
-                signals.rejection_score = min(signals.rejection_score * 1.3, 1.0)
+                signals.rejection_score = _clamp_score(signals.rejection_score * 1.3)
             if signals.hostility_score > 0:
-                signals.hostility_score = min(signals.hostility_score * 1.2, 1.0)
+                signals.hostility_score = _clamp_score(signals.hostility_score * 1.2)
+            if signals.reassurance_score > 0:
+                signals.reassurance_score = _boost_if(signals.reassurance_score, True, 0.15)
 
-        if relationship and relationship.trust > 70 and signals.apology_score > 0:
+        if relationship.trust > 70 and signals.apology_score > 0:
             signals.rejection_score *= 0.7
             signals.hostility_score *= 0.7
 
-        return signals
+        if relationship.familiarity > 75 and signals.command_score > 0 and signals.care_score > 0:
+            signals.command_score = max(0.0, signals.command_score - 0.12)
+
+        if relationship.dependency > 70 and signals.reassurance_score > 0:
+            signals.intimacy_score = _boost_if(signals.intimacy_score, True, 0.1)
+
+    def _soften_or_disambiguate(
+        self,
+        signals: UserSignals,
+        user_message: str,
+        matched_softeners: List[str],
+    ) -> None:
+        if signals.playfulness_score > 0 and signals.hostility_score > 0:
+            signals.hostility_score *= 0.65
+            signals.rejection_score *= 0.75
+
+        if matched_softeners and signals.command_score > 0:
+            signals.command_score = max(0.0, signals.command_score - 0.08)
+
+        if signals.vulnerability_score > 0 and signals.question_score > 0:
+            signals.uncertainty_score = _boost_if(signals.uncertainty_score, True, 0.1)
+        elif signals.vulnerability_score > 0:
+            signals.uncertainty_score = _boost_if(signals.uncertainty_score, True, 0.05)
+
+        if signals.reassurance_score > 0 and "不会离开" in user_message:
+            signals.intimacy_score = _boost_if(signals.intimacy_score, True, 0.12)
