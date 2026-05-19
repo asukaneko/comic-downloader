@@ -2165,7 +2165,10 @@ const NbotMethods = {
                         ).trim();
                         const hasTaggedEntries = timeline.some(item => String(item?.character_id || '').trim());
                         const filteredTimeline = hasTaggedEntries && expectedCharacterId
-                            ? timeline.filter(item => String(item?.character_id || '').trim() === expectedCharacterId)
+                            ? timeline.filter(item => {
+                                const itemCharacterId = String(item?.character_id || '').trim();
+                                return !itemCharacterId || itemCharacterId === expectedCharacterId;
+                            })
                             : timeline;
                         this.personalityTimelineData = filteredTimeline.map(item => this.normalizePersonalityTimelinePoint(item));
                         this.personalityTimelineIndex = Math.max(0, this.personalityTimelineData.length - 1);
