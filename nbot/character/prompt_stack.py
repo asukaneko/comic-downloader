@@ -88,7 +88,7 @@ class PromptStack:
     PRIORITY_CHARACTER_MEMORIES = 60
     PRIORITY_KNOWLEDGE_RAG = 70
     PRIORITY_TOOL_INSTRUCTIONS = 80
-    PRIORITY_REACTION_PLAN = 90
+    PRIORITY_REACTION_PLAN = 55
 
     def __init__(self):
         self.items: List[PromptInjection] = []

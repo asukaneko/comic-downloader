@@ -47,6 +47,34 @@ _MOOD_TRANSITIONS = {
     "生气": ["沉默", "委屈"],
 }
 
+_RESTORATIVE_KEYWORDS = (
+    "休息",
+    "睡觉",
+    "补觉",
+    "放松",
+    "歇一会",
+    "休息一下",
+    "吃饭",
+    "喝水",
+    "充电",
+    "摸摸",
+    "抱抱",
+    "晚安",
+)
+
+
+def _clamp_energy(value: int) -> int:
+    return max(0, min(100, int(value)))
+
+
+def _signal_score(signals: Optional[UserSignals], field_name: str) -> float:
+    if not signals:
+        return 0.0
+    try:
+        return float(getattr(signals, field_name, 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
 
 class StateMachine:
     """角色状态机，负责情绪和关系的更新"""
@@ -73,7 +101,13 @@ class StateMachine:
         Returns:
             (new_state, new_relationship) 元组
         """
-        new_state = self._apply_state(old_state, plan)
+        new_state = self._apply_state(
+            old_state,
+            plan,
+            signals=signals,
+            user_message=user_message,
+            assistant_message=assistant_message,
+        )
         new_relationship = self._apply_relationship(old_relationship, plan)
         return new_state, new_relationship
 
@@ -81,6 +115,9 @@ class StateMachine:
         self,
         old_state: CharacterState,
         plan: ReactionPlan,
+        signals: Optional[UserSignals] = None,
+        user_message: str = "",
+        assistant_message: str = "",
     ) -> CharacterState:
         """更新角色运行时状态"""
         new_state = CharacterState(
@@ -116,10 +153,74 @@ class StateMachine:
             # 无显著信号时缓慢回落，避免情绪长时间卡在高强度。
             new_state.mood_intensity = max(0.0, old_state.mood_intensity - 0.03)
 
-        # 精力微减（每轮 -1）
-        new_state.energy = max(0, old_state.energy - 1)
+        energy_delta = self._calculate_energy_delta(
+            old_energy=old_state.energy,
+            signals=signals,
+            user_message=user_message,
+            assistant_message=assistant_message,
+        )
+        new_state.energy = _clamp_energy(old_state.energy + energy_delta)
 
         return new_state
+
+    def _calculate_energy_delta(
+        self,
+        *,
+        old_energy: int,
+        signals: Optional[UserSignals],
+        user_message: str,
+        assistant_message: str,
+    ) -> int:
+        """Return the local per-turn energy change before the 6-turn AI evaluator."""
+        delta = 0
+
+        if old_energy < 30:
+            delta += 2
+        elif old_energy < 65:
+            delta += 1
+
+        care = _signal_score(signals, "care_score")
+        affection = _signal_score(signals, "affection_score")
+        intimacy = _signal_score(signals, "intimacy_score")
+        praise = _signal_score(signals, "praise_score")
+        apology = _signal_score(signals, "apology_score")
+        playfulness = _signal_score(signals, "playfulness_score")
+        hostility = _signal_score(signals, "hostility_score")
+        rejection = _signal_score(signals, "rejection_score")
+        command = _signal_score(signals, "command_score")
+        arousal = _signal_score(signals, "arousal_score")
+
+        if care >= 0.45:
+            delta += 2
+        if max(affection, intimacy, praise) >= 0.65:
+            delta += 1
+        if apology >= 0.45:
+            delta += 1
+        if playfulness >= 0.35 and hostility < 0.4:
+            delta += 1
+
+        lowered_message = (user_message or "").lower()
+        has_restorative_keyword = any(
+            keyword in lowered_message for keyword in _RESTORATIVE_KEYWORDS
+        )
+        if has_restorative_keyword:
+            delta += 2
+
+        if max(hostility, rejection) >= 0.6:
+            delta -= 2
+        if command >= 0.4:
+            delta -= 1
+        if arousal >= 0.75 and care < 0.45:
+            delta -= 1
+        if len(assistant_message or "") > 1200:
+            delta -= 1
+
+        if old_energy <= 20 and delta < 1:
+            delta = 1
+        if old_energy >= 85 and delta > 1 and not has_restorative_keyword:
+            delta = 1
+
+        return max(-3, min(5, delta))
 
     def _apply_relationship(
         self,

@@ -177,14 +177,16 @@ def _call_state_model(
         "{\n"
         '  "mood": "short mood label or empty string to keep current mood",\n'
         '  "mood_intensity_delta": number between -0.35 and 0.35,\n'
-        '  "energy_delta": integer between -8 and 8,\n'
+        '  "energy_delta": integer between -8 and 12,\n'
         '  "relationship_deltas": {\n'
         '    "affection": integer, "trust": integer, "familiarity": integer,\n'
         '    "dependency": integer, "security": integer, "jealousy": integer\n'
         "  },\n"
         '  "reason": "brief reason"\n'
         "}\n"
-        "Use 0 for relationship fields that should not change. The relationship range is 0-100."
+        "Use 0 for relationship fields that should not change. The relationship range is 0-100. "
+        "Energy should recover when the user helps the character rest, eat, relax, feel safe, "
+        "or receive affection/care; ordinary friendly comfort may be positive even without a major event."
     )
 
     user_prompt = (
@@ -265,7 +267,7 @@ def _apply_ai_adjustment(
         1.0,
     )
 
-    energy_delta = _clamp_int(adjustment.get("energy_delta"), 0, -8, 8)
+    energy_delta = _clamp_int(adjustment.get("energy_delta"), 0, -8, 12)
     new_state.energy = _clamp_int(new_state.energy + energy_delta, new_state.energy, 0, 100)
 
     deltas = adjustment.get("relationship_deltas") or {}

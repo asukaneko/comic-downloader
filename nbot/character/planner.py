@@ -102,6 +102,7 @@ class ReactionPlanner:
 
         # 如果最强信号不够明显，保持自然
         if strongest_score < 0.3:
+            plan.intent = "respond_naturally"
             plan.tone = "natural"
             plan.visible_emotion = state.mood
             if signals.question_score > 0:
@@ -117,6 +118,7 @@ class ReactionPlanner:
         plan.tone = emotion_config.get("tone", "natural")
         plan.visible_emotion = emotion_config.get("visible", state.mood)
         plan.hidden_emotion = emotion_config.get("hidden", "")
+        plan.intent = self._compute_intent(strongest, signals)
 
         if strongest == "apology":
             plan.tone = "soft_reassuring"
@@ -165,6 +167,23 @@ class ReactionPlanner:
             plan.memory_ids = [m.id for m in memories[:3] if m.id]
 
         return plan
+
+    def _compute_intent(self, signal_type: str, signals: UserSignals) -> str:
+        intent_map = {
+            "hostility": "show_hurt_and_pull_back",
+            "rejection": "seek_reassurance_gently",
+            "affection": "reciprocate_affection",
+            "praise": "receive_praise_and_move_closer",
+            "intimacy": "deepen_closeness",
+            "care": "soften_and_receive_care",
+            "apology": "repair_relationship",
+            "playfulness": "play_back",
+            "uncertainty": "gently_probe_and_clarify",
+        }
+        intent = intent_map.get(signal_type, "respond_naturally")
+        if signal_type == "uncertainty" and signals.sentiment_score < -0.2:
+            return "clarify_cautiously"
+        return intent
 
     def _compute_style_controls(
         self,
