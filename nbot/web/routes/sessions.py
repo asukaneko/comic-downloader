@@ -68,6 +68,7 @@ def _runtime_snapshot_signature(snapshot):
     if not isinstance(snapshot, dict):
         return {}
     keys = (
+        "character_id",
         "mood",
         "mood_intensity",
         "energy",
@@ -761,12 +762,14 @@ def register_session_routes(app, server):
 
         data = request.json or {}
         old_name = session.get("sender_name", "")
+        old_character_id = str(session.get("character_id") or old_name).strip()
         sender_name = (data.get("sender_name") or "").strip()
         if not sender_name:
             return jsonify({"error": "角色名称不能为空"}), 400
 
         session["sender_name"] = sender_name
         session["character_id"] = (data.get("character_id") or sender_name).strip()
+        new_character_id = str(session.get("character_id") or sender_name).strip()
         if "sender_avatar" in data:
             session["sender_avatar"] = data.get("sender_avatar") or ""
         if "sender_portrait" in data:
@@ -793,6 +796,10 @@ def register_session_routes(app, server):
         messages = session.get("messages", [])
         if messages and messages[0].get("role") == "system":
             messages[0]["content"] = system_prompt
+
+        if old_character_id and new_character_id and old_character_id != new_character_id:
+            session["character_runtime_timeline"] = []
+            session["character_runtime_snapshot"] = None
 
         session_store.set_session(session_id, session)
         return jsonify({"success": True, "session": session})

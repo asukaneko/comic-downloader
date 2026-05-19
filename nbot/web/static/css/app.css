@@ -17197,3 +17197,557 @@
         grid-template-columns: 1fr;
     }
 }
+
+.personality-page .personality-journey-section {
+    position: relative;
+    overflow: hidden;
+}
+
+.personality-page .personality-journey-shortcut-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 22px 24px;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background:
+        radial-gradient(circle at right top, rgba(96, 165, 250, 0.16), transparent 28%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.82), rgba(30, 41, 59, 0.68));
+}
+
+.personality-page .personality-journey-shortcut-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 520px;
+}
+
+.personality-page .personality-journey-shortcut-copy h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.personality-page .personality-journey-shortcut-copy p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.personality-journey-page {
+    min-width: 0;
+    position: relative;
+    isolation: isolate;
+}
+
+.personality-journey-page-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 20px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.68));
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
+    backdrop-filter: blur(16px);
+}
+
+.personality-journey-page-top {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 18px 20px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.62), rgba(30, 41, 59, 0.48));
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.personality-journey-page-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 760px;
+}
+
+.personality-journey-page-copy h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 32px;
+    line-height: 1.1;
+    font-weight: 800;
+}
+
+.personality-journey-page-copy p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.8;
+}
+
+.personality-journey-page-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.personality-journey-page-band {
+    padding: 20px;
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.56));
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.personality-journey-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 20px;
+    background: rgba(15, 23, 42, 0.46);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.personality-page .personality-journey-hero {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at top right, rgba(96, 165, 250, 0.24), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(244, 114, 182, 0.18), transparent 32%),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.84));
+    box-shadow: 0 22px 44px rgba(15, 23, 42, 0.18);
+}
+
+.personality-page .personality-journey-copy {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 540px;
+}
+
+.personality-page .personality-journey-kicker {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.14);
+    color: #cbd5e1;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.personality-page .personality-journey-copy h3 {
+    margin: 0;
+    color: #f8fbff;
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 700;
+}
+
+.personality-page .personality-journey-copy p {
+    margin: 0;
+    color: rgba(226, 232, 240, 0.86);
+    font-size: 14px;
+    line-height: 1.7;
+}
+
+.personality-page .personality-journey-glow {
+    flex: 0 0 180px;
+    align-self: center;
+    width: 180px;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle, rgba(96, 165, 250, 0.72) 0%, rgba(96, 165, 250, 0.14) 34%, rgba(244, 114, 182, 0.06) 62%, transparent 74%);
+    filter: blur(4px);
+    opacity: 0.92;
+    animation: personalityJourneyPulse 4.8s ease-in-out infinite;
+}
+
+.personality-page .personality-journey-toolbar {
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.personality-page .personality-journey-select {
+    min-height: 42px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    color: #f8fbff;
+}
+
+.personality-page .personality-journey-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.personality-page .personality-journey-trend-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.46);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.personality-page .personality-journey-trend-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.personality-page .personality-journey-trend-pills {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.personality-page .personality-journey-trend-pill {
+    min-width: 72px;
+    padding: 8px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 999px;
+    background: rgba(30, 41, 59, 0.78);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.personality-page .personality-journey-trend-pill:hover {
+    color: var(--text-primary);
+    border-color: rgba(148, 163, 184, 0.22);
+}
+
+.personality-page .personality-journey-trend-pill.active {
+    color: #fff;
+    background: var(--journey-accent);
+    border-color: transparent;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.24);
+}
+
+.personality-page .personality-journey-meta {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.personality-page .journey-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.52));
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.personality-page .journey-metric-label {
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+.personality-page .journey-metric strong {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.personality-page .personality-journey-chart-shell {
+    padding: 14px;
+    border-radius: 18px;
+    background:
+        linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.58));
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.personality-page .personality-journey-analytics {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.82fr);
+    gap: 16px;
+    align-items: stretch;
+}
+
+.personality-page .personality-journey-chart {
+    width: 100%;
+    min-height: 440px;
+}
+
+.personality-page .personality-journey-slider-wrap {
+    padding: 8px 6px 2px;
+}
+
+.personality-page .personality-journey-slider-wrap-bottom {
+    margin-top: 12px;
+    padding: 10px 8px 2px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.personality-page .personality-journey-slider {
+    width: 100%;
+    accent-color: #60a5fa;
+}
+
+.personality-page .personality-journey-delta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-content: start;
+}
+
+.personality-page .journey-delta-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 122px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.78), rgba(30, 41, 59, 0.52));
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+.personality-page .journey-delta-head,
+.personality-page .journey-delta-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.personality-page .journey-delta-head span {
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.personality-page .journey-delta-head strong {
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.personality-page .journey-delta-bar {
+    height: 8px;
+    margin: 12px 0 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.12);
+}
+
+.personality-page .journey-delta-bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--journey-accent), rgba(255, 255, 255, 0.92));
+    box-shadow: 0 0 18px rgba(255, 255, 255, 0.12);
+    transition: width 0.45s ease;
+}
+
+.personality-page .journey-delta-foot small {
+    color: var(--journey-accent);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.personality-page .personality-journey-empty {
+    margin-top: 8px;
+    border-radius: 16px;
+    border: 1px dashed rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.28);
+}
+
+[data-theme="light"] .personality-page .personality-journey-hero {
+    background:
+        radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 34%),
+        radial-gradient(circle at bottom left, rgba(244, 114, 182, 0.14), transparent 32%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(241, 245, 249, 0.92));
+    border-color: rgba(148, 163, 184, 0.2);
+    box-shadow: 0 18px 38px rgba(148, 163, 184, 0.18);
+}
+
+[data-theme="light"] .personality-page .personality-journey-kicker {
+    background: rgba(99, 102, 241, 0.1);
+    color: #475569;
+}
+
+[data-theme="light"] .personality-page .personality-journey-copy h3 {
+    color: #0f172a;
+}
+
+[data-theme="light"] .personality-page .personality-journey-copy p {
+    color: #475569;
+}
+
+[data-theme="light"] .personality-page .personality-journey-select,
+[data-theme="light"] .personality-page .personality-journey-trend-toolbar,
+[data-theme="light"] .personality-page .journey-metric,
+[data-theme="light"] .personality-page .personality-journey-chart-shell,
+[data-theme="light"] .personality-page .personality-journey-slider-wrap-bottom,
+[data-theme="light"] .personality-page .journey-delta-card,
+[data-theme="light"] .personality-page .personality-journey-empty {
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(148, 163, 184, 0.18);
+    box-shadow: 0 12px 28px rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="light"] .personality-page .personality-journey-select {
+    background: rgba(255, 255, 255, 0.94);
+    color: #0f172a;
+}
+
+[data-theme="light"] .personality-page .personality-journey-trend-pill {
+    background: rgba(255, 255, 255, 0.9);
+    color: #475569;
+}
+
+[data-theme="light"] .personality-page .personality-journey-shortcut-card,
+[data-theme="light"] .personality-journey-page-band,
+[data-theme="light"] .personality-journey-page-shell,
+[data-theme="light"] .personality-journey-page-top,
+[data-theme="light"] .personality-journey-panel {
+    background:
+        radial-gradient(circle at right top, rgba(96, 165, 250, 0.12), transparent 28%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(241, 245, 249, 0.92));
+    border-color: rgba(148, 163, 184, 0.18);
+    box-shadow: 0 18px 38px rgba(148, 163, 184, 0.12);
+}
+
+@keyframes personalityJourneyPulse {
+    0%,
+    100% {
+        transform: scale(0.92);
+        opacity: 0.82;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 960px) {
+    .personality-page .personality-journey-meta,
+    .personality-page .personality-journey-delta-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .personality-page .personality-journey-analytics {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-journey-page-top,
+    .personality-page .personality-journey-shortcut-card {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .personality-page .personality-journey-toolbar {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .personality-page .personality-journey-trend-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .personality-page .personality-journey-trend-pills {
+        justify-content: flex-start;
+    }
+
+    .personality-page .personality-journey-hero {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 720px) {
+    .personality-page .personality-journey-hero,
+    .personality-page .personality-journey-toolbar {
+        grid-template-columns: 1fr;
+        display: grid;
+    }
+
+    .personality-journey-page-shell,
+    .personality-journey-page-top,
+    .personality-journey-page-band,
+    .personality-journey-panel {
+        padding: 14px;
+    }
+
+    .personality-page .personality-journey-glow {
+        width: min(52vw, 180px);
+        justify-self: end;
+    }
+
+    .personality-page .personality-journey-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .personality-page .personality-journey-actions .btn {
+        flex: 1 1 0;
+        justify-content: center;
+    }
+
+    .personality-page .personality-journey-trend-pill {
+        flex: 1 1 calc(33.333% - 8px);
+        min-width: 0;
+    }
+
+    .personality-page .personality-journey-chart {
+        min-height: 620px;
+    }
+
+    .personality-page .personality-journey-delta-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .personality-page .personality-journey-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .personality-page .personality-journey-copy h3 {
+        font-size: 22px;
+    }
+
+    .personality-page .personality-journey-chart-shell {
+        padding: 10px;
+    }
+
+    .personality-page .personality-journey-chart {
+        min-height: 560px;
+    }
+}

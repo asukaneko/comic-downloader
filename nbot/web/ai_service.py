@@ -585,6 +585,7 @@ class WebCallbacks(PipelineCallbacks):
                 from nbot.character.models import CharacterTurnContext
                 turn = ctx.character_turn
                 snapshot = {
+                    "character_id": getattr(turn.profile, "id", None) or getattr(turn.profile, "name", None),
                     "mood": turn.state.mood,
                     "mood_intensity": turn.state.mood_intensity,
                     "energy": turn.state.energy,
@@ -607,6 +608,7 @@ class WebCallbacks(PipelineCallbacks):
                     **{
                         key: snapshot.get(key)
                         for key in (
+                            "character_id",
                             "mood",
                             "mood_intensity",
                             "energy",

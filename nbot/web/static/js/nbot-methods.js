@@ -770,7 +770,7 @@ const NbotMethods = {
                     this.isMobileChatPickerOpen = false;
                     this.loadPageData(page);
                     // 如果是样式编辑页面或人格设置页面，初始化滑条进度
-                    if (page === 'message-style' || page === 'personality') {
+                    if (page === 'message-style' || page === 'personality' || page === 'personality-journey') {
                         this.$nextTick(() => {
                             this.updateRangeProgress();
                         });
@@ -1396,6 +1396,16 @@ const NbotMethods = {
                             }
                             await this.loadPersonalityPresets();
                             break;
+                        case 'personality-journey':
+                            if (!this.personalityHasUnsavedChanges) {
+                                await this.loadPersonality();
+                            }
+                            await this.loadPersonalityPresets();
+                            this.refreshPersonalityTimelineSessions(true);
+                            this.$nextTick(() => {
+                                this.updatePersonalityTimelineChart();
+                            });
+                            break;
                         case 'memory':
                             await this.loadMemory();
                             break;
@@ -1641,6 +1651,9 @@ const NbotMethods = {
                 handleResize() {
                     if (this.trendChart) this.trendChart.resize();
                     if (this.platformChart) this.platformChart.resize();
+                    if (this.personalityTimelineChart && this.currentPage === 'personality-journey') {
+                        this.updatePersonalityTimelineChart();
+                    }
                 },
 
                 // Theme Methods
@@ -1866,6 +1879,7 @@ const NbotMethods = {
                         
                         // 合并：临时会话 + 服务器会话
                         this.sessions = [...localTempSessions, ...serverSessions];
+                        this.refreshPersonalityTimelineSessions();
                     } catch (e) {
                         console.error('Failed to load sessions:', e);
                         this.showToast('加载会话失败', 'error');
@@ -2059,11 +2073,468 @@ const NbotMethods = {
                         this.personalityTagsInput = (this.personality.tags || []).join(' ');
                         // 重新应用聊天背景（personality.portrait 可能已更新）
                         this.applyChatBackground();
+                        this.refreshPersonalityTimelineSessions();
                     } catch (e) {
                         console.error('Failed to load personality:', e);
                     }
                 },
-                
+
+                ensurePersonalityTimelineState() {
+                    if (!Array.isArray(this.personalityTimelineCharacters)) this.personalityTimelineCharacters = [];
+                    if (!Array.isArray(this.personalityTimelineSessions)) this.personalityTimelineSessions = [];
+                    if (!Array.isArray(this.personalityTimelineData)) this.personalityTimelineData = [];
+                    if (typeof this.personalityTimelineSelectedCharacter !== 'string') this.personalityTimelineSelectedCharacter = '';
+                    if (typeof this.personalityTimelineTrendMetric !== 'string') this.personalityTimelineTrendMetric = 'affection';
+                    if (typeof this.personalityTimelineSelectedSessionId !== 'string') this.personalityTimelineSelectedSessionId = '';
+                    if (typeof this.personalityTimelineIndex !== 'number') this.personalityTimelineIndex = 0;
+                    if (typeof this.personalityTimelinePlaying !== 'boolean') this.personalityTimelinePlaying = false;
+                    if (typeof this.personalityTimelineLoading !== 'boolean') this.personalityTimelineLoading = false;
+                    if (!('personalityTimelinePlayTimer' in this)) this.personalityTimelinePlayTimer = null;
+                    if (!('personalityTimelineChart' in this)) this.personalityTimelineChart = null;
+                },
+
+                refreshPersonalityTimelineSessions(forceSelect = false) {
+                    this.ensurePersonalityTimelineState();
+                    const allSessions = (this.sessions || [])
+                        .filter(session => session && !session._isTemp && !session.archived);
+                    const characters = Array.from(new Set([
+                        ...allSessions
+                            .map(session => String(session?.sender_name || '').trim())
+                            .filter(Boolean),
+                        ...((this.customPersonalityPresets || [])
+                            .map(preset => String(preset?.name || '').trim())
+                            .filter(Boolean)),
+                        String(this.activePersonality?.name || '').trim(),
+                        String(this.personality?.name || '').trim()
+                    ].filter(Boolean))).sort((a, b) => a.localeCompare(b, 'zh-CN'));
+
+                    this.personalityTimelineCharacters = characters;
+                    if (this.personalityTimelineSelectedCharacter && !characters.includes(this.personalityTimelineSelectedCharacter)) {
+                        this.personalityTimelineSelectedCharacter = '';
+                    }
+
+                    const selectedCharacter = String(this.personalityTimelineSelectedCharacter || '').trim();
+                    const matches = allSessions
+                        .filter(session => !selectedCharacter || String(session?.sender_name || '').trim() === selectedCharacter)
+                        .sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0));
+
+                    this.personalityTimelineSessions = matches;
+                    const stillExists = matches.some(session => session.id === this.personalityTimelineSelectedSessionId);
+                    const nextSessionId = stillExists && !forceSelect
+                        ? this.personalityTimelineSelectedSessionId
+                        : (matches[0]?.id || '');
+
+                    if (!nextSessionId) {
+                        this.stopPersonalityTimelinePlayback();
+                        this.personalityTimelineData = [];
+                        this.personalityTimelineSelectedSessionId = '';
+                        this.updatePersonalityTimelineChart();
+                        return;
+                    }
+
+                    if (forceSelect || this.personalityTimelineSelectedSessionId !== nextSessionId) {
+                        this.selectPersonalityTimelineSession(nextSessionId);
+                    }
+                },
+
+                selectPersonalityTimelineCharacter(characterName) {
+                    this.ensurePersonalityTimelineState();
+                    this.personalityTimelineSelectedCharacter = String(characterName || '');
+                    this.refreshPersonalityTimelineSessions(true);
+                },
+
+                async selectPersonalityTimelineSession(sessionId) {
+                    this.ensurePersonalityTimelineState();
+                    this.stopPersonalityTimelinePlayback();
+                    this.personalityTimelineSelectedSessionId = String(sessionId || '');
+                    if (!this.personalityTimelineSelectedSessionId) {
+                        this.personalityTimelineData = [];
+                        this.updatePersonalityTimelineChart();
+                        return;
+                    }
+
+                    this.personalityTimelineLoading = true;
+                    try {
+                        const res = await api.get(`/api/sessions/${this.personalityTimelineSelectedSessionId}/runtime-timeline`);
+                        const timeline = Array.isArray(res.data?.timeline) ? res.data.timeline : [];
+                        const selectedSession = this.personalityTimelineSessions.find(
+                            session => session.id === this.personalityTimelineSelectedSessionId
+                        );
+                        const expectedCharacterId = String(
+                            selectedSession?.character_id || selectedSession?.sender_name || this.personalityTimelineSelectedCharacter || ''
+                        ).trim();
+                        const hasTaggedEntries = timeline.some(item => String(item?.character_id || '').trim());
+                        const filteredTimeline = hasTaggedEntries && expectedCharacterId
+                            ? timeline.filter(item => String(item?.character_id || '').trim() === expectedCharacterId)
+                            : timeline;
+                        this.personalityTimelineData = filteredTimeline.map(item => this.normalizePersonalityTimelinePoint(item));
+                        this.personalityTimelineIndex = Math.max(0, this.personalityTimelineData.length - 1);
+                        this.$nextTick(() => this.updatePersonalityTimelineChart());
+                    } catch (e) {
+                        console.error('Failed to load personality runtime timeline:', e);
+                        this.personalityTimelineData = [];
+                        this.personalityTimelineIndex = 0;
+                        this.updatePersonalityTimelineChart();
+                        this.showToast('加载角色状态历程失败', 'error');
+                    } finally {
+                        this.personalityTimelineLoading = false;
+                    }
+                },
+
+                normalizePersonalityTimelinePoint(point) {
+                    const source = point || {};
+                    const toNumber = (value, fallback = 0) => {
+                        const parsed = Number(value);
+                        return Number.isFinite(parsed) ? parsed : fallback;
+                    };
+                    return {
+                        character_id: source.character_id || '',
+                        timestamp: source.timestamp || '',
+                        mood: source.mood || '',
+                        visible_emotion: source.visible_emotion || '',
+                        hidden_emotion: source.hidden_emotion || '',
+                        affection: toNumber(source.affection, 50),
+                        trust: toNumber(source.trust, 50),
+                        familiarity: toNumber(source.familiarity, 30),
+                        dependency: toNumber(source.dependency, 30),
+                        security: toNumber(source.security, 50),
+                        energy: toNumber(source.energy, 70),
+                    };
+                },
+
+                personalityTimelineCurrentPoint() {
+                    this.ensurePersonalityTimelineState();
+                    if (!this.personalityTimelineData.length) return null;
+                    return this.personalityTimelineData[Math.min(this.personalityTimelineIndex, this.personalityTimelineData.length - 1)] || null;
+                },
+
+                personalityTimelinePreviousPoint() {
+                    this.ensurePersonalityTimelineState();
+                    if (this.personalityTimelineIndex <= 0 || !this.personalityTimelineData.length) return null;
+                    return this.personalityTimelineData[this.personalityTimelineIndex - 1] || null;
+                },
+
+                getPersonalityTimelineMetricDefs() {
+                    return [
+                        { key: 'affection', label: '好感', color: '#fb7185' },
+                        { key: 'trust', label: '信任', color: '#38bdf8' },
+                        { key: 'familiarity', label: '熟悉', color: '#34d399' },
+                        { key: 'dependency', label: '依赖', color: '#a78bfa' },
+                        { key: 'security', label: '安全感', color: '#f59e0b' },
+                        { key: 'energy', label: '精力', color: '#22c55e' },
+                    ];
+                },
+
+                getPersonalityTimelineMetrics() {
+                    const current = this.personalityTimelineCurrentPoint();
+                    const previous = this.personalityTimelinePreviousPoint();
+                    const metricDefs = this.getPersonalityTimelineMetricDefs();
+                    if (!current) return [];
+                    return metricDefs.map(metric => {
+                        const value = Number(current[metric.key] || 0);
+                        const prev = previous ? Number(previous[metric.key] || 0) : value;
+                        const delta = value - prev;
+                        return {
+                            ...metric,
+                            value,
+                            percent: Math.max(0, Math.min(100, value)),
+                            delta,
+                            deltaLabel: `${delta > 0 ? '+' : ''}${delta}`
+                        };
+                    });
+                },
+
+                stepPersonalityTimeline(step) {
+                    this.ensurePersonalityTimelineState();
+                    if (!this.personalityTimelineData.length) return;
+                    const maxIndex = this.personalityTimelineData.length - 1;
+                    this.personalityTimelineIndex = Math.max(0, Math.min(maxIndex, this.personalityTimelineIndex + step));
+                    this.updatePersonalityTimelineChart();
+                },
+
+                onPersonalityTimelineScrub(event) {
+                    this.ensurePersonalityTimelineState();
+                    this.stopPersonalityTimelinePlayback();
+                    this.personalityTimelineIndex = Number(event?.target?.value || 0);
+                    this.updatePersonalityTimelineChart();
+                },
+
+                togglePersonalityTimelinePlayback() {
+                    this.ensurePersonalityTimelineState();
+                    if (this.personalityTimelinePlaying) {
+                        this.stopPersonalityTimelinePlayback();
+                    } else {
+                        this.startPersonalityTimelinePlayback();
+                    }
+                },
+
+                startPersonalityTimelinePlayback() {
+                    this.ensurePersonalityTimelineState();
+                    if (this.personalityTimelineData.length < 2) return;
+                    this.stopPersonalityTimelinePlayback();
+                    this.personalityTimelinePlaying = true;
+                    this.personalityTimelinePlayTimer = setInterval(() => {
+                        const maxIndex = this.personalityTimelineData.length - 1;
+                        this.personalityTimelineIndex = this.personalityTimelineIndex >= maxIndex ? 0 : this.personalityTimelineIndex + 1;
+                        this.updatePersonalityTimelineChart();
+                    }, 1600);
+                },
+
+                stopPersonalityTimelinePlayback() {
+                    this.ensurePersonalityTimelineState();
+                    this.personalityTimelinePlaying = false;
+                    if (this.personalityTimelinePlayTimer) {
+                        clearInterval(this.personalityTimelinePlayTimer);
+                        this.personalityTimelinePlayTimer = null;
+                    }
+                },
+
+                updatePersonalityTimelineChart() {
+                    this.ensurePersonalityTimelineState();
+                    const chartEl = this.$refs.personalityTimelineChart;
+                    if (!chartEl) return;
+                    if (this.personalityTimelineChart && this.personalityTimelineChart.getDom() !== chartEl) {
+                        this.personalityTimelineChart.dispose();
+                        this.personalityTimelineChart = null;
+                    }
+                    if (!this.personalityTimelineChart) {
+                        this.personalityTimelineChart = echarts.init(chartEl);
+                    }
+                    const chart = this.personalityTimelineChart;
+                    const current = this.personalityTimelineCurrentPoint();
+                    if (!current) {
+                        chart.clear();
+                        return;
+                    }
+
+                    const indicator = [
+                        { name: '好感', max: 100 },
+                        { name: '信任', max: 100 },
+                        { name: '熟悉', max: 100 },
+                        { name: '依赖', max: 100 },
+                        { name: '安全感', max: 100 },
+                        { name: '精力', max: 100 },
+                    ];
+                    const values = [current.affection, current.trust, current.familiarity, current.dependency, current.security, current.energy];
+                    const metricDefs = this.getPersonalityTimelineMetricDefs();
+                    const selectedMetric = metricDefs.find(metric => metric.key === this.personalityTimelineTrendMetric) || metricDefs[0];
+                    const trendMetricKey = selectedMetric.key;
+                    const trendMetricLabel = selectedMetric.label;
+                    const trendMetricColor = selectedMetric.color;
+                    const currentTrendValue = Number(current[trendMetricKey] || 0);
+                    const trendSeriesData = this.personalityTimelineData.map((item, index) => ({
+                        value: Number(item[trendMetricKey] || 0),
+                        index,
+                    }));
+                    const xData = this.personalityTimelineData.map((item, index) => `${index + 1}`);
+                    const pointCount = xData.length;
+                    const timelineLength = Math.max(this.personalityTimelineData.length - 1, 1);
+                    const progressRatio = this.personalityTimelineIndex / timelineLength;
+                    const accent = progressRatio < 0.5 ? '#38bdf8' : '#f472b6';
+                    const isCompact = chartEl.clientWidth < 720;
+                    const isDense = pointCount > (isCompact ? 18 : 28);
+                    const isVeryDense = pointCount > (isCompact ? 32 : 56);
+                    const labelStep = Math.max(1, Math.ceil(pointCount / (isCompact ? 6 : 10)));
+                    const grid = isCompact
+                        ? [{ left: '10%', right: '8%', top: '60%', bottom: '10%' }]
+                        : [{ left: '56%', right: '4%', top: '14%', bottom: '18%' }];
+                    const radar = isCompact
+                        ? {
+                            center: ['50%', '25%'],
+                            radius: '34%'
+                        }
+                        : {
+                            center: ['26%', '50%'],
+                            radius: '68%'
+                        };
+
+                    chart.setOption({
+                        animationDuration: 700,
+                        animationDurationUpdate: 700,
+                        backgroundColor: 'transparent',
+                        tooltip: {
+                            trigger: 'item',
+                            backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                            borderColor: 'rgba(148, 163, 184, 0.2)',
+                            textStyle: { color: '#e5eefc' },
+                            formatter: params => {
+                                if (params?.seriesId === 'personality-timeline-line') {
+                                    const pointIndex = Number(params?.data?.index ?? params?.dataIndex ?? 0) + 1;
+                                    const pointValue = Number(params?.data?.value ?? params?.value ?? 0);
+                                    return `${trendMetricLabel}<br/>节点 ${pointIndex}: ${pointValue}`;
+                                }
+                                return params?.name || '';
+                            }
+                        },
+                        grid,
+                        radar: {
+                            center: radar.center,
+                            radius: radar.radius,
+                            indicator,
+                            splitNumber: 5,
+                            axisName: {
+                                color: '#cbd5e1',
+                                fontSize: isCompact ? 11 : 12,
+                                fontWeight: 600
+                            },
+                            splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+                            splitArea: { areaStyle: { color: ['rgba(30, 41, 59, 0.12)', 'rgba(30, 41, 59, 0.08)'] } },
+                            axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.22)' } }
+                        },
+                        xAxis: {
+                            type: 'category',
+                            gridIndex: 0,
+                            data: xData,
+                            boundaryGap: false,
+                            axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.2)' } },
+                            axisLabel: {
+                                color: '#94a3b8',
+                                fontSize: isCompact ? 10 : 11,
+                                interval: (index) => {
+                                    if (!isDense) return true;
+                                    return index === 0 || index === pointCount - 1 || index % labelStep === 0;
+                                },
+                                hideOverlap: true
+                            },
+                            axisTick: { show: false }
+                        },
+                        yAxis: {
+                            type: 'value',
+                            gridIndex: 0,
+                            min: 0,
+                            max: 100,
+                            axisLine: { show: false },
+                            axisLabel: { color: '#64748b', fontSize: isCompact ? 10 : 11 },
+                            splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.12)' } }
+                        },
+                        series: [
+                            {
+                                id: 'personality-timeline-radar',
+                                type: 'radar',
+                                data: [{
+                                    value: values,
+                                    name: current.visible_emotion || current.mood || '当前状态',
+                                    symbol: 'circle',
+                                    symbolSize: 7,
+                                    lineStyle: { width: 3, color: accent },
+                                    areaStyle: {
+                                        color: {
+                                            type: 'radial',
+                                            x: 0.5,
+                                            y: 0.5,
+                                            r: 0.8,
+                                            colorStops: [
+                                                { offset: 0, color: 'rgba(56, 189, 248, 0.36)' },
+                                                { offset: 1, color: 'rgba(244, 114, 182, 0.08)' }
+                                            ]
+                                        }
+                                    },
+                                    itemStyle: { color: accent }
+                                }]
+                            },
+                            {
+                                id: 'personality-timeline-line',
+                                type: 'line',
+                                xAxisIndex: 0,
+                                yAxisIndex: 0,
+                                smooth: true,
+                                sampling: isVeryDense ? 'lttb' : 'none',
+                                showSymbol: !isDense,
+                                symbol: isDense ? 'none' : 'circle',
+                                symbolSize: isDense ? 6 : 10,
+                                progressive: 400,
+                                data: trendSeriesData,
+                                lineStyle: { width: 3, color: trendMetricColor },
+                                areaStyle: {
+                                    color: {
+                                        type: 'linear',
+                                        x: 0,
+                                        y: 0,
+                                        x2: 0,
+                                        y2: 1,
+                                        colorStops: [
+                                            { offset: 0, color: `${trendMetricColor}47` },
+                                            { offset: 1, color: `${trendMetricColor}08` }
+                                        ]
+                                    }
+                                },
+                                itemStyle: {
+                                    color: params => params.dataIndex === this.personalityTimelineIndex ? '#f472b6' : trendMetricColor
+                                },
+                                markPoint: {
+                                    symbol: 'pin',
+                                    symbolSize: 36,
+                                    data: [{ coord: [String(this.personalityTimelineIndex + 1), currentTrendValue], value: currentTrendValue }],
+                                    itemStyle: { color: '#f472b6' },
+                                    label: { color: '#fff', fontSize: 10 }
+                                }
+                            }
+                        ]
+                    }, false);
+
+                    const dragHandlePosition = pointCount
+                        ? chart.convertToPixel({ gridIndex: 0 }, [this.personalityTimelineIndex, currentTrendValue])
+                        : null;
+                    chart.setOption({
+                        graphic: (Array.isArray(dragHandlePosition) && dragHandlePosition.length === 2)
+                            ? [
+                                {
+                                    id: 'personality-timeline-drag-handle',
+                                    type: 'group',
+                                    position: dragHandlePosition,
+                                    draggable: true,
+                                    cursor: 'ew-resize',
+                                    z: 100,
+                                    children: [
+                                        {
+                                            type: 'circle',
+                                            shape: { cx: 0, cy: 0, r: isCompact ? 17 : 19 },
+                                            style: {
+                                                fill: 'rgba(244, 114, 182, 0.12)',
+                                                stroke: '#f472b6',
+                                                lineWidth: 2,
+                                                shadowBlur: 18,
+                                                shadowColor: 'rgba(244, 114, 182, 0.26)'
+                                            }
+                                        },
+                                        {
+                                            type: 'circle',
+                                            shape: { cx: 0, cy: 0, r: 5 },
+                                            style: {
+                                                fill: '#f472b6'
+                                            }
+                                        }
+                                    ],
+                                    ondrag: (event) => {
+                                        if (!this.personalityTimelineData.length) return;
+                                        const nativeEvent = event?.event || event;
+                                        const pixelPoint = [
+                                            Number(nativeEvent?.offsetX),
+                                            Number(nativeEvent?.offsetY)
+                                        ];
+                                        if (!Number.isFinite(pixelPoint[0]) || !Number.isFinite(pixelPoint[1])) return;
+                                        const dataPoint = chart.convertFromPixel({ gridIndex: 0 }, pixelPoint);
+                                        const rawIndex = Array.isArray(dataPoint) ? Number(dataPoint[0]) : NaN;
+                                        if (!Number.isFinite(rawIndex)) return;
+                                        const nextIndex = Math.max(0, Math.min(this.personalityTimelineData.length - 1, Math.round(rawIndex)));
+                                        if (nextIndex !== this.personalityTimelineIndex) {
+                                            this.stopPersonalityTimelinePlayback();
+                                            this.personalityTimelineIndex = nextIndex;
+                                            this.updatePersonalityTimelineChart();
+                                        }
+                                    },
+                                }
+                            ]
+                            : []
+                    }, false);
+
+                    this.$nextTick(() => {
+                        if (this.personalityTimelineChart) {
+                            this.personalityTimelineChart.resize();
+                        }
+                    });
+                },
+
                 async loadPersonalityPresets() {
                     try {
                         const res = await api.get('/api/personality/presets');
@@ -6747,6 +7218,7 @@ def main(params):
                         // 始终同步更新 activePersonality，确保角色卡预览立即刷新
                         this.activePersonality = { ...this.personality };
                         this.personalityHasUnsavedChanges = false;
+                        this.refreshPersonalityTimelineSessions(true);
                         this.showToast('人格设置已保存', 'success');
                     } catch (e) {
                         this.showToast('保存失败', 'error');
@@ -6785,6 +7257,7 @@ def main(params):
                     };
                     this.personalityTagsInput = (this.personality.tags || []).join(' ');
                     this.personalityHasUnsavedChanges = true;
+                    this.refreshPersonalityTimelineSessions(true);
                     this.showToast('已加载角色到编辑器', 'success');
                 },
 

@@ -2528,6 +2528,25 @@
                                     </div>
 
                                     <!-- 对话控制 -->
+                                    <div class="form-section personality-journey-shortcut">
+                                        <div class="section-header">
+                                            <div class="section-header-title">
+                                                <i class="fas fa-bullseye"></i> 状态历程
+                                            </div>
+                                        </div>
+                                        <div class="section-body">
+                                            <div class="personality-journey-shortcut-card">
+                                                <div class="personality-journey-shortcut-copy">
+                                                    <div class="personality-journey-kicker">Relationship Dynamics</div>
+                                                    <h3>在独立界面查看六维变化图</h3>
+                                                    <p>把不同会话里的好感、信任、熟悉、依赖、安全感和嫉妒变化单独展开看，会更直观。</p>
+                                                </div>
+                                                <button class="btn btn-primary" @click="navigateTo('personality-journey')">
+                                                    <i class="fas fa-arrow-up-right-from-square"></i> 打开状态历程
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="form-section">
                                         <div class="section-header" @click="toggleSection('dialogControl')">
                                             <div class="section-header-title">
@@ -2989,6 +3008,125 @@
                                         <div v-if="customPersonalityTotalPages > 1" style="text-align: center; color: var(--text-muted); font-size: 12px; margin-top: 4px;">
                                             共 {{ customPersonalityPresets.length }} 个角色
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Personality Journey -->
+                    <div v-if="currentPage === 'personality-journey'" class="fade-in personality-journey-page personality-page">
+                        <div class="personality-journey-page-shell">
+                            <div class="personality-journey-page-top">
+                                <div class="personality-journey-page-copy">
+                                    <div class="personality-journey-kicker">State Timeline</div>
+                                    <h2>角色状态历程</h2>
+                                    <p>这里专门用来回看不同会话里角色六维关系的变化轨迹。你可以切换会话、播放节点、拖动时间线，观察情绪和关系是怎么一步步变动的。</p>
+                                </div>
+                                <div class="personality-journey-page-actions">
+                                    <button class="btn btn-ghost btn-sm" @click="navigateTo('personality')">
+                                        <i class="fas fa-chevron-left"></i> 返回角色设置
+                                    </button>
+                                    <button class="btn btn-primary" @click="refreshPersonalityTimelineSessions(true)" :disabled="personalityTimelineLoading">
+                                        <i class="fas fa-rotate-right" :class="{ 'fa-spin': personalityTimelineLoading }"></i> 刷新历程
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="personality-journey-page-band">
+                                <div ref="personalityJourneySection" class="personality-journey-panel">
+                                    <div class="personality-journey-toolbar">
+                                        <select class="form-select personality-journey-select" v-model="personalityTimelineSelectedCharacter" @change="selectPersonalityTimelineCharacter(personalityTimelineSelectedCharacter)">
+                                            <option value="">全部角色</option>
+                                            <option v-for="character in personalityTimelineCharacters" :key="character" :value="character">
+                                                {{ character }}
+                                            </option>
+                                        </select>
+                                        <select class="form-select personality-journey-select" v-model="personalityTimelineSelectedSessionId" @change="selectPersonalityTimelineSession(personalityTimelineSelectedSessionId)">
+                                            <option value="">选择一个会话</option>
+                                            <option v-for="session in personalityTimelineSessions" :key="session.id" :value="session.id">
+                                                {{ session.name || session.id }} · {{ session.sender_name || '未绑定角色' }} · {{ session.type || 'web' }}
+                                            </option>
+                                        </select>
+                                        <div class="personality-journey-actions">
+                                            <button class="btn btn-secondary btn-sm" @click="stepPersonalityTimeline(-1)" :disabled="!personalityTimelineData.length">
+                                                <i class="fas fa-backward-step"></i>
+                                            </button>
+                                            <button class="btn btn-primary btn-sm" @click="togglePersonalityTimelinePlayback()" :disabled="personalityTimelineData.length < 2">
+                                                <i :class="personalityTimelinePlaying ? 'fas fa-pause' : 'fas fa-play'"></i>
+                                                {{ personalityTimelinePlaying ? '暂停' : '播放' }}
+                                            </button>
+                                            <button class="btn btn-secondary btn-sm" @click="stepPersonalityTimeline(1)" :disabled="!personalityTimelineData.length">
+                                                <i class="fas fa-forward-step"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="personalityTimelineData.length" class="personality-journey-trend-toolbar">
+                                        <span class="personality-journey-trend-label">趋势字段</span>
+                                        <div class="personality-journey-trend-pills">
+                                            <button
+                                                v-for="metric in getPersonalityTimelineMetricDefs()"
+                                                :key="metric.key"
+                                                type="button"
+                                                class="personality-journey-trend-pill"
+                                                :class="{ active: personalityTimelineTrendMetric === metric.key }"
+                                                :style="{ '--journey-accent': metric.color }"
+                                                @click="personalityTimelineTrendMetric = metric.key; updatePersonalityTimelineChart()"
+                                            >
+                                                {{ metric.label }}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="personalityTimelineData.length" class="personality-journey-meta">
+                                        <div class="journey-metric">
+                                            <span class="journey-metric-label">当前节点</span>
+                                            <strong>{{ personalityTimelineIndex + 1 }}/{{ personalityTimelineData.length }}</strong>
+                                        </div>
+                                        <div class="journey-metric">
+                                            <span class="journey-metric-label">记录时间</span>
+                                            <strong>{{ formatFullTime(personalityTimelineCurrentPoint()?.timestamp) || '-' }}</strong>
+                                        </div>
+                                        <div class="journey-metric">
+                                            <span class="journey-metric-label">当前心情</span>
+                                            <strong>{{ personalityTimelineCurrentPoint()?.mood || '-' }}</strong>
+                                        </div>
+                                        <div class="journey-metric">
+                                            <span class="journey-metric-label">表层情绪</span>
+                                            <strong>{{ personalityTimelineCurrentPoint()?.visible_emotion || '-' }}</strong>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="personalityTimelineData.length" class="personality-journey-analytics">
+                                        <div class="personality-journey-chart-shell">
+                                            <div ref="personalityTimelineChart" class="personality-journey-chart"></div>
+                                        </div>
+
+                                        <div class="personality-journey-delta-grid">
+                                            <div v-for="metric in getPersonalityTimelineMetrics()" :key="metric.key" class="journey-delta-card" :style="{ '--journey-accent': metric.color }">
+                                                <div class="journey-delta-head">
+                                                    <span>{{ metric.label }}</span>
+                                                    <strong>{{ metric.value }}</strong>
+                                                </div>
+                                                <div class="journey-delta-bar">
+                                                    <span :style="{ width: metric.percent + '%' }"></span>
+                                                </div>
+                                                <div class="journey-delta-foot">
+                                                    <small>{{ metric.deltaLabel }}</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="personalityTimelineData.length" class="personality-journey-slider-wrap personality-journey-slider-wrap-bottom">
+                                        <input type="range" min="0" :max="Math.max(personalityTimelineData.length - 1, 0)" :value="personalityTimelineIndex" class="personality-journey-slider" @input="onPersonalityTimelineScrub($event)">
+                                    </div>
+
+                                    <div v-else class="empty-state personality-journey-empty">
+                                        <div class="empty-state-icon"><i class="fas fa-wave-square"></i></div>
+                                        <div class="empty-state-title">还没有可展示的会话轨迹</div>
+                                        <div class="empty-state-subtitle">先用这个角色和用户对话几轮，角色运行时就会开始积累六维变化时间线。</div>
                                     </div>
                                 </div>
                             </div>
@@ -7542,7 +7680,8 @@
                             { id: 'chat', labelKey: 'nav.chat_chat', icon: 'fas fa-comments' },
                             { id: 'sessions', labelKey: 'nav.sessions', icon: 'fas fa-list' },
                             { id: 'message-style', labelKey: 'nav.message_style', icon: 'fas fa-paint-brush' },
-                            { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' }
+                            { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
+                            { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' }
                         ],
                         config: [
                             { id: 'task-center', labelKey: 'nav.task_center', icon: 'fas fa-calendar-check' },
@@ -7831,6 +7970,17 @@
                     activePersonality: {}, // 服务器端当前实际应用的角色
                     personalityTagsInput: '', // 标签输入框的临时值（兼容旧逻辑）
                     personalityTagDraft: '', // 标签输入框当前草稿
+                    personalityTimelineCharacters: [],
+                    personalityTimelineSelectedCharacter: '',
+                    personalityTimelineTrendMetric: 'affection',
+                    personalityTimelineSessions: [],
+                    personalityTimelineSelectedSessionId: '',
+                    personalityTimelineData: [],
+                    personalityTimelineIndex: 0,
+                    personalityTimelinePlaying: false,
+                    personalityTimelinePlayTimer: null,
+                    personalityTimelineChart: null,
+                    personalityTimelineLoading: false,
                     showAvatarPicker: false, // 头像选择器
                     showExportImportDropdown: false, // 导出/导入下拉菜单
                     moodOptions: [
@@ -8424,6 +8574,7 @@
                         'message-style': '样式编辑',
                         workflows: '工作流',
                         personality: '角色设置',
+                        'personality-journey': '状态历程',
                         memory: '记忆管理',
                         knowledge: '知识库',
                         'ai-config': 'AI 配置',
