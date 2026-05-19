@@ -1048,7 +1048,14 @@ def register_session_routes(app, server):
             ]
         )
 
-        summary_prompt = f"""请简洁地总结以下对话的主要内容，保留关键信息和结论：
+        if has_been_compressed:
+            summary_prompt = f"""以下内容包含上一轮的对话摘要和后续新的对话，请将它们融合成一份新的简洁总结。旧摘要中以"【对话总结】"开头的内容是之前对话的要点，请吸收保留其中仍然重要的信息，与新对话内容整合，不要丢失关键上下文：
+
+{conversation_text}
+
+请融合以上所有信息，用80-150字总结："""
+        else:
+            summary_prompt = f"""请简洁地总结以下对话的主要内容，保留关键信息和结论：
 
 {conversation_text}
 
