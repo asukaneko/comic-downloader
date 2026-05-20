@@ -1298,6 +1298,15 @@ def register_session_routes(app, server):
         if not messages_to_compress:
             return jsonify({"success": False, "error": "没有消息需要压缩"}), 400
 
+        # 过滤掉已有的summary消息，避免【对话总结】标记重复嵌套
+        messages_to_compress = [
+            msg for msg in messages_to_compress
+            if not (msg.get("role") == "system" and str(msg.get("id", "")).startswith("summary_"))
+        ]
+
+        if not messages_to_compress and not has_been_compressed:
+            return jsonify({"success": False, "error": "没有消息需要压缩"}), 400
+
         conversation_text = "\n".join(
             [
                 f"[{msg.get('role', 'user')}]: {msg.get('content', '')[:500]}"
@@ -1334,6 +1343,12 @@ def register_session_routes(app, server):
             )
 
             summary = response.choices[0].message.content.strip()
+
+            # 清理AI输出中可能包含的嵌套【对话总结】标记，避免重复嵌套
+            import re
+            summary = re.sub(r'【对话总结】\s*', '', summary).strip()
+            # 去除可能的markdown加粗标记
+            summary = re.sub(r'\*\*【对话总结】\*\*\s*', '', summary).strip()
 
             archive = _get_or_create_archive_session(session_id, session)
             compress_label = f"压缩于 {datetime.now().strftime('%Y-%m-%d %H:%M')} ({len(messages_to_compress)} 条消息)"
