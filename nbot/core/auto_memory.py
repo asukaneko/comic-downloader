@@ -213,6 +213,7 @@ def _call_memory_model(turns: List[Dict[str, str]],
     model = runtime_ai.get("model") or ""
     provider_type = runtime_ai.get("provider_type") or "openai_compatible"
     api_key = runtime_ai.get("api_key") or ""
+    append_base_url_path = runtime_ai.get("append_base_url_path", True)
     if not base_url or not model:
         return []
 
@@ -267,6 +268,7 @@ def _call_memory_model(turns: List[Dict[str, str]],
         base_url,
         model=model,
         provider_type=provider_type,
+        append_base_url_path=append_base_url_path,
     )
     payload = build_chat_completion_payload(
         model,

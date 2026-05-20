@@ -13,7 +13,7 @@ _log = logging.getLogger(__name__)
 
 _STATE_TURN_COUNTERS: Dict[str, int] = {}
 _STATE_TURN_BUFFER: Dict[str, List[Dict[str, str]]] = {}
-_STATE_TURN_INTERVAL = 6
+_STATE_TURN_INTERVAL = 4
 
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
 RELATIONSHIP_FIELDS = (
@@ -148,6 +148,7 @@ def _call_state_model(
     model = runtime_ai.get("model") or ""
     provider_type = runtime_ai.get("provider_type") or "openai_compatible"
     api_key = runtime_ai.get("api_key") or ""
+    append_base_url_path = runtime_ai.get("append_base_url_path", True)
     if not base_url or not model:
         return {}
 
@@ -200,7 +201,12 @@ def _call_state_model(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
-    url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+    url = resolve_chat_completion_url(
+        base_url,
+        model=model,
+        provider_type=provider_type,
+        append_base_url_path=append_base_url_path,
+    )
     payload = build_chat_completion_payload(
         model,
         messages,
@@ -355,7 +361,8 @@ def update_state_from_recent_turns(
 
     new_state, new_relationship = _apply_ai_adjustment(state, relationship, adjustment)
     _log.info(
-        "[AutoState] applied 6-turn state adjustment: character=%s mood=%s intensity=%.2f reason=%s",
+        "[AutoState] applied %d-turn state adjustment: character=%s mood=%s intensity=%.2f reason=%s",
+        _STATE_TURN_INTERVAL,
         state.character_id,
         new_state.mood,
         new_state.mood_intensity,

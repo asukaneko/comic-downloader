@@ -8999,7 +8999,7 @@ def main(params):
                     this.aiConfig.model = defaultModels[this.aiConfig.provider] || 'custom';
                     this.aiConfig.custom_model = '';
                     this.aiConfig.provider_type = this.getProviderTypeByProvider(this.aiConfig.provider);
-                    this.applyProviderCapabilities(this.aiConfig);
+                    this.applyProviderCapabilities(this.aiConfig, true);
                     this.currentPreset = '';
                 },
 
@@ -9015,7 +9015,7 @@ def main(params):
                     };
                     this.modelForm.model = defaultModels[this.modelForm.provider] || 'custom';
                     this.modelForm.provider_type = this.getProviderTypeByProvider(this.modelForm.provider);
-                    this.applyProviderCapabilities(this.modelForm);
+                    this.applyProviderCapabilities(this.modelForm, true);
                 },
 
                 async onApiKeySelectChange() {
@@ -9181,7 +9181,7 @@ def main(params):
                     }
                 },
 
-                applyProviderCapabilities(target) {
+                applyProviderCapabilities(target, force = false) {
                     const providerType = target.provider_type || this.getProviderTypeByProvider(target.provider);
                     const capabilityMap = {
                         openai_compatible: { supports_tools: true, supports_reasoning: true, supports_stream: true },
@@ -9192,9 +9192,15 @@ def main(params):
                     };
                     const defaults = capabilityMap[providerType] || capabilityMap.openai_compatible;
                     target.provider_type = providerType;
-                    target.supports_tools = defaults.supports_tools;
-                    target.supports_reasoning = defaults.supports_reasoning;
-                    target.supports_stream = defaults.supports_stream;
+                    if (force || typeof target.supports_tools !== 'boolean') {
+                        target.supports_tools = defaults.supports_tools;
+                    }
+                    if (force || typeof target.supports_reasoning !== 'boolean') {
+                        target.supports_reasoning = defaults.supports_reasoning;
+                    }
+                    if (force || typeof target.supports_stream !== 'boolean') {
+                        target.supports_stream = defaults.supports_stream;
+                    }
                     if (!target.supports_stream) {
                         target.stream = false;
                     }
@@ -9206,7 +9212,7 @@ def main(params):
                     this.aiConfig.custom_model = '';
                     this.aiConfig.base_url = preset.base_url;
                     this.aiConfig.provider_type = this.getProviderTypeByProvider(preset.provider);
-                    this.applyProviderCapabilities(this.aiConfig);
+                    this.applyProviderCapabilities(this.aiConfig, true);
                     this.currentPreset = preset.name;
                     this.showToast(`已应用 ${preset.name} 配置`, 'success');
                 },
@@ -9216,7 +9222,7 @@ def main(params):
                     this.modelForm.model = preset.model;
                     this.modelForm.base_url = preset.base_url;
                     this.modelForm.provider_type = this.getProviderTypeByProvider(preset.provider);
-                    this.applyProviderCapabilities(this.modelForm);
+                    this.applyProviderCapabilities(this.modelForm, true);
                     if (!this.modelForm.name || this.modelForm.name === '新配置') {
                         this.modelForm.name = `${preset.name} 配置`;
                     }
@@ -9304,6 +9310,7 @@ def main(params):
                             ...model,
                             // 确保purpose字段存在
                             purpose: model.purpose || 'chat',
+                            append_base_url_path: typeof model.append_base_url_path === 'boolean' ? model.append_base_url_path : true,
                             // 确保特有配置字段存在
                             voice: model.voice || 'default',
                             speed: model.speed || 1.0,
@@ -9344,6 +9351,7 @@ def main(params):
                             api_key: '',
                             selectedApiKeyId: '',
                             base_url: '',
+                            append_base_url_path: true,
                             model: 'gpt-4',
                             enabled: true,
                             supports_tools: true,

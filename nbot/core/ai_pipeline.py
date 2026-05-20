@@ -266,8 +266,14 @@ class PipelineCallbacks(ABC):
             model = runtime_ai.get("model") or ai_client.model
             provider_type = runtime_ai.get("provider_type") or "openai_compatible"
             api_key = runtime_ai.get("api_key") or ""
+            append_base_url_path = runtime_ai.get("append_base_url_path", True)
 
-            url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+            url = resolve_chat_completion_url(
+                base_url,
+                model=model,
+                provider_type=provider_type,
+                append_base_url_path=append_base_url_path,
+            )
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",

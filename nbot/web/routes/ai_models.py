@@ -97,6 +97,7 @@ def register_ai_model_routes(app, server):
             ),
             "api_key": data.get("api_key", ""),
             "base_url": data.get("base_url", ""),
+            "append_base_url_path": data.get("append_base_url_path", True),
             "model": data.get("model", ""),
             "enabled": data.get("enabled", True),
             "supports_tools": data.get("supports_tools", default_config.get("supports_tools", True)),
@@ -165,6 +166,10 @@ def register_ai_model_routes(app, server):
             if data.get("api_key") and data["api_key"] != "********":
                 model["api_key"] = data["api_key"]
             model["base_url"] = data.get("base_url", model["base_url"])
+            model["append_base_url_path"] = data.get(
+                "append_base_url_path",
+                model.get("append_base_url_path", True),
+            )
             model["model"] = data.get("model", model["model"])
             model["enabled"] = data.get("enabled", model.get("enabled", True))
             model["supports_tools"] = data.get(
@@ -405,6 +410,7 @@ def register_ai_model_routes(app, server):
             )
             api_key = resolve_runtime_api_key(model.get("api_key", ""), provider_type)
             base_url = model.get("base_url", "")
+            append_base_url_path = model.get("append_base_url_path", True)
             model_name = model.get("model", "")
             purpose = model.get("purpose", "chat")
 
@@ -450,6 +456,7 @@ def register_ai_model_routes(app, server):
                         base_url,
                         model=model_name,
                         provider_type=provider_type,
+                        append_base_url_path=append_base_url_path,
                     )
 
                     headers = {

@@ -111,6 +111,8 @@ def get_runtime_ai_config() -> dict:
         or shared.get("provider")
         or provider_type
         or "openai_compatible",
+        "append_base_url_path": shared.get("append_base_url_path", True),
+        "stream": shared.get("stream", True),
         "supports_tools": shared.get("supports_tools", supports_tools),
         "supports_reasoning": shared.get("supports_reasoning", supports_reasoning),
         "supports_stream": shared.get("supports_stream", supports_stream),
@@ -141,6 +143,8 @@ def refresh_runtime_ai_config() -> dict:
         client.base_url = base_url
         client.model = model
         client.provider_type = provider_type
+        client.append_base_url_path = bool(effective.get("append_base_url_path", True))
+        client.stream_enabled = bool(effective.get("stream", True))
         client.supports_tools = supports_tools
         client.supports_reasoning = supports_reasoning
         client.supports_stream = supports_stream
@@ -163,6 +167,8 @@ class AIClient:
     def __init__(self, api_key: str, base_url: str, model: str, pic_model: str,
                  search_api_key: str, search_api_url: str, video_api: str, silicon_api_key: str,
                  provider_type: str = "openai_compatible",
+                 append_base_url_path: bool = True,
+                 stream_enabled: bool = True,
                  supports_tools: bool = True,
                  supports_reasoning: bool = True,
                  supports_stream: bool = True):
@@ -175,6 +181,8 @@ class AIClient:
         self.video_api = video_api
         self.silicon_api_key = silicon_api_key
         self.provider_type = provider_type or "openai_compatible"
+        self.append_base_url_path = bool(append_base_url_path)
+        self.stream_enabled = bool(stream_enabled)
         self.supports_tools = bool(supports_tools)
         self.supports_reasoning = bool(supports_reasoning)
         self.supports_stream = bool(supports_stream)
@@ -196,7 +204,7 @@ class AIClient:
         return content.strip()
 
     def chat_completion(self, messages, model: str = None, stream: bool = False):
-        stream = bool(stream and self.supports_stream)
+        stream = bool(stream and self.supports_stream and self.stream_enabled)
         url_base = (self.base_url or "").rstrip("/")
         if not url_base:
             raise ValueError("base_url 未配置")
@@ -259,6 +267,7 @@ class AIClient:
                 self.base_url,
                 model=model or self.model or "",
                 provider_type=self.provider_type,
+                append_base_url_path=self.append_base_url_path,
             )
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -417,6 +426,7 @@ class AIClient:
             base_url = vision_config.get("base_url", "")
             model = vision_config.get("model", "zai-org/GLM-4.6V")
             provider_type = vision_config.get("provider_type", "openai_compatible")
+            append_base_url_path = vision_config.get("append_base_url_path", True)
             system_prompt = vision_config.get("system_prompt", "请详细描述这张图片的内容。")
             
             messages = [
@@ -436,7 +446,12 @@ class AIClient:
             ]
             
             try:
-                url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+                url = resolve_chat_completion_url(
+                    base_url,
+                    model=model,
+                    provider_type=provider_type,
+                    append_base_url_path=append_base_url_path,
+                )
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
@@ -666,6 +681,7 @@ class AIClient:
             base_url = video_config.get("base_url", "")
             model = video_config.get("model", "zai-org/GLM-4.6V")
             provider_type = video_config.get("provider_type", "openai_compatible")
+            append_base_url_path = video_config.get("append_base_url_path", True)
             system_prompt = video_config.get("system_prompt", "请分析这个视频的内容。")
         else:
             # 使用默认配置
@@ -673,10 +689,16 @@ class AIClient:
             base_url = self.base_url
             model = "zai-org/GLM-4.6V"
             provider_type = self.provider_type
+            append_base_url_path = self.append_base_url_path
             system_prompt = "请分析这个视频的内容。"
         
         try:
-            url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+            url = resolve_chat_completion_url(
+                base_url,
+                model=model,
+                provider_type=provider_type,
+                append_base_url_path=append_base_url_path,
+            )
             payload = {
                 "model": model,
                 "messages": [
@@ -713,6 +735,8 @@ ai_client = AIClient(
     video_api=video_api,
     silicon_api_key=silicon_api_key,
     provider_type=provider_type,
+    append_base_url_path=True,
+    stream_enabled=True,
     supports_tools=supports_tools,
     supports_reasoning=supports_reasoning,
     supports_stream=supports_stream,

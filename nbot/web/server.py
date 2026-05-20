@@ -955,6 +955,7 @@ class WebChatServer:
         self,
         *,
         provider_type: str = None,
+        stream_enabled: Optional[bool] = None,
         supports_tools: Optional[bool] = None,
         supports_reasoning: Optional[bool] = None,
         supports_stream: Optional[bool] = None,
@@ -1012,6 +1013,11 @@ class WebChatServer:
                 if supports_stream is None
                 else supports_stream
             )
+            resolved_stream_enabled = (
+                self.ai_config.get("stream", True)
+                if stream_enabled is None
+                else stream_enabled
+            )
 
             self.ai_client = AIClient(
                 api_key=self.ai_api_key,
@@ -1023,6 +1029,7 @@ class WebChatServer:
                 video_api=video_config.get("api_key", ""),
                 silicon_api_key=api_config.get("silicon_api_key", ""),
                 provider_type=resolved_provider_type,
+                stream_enabled=resolved_stream_enabled,
                 supports_tools=resolved_supports_tools,
                 supports_reasoning=resolved_supports_reasoning,
                 supports_stream=resolved_supports_stream,
@@ -1526,6 +1533,7 @@ class WebChatServer:
                 if self.ai_api_key and self.ai_base_url:
                     self._initialize_ai_client(
                         provider_type=model_provider_type,
+                        stream_enabled=model.get("stream", True),
                         supports_tools=model.get("supports_tools", True),
                         supports_reasoning=model.get("supports_reasoning", True),
                         supports_stream=model.get("supports_stream", True),
@@ -1569,6 +1577,7 @@ class WebChatServer:
                             "ApiKey", "silicon_api_key", fallback=""
                         ),
                         provider_type=model.get("provider_type", model.get("provider", "openai_compatible")),
+                        stream_enabled=model.get("stream", True),
                         supports_tools=model.get("supports_tools", True),
                         supports_reasoning=model.get("supports_reasoning", True),
                         supports_stream=model.get("supports_stream", True),

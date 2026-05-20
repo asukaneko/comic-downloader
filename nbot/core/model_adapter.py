@@ -260,6 +260,7 @@ def resolve_chat_completion_url(
     *,
     model: str = "",
     provider_type: str = "",
+    append_base_url_path: bool = True,
 ) -> str:
     url_base = (base_url or "").rstrip("/")
     if not url_base:
@@ -267,6 +268,8 @@ def resolve_chat_completion_url(
 
     provider = provider or infer_provider_profile(base_url, model, provider_type)
     if provider.endpoint_mode == "raw":
+        return url_base
+    if not append_base_url_path:
         return url_base
     if "/chat/completions" in url_base or "/chatcompletion" in url_base:
         return url_base

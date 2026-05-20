@@ -419,6 +419,13 @@ class WebCallbacks(PipelineCallbacks):
         """返回 provider 级流式迭代器。"""
         server = self.server
         session_id = self.session_id
+        from nbot.services.ai import refresh_runtime_ai_config
+
+        runtime_ai = refresh_runtime_ai_config()
+        if not runtime_ai.get("supports_stream", True):
+            return None
+        if not runtime_ai.get("stream", True):
+            return None
 
         def streamer(messages, stop_event=None):
             return _stream_to_web(server, messages, tools, session_id, stop_event)
@@ -839,8 +846,14 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
     model = runtime_ai.get("model") or ""
     provider_type = runtime_ai.get("provider_type") or "openai_compatible"
     api_key = runtime_ai.get("api_key") or ""
+    append_base_url_path = runtime_ai.get("append_base_url_path", True)
 
-    url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+    url = resolve_chat_completion_url(
+        base_url,
+        model=model,
+        provider_type=provider_type,
+        append_base_url_path=append_base_url_path,
+    )
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -873,8 +886,14 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
     model = runtime_ai.get("model") or ""
     provider_type = runtime_ai.get("provider_type") or "openai_compatible"
     api_key = runtime_ai.get("api_key") or ""
+    append_base_url_path = runtime_ai.get("append_base_url_path", True)
 
-    url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+    url = resolve_chat_completion_url(
+        base_url,
+        model=model,
+        provider_type=provider_type,
+        append_base_url_path=append_base_url_path,
+    )
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -1408,6 +1427,7 @@ def get_ai_response_with_images(
         base_url = ""
         model = "zai-org/GLM-4.6V"
         provider_type = "openai_compatible"
+        append_base_url_path = True
         system_prompt = "请详细描述这张图片的内容。"
 
         if vision_config and vision_config.get("api_key"):
@@ -1416,6 +1436,7 @@ def get_ai_response_with_images(
             base_url = vision_config.get("base_url", "")
             model = vision_config.get("model", "zai-org/GLM-4.6V")
             provider_type = vision_config.get("provider_type", "openai_compatible")
+            append_base_url_path = vision_config.get("append_base_url_path", True)
             system_prompt = vision_config.get("system_prompt", "请详细描述这张图片的内容。")
         else:
             # 回退到旧的配置方式
@@ -1426,6 +1447,7 @@ def get_ai_response_with_images(
             base_url = getattr(server.ai_client, "base_url", None)
             model = getattr(server.ai_client, "pic_model", None) or "zai-org/GLM-4.6V"
             provider_type = getattr(server.ai_client, "provider_type", "openai_compatible")
+            append_base_url_path = getattr(server.ai_client, "append_base_url_path", True)
             system_prompt = "请详细描述这张图片的内容。"
 
             # 尝试从config.ini获取silicon_api_key
@@ -1476,7 +1498,12 @@ def get_ai_response_with_images(
         if provider_type == "siliconflow" or "siliconflow" in base_url:
             url = "https://api.siliconflow.cn/v1/chat/completions"
         else:
-            url = resolve_chat_completion_url(base_url, model=model, provider_type=provider_type)
+            url = resolve_chat_completion_url(
+                base_url,
+                model=model,
+                provider_type=provider_type,
+                append_base_url_path=append_base_url_path,
+            )
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -1688,6 +1715,7 @@ server,
                 server.ai_base_url,
                 model=server.ai_model or "",
                 provider_type=server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible")),
+                append_base_url_path=server.ai_config.get("append_base_url_path", True),
             )
 
             headers = {
