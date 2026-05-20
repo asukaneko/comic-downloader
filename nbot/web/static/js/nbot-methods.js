@@ -2229,6 +2229,9 @@ const NbotMethods = {
                         dependency: toNumber(source.dependency, 30),
                         security: toNumber(source.security, 50),
                         energy: toNumber(source.energy, 70),
+                        // 对话内容
+                        user_message: source.user_message || '',
+                        assistant_message: source.assistant_message || '',
                     };
                 },
 

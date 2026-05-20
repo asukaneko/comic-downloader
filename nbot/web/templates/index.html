@@ -3119,6 +3119,31 @@
                                         </div>
                                     </div>
 
+                                    <!-- 当前节点对话内容展示 - 聊天式布局 -->
+                                    <div v-if="personalityTimelineData.length && (personalityTimelineCurrentPoint()?.user_message || personalityTimelineCurrentPoint()?.assistant_message)" class="personality-journey-conversation">
+                                        <div class="conversation-chat">
+                                            <!-- 用户消息 - 靠右，头像在右边 -->
+                                            <div v-if="personalityTimelineCurrentPoint()?.user_message" class="chat-message chat-user">
+                                                <div class="chat-avatar">
+                                                    <i class="fas fa-user"></i>
+                                                </div>
+                                                <div class="chat-bubble">
+                                                    <div class="chat-text">{{ personalityTimelineCurrentPoint().user_message }}</div>
+                                                </div>
+                                            </div>
+                                            <!-- AI消息 - 靠左 -->
+                                            <div v-if="personalityTimelineCurrentPoint()?.assistant_message" class="chat-message chat-assistant">
+                                                <div class="chat-avatar">
+                                                    <i class="fas fa-robot"></i>
+                                                </div>
+                                                <div class="chat-bubble">
+                                                    <div class="chat-sender">{{ personalityTimelineSelectedCharacter || '角色' }}</div>
+                                                    <div class="chat-text">{{ personalityTimelineCurrentPoint().assistant_message }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div v-if="personalityTimelineData.length" class="personality-journey-slider-wrap personality-journey-slider-wrap-bottom">
                                         <input type="range" min="0" :max="Math.max(personalityTimelineData.length - 1, 0)" :value="personalityTimelineIndex" class="personality-journey-slider" @input="onPersonalityTimelineScrub($event)">
                                     </div>

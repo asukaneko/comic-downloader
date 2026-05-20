@@ -17585,6 +17585,150 @@
     background: rgba(15, 23, 42, 0.28);
 }
 
+/* 状态历程 - 当前节点对话内容（聊天式布局） */
+.personality-page .personality-journey-conversation {
+    margin-top: 16px;
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.24);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+    overflow: hidden;
+}
+
+.personality-page .conversation-chat {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+/* 聊天消息基础样式 */
+.personality-page .chat-message {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    max-width: 85%;
+}
+
+/* 用户消息 - 靠右对齐 */
+.personality-page .chat-user {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+}
+
+/* AI消息 - 靠左对齐 */
+.personality-page .chat-assistant {
+    align-self: flex-start;
+    flex-direction: row;
+}
+
+/* 头像 */
+.personality-page .chat-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+}
+
+.personality-page .chat-user .chat-avatar {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(99, 102, 241, 0.4));
+    color: #93c5fd;
+}
+
+.personality-page .chat-assistant .chat-avatar {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.35), rgba(244, 114, 182, 0.35));
+    color: #f9a8d4;
+}
+
+/* 气泡容器 */
+.personality-page .chat-bubble {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.personality-page .chat-user .chat-bubble {
+    align-items: flex-end;
+}
+
+.personality-page .chat-assistant .chat-bubble {
+    align-items: flex-start;
+}
+
+/* 发送者名称（仅AI显示） */
+.personality-page .chat-sender {
+    font-size: 10px;
+    font-weight: 600;
+    color: #f472b6;
+    padding: 0 4px;
+    opacity: 0.8;
+}
+
+/* 消息文本气泡 */
+.personality-page .chat-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    padding: 10px 14px;
+    border-radius: 16px;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+/* 用户消息气泡 - 右侧蓝色 */
+.personality-page .chat-user .chat-text {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(99, 102, 241, 0.18));
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-bottom-right-radius: 4px;
+}
+
+/* AI消息气泡 - 左侧粉色 */
+.personality-page .chat-assistant .chat-text {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(244, 114, 182, 0.1));
+    border: 1px solid rgba(236, 72, 153, 0.15);
+    border-bottom-left-radius: 4px;
+}
+
+/* 滚动条样式 */
+.personality-page .conversation-chat::-webkit-scrollbar {
+    width: 5px;
+}
+
+.personality-page .conversation-chat::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.personality-page .conversation-chat::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 3px;
+}
+
+.personality-page .conversation-chat::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.35);
+}
+
+/* 浅色主题适配 */
+[data-theme="light"] .personality-page .personality-journey-conversation {
+    background: rgba(255, 255, 255, 0.6);
+    border-color: rgba(148, 163, 184, 0.12);
+}
+
+[data-theme="light"] .personality-page .chat-user .chat-text {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(99, 102, 241, 0.1));
+    border-color: rgba(59, 130, 246, 0.15);
+}
+
+[data-theme="light"] .personality-page .chat-assistant .chat-text {
+    background: linear-gradient(135deg, rgba(236, 72, 153, 0.08), rgba(244, 114, 182, 0.06));
+    border-color: rgba(236, 72, 153, 0.12);
+}
+
 [data-theme="light"] .personality-page .personality-journey-hero {
     background:
         radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 34%),

@@ -595,6 +595,120 @@ def register_session_routes(app, server):
         timeline, changed = _ensure_runtime_timeline_from_snapshot(session)
         if changed:
             session_store.set_session(session_id, session)
+
+        # 附加对话内容到timeline节点
+        messages = session.get("messages", [])
+        for entry in timeline:
+            if not isinstance(entry, dict):
+                continue
+            msg_index = entry.get("message_index")
+            msg_id = entry.get("message_id")
+            user_msg = None
+            assistant_msg = None
+
+            # 根据message_index查找对应的用户和AI消息
+            if isinstance(msg_index, int) and msg_index >= 0 and msg_index < len(messages):
+                # 查找当前assistant消息及之前的user消息
+                for i in range(msg_index, -1, -1):
+                    msg = messages[i]
+                    if isinstance(msg, dict):
+                        if msg.get("role") == "assistant" and not assistant_msg:
+                            assistant_msg = msg
+                        elif msg.get("role") == "user" and not user_msg:
+                            user_msg = msg
+                        if assistant_msg and user_msg:
+                            break
+
+            # 如果通过index没找到，尝试用message_id
+            if (not assistant_msg or not user_msg) and msg_id:
+                msg_id_str = str(msg_id)
+                found_assistant = False
+                found_user = False
+                for i in range(len(messages) - 1, -1, -1):
+                    msg = messages[i]
+                    if isinstance(msg, dict) and str(msg.get("id")) == msg_id_str:
+                        if msg.get("role") == "assistant":
+                            assistant_msg = msg
+                            found_assistant = True
+                        for j in range(i - 1, -1, -1):
+                            prev_msg = messages[j]
+                            if isinstance(prev_msg, dict) and prev_msg.get("role") == "user":
+                                user_msg = prev_msg
+                                found_user = True
+                                break
+                    if found_assistant and found_user:
+                        break
+
+            # 策略3：时间戳邻近匹配（处理旧数据、snapshot fallback、索引失效等情况）
+            if (not assistant_msg or not user_msg) and entry.get("timestamp") and len(messages) >= 2:
+                try:
+                    from datetime import datetime as dt
+                    entry_time = dt.fromisoformat(entry["timestamp"].replace("Z", "+00:00"))
+                    if entry_time.tzinfo:
+                        entry_time = entry_time.astimezone().replace(tzinfo=None)
+
+                    best_pair = None
+                    min_time_diff = None
+
+                    for i in range(len(messages) - 1, 0, -1):
+                        curr_msg = messages[i]
+                        prev_msg = messages[i - 1]
+                        if not isinstance(curr_msg, dict) or not isinstance(prev_msg, dict):
+                            continue
+
+                        is_valid_pair = (
+                            (curr_msg.get("role") == "assistant" and prev_msg.get("role") == "user") or
+                            (curr_msg.get("role") == "user" and prev_msg.get("role") == "assistant")
+                        )
+                        if not is_valid_pair:
+                            continue
+
+                        curr_time_str = _message_timestamp(curr_msg)
+                        prev_time_str = _message_timestamp(prev_msg)
+                        if not curr_time_str or not prev_time_str:
+                            continue
+
+                        curr_time = _parse_iso_datetime(curr_time_str)
+                        prev_time = _parse_iso_datetime(prev_time_str)
+                        pair_time = max(curr_time, prev_time) if curr_time and prev_time else None
+                        if not pair_time:
+                            continue
+
+                        time_diff = abs((entry_time - pair_time).total_seconds())
+                        if min_time_diff is None or time_diff < min_time_diff:
+                            min_time_diff = time_diff
+                            if curr_msg.get("role") == "assistant":
+                                best_pair = (prev_msg, curr_msg)
+                            else:
+                                best_pair = (curr_msg, prev_msg)
+
+                    if best_pair and min_time_diff is not None and min_time_diff <= 300:
+                        if not user_msg:
+                            user_msg = best_pair[0]
+                        if not assistant_msg:
+                            assistant_msg = best_pair[1]
+
+                except Exception:
+                    pass
+
+            # 提取文本内容（限制长度避免数据过大）
+            def extract_text(msg):
+                if not msg or not isinstance(msg, dict):
+                    return ""
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    texts = []
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            texts.append(part.get("text", ""))
+                        elif isinstance(part, str):
+                            texts.append(part)
+                    content = "\n".join(texts)
+                return str(content)[:500] if content else ""
+
+            entry["user_message"] = extract_text(user_msg)
+            entry["assistant_message"] = extract_text(assistant_msg)
+
         return jsonify({"success": True, "timeline": timeline})
 
     @app.route("/api/sessions/<session_id>/runtime-timeline", methods=["POST"])
