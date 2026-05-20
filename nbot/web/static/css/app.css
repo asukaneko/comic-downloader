@@ -750,11 +750,99 @@
         .session-title-editor {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
         }
         .session-title-input {
             flex: 1;
             min-width: 0;
+            height: 38px;
+            padding: 0 14px;
+            font-size: 14px;
+            border-radius: 10px;
+            border: 1.5px solid rgba(148, 163, 184, 0.2);
+            background: rgba(15, 23, 42, 0.4);
+            color: var(--text-primary);
+            transition: all 0.25s ease;
+            box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+        }
+        .session-title-input:focus {
+            border-color: #818cf8;
+            background: rgba(15, 23, 42, 0.6);
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.15), 0 4px 12px rgba(0, 0, 0, 0.1);
+            outline: none;
+        }
+        .session-title-input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+
+        /* 编辑器操作按钮 */
+        .session-title-editor .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+            font-size: 13px;
+        }
+
+        /* 保存按钮 - 蓝紫色渐变 */
+        .session-title-editor .icon-btn[title="保存"] {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+        .session-title-editor .icon-btn[title="保存"]:hover {
+            background: linear-gradient(135deg, #7c7ff7, #9d73f7);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        }
+        .session-title-editor .icon-btn[title="保存"]:active {
+            transform: translateY(0) scale(0.96);
+        }
+
+        /* 取消按钮 - 柔和灰色 */
+        .session-title-editor .icon-btn[title="取消"] {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-secondary);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .session-title-editor .icon-btn[title="取消"]:hover {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border-color: rgba(239, 68, 68, 0.2);
+            transform: translateY(-1px);
+        }
+        .session-title-editor .icon-btn[title="取消"]:active {
+            transform: translateY(0) scale(0.96);
+        }
+
+        /* 浅色主题适配 */
+        [data-theme="light"] .session-title-input {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(148, 163, 184, 0.25);
+            color: #1e293b;
+        }
+        [data-theme="light"] .session-title-input:focus {
+            background: #ffffff;
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+        [data-theme="light"] .session-title-editor .icon-btn[title="保存"] {
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
+        }
+        [data-theme="light"] .session-title-editor .icon-btn[title="save"]:hover {
+            box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+        }
+        [data-theme="light"] .session-title-editor .icon-btn[title="取消"] {
+            background: rgba(148, 163, 184, 0.1);
+            border-color: rgba(148, 163, 184, 0.15);
+            color: #64748b;
         }
 
         .code-block {
