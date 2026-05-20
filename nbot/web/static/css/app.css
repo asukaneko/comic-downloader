@@ -15321,25 +15321,6 @@
             margin-left: 4px;
         }
 
-        .favorite-folder-btn {
-            position: relative;
-        }
-
-        .favorite-folder-count {
-            position: absolute;
-            top: -4px;
-            right: -4px;
-            min-width: 16px;
-            height: 16px;
-            padding: 0 4px;
-            border-radius: 999px;
-            background: var(--accent-primary);
-            color: #fff;
-            font-size: 10px;
-            line-height: 16px;
-            font-weight: 700;
-        }
-
         .message-favorite-toolbar {
             display: flex;
             align-items: center;
@@ -15418,6 +15399,23 @@
                 0 0 0 2px rgba(99, 102, 241, 0.45),
                 0 8px 32px rgba(0, 0, 0, 0.3),
                 inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .message.search-highlight .message-content {
+            animation: messageSearchPulse 1.2s ease-in-out 2;
+            box-shadow:
+                0 0 0 3px rgba(245, 158, 11, 0.7),
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        @keyframes messageSearchPulse {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-2px);
+            }
         }
 
         .message-favorites-modal {
@@ -15567,6 +15565,114 @@
             font-size: 14px;
             line-height: 1.65;
             overflow-wrap: anywhere;
+        }
+
+        .message-search-modal {
+            max-width: 720px;
+        }
+
+        .message-search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 0 12px;
+            margin-bottom: 14px;
+        }
+
+        .message-search-box i {
+            color: var(--text-muted);
+        }
+
+        .message-search-box input {
+            width: 100%;
+            height: 42px;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .message-search-empty {
+            padding: 32px 20px;
+        }
+
+        .message-search-empty i {
+            font-size: 32px;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .message-search-results {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: min(62vh, 620px);
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .message-search-result {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: rgba(15, 23, 42, 0.46);
+            color: var(--text-primary);
+            padding: 12px;
+            cursor: pointer;
+            text-align: left;
+            transition: border-color 0.15s, background 0.15s, transform 0.15s;
+        }
+
+        .message-search-result:hover {
+            border-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.12);
+            transform: translateY(-1px);
+        }
+
+        .message-search-result-icon {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.18);
+            color: var(--accent-primary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .message-search-result-main {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .message-search-result-main strong {
+            font-size: 13px;
+        }
+
+        .message-search-result-main em {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-style: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .message-search-result-time {
+            color: var(--text-muted);
+            font-size: 12px;
+            white-space: nowrap;
         }
 
         @media (max-width: 768px) {

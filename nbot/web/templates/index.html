@@ -854,9 +854,9 @@
                                     <i class="fas fa-file-export"></i>
                                     导出会话
                                 </button>
-                                <button v-if="currentSession" class="chat-view-action" @click.prevent="startMessageFavoriteMode(); closeChatViewMenu()" :disabled="isLoading">
-                                    <i class="far fa-circle-check"></i>
-                                    收藏对话
+                                <button v-if="currentSession" class="chat-view-action" @click.prevent="openMessageSearch(); closeChatViewMenu()">
+                                    <i class="fas fa-search"></i>
+                                    搜索对话
                                 </button>
                                 <button class="chat-view-action" @click.prevent="toggleChatHeader">
                                     <i class="fas fa-window-minimize"></i>
@@ -894,6 +894,10 @@
                                         <div v-if="currentSession" class="mobile-chat-actions-item" @click="exportCurrentSession(); showMobileChatActions = false" :class="{ disabled: isLoading }">
                                             <i class="fas fa-file-export"></i>
                                             <span>导出会话</span>
+                                        </div>
+                                        <div v-if="currentSession" class="mobile-chat-actions-item" @click="openMessageSearch(); showMobileChatActions = false">
+                                            <i class="fas fa-search"></i>
+                                            <span>搜索对话</span>
                                         </div>
                                         <div v-if="currentSession" class="mobile-chat-actions-item" @click="openMessageFavorites(); showMobileChatActions = false">
                                             <i class="fas fa-folder-open"></i>
@@ -1104,7 +1108,6 @@
                                         </div>
                                         <button class="btn-icon desktop-only favorite-folder-btn" @click="openMessageFavorites" title="收藏夹">
                                             <i class="fas fa-folder-open"></i>
-                                            <span v-if="currentMessageFavorites.length" class="favorite-folder-count">{{ currentMessageFavorites.length }}</span>
                                         </button>
                                         <!-- 桌面端按钮 -->
                                         <button class="btn-icon desktop-only" @click="toggleCharacterRuntimePanel" title="角色运行时">
@@ -1136,6 +1139,10 @@
                                                 <div class="dropdown-item" @click="exportCurrentSession; showMobileChatActions = false" :class="{ disabled: isLoading }">
                                                     <i class="fas fa-file-export"></i>
                                                     <span>导出会话</span>
+                                                </div>
+                                                <div class="dropdown-item" @click="openMessageSearch(); showMobileChatActions = false">
+                                                    <i class="fas fa-search"></i>
+                                                    <span>搜索对话</span>
                                                 </div>
                                                 <div class="dropdown-item" @click="openMessageFavorites(); showMobileChatActions = false">
                                                     <i class="fas fa-folder-open"></i>
@@ -1298,7 +1305,11 @@
                                     </div>
                                     <template v-for="msg in currentMessages.filter(m => !m.hide_in_web)" :key="msg.id">
                                         <!-- 消息主体 -->
-                                        <div class="message" :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg), 'favorite-selecting': messageFavoriteMode, 'favorite-selected': isMessageSelectedForFavorite(msg) }]">
+                                        <div
+                                            class="message"
+                                            :data-message-id="msg.id || ''"
+                                            :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg), 'favorite-selecting': messageFavoriteMode, 'favorite-selected': isMessageSelectedForFavorite(msg), 'search-highlight': highlightedSearchMessageId === msg.id }]"
+                                        >
                                             <button
                                                 v-if="messageFavoriteMode && msg.id"
                                                 class="favorite-message-check"
@@ -5644,6 +5655,54 @@
             </div>
         </div>
 
+        <div v-if="showMessageSearchModal" class="modal-overlay" @click.self="showMessageSearchModal = false">
+            <div class="modal message-search-modal">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-search"></i> 搜索对话</span>
+                    <button class="modal-close" @click="showMessageSearchModal = false"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <div class="message-search-box">
+                        <i class="fas fa-search"></i>
+                        <input
+                            ref="messageSearchInput"
+                            v-model="messageSearchQuery"
+                            type="text"
+                            placeholder="搜索当前会话..."
+                        >
+                    </div>
+                    <div v-if="!messageSearchQuery.trim()" class="empty-state message-search-empty">
+                        <i class="far fa-comments"></i>
+                        <p>输入关键词搜索当前会话的对话内容</p>
+                    </div>
+                    <div v-else-if="getMessageSearchResults().length === 0" class="empty-state message-search-empty">
+                        <i class="fas fa-search"></i>
+                        <p>没有找到匹配的对话</p>
+                    </div>
+                    <div v-else class="message-search-results">
+                        <button
+                            v-for="result in getMessageSearchResults()"
+                            :key="result.id"
+                            class="message-search-result"
+                            @click="openMessageSearchResult(result)"
+                        >
+                            <span class="message-search-result-icon">
+                                <i :class="result.role === 'assistant' ? 'fas fa-robot' : 'fas fa-user'"></i>
+                            </span>
+                            <span class="message-search-result-main">
+                                <strong>{{ result.sender }}</strong>
+                                <em>{{ result.preview }}</em>
+                            </span>
+                            <span class="message-search-result-time">{{ formatFullTime(result.timestamp) }}</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showMessageSearchModal = false">关闭</button>
+                </div>
+            </div>
+        </div>
+
         <!-- AI创建角色卡模态框 -->
         <div v-if="showAiCreateModal" class="modal-overlay" @click.self="cancelAiCreate">
             <div class="modal" style="max-width: 560px;">
@@ -7953,6 +8012,9 @@
                     selectedMessageFavoriteCollection: null,
                     showMessageFavoritesModal: false,
                     isSavingMessageFavorites: false,
+                    showMessageSearchModal: false,
+                    messageSearchQuery: '',
+                    highlightedSearchMessageId: null,
                     showCharacterRuntimePanel: false,
                     chatHorizontalMargin: Math.min(300, Math.max(0, parseInt(localStorage.getItem('nbot_chat_horizontal_margin') || '0', 10) || 0)),
                     sessionSwitching: false,

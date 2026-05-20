@@ -3654,6 +3654,9 @@ def main(params):
                     this.messageFavoriteTitle = '';
                     this.editingMessageFavoriteId = null;
                     this.selectedMessageFavoriteCollection = null;
+                    this.showMessageSearchModal = false;
+                    this.messageSearchQuery = '';
+                    this.highlightedSearchMessageId = null;
                     this.updateWebVisibility();
                     if (window.__nbotLive2dSay) {
                         window.__nbotLive2dSay(`\u5df2\u5207\u6362\u5230\u300c${session.name || '\u5f53\u524d\u4f1a\u8bdd'}\u300d\u3002`, 3200, 3);
@@ -11534,6 +11537,78 @@ def main(params):
                     await this.loadMessageFavorites();
                     this.selectedMessageFavoriteCollection = null;
                     this.showMessageFavoritesModal = true;
+                },
+
+                openMessageSearch() {
+                    if (!this.currentSession) return;
+                    this.messageSearchQuery = '';
+                    this.showMessageSearchModal = true;
+                    this.$nextTick(() => {
+                        const input = this.$refs.messageSearchInput;
+                        if (input && input.focus) input.focus();
+                    });
+                },
+
+                getSearchableMessageText(msg) {
+                    if (!msg) return '';
+                    const content = msg.content;
+                    if (typeof content === 'string') return content;
+                    if (Array.isArray(content)) {
+                        return content.map(part => {
+                            if (typeof part === 'string') return part;
+                            if (part && typeof part === 'object') {
+                                return part.text || part.content || part.name || '';
+                            }
+                            return '';
+                        }).join('\n');
+                    }
+                    if (content && typeof content === 'object') {
+                        return content.text || content.content || JSON.stringify(content);
+                    }
+                    return '';
+                },
+
+                getMessageSearchResults() {
+                    const query = (this.messageSearchQuery || '').trim().toLowerCase();
+                    if (!query) return [];
+                    return (this.currentMessages || [])
+                        .filter(msg => msg && !msg.hide_in_web && msg.id && msg.role !== 'system')
+                        .map(msg => {
+                            const text = this.getSearchableMessageText(msg);
+                            const index = text.toLowerCase().indexOf(query);
+                            if (index < 0) return null;
+                            const start = Math.max(0, index - 36);
+                            const end = Math.min(text.length, index + query.length + 72);
+                            const prefix = start > 0 ? '...' : '';
+                            const suffix = end < text.length ? '...' : '';
+                            return {
+                                id: msg.id,
+                                role: msg.role,
+                                sender: msg.sender || (msg.role === 'assistant' ? (this.currentSession?.sender_name || 'AI') : (this.username || '用户')),
+                                timestamp: msg.timestamp,
+                                preview: prefix + text.slice(start, end).replace(/\s+/g, ' ').trim() + suffix,
+                            };
+                        })
+                        .filter(Boolean)
+                        .slice(0, 80);
+                },
+
+                openMessageSearchResult(result) {
+                    if (!result?.id) return;
+                    this.showMessageSearchModal = false;
+                    this.highlightedSearchMessageId = result.id;
+                    this.$nextTick(() => {
+                        const escapedId = window.CSS && CSS.escape ? CSS.escape(result.id) : String(result.id).replace(/"/g, '\\"');
+                        const el = document.querySelector(`[data-message-id="${escapedId}"]`);
+                        if (el && el.scrollIntoView) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                        setTimeout(() => {
+                            if (this.highlightedSearchMessageId === result.id) {
+                                this.highlightedSearchMessageId = null;
+                            }
+                        }, 2400);
+                    });
                 },
 
                 async regenerateMessage(msg) {
