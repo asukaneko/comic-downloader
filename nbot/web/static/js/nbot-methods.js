@@ -3648,6 +3648,12 @@ def main(params):
 
                     // 切换到新会话，清除所有状态
                     this.currentSession = session;
+                    this.messageFavoriteMode = false;
+                    this.selectedFavoriteMessageIds = [];
+                    this.currentMessageFavorites = [];
+                    this.messageFavoriteTitle = '';
+                    this.editingMessageFavoriteId = null;
+                    this.selectedMessageFavoriteCollection = null;
                     this.updateWebVisibility();
                     if (window.__nbotLive2dSay) {
                         window.__nbotLive2dSay(`\u5df2\u5207\u6362\u5230\u300c${session.name || '\u5f53\u524d\u4f1a\u8bdd'}\u300d\u3002`, 3200, 3);
@@ -3678,6 +3684,7 @@ def main(params):
                     socket.emit('join_session', { session_id: session.id });
                     // 切换会话时强制滚动到底部
                     await this.loadMessages(true);
+                    await this.loadMessageFavorites();
                     this.updateContextStats();
 
                     // 消息加载完成，淡入
@@ -11425,6 +11432,108 @@ def main(params):
                 copyMessage(msg) {
                     const text = msg.content || '';
                     this.copyToClipboard(text);
+                },
+
+                async loadMessageFavorites() {
+                    if (!this.currentSession?.id || this.currentSession._isTemp) {
+                        this.currentMessageFavorites = [];
+                        return;
+                    }
+                    try {
+                        const res = await api.get(`/api/sessions/${this.currentSession.id}/message-favorites`);
+                        const collections = res.data?.collections || res.data?.favorites || [];
+                        this.currentMessageFavorites = Array.isArray(collections) ? collections : [];
+                    } catch (e) {
+                        console.error('Failed to load message favorites:', e);
+                        this.currentMessageFavorites = [];
+                    }
+                },
+
+                startMessageFavoriteMode() {
+                    if (!this.currentSession) return;
+                    this.selectedFavoriteMessageIds = [];
+                    this.messageFavoriteTitle = this.buildDefaultMessageFavoriteTitle();
+                    this.editingMessageFavoriteId = null;
+                    this.messageFavoriteMode = true;
+                },
+
+                cancelMessageFavoriteMode() {
+                    this.messageFavoriteMode = false;
+                    this.selectedFavoriteMessageIds = [];
+                    this.messageFavoriteTitle = '';
+                    this.editingMessageFavoriteId = null;
+                },
+
+                buildDefaultMessageFavoriteTitle() {
+                    const date = new Date();
+                    const pad = (value) => String(value).padStart(2, '0');
+                    const stamp = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                    return `收藏 ${stamp}`;
+                },
+
+                isMessageSelectedForFavorite(msg) {
+                    return !!msg?.id && this.selectedFavoriteMessageIds.includes(msg.id);
+                },
+
+                toggleMessageFavoriteSelection(msg) {
+                    if (!msg?.id) return;
+                    const index = this.selectedFavoriteMessageIds.indexOf(msg.id);
+                    if (index >= 0) {
+                        this.selectedFavoriteMessageIds.splice(index, 1);
+                    } else {
+                        this.selectedFavoriteMessageIds.push(msg.id);
+                    }
+                },
+
+                startEditMessageFavorite(collection) {
+                    if (!this.currentSession || !collection) return;
+                    const favoriteIds = (collection.messages || [])
+                        .map(msg => msg.message_id || msg.id)
+                        .filter(Boolean);
+                    this.selectedFavoriteMessageIds = [...new Set(favoriteIds)];
+                    this.messageFavoriteTitle = collection.title || this.buildDefaultMessageFavoriteTitle();
+                    this.editingMessageFavoriteId = collection.id || null;
+                    this.showMessageFavoritesModal = false;
+                    this.selectedMessageFavoriteCollection = null;
+                    this.messageFavoriteMode = true;
+                    this.$nextTick(() => {
+                        const input = document.querySelector('.message-favorite-title-input');
+                        if (input) input.focus();
+                    });
+                },
+
+                async saveMessageFavorites() {
+                    if (!this.currentSession?.id || this.isSavingMessageFavorites) return;
+                    if (!this.selectedFavoriteMessageIds.length) {
+                        this.showToast('请先选择要收藏的对话', 'warning');
+                        return;
+                    }
+                    this.isSavingMessageFavorites = true;
+                    try {
+                        const wasEditing = !!this.editingMessageFavoriteId;
+                        const res = await api.put(`/api/sessions/${this.currentSession.id}/message-favorites`, {
+                            message_ids: this.selectedFavoriteMessageIds,
+                            title: this.messageFavoriteTitle,
+                            collection_id: this.editingMessageFavoriteId,
+                        });
+                        const collections = res.data?.collections || res.data?.favorites || [];
+                        this.currentMessageFavorites = Array.isArray(collections) ? collections : [];
+                        this.messageFavoriteMode = false;
+                        this.selectedFavoriteMessageIds = [];
+                        this.messageFavoriteTitle = '';
+                        this.editingMessageFavoriteId = null;
+                        this.showToast(wasEditing ? '收藏已更新' : '已保存到收藏夹', 'success');
+                    } catch (e) {
+                        this.showToast(e.response?.data?.error || '保存收藏失败', 'error');
+                    } finally {
+                        this.isSavingMessageFavorites = false;
+                    }
+                },
+
+                async openMessageFavorites() {
+                    await this.loadMessageFavorites();
+                    this.selectedMessageFavoriteCollection = null;
+                    this.showMessageFavoritesModal = true;
                 },
 
                 async regenerateMessage(msg) {

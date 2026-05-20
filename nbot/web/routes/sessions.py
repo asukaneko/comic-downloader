@@ -136,6 +136,41 @@ def _normalize_proactive_chat_config(config):
     return defaults
 
 
+def _normalize_message_favorite_collections(raw_favorites):
+    if not isinstance(raw_favorites, list):
+        return []
+
+    collections = []
+    legacy_messages = []
+    for item in raw_favorites:
+        if not isinstance(item, dict):
+            continue
+        if isinstance(item.get("messages"), list):
+            messages = [deepcopy(msg) for msg in item.get("messages", []) if isinstance(msg, dict)]
+            collections.append(
+                {
+                    "id": str(item.get("id") or item.get("favorite_id") or uuid.uuid4()),
+                    "title": str(item.get("title") or "未命名收藏"),
+                    "created_at": item.get("created_at") or item.get("favorited_at") or datetime.now().isoformat(),
+                    "messages": messages,
+                }
+            )
+        elif item.get("message_id") or item.get("id"):
+            legacy_messages.append(deepcopy(item))
+
+    if legacy_messages:
+        collections.insert(
+            0,
+            {
+                "id": str(uuid.uuid4()),
+                "title": "旧版收藏",
+                "created_at": legacy_messages[0].get("favorited_at") or datetime.now().isoformat(),
+                "messages": legacy_messages,
+            },
+        )
+    return collections
+
+
 def _skills_prompt_injection_enabled(settings):
     features = (settings or {}).get("features") or {}
     return bool(features.get("skills_prompt_injection", False))
@@ -352,6 +387,12 @@ def register_session_routes(app, server):
             if timeline_changed:
                 session_store.set_session(sid, session)
             archived = bool(session.get("archived"))
+            favorite_collections = _normalize_message_favorite_collections(
+                session.get("message_favorites", [])
+            )
+            if favorite_collections != session.get("message_favorites", []):
+                session["message_favorites"] = favorite_collections
+                session_store.set_session(sid, session)
             # 检查会话是否已公开
             public_id = _generate_public_id(sid)
             is_public = public_id in _public_sessions
@@ -380,6 +421,7 @@ def register_session_routes(app, server):
                     "scenario": session.get("scenario", ""),
                     "tags": _normalize_tags(session.get("tags", [])),
                     "favorite": bool(session.get("favorite")),
+                    "message_favorites_count": len(favorite_collections),
                     "pinned": bool(session.get("pinned")),
                     "is_public": is_public,
                     "proactive_chat": _normalize_proactive_chat_config(session.get("proactive_chat")),
@@ -466,6 +508,7 @@ def register_session_routes(app, server):
             "sender_portrait": sender_portrait,
             "tags": _normalize_tags(data.get("tags", [])),
             "favorite": bool(data.get("favorite")),
+            "message_favorites": [],
             "pinned": bool(data.get("pinned")),
             "is_public": bool(data.get("is_public")),
             "proactive_chat": _normalize_proactive_chat_config(data.get("proactive_chat")),
@@ -520,6 +563,12 @@ def register_session_routes(app, server):
         session["proactive_chat"] = _normalize_proactive_chat_config(
             session.get("proactive_chat")
         )
+        if not isinstance(session.get("message_favorites"), list):
+            session["message_favorites"] = []
+        else:
+            session["message_favorites"] = _normalize_message_favorite_collections(
+                session.get("message_favorites", [])
+            )
         return jsonify(session)
 
     @app.route("/api/sessions/<session_id>/debug")
@@ -1152,6 +1201,86 @@ def register_session_routes(app, server):
         messages = session.get("messages", [])
         display_messages = [m for m in messages if m.get("role") != "system"]
         return jsonify(display_messages)
+
+    @app.route("/api/sessions/<session_id>/message-favorites", methods=["GET"])
+    def get_message_favorites(session_id):
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        favorites = _normalize_message_favorite_collections(
+            session.get("message_favorites", [])
+        )
+        if favorites != session.get("message_favorites", []):
+            session["message_favorites"] = favorites
+            session_store.set_session(session_id, session)
+        return jsonify({"success": True, "collections": favorites, "favorites": favorites})
+
+    @app.route("/api/sessions/<session_id>/message-favorites", methods=["PUT"])
+    def update_message_favorites(session_id):
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        data = request.get_json(silent=True) or {}
+        message_ids = data.get("message_ids", [])
+        if not isinstance(message_ids, list):
+            return jsonify({"error": "message_ids must be a list"}), 400
+        title = str(data.get("title") or "").strip()[:80]
+        collection_id = str(data.get("collection_id") or "").strip()
+
+        seen = set()
+        for message_id in message_ids:
+            message_id = str(message_id or "").strip()
+            if not message_id or message_id in seen:
+                continue
+            seen.add(message_id)
+        if not seen:
+            return jsonify({"error": "请选择至少一条对话"}), 400
+
+        collections = _normalize_message_favorite_collections(
+            session.get("message_favorites", [])
+        )
+
+        messages = session.get("messages", [])
+        now = datetime.now().isoformat()
+        snapshots = []
+        for msg in messages:
+            if not isinstance(msg, dict) or msg.get("role") == "system":
+                continue
+            message_id = str(msg.get("id") or "")
+            if message_id not in seen:
+                continue
+
+            item = deepcopy(msg)
+            item["message_id"] = message_id
+            snapshots.append(item)
+
+        if not snapshots:
+            return jsonify({"error": "Message not found"}), 404
+        if not title:
+            title = f"收藏 {datetime.now().strftime('%Y-%m-%d %H:%M')} ({len(snapshots)}条)"
+
+        if collection_id:
+            target = next((item for item in collections if str(item.get("id")) == collection_id), None)
+            if not target:
+                return jsonify({"error": "Favorite collection not found"}), 404
+            target["title"] = title
+            target["updated_at"] = now
+            target["messages"] = snapshots
+        else:
+            collections.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "title": title,
+                    "created_at": now,
+                    "messages": snapshots,
+                }
+            )
+
+        session["message_favorites"] = collections
+        session_store.set_session(session_id, session)
+        return jsonify({"success": True, "collections": collections, "favorites": collections})
 
     @app.route("/api/sessions/<session_id>/messages", methods=["POST"])
     def add_message(session_id):
