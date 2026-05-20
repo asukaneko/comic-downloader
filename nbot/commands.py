@@ -4162,9 +4162,9 @@ def is_at_bot(msg) -> bool:
             if mention_id in bot_uins or _is_at_all_enabled(msg, mention_id):
                 return True
 
-    for bot_uin in bot_uins:
-        if bot_uin and bot_uin in raw_message:
-            return True
+    # 不再检查 raw_message 中是否包含 bot_uin
+    # 原因：cq:json 分享内容可能包含机器人QQ号，导致误判为@机器人
+    # 正常的@会通过上面的 CQ:at 码检查捕获
 
     return False
 
