@@ -2223,7 +2223,8 @@ const NbotMethods = {
                 selectPersonalityTimelineCharacter(characterName) {
                     this.ensurePersonalityTimelineState();
                     this.personalityTimelineSelectedCharacter = String(characterName || '');
-                    this.refreshPersonalityTimelineSessions(true);
+                    // 不传 forceSelect，避免有打开的会话时被强制覆盖回当前会话角色
+                    this.refreshPersonalityTimelineSessions(false);
                 },
 
                 async selectPersonalityTimelineSession(sessionId) {
