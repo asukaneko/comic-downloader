@@ -15691,6 +15691,73 @@
                 margin-left: auto;
             }
         }
+
+        /* Light mode: message favorites */
+        [data-theme="light"] .message-favorite-toolbar {
+            background: var(--bg-secondary);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .message-favorite-title-input {
+            background: var(--bg-tertiary);
+        }
+
+        [data-theme="light"] .favorite-message-check {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .message.favorite-selected .message-content {
+            box-shadow:
+                0 0 0 2px rgba(99, 102, 241, 0.45),
+                0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] .message-favorite-collection-item {
+            background: var(--bg-secondary);
+        }
+
+        [data-theme="light"] .message-favorite-item {
+            background: var(--bg-secondary);
+        }
+
+        [data-theme="light"] .message-search-box {
+            background: var(--bg-tertiary);
+        }
+
+        [data-theme="light"] .message-search-result {
+            background: var(--bg-secondary);
+        }
+
+        [data-theme="light"] .user-msg-time {
+            color: var(--text-muted);
+        }
+
+        [data-theme="light"] .user-msg-action-btn {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+
+        [data-theme="light"] .user-msg-action-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .user-edit-textarea {
+            border-color: var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .user-edit-textarea:focus {
+            border-color: var(--accent-primary);
+            background: var(--bg-secondary);
+        }
+
+        [data-theme="light"] .user-edit-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
         .user-msg-meta {
             display: flex;
             align-items: center;

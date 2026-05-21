@@ -1094,6 +1094,9 @@
                                                 <button v-else-if="!currentSession.is_archive" class="btn-bind-character" @click="showBindCharacterModal = true" title="绑定角色">
                                                     <i class="fas fa-user-plus"></i> 绑定角色
                                                 </button>
+                                                <button v-if="currentSession.archive_session_id && !currentSession.is_archive && !currentSession.archived" class="btn-bind-character" style="color: var(--success); border-color: var(--success);" @click="restoreTurnsFromArchive" title="从归档恢复指定轮数到当前会话">
+                                                    <i class="fas fa-level-up-alt"></i> 提取归档
+                                                </button>
                                                 <button v-if="currentSession.archive_session_id" class="btn-bind-character" style="color: var(--accent-primary); border-color: var(--accent-primary);" @click="openArchiveSession" title="查看归档">
                                                     <i class="fas fa-archive"></i> 查看归档
                                                 </button>
@@ -1147,6 +1150,10 @@
                                                 <div class="dropdown-item" @click="openMessageFavorites(); showMobileChatActions = false">
                                                     <i class="fas fa-folder-open"></i>
                                                     <span>收藏面板</span>
+                                                </div>
+                                                <div v-if="currentSession.archive_session_id && !currentSession.is_archive && !currentSession.archived" class="dropdown-item" @click="restoreTurnsFromArchive(); showMobileChatActions = false" :class="{ disabled: isLoading }">
+                                                    <i class="fas fa-level-up-alt"></i>
+                                                    <span>提取归档</span>
                                                 </div>
                                                 <div v-if="currentSession.is_archive || currentSession.archived" class="dropdown-item" @click="aiSummarySession; showMobileChatActions = false" :class="{ disabled: isSummarizing || isLoading }">
                                                     <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>

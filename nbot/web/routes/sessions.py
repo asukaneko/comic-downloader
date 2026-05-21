@@ -1392,6 +1392,127 @@ def register_session_routes(app, server):
         archive_session["messages"] = existing
         session_store.set_session(archive_session["id"], archive_session)
 
+    def _is_archive_divider_message(msg):
+        return (
+            isinstance(msg, dict)
+            and msg.get("role") == "system"
+            and str(msg.get("id", "")).startswith("archive_divider_")
+        )
+
+    def _is_summary_message(msg):
+        return (
+            isinstance(msg, dict)
+            and msg.get("role") == "system"
+            and str(msg.get("id", "")).startswith("summary_")
+        )
+
+    def _split_archive_into_turns(messages):
+        turns = []
+        current = []
+        for msg in messages or []:
+            if not isinstance(msg, dict) or msg.get("role") == "system":
+                continue
+            role = msg.get("role")
+            if role == "user" and current:
+                turns.append(current)
+                current = []
+            current.append(msg)
+        if current:
+            turns.append(current)
+        return turns
+
+    def _find_insert_index_after_summary(messages):
+        idx = 0
+        if messages and isinstance(messages[0], dict) and messages[0].get("role") == "system" and not _is_summary_message(messages[0]):
+            idx = 1
+        while idx < len(messages) and _is_summary_message(messages[idx]):
+            idx += 1
+        return idx
+
+    def _cleanup_archive_messages_after_extract(messages):
+        cleaned = list(messages or [])
+        while cleaned and _is_archive_divider_message(cleaned[-1]):
+            cleaned.pop()
+        compact = []
+        previous_divider = False
+        for msg in cleaned:
+            is_divider = _is_archive_divider_message(msg)
+            if is_divider and previous_divider:
+                continue
+            compact.append(msg)
+            previous_divider = is_divider
+        return compact
+
+    @app.route("/api/sessions/<session_id>/restore-from-archive", methods=["POST"])
+    def restore_from_archive(session_id):
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+        if session.get("is_archive"):
+            return jsonify({"success": False, "error": "归档会话不能执行此操作"}), 400
+
+        data = request.get_json(silent=True) or {}
+        try:
+            turn_count = int(data.get("turns", data.get("count", 1)))
+        except Exception:
+            return jsonify({"success": False, "error": "turns must be an integer"}), 400
+        if turn_count <= 0:
+            return jsonify({"success": False, "error": "提取轮数必须大于 0"}), 400
+        turn_count = min(turn_count, 100)
+
+        archive_id = session.get("archive_session_id")
+        if not archive_id:
+            return jsonify({"success": False, "error": "当前会话没有关联归档"}), 400
+        archive = session_store.get_session(archive_id) or get_session_from_db(server.data_dir, archive_id)
+        if not archive:
+            return jsonify({"success": False, "error": "归档会话不存在"}), 404
+
+        archive_messages = list(archive.get("messages", []))
+        turns = _split_archive_into_turns(archive_messages)
+        if not turns:
+            return jsonify({"success": False, "error": "归档中没有可提取的对话"}), 400
+
+        selected_turns = turns[-turn_count:]
+        selected_ids = {
+            id(msg) for turn in selected_turns for msg in turn
+        }
+        selected_messages = [deepcopy(msg) for turn in selected_turns for msg in turn]
+        selected_message_ids = {
+            str(msg.get("id")) for turn in selected_turns for msg in turn if msg.get("id")
+        }
+
+        remaining_archive = []
+        for msg in archive_messages:
+            if id(msg) in selected_ids:
+                continue
+            if msg.get("id") and str(msg.get("id")) in selected_message_ids and msg.get("role") != "system":
+                continue
+            remaining_archive.append(msg)
+        remaining_archive = _cleanup_archive_messages_after_extract(remaining_archive)
+
+        current_messages = list(session.get("messages", []))
+        insert_idx = _find_insert_index_after_summary(current_messages)
+        inserted_at = datetime.now().isoformat()
+        for msg in selected_messages:
+            msg["restored_from_archive"] = archive_id
+            msg["restored_at"] = inserted_at
+        new_messages = current_messages[:insert_idx] + selected_messages + current_messages[insert_idx:]
+
+        session["messages"] = new_messages
+        archive["messages"] = remaining_archive
+        session_store.set_session(archive_id, archive)
+        session_store.set_session(session_id, session)
+
+        return jsonify({
+            "success": True,
+            "turns_requested": turn_count,
+            "turns_restored": len(selected_turns),
+            "messages_restored": len(selected_messages),
+            "archive_session_id": archive_id,
+            "archive_messages_remaining": len([m for m in remaining_archive if isinstance(m, dict) and m.get("role") != "system"]),
+            "insert_index": insert_idx,
+        })
+
     @app.route("/api/sessions/<session_id>/compress", methods=["POST"])
     def compress_context(session_id):
         session = _get_web_session(session_id)

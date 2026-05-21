@@ -647,6 +647,32 @@ const NbotMethods = {
                     }
                 },
 
+                async restoreTurnsFromArchive() {
+                    if (!this.currentSession?.archive_session_id || this.currentSession.is_archive || this.currentSession.archived) return;
+                    const raw = window.prompt('从归档尾部提取多少轮对话到当前会话？\n会插入到对话总结之后、当前对话之前，并从归档中移除。', '3');
+                    if (raw === null) return;
+                    const turns = parseInt(String(raw).trim(), 10);
+                    if (!Number.isFinite(turns) || turns <= 0) {
+                        this.showToast('请输入大于 0 的轮数', 'warning');
+                        return;
+                    }
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post(`/api/sessions/${this.currentSession.id}/restore-from-archive`, { turns });
+                        if (res.data.success) {
+                            await this.loadMessages(true);
+                            this.updateContextStats();
+                            this.showToast(`已从归档恢复 ${res.data.turns_restored} 轮 / ${res.data.messages_restored} 条消息`, 'success');
+                        } else {
+                            this.showToast(res.data.error || '恢复失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('从归档恢复失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
                 async aiSummarySession() {
                     if (!this.currentSession || this.isSummarizing) return;
 
