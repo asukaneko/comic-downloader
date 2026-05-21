@@ -61,6 +61,31 @@ _EMOTION_MAP = {
         "hidden": "想先接住对方的情绪",
         "tone": "gentle_supportive",
     },
+    "sadness": {
+        "visible": "心疼",
+        "hidden": "想靠近并安抚对方",
+        "tone": "gentle_supportive",
+    },
+    "anger": {
+        "visible": "谨慎",
+        "hidden": "想先稳住气氛",
+        "tone": "calm_careful",
+    },
+    "anxiety": {
+        "visible": "担心",
+        "hidden": "想让对方安心一点",
+        "tone": "steady_reassuring",
+    },
+    "joy": {
+        "visible": "开心",
+        "hidden": "被对方情绪感染得轻快",
+        "tone": "bright_warm",
+    },
+    "fatigue": {
+        "visible": "心疼",
+        "hidden": "想让对方先休息",
+        "tone": "soft_caring",
+    },
 }
 
 
@@ -93,12 +118,26 @@ class ReactionPlanner:
             "apology": signals.apology_score,
             "playfulness": signals.playfulness_score,
             "uncertainty": signals.uncertainty_score,
+            "sadness": signals.sadness_score,
+            "anger": signals.anger_score,
+            "anxiety": signals.anxiety_score,
+            "joy": signals.joy_score,
+            "fatigue": signals.fatigue_score,
         }
 
         strongest = max(signal_scores, key=lambda key: signal_scores[key])
         strongest_score = signal_scores[strongest]
 
-        if signals.vulnerability_score > 0.45 and signals.hostility_score < 0.35:
+        if signals.fatigue_score > 0.45 and signals.hostility_score < 0.35:
+            strongest = "fatigue"
+            strongest_score = signals.fatigue_score
+        elif signals.sadness_score > 0.45 and signals.hostility_score < 0.35:
+            strongest = "sadness"
+            strongest_score = signals.sadness_score
+        elif signals.anxiety_score > 0.45 and signals.hostility_score < 0.35:
+            strongest = "anxiety"
+            strongest_score = signals.anxiety_score
+        elif signals.vulnerability_score > 0.45 and signals.hostility_score < 0.35:
             strongest = "vulnerability"
             strongest_score = signals.vulnerability_score
         elif signals.reassurance_score > 0.5 and relationship.security < 45:
@@ -185,6 +224,11 @@ class ReactionPlanner:
             "apology": "repair_relationship",
             "playfulness": "play_back",
             "uncertainty": "gently_probe_and_clarify",
+            "sadness": "comfort_and_stabilize",
+            "anger": "deescalate_and_validate",
+            "anxiety": "reassure_and_ground",
+            "joy": "share_positive_emotion",
+            "fatigue": "encourage_rest_gently",
         }
         intent = intent_map.get(signal_type, "respond_naturally")
         if signal_type == "uncertainty" and signals.sentiment_score < -0.2:
@@ -220,6 +264,15 @@ class ReactionPlanner:
             controls["initiative"] = "high"
         elif signal_type == "uncertainty":
             controls["length"] = "short"
+        elif signal_type in ("sadness", "anxiety", "fatigue"):
+            controls["initiative"] = "low"
+            controls["action_detail"] = "medium"
+        elif signal_type == "anger":
+            controls["length"] = "short"
+            controls["action_detail"] = "low"
+            controls["initiative"] = "low"
+        elif signal_type == "joy":
+            controls["action_detail"] = "high"
 
         if relationship.dependency > 70:
             controls["initiative"] = "high"
@@ -264,6 +317,21 @@ class ReactionPlanner:
         if signals.vulnerability_score > 0.45 and signals.hostility_score < 0.35:
             deltas["mood_toward"] = "心疼"
             deltas["mood_intensity_delta"] = 0.1
+        if signals.sadness_score > 0.4 and signals.hostility_score < 0.35:
+            deltas["mood_toward"] = "心疼"
+            deltas["mood_intensity_delta"] = 0.12
+        if signals.anxiety_score > 0.4 and signals.hostility_score < 0.35:
+            deltas["mood_toward"] = "担心"
+            deltas["mood_intensity_delta"] = 0.1
+        if signals.fatigue_score > 0.4:
+            deltas["mood_toward"] = "心疼"
+            deltas["mood_intensity_delta"] = 0.08
+        if signals.anger_score > 0.45 and signals.hostility_score < 0.35:
+            deltas["mood_toward"] = "谨慎"
+            deltas["mood_intensity_delta"] = 0.08
+        if signals.joy_score > 0.45 and signals.sentiment_score > 0:
+            deltas["mood_toward"] = "开心"
+            deltas["mood_intensity_delta"] = 0.08
 
         return deltas
 

@@ -7,6 +7,7 @@ relationship context all contribute to a small set of normalized scores.
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -34,6 +35,13 @@ class UserSignals:
     uncertainty_score: float = 0.0
     apology_score: float = 0.0
     playfulness_score: float = 0.0
+    sadness_score: float = 0.0
+    anger_score: float = 0.0
+    anxiety_score: float = 0.0
+    joy_score: float = 0.0
+    fatigue_score: float = 0.0
+    sarcasm_score: float = 0.0
+    negation_scope_score: float = 0.0
 
     detected_keywords: List[str] = field(default_factory=list)
 
@@ -54,13 +62,20 @@ class UserSignals:
             "uncertainty_score": round(self.uncertainty_score, 2),
             "apology_score": round(self.apology_score, 2),
             "playfulness_score": round(self.playfulness_score, 2),
+            "sadness_score": round(self.sadness_score, 2),
+            "anger_score": round(self.anger_score, 2),
+            "anxiety_score": round(self.anxiety_score, 2),
+            "joy_score": round(self.joy_score, 2),
+            "fatigue_score": round(self.fatigue_score, 2),
+            "sarcasm_score": round(self.sarcasm_score, 2),
+            "negation_scope_score": round(self.negation_scope_score, 2),
             "detected_keywords": self.detected_keywords,
         }
 
 
 _KEYWORD_RULES = {
     "praise": {
-        "keywords": ["可爱", "好棒", "厉害", "优秀", "真好", "最棒", "最喜欢", "爱你", "真棒"],
+        "keywords": ["可爱", "好棒", "厉害", "优秀", "真好", "最棒", "最喜欢", "爱你", "真棒", "靠谱", "聪明", "懂我", "谢谢你", "感谢", "辛苦你了"],
         "score": 0.6,
     },
     "rejection": {
@@ -98,7 +113,14 @@ _DOWNTONERS = ["有点", "稍微", "可能", "也许", "大概", "一点", "好�
 _SOFTENERS = ["请", "拜托", "可以吗", "好吗", "辛苦你", "麻烦你", "能不能"]
 _APOLOGY_KEYWORDS = ["对不起", "抱歉", "不好意思", "我错了", "别生气", "原谅我"]
 _UNCERTAINTY_KEYWORDS = ["吗", "呢", "是不是", "可以吗", "行不行", "能不能", "也许", "可能", "会不会"]
-_PLAYFUL_KEYWORDS = ["哈哈", "嘿嘿", "逗你", "开玩笑", "略略", "哼哼"]
+_PLAYFUL_KEYWORDS = ["哈哈", "嘿嘿", "hhh", "233", "逗你", "开玩笑", "略略", "哼哼", "笑死", "乐"]
+_SADNESS_KEYWORDS = ["难过", "伤心", "想哭", "哭了", "崩溃", "失落", "委屈", "心酸", "撑不住", "没人懂"]
+_ANGER_KEYWORDS = ["生气", "火大", "烦躁", "气死", "受不了", "离谱", "无语", "讨厌死", "真服了"]
+_ANXIETY_KEYWORDS = ["焦虑", "紧张", "害怕", "慌", "不安", "担心", "怕", "怎么办", "完蛋", "糟了"]
+_JOY_KEYWORDS = ["开心", "高兴", "快乐", "舒服", "安心", "期待", "喜欢", "太好了", "好耶"]
+_FATIGUE_KEYWORDS = ["累", "困", "疲惫", "没力气", "不想动", "熬夜", "撑不住", "倦", "麻了"]
+_NEGATION_MARKERS = ["不", "没", "没有", "别", "不是", "并不", "不太", "不要"]
+_SARCASM_MARKERS = ["呵呵", "啊对对对", "真行", "可真", "你可真", "也是醉了", "笑死", "6", "行吧"]
 _COMMAND_PATTERNS = ["帮我", "给我", "去做", "快点", "马上", "立刻", "现在就"]
 _REST_CARE_KEYWORDS = ["休息", "睡觉", "补觉", "放松", "吃饭", "喝水", "别太累", "歇一会"]
 
@@ -125,6 +147,21 @@ def _boost_if(value: float, condition: bool, amount: float) -> float:
     if not condition:
         return value
     return _clamp_score(value + amount)
+
+
+def _score_keywords(text: str, keywords: List[str], base: float = 0.22, per_hit: float = 0.12) -> float:
+    hits = _contains_any(text, keywords)
+    if not hits:
+        return 0.0
+    return _clamp_score(base + len(hits) * per_hit)
+
+
+def _has_negated_keyword(text: str, keyword: str, window: int = 4) -> bool:
+    for match in re.finditer(re.escape(keyword), text):
+        prefix = text[max(0, match.start() - window):match.start()]
+        if any(marker in prefix for marker in _NEGATION_MARKERS):
+            return True
+    return False
 
 
 class SignalAnalyzer:
@@ -203,6 +240,8 @@ class SignalAnalyzer:
             signals.playfulness_score = _clamp_score(0.3 + len(matched_playful) * 0.14)
             signals.detected_keywords.extend(matched_playful)
 
+        self._apply_affect_lexicons(signals, user_message, intensity_multiplier)
+
         command_hits = [pattern for pattern in _COMMAND_PATTERNS if pattern in user_message]
         if command_hits:
             raw_command = 0.35 + len(command_hits) * 0.12
@@ -236,10 +275,50 @@ class SignalAnalyzer:
         self._soften_or_disambiguate(signals, user_message, matched_softeners)
 
         positive_score = max(getattr(signals, field_name) for field_name in _POSITIVE_FIELDS)
+        positive_score = max(positive_score, signals.joy_score)
         negative_score = max(getattr(signals, field_name) for field_name in _NEGATIVE_FIELDS)
+        negative_score = max(negative_score, signals.sadness_score * 0.75, signals.anxiety_score * 0.6, signals.anger_score * 0.85, signals.fatigue_score * 0.45)
+        if signals.sarcasm_score > 0.3 and positive_score > negative_score:
+            positive_score *= 0.75
+            negative_score = max(negative_score, signals.sarcasm_score * 0.45)
         signals.sentiment_score = max(-1.0, min(1.0, positive_score - negative_score))
 
         return signals
+
+    def _apply_affect_lexicons(self, signals: UserSignals, user_message: str, intensity_multiplier: float) -> None:
+        groups = [
+            ("sadness_score", _SADNESS_KEYWORDS),
+            ("anger_score", _ANGER_KEYWORDS),
+            ("anxiety_score", _ANXIETY_KEYWORDS),
+            ("joy_score", _JOY_KEYWORDS),
+            ("fatigue_score", _FATIGUE_KEYWORDS),
+        ]
+        for field_name, keywords in groups:
+            hits = _contains_any(user_message, keywords)
+            valid_hits = [kw for kw in hits if not _has_negated_keyword(user_message, kw)]
+            if hits and len(valid_hits) < len(hits):
+                signals.negation_scope_score = _clamp_score(signals.negation_scope_score + 0.12)
+            if valid_hits:
+                setattr(signals, field_name, _clamp_score((0.22 + len(valid_hits) * 0.13) * intensity_multiplier))
+                signals.detected_keywords.extend(valid_hits)
+
+        sarcasm_hits = _contains_any(user_message, _SARCASM_MARKERS)
+        if sarcasm_hits:
+            signals.sarcasm_score = _clamp_score(0.2 + len(sarcasm_hits) * 0.14)
+            signals.detected_keywords.extend(sarcasm_hits)
+            if signals.praise_score > 0 and signals.joy_score < 0.25:
+                signals.praise_score *= 0.65
+            signals.anger_score = _boost_if(signals.anger_score, True, 0.12)
+
+        if signals.sadness_score > 0 or signals.anxiety_score > 0 or signals.fatigue_score > 0:
+            signals.vulnerability_score = max(
+                signals.vulnerability_score,
+                _clamp_score(max(signals.sadness_score, signals.anxiety_score, signals.fatigue_score) * 0.85),
+            )
+        if signals.anger_score > 0 and signals.hostility_score == 0 and signals.rejection_score == 0:
+            signals.rejection_score = max(signals.rejection_score, signals.anger_score * 0.45)
+        if signals.joy_score > 0:
+            signals.sentiment_score = max(signals.sentiment_score, signals.joy_score * 0.5)
 
     def _apply_state_context(
         self,
@@ -300,8 +379,9 @@ class SignalAnalyzer:
         matched_softeners: List[str],
     ) -> None:
         if signals.playfulness_score > 0 and signals.hostility_score > 0:
-            signals.hostility_score *= 0.65
-            signals.rejection_score *= 0.75
+            playful_factor = 0.35 if any(marker in user_message for marker in ("逗你", "开玩笑", "哈哈", "嘿嘿")) else 0.65
+            signals.hostility_score *= playful_factor
+            signals.rejection_score *= 0.6
 
         if matched_softeners and signals.command_score > 0:
             signals.command_score = max(0.0, signals.command_score - 0.08)
