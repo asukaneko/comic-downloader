@@ -9710,18 +9710,19 @@ def main(params):
                         const res = await api.post('/api/config-transfer/export', {
                             password: this.configExportPassword
                         }, { responseType: 'blob' });
-                        const blob = new Blob([res.data], { type: 'application/json' });
+                        // 导出格式已改为 ZIP（含配置 + 立绘）
+                        const blob = new Blob([res.data], { type: 'application/zip' });
                         const url = URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         const disposition = res.headers && (res.headers['content-disposition'] || res.headers['Content-Disposition']);
                         const match = disposition && disposition.match(/filename="?([^"]+)"?/);
                         link.href = url;
-                        link.download = match ? match[1] : `nbot-config-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.nbotcfg`;
+                        link.download = match ? match[1] : `nbot-config-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`;
                         document.body.appendChild(link);
                         link.click();
                         link.remove();
                         URL.revokeObjectURL(url);
-                        this.showToast('加密配置包已导出', 'success');
+                        this.showToast('配置包（含立绘）已导出为 ZIP', 'success');
                     } catch (e) {
                         this.showToast('导出失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
@@ -9758,7 +9759,12 @@ def main(params):
                             headers: { 'Content-Type': 'multipart/form-data' }
                         });
                         const imported = res.data?.imported || [];
-                        this.showToast(`配置导入完成: ${imported.length} 项`, 'success');
+                        const portraits = res.data?.portraits_restored || 0;
+                        let msg = `配置导入完成: ${imported.length} 项`;
+                        if (portraits > 0) {
+                            msg += `，立绘 ${portraits} 张`;
+                        }
+                        this.showToast(msg, 'success');
                         await Promise.all([
                             this.loadSettings(),
                             this.loadAIConfig(),

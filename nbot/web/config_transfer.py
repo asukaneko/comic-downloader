@@ -1,16 +1,22 @@
 import base64
+import io
 import json
+import logging
 import os
 import platform
+import re
+import zipfile
 from copy import deepcopy
 from datetime import datetime
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, List, Tuple
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from nbot.web.secure_store import read_secure_json, write_secure_json
+
+_log = logging.getLogger(__name__)
 
 
 BUNDLE_VERSION = 1
@@ -292,3 +298,178 @@ def apply_bundle(server, bundle: Dict[str, Any], *, overwrite: bool = True) -> D
         "exported_at": bundle.get("exported_at"),
         "source": bundle.get("source") or {},
     }
+
+
+# ==================== ZIP 导出/导入（含立绘）====================
+
+# 立绘本地存储目录前缀
+_PORTRAIT_URL_PREFIX = "/static/uploads/portraits/"
+# 立绘文件在ZIP中的存放目录
+_ZIP_PORTRAIT_DIR = "portraits/"
+
+
+def _collect_portrait_paths(server, plain_bundle: Dict[str, Any]) -> Dict[str, str]:
+    """从配置包中扫描所有立绘URL，返回 {zip内路径: 本地文件绝对路径}
+
+    扫描范围：
+    - personality.portrait（主角色立绘）
+    - sessions[*].sender_portrait（各会话立绘）
+    - custom_personality_presets 中的 portrait 字段
+    """
+    portraits = {}
+    configs = plain_bundle.get("configs", {})
+    static_root = os.path.join(server.base_dir, "nbot", "web", "static")
+
+    def add_portrait(url: str) -> None:
+        if not url or not isinstance(url, str):
+            return
+        if not url.startswith(_PORTRAIT_URL_PREFIX):
+            return
+        filename = os.path.basename(url)
+        relative_path = url[len("/static/"):]
+        local_path = os.path.join(static_root, relative_path)
+        if not os.path.isfile(local_path):
+            return
+        zip_path = f"{_ZIP_PORTRAIT_DIR}{filename}"
+        if zip_path not in portraits:
+            portraits[zip_path] = local_path
+
+    # 1. 主角色 personality 立绘
+    personality = configs.get("personality")
+    if isinstance(personality, dict):
+        add_portrait(personality.get("portrait"))
+
+    # 2. 各会话的 sender_portrait
+    sessions = configs.get("sessions")
+    if isinstance(sessions, dict):
+        for sess in sessions.values():
+            if isinstance(sess, dict):
+                add_portrait(sess.get("sender_portrait"))
+
+    # 3. 自定义角色预设中的 portrait
+    presets = configs.get("custom_personality_presets")
+    if isinstance(presets, list):
+        for preset in presets:
+            if isinstance(preset, dict):
+                add_portrait(preset.get("portrait"))
+
+    _log.info(f"[ConfigTransfer] 导出ZIP，收集到 {len(portraits)} 张立绘")
+    return portraits
+
+
+def build_zip_bundle(server, password: str) -> io.BytesIO:
+    """构建包含配置+立绘的 ZIP 文件（内存中），返回 BytesIO 对象"""
+    encrypted = encrypt_bundle(server, password)
+    portraits = _collect_portrait_paths(server, build_plain_bundle(server))
+
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # 写入加密配置 JSON
+        config_json = json.dumps(encrypted, ensure_ascii=False, indent=2)
+        zf.writestr("config.nbotcfg", config_json)
+
+        # 写入立绘清单（记录哪些配置字段对应哪个立绘文件）
+        manifest = {"version": 2, "type": "nbot_config_zip", "portraits": list(portraits.keys())}
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False))
+
+        # 写入立绘图片文件
+        for zip_path, local_path in portraits.items():
+            zf.write(local_path, zip_path)
+
+    memory_file.seek(0)
+    return memory_file
+
+
+def extract_zip_bundle(zip_bytes: bytes, password: str) -> Tuple[Dict[str, Any], Dict[str, bytes]]:
+    """从 ZIP 中解析出配置和立绘文件
+
+    Returns:
+        (解密后的配置字典, {zip内路径: 文件二进制数据})
+    """
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), 'r') as zf:
+        namelist = zf.namelist()
+
+        # 查找配置文件
+        config_filename = None
+        for name in namelist:
+            if name == "config.nbotcfg":
+                config_filename = name
+                break
+            # 兼容旧版 .nbotcfg 直接打ZIP的情况
+            if name.endswith(".nbotcfg"):
+                config_filename = name
+                break
+
+        if not config_filename:
+            raise ConfigTransferError("ZIP 中未找到配置文件 (config.nbotcfg)")
+
+        # 解析并解密配置
+        raw_config = json.loads(zf.read(config_filename).decode("utf-8"))
+        bundle = decrypt_bundle(raw_config, password)
+
+        # 收集所有立绘文件
+        portraits = {}
+        for name in namelist:
+            if name.startswith(_ZIP_PORTRAIT_DIR):
+                portraits[name] = zf.read(name)
+
+        return bundle, portraits
+
+
+def restore_portraits_from_zip(server, portraits: Dict[str, bytes], bundle: Dict[str, Any]) -> int:
+    """将 ZIP 中的立绘文件恢复到本地，并更新配置中的 URL 引用
+
+    Args:
+        server: 服务端实例
+        portraits: {zip路径: 文件二进制数据}
+        bundle: 已解密的配置字典（会被原地修改以更新portrait URL）
+
+    Returns:
+        成功恢复的立绘数量
+    """
+    static_root = os.path.join(server.base_dir, "nbot", "web", "static")
+    upload_dir = os.path.join(static_root, "uploads", "portraits")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # 建立 zip路径 → 新URL 的映射
+    url_map = {}  # 旧文件名 → 新URL
+    restored_count = 0
+
+    for zip_path, data in portraits.items():
+        old_filename = os.path.basename(zip_path)
+        ext = os.path.splitext(old_filename)[1] or ".png"
+        new_filename = f"portrait_{os.urandom(8).hex()}{ext}"
+        dest_path = os.path.join(upload_dir, new_filename)
+
+        try:
+            with open(dest_path, 'wb') as f:
+                f.write(data)
+            new_url = f"{_PORTRAIT_URL_PREFIX}{new_filename}"
+            url_map[old_filename] = new_url
+            restored_count += 1
+        except Exception:
+            continue
+
+    # 更新配置中的 portrait URL
+    configs = bundle.get("configs", {})
+    if not url_map or not isinstance(configs, dict):
+        return restored_count
+
+    def update_portrait_url(obj: Any) -> None:
+        """递归更新对象中 portrait / sender_portrait 的值"""
+        if isinstance(obj, dict):
+            for key in ("portrait", "sender_portrait"):
+                old_val = obj.get(key)
+                if isinstance(old_val, str) and old_val:
+                    old_basename = os.path.basename(old_val)
+                    if old_basename in url_map:
+                        obj[key] = url_map[old_basename]
+            # 递归处理嵌套结构
+            for v in obj.values():
+                update_portrait_url(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                update_portrait_url(item)
+
+    update_portrait_url(configs)
+    return restored_count

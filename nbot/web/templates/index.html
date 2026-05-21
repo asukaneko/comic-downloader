@@ -129,7 +129,7 @@
                                 <i class="fas fa-shield-alt"></i>
                                 一键导入已有配置
                             </div>
-                            <div class="config-transfer-desc">从旧服务器导出的加密配置包可直接导入，用于快速切换服务器。</div>
+                            <div class="config-transfer-desc">支持导入 ZIP（含立绘）或旧版 .nbotcfg 配置包，用于快速切换服务器。</div>
                             <div class="config-transfer-actions">
                                 <input v-model="configImportPassword" class="form-input" type="password" placeholder="配置包密码">
                                 <button class="btn btn-secondary" @click="triggerConfigImport" :disabled="isLoading">
@@ -5028,7 +5028,7 @@
                                             <i class="fas fa-lock"></i>
                                             加密导出 / 导入全部配置
                                         </div>
-                                        <div class="config-transfer-desc">用于快速切换服务器。导出内容包含系统设置、AI 模型、API Keys、频道、Skills、Tools、定时任务、人格和聊天记录，不包含登录令牌。</div>
+                                        <div class="config-transfer-desc">用于快速切换服务器。导出内容包含系统设置、AI 模型、API Keys、频道、Skills、Tools、定时任务、人格、聊天记录和角色立绘，打包为 ZIP 文件。导入支持 ZIP 和旧版 .nbotcfg 格式，不包含登录令牌。</div>
                                         <div class="grid-2">
                                             <div class="form-group">
                                                 <label class="form-label">导出密码</label>
@@ -5797,7 +5797,7 @@
 
         <!-- 隐藏的文件导入input -->
         <input type="file" ref="importPersonalityFile" accept=".json,.zip" style="display: none;" @change="importPersonality"></input>
-        <input type="file" ref="configImportInput" accept=".nbotcfg,.json,application/json" style="display: none;" @change="handleConfigImportFile"></input>
+        <input type="file" ref="configImportInput" accept=".zip,.nbotcfg,.json,application/json" style="display: none;" @change="handleConfigImportFile"></input>
 
         <!-- 批量导入角色卡文件input -->
         <input type="file" ref="bulkImportPersonalitiesFile" accept=".zip" style="display: none;" @change="bulkImportPersonalities"></input>
