@@ -48,6 +48,15 @@ except ImportError:
 _log = logging.getLogger(__name__)
 
 
+def _runtime_timeline_state_signature(entry: Dict) -> tuple:
+    ignore_keys = {"timestamp", "message_id", "message_index"}
+    return tuple(
+        (key, entry.get(key))
+        for key in sorted(entry.keys())
+        if key not in ignore_keys
+    )
+
+
 def _resolve_session_character_name(server, session: Dict) -> str:
     if not isinstance(session, dict):
         session = {}
@@ -645,7 +654,11 @@ class WebCallbacks(PipelineCallbacks):
                     },
                     "timestamp": datetime.now().isoformat(),
                 }
-                timeline.append(entry)
+                last = timeline[-1] if timeline else None
+                if isinstance(last, dict) and _runtime_timeline_state_signature(last) == _runtime_timeline_state_signature(entry):
+                    last.update(entry)
+                else:
+                    timeline.append(entry)
                 session["character_runtime_timeline"] = timeline[-200:]
 
             self.session_store.set_session(self.session_id, session)

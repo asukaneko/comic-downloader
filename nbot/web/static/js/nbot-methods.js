@@ -869,6 +869,30 @@ const NbotMethods = {
                     }
                 },
 
+                getRuntimeTimelineNodes(timeline, limit = 5) {
+                    if (!Array.isArray(timeline) || timeline.length === 0) return [];
+                    const fields = [
+                        'character_id', 'mood', 'mood_intensity', 'energy',
+                        'affection', 'trust', 'security', 'familiarity',
+                        'dependency', 'jealousy', 'visible_emotion', 'hidden_emotion'
+                    ];
+                    const nodes = [];
+                    let lastSignature = '';
+                    for (const item of timeline) {
+                        if (!item || typeof item !== 'object') continue;
+                        const signature = fields.map(key => `${key}:${item[key] ?? ''}`).join('|');
+                        if (signature === lastSignature) {
+                            if (nodes.length) {
+                                nodes[nodes.length - 1] = { ...nodes[nodes.length - 1], ...item };
+                            }
+                            continue;
+                        }
+                        nodes.push(item);
+                        lastSignature = signature;
+                    }
+                    return nodes.slice(-limit);
+                },
+
                 async refreshCurrentSessionRuntime() {
                     if (!this.currentSession?.id || this.currentSession._isTemp) return;
                     try {

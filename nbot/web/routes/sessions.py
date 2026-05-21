@@ -92,6 +92,17 @@ def _normalize_runtime_timeline_entry(snapshot, timestamp=None):
     return entry
 
 
+def _runtime_timeline_state_signature(entry):
+    if not isinstance(entry, dict):
+        return None
+    ignore_keys = {"timestamp", "message_id", "message_index"}
+    return tuple(
+        (key, entry.get(key))
+        for key in sorted(entry.keys())
+        if key not in ignore_keys
+    )
+
+
 def _ensure_runtime_timeline_from_snapshot(session):
     timeline = session.get("character_runtime_timeline", [])
     if not isinstance(timeline, list):
@@ -778,10 +789,10 @@ def register_session_routes(app, server):
 
         last = timeline[-1] if timeline else None
         if isinstance(last, dict):
-            last_signature = {k: v for k, v in last.items() if k != "timestamp"}
-            entry_signature = {k: v for k, v in entry.items() if k != "timestamp"}
+            last_signature = _runtime_timeline_state_signature(last)
+            entry_signature = _runtime_timeline_state_signature(entry)
             if last_signature == entry_signature:
-                last["timestamp"] = entry["timestamp"]
+                last.update(entry)
             else:
                 timeline.append(entry)
         else:
