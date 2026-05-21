@@ -1249,6 +1249,7 @@
                                         <div v-if="currentSession.character_runtime_timeline && currentSession.character_runtime_timeline.length" class="runtime-timeline">
                                             <div class="runtime-timeline-title">状态时间线</div>
                                             <div v-for="item in currentSession.character_runtime_timeline.slice(-5).reverse()" :key="item.timestamp" class="runtime-timeline-item">
+                                                <div class="runtime-timeline-node" :title="item.visible_emotion || item.mood || '状态节点'"></div>
                                                 <span>{{ formatShortTime(item.timestamp) }}</span>
                                                 <strong>{{ item.mood || '未知' }}</strong>
                                                 <em>好感 {{ item.affection ?? '-' }} / 信任 {{ item.trust ?? '-' }}</em>
@@ -6719,6 +6720,7 @@
                         </div>
                         <div class="runtime-timeline runtime-timeline-detail">
                             <div v-for="item in viewingSession.character_runtime_timeline.slice(-12).reverse()" :key="item.timestamp" class="runtime-timeline-item">
+                                <div class="runtime-timeline-node" :title="item.visible_emotion || item.mood || '状态节点'"></div>
                                 <span>{{ formatFullTime(item.timestamp) }}</span>
                                 <strong>{{ item.mood || '未知' }}</strong>
                                 <em>强度 {{ Math.round((item.mood_intensity || 0) * 100) }}% · 精力 {{ item.energy ?? '-' }} · 好感 {{ item.affection ?? '-' }} · 信任 {{ item.trust ?? '-' }}</em>
