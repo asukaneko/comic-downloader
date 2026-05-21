@@ -649,14 +649,30 @@ const NbotMethods = {
 
                 async restoreTurnsFromArchive() {
                     if (!this.currentSession?.archive_session_id || this.currentSession.is_archive || this.currentSession.archived) return;
-                    const raw = window.prompt('从归档尾部提取多少轮对话到当前会话？\n会插入到对话总结之后、当前对话之前，并从归档中移除。', '3');
-                    if (raw === null) return;
-                    const turns = parseInt(String(raw).trim(), 10);
+                    // 立即显示弹窗，不等待DOM更新
+                    this.restoreArchiveTurns = 3;
+                    this.showRestoreArchiveModal = true;
+                    // 使用setTimeout延迟聚焦，避免阻塞弹窗渲染
+                    setTimeout(() => {
+                        if (this.$refs.restoreArchiveInputRef) {
+                            this.$refs.restoreArchiveInputRef.focus();
+                            this.$refs.restoreArchiveInputRef.select();
+                        }
+                    }, 50);
+                },
+
+                async confirmRestoreFromArchive() {
+                    if (!this.restoreArchiveTurns || this.restoreArchiveTurns <= 0) {
+                        this.showToast('请输入大于 0 的轮数', 'warning');
+                        return;
+                    }
+                    const turns = parseInt(this.restoreArchiveTurns, 10);
                     if (!Number.isFinite(turns) || turns <= 0) {
                         this.showToast('请输入大于 0 的轮数', 'warning');
                         return;
                     }
-                    this.isLoading = true;
+                    this.showRestoreArchiveModal = false;
+                    this.isRestoringArchive = true;
                     try {
                         const res = await api.post(`/api/sessions/${this.currentSession.id}/restore-from-archive`, { turns });
                         if (res.data.success) {
@@ -669,7 +685,7 @@ const NbotMethods = {
                     } catch (e) {
                         this.showToast('从归档恢复失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
-                        this.isLoading = false;
+                        this.isRestoringArchive = false;
                     }
                 },
 

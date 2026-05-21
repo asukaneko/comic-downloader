@@ -14132,6 +14132,9 @@
             justify-content: center;
             z-index: 1000;
             padding: 20px;
+            /* 确保立即显示/隐藏，无动画延迟 */
+            animation: none !important;
+            transition: none !important;
         }
 
         .confirm-modal-overlay {
@@ -14289,6 +14292,102 @@
 
         .confirm-btn-confirm {
             border-radius: 10px;
+        }
+
+        /* 归档提取弹窗样式（性能优化版） */
+        .restore-archive-modal {
+            max-width: 440px;
+            /* 使用纯色替代毛玻璃效果，避免 backdrop-filter 导致的卡顿 */
+            background: var(--bg-primary, rgba(15, 23, 42, 0.98));
+            /* 移除 backdrop-filter 和 inset shadow，减少 GPU 合成开销 */
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+            /* 确保立即显示，无动画延迟 */
+            animation: none !important;
+            transition: none !important;
+        }
+        .restore-archive-desc {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+        .restore-archive-hint {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .restore-archive-input-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .restore-archive-input {
+            flex: 1;
+            height: 44px;
+            padding: 0 16px;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 12px;
+            border: 2px solid rgba(148, 163, 184, 0.25);
+            background: rgba(15, 23, 42, 0.6);
+            color: var(--text-primary);
+            /* 只过渡必要属性，避免 all 触发不必要的重绘 */
+            transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+            /* 使用简单的单层阴影 */
+            box-shadow: none;
+        }
+        .restore-archive-input:focus {
+            outline: none;
+            border-color: #818cf8;
+            background: rgba(15, 23, 42, 0.85);
+            /* 简化聚焦效果为单层阴影 */
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.12);
+        }
+        .restore-archive-input::placeholder {
+            color: var(--text-muted);
+            opacity: 0.6;
+        }
+        /* 隐藏数字输入框的上下箭头 */
+        .restore-archive-input::-webkit-outer-spin-button,
+        .restore-archive-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .restore-archive-input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .restore-archive-unit {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            min-width: 24px;
+        }
+
+        /* 浅色主题适配 */
+        [data-theme="light"] .restore-archive-modal {
+            background: #ffffff;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+        }
+        [data-theme="light"] .restore-archive-desc {
+            color: #1e293b;
+        }
+        [data-theme="light"] .restore-archive-hint {
+            color: #64748b;
+        }
+        [data-theme="light"] .restore-archive-input {
+            background: rgba(248, 250, 252, 0.95);
+            border-color: rgba(148, 163, 184, 0.3);
+            color: #1e293b;
+        }
+        [data-theme="light"] .restore-archive-input:focus {
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
+        }
+        [data-theme="light"] .restore-archive-unit {
+            color: #64748b;
         }
 
         .modal {

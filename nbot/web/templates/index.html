@@ -27,9 +27,11 @@
     <script>
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
+        // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
+        window.__nbotAssetVersion = '20260521';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css">
-    <link rel="stylesheet" href="/static/css/app.css">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260521">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260521">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -5491,6 +5493,40 @@
             </div>
         </div>
 
+        <!-- 归档提取模态框 (v-show: DOM常驻，切换无延迟) -->
+        <div v-show="showRestoreArchiveModal" class="modal-overlay" @click.self="showRestoreArchiveModal = false">
+            <div class="modal restore-archive-modal">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-level-up-alt"></i> 提取归档对话</span>
+                    <button class="modal-close" @click="showRestoreArchiveModal = false">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="restore-archive-desc">从旧归档尾部提取多少轮对话到当前会话？</p>
+                    <p class="restore-archive-hint">会插入到对话总结之后、当前对话之前，并从归档中移除。</p>
+                    <div class="restore-archive-input-wrap">
+                        <input
+                            type="number"
+                            v-model.number="restoreArchiveTurns"
+                            class="form-control restore-archive-input"
+                            placeholder="请输入轮数"
+                            min="1"
+                            step="1"
+                            @keyup.enter="confirmRestoreFromArchive"
+                            ref="restoreArchiveInputRef"
+                        />
+                        <span class="restore-archive-unit">轮</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showRestoreArchiveModal = false">取消</button>
+                    <button class="btn btn-primary" @click="confirmRestoreFromArchive" :disabled="!restoreArchiveTurns || restoreArchiveTurns <= 0 || isRestoringArchive">
+                        <i v-if="isRestoringArchive" class="fas fa-spinner fa-spin"></i>
+                        <i v-else class="fas fa-check"></i> 确定
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- 头像选择模态框 -->
         <div v-if="showAvatarPicker" class="modal-overlay" @click.self="showAvatarPicker = false">
             <div class="modal" style="max-width: 500px; max-height: 90vh;">
@@ -7837,8 +7873,8 @@
         </div>
     </div>
 
-    <script src="/static/js/nbot-shared.js"></script>
-    <script src="/static/js/nbot-methods.js"></script>
+    <script src="/static/js/nbot-shared.js?v=20260521"></script>
+    <script src="/static/js/nbot-methods.js?v=20260521"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -8261,6 +8297,10 @@
                         message: '',
                         confirmText: '确认'
                     },
+                    // 归档提取弹窗
+                    showRestoreArchiveModal: false,
+                    restoreArchiveTurns: 3,
+                    isRestoringArchive: false,
                     showAddPersonalityPresetModal: false,
                     newPersonalityPreset: {
                         name: '',
