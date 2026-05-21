@@ -8575,6 +8575,14 @@
             background: var(--bg-tertiary);
         }
 
+        .session-more-popover button.danger {
+            color: var(--danger);
+        }
+
+        .session-more-popover button.danger:hover {
+            background: rgba(239, 68, 68, 0.12);
+        }
+
         .proactive-chat-panel {
             display: flex;
             flex-direction: column;

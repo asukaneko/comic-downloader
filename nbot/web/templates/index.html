@@ -1937,6 +1937,9 @@
                                                             <button v-if="session.archived && !session.is_archive" @click="restoreSession(session)" :disabled="isLoading">
                                                                 <i class="fas fa-undo"></i> 恢复
                                                             </button>
+                                                            <button class="danger" @click="deleteWebSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-trash-alt"></i> 删除
+                                                            </button>
                                                         </div>
                                                     </details>
                                                 </div>
