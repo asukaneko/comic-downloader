@@ -64,6 +64,107 @@ def _resolve_session_character_name(server, session):
     return ""
 
 
+def _static_portrait_exists(server, portrait_url):
+    portrait_url = str(portrait_url or "").strip()
+    if not portrait_url:
+        return False
+    if portrait_url.startswith(("http://", "https://", "data:", "blob:")):
+        return True
+    if not portrait_url.startswith("/static/"):
+        return False
+    base_dir = getattr(server, "base_dir", None) or os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..")
+    )
+    static_rel = portrait_url[len("/static/") :].replace("/", os.sep)
+    return os.path.exists(os.path.join(base_dir, "nbot", "web", "static", static_rel))
+
+
+def _find_character_visuals(server, session, sessions_data=None):
+    session = session if isinstance(session, dict) else {}
+    sessions_data = sessions_data or {}
+    candidates = []
+
+    source_id = str(session.get("source_session_id") or "").strip()
+    if source_id and isinstance(sessions_data.get(source_id), dict):
+        candidates.append(sessions_data[source_id])
+
+    character_id = str(session.get("character_id") or "").strip()
+    sender_name = str(session.get("sender_name") or "").strip()
+    for preset in getattr(server, "custom_personality_presets", []) or []:
+        if not isinstance(preset, dict):
+            continue
+        if character_id and str(preset.get("id") or "") == character_id:
+            candidates.append(preset)
+            break
+    for preset in getattr(server, "custom_personality_presets", []) or []:
+        if not isinstance(preset, dict):
+            continue
+        names = {
+            str(preset.get("name") or "").strip(),
+            str(preset.get("sender_name") or "").strip(),
+        }
+        if sender_name and sender_name in names:
+            candidates.append(preset)
+            break
+
+    personality = getattr(server, "personality", {}) or {}
+    if isinstance(personality, dict):
+        personality_name = str(personality.get("name") or "").strip()
+        if sender_name and sender_name == personality_name:
+            candidates.append(personality)
+
+    first_avatar = ""
+    for candidate in candidates:
+        portrait = str(
+            candidate.get("sender_portrait")
+            or candidate.get("portrait")
+            or ""
+        ).strip()
+        avatar = str(
+            candidate.get("sender_avatar")
+            or candidate.get("avatar")
+            or ""
+        ).strip()
+        if portrait and _static_portrait_exists(server, portrait):
+            return portrait, avatar
+        if avatar and not first_avatar:
+            first_avatar = avatar
+    return "", first_avatar
+
+
+def _repair_session_visuals(server, session, sessions_data=None):
+    if not isinstance(session, dict):
+        return "", "", False
+
+    portrait = str(session.get("sender_portrait") or "").strip()
+    avatar = str(session.get("sender_avatar") or "").strip()
+    changed = False
+
+    if portrait and not _static_portrait_exists(server, portrait):
+        portrait = ""
+        changed = True
+
+    if not portrait:
+        fallback_portrait, fallback_avatar = _find_character_visuals(
+            server, session, sessions_data
+        )
+        if fallback_portrait:
+            portrait = fallback_portrait
+            changed = True
+        if not avatar and fallback_avatar:
+            avatar = fallback_avatar
+            changed = True
+
+    if session.get("sender_portrait", "") != portrait:
+        session["sender_portrait"] = portrait
+        changed = True
+    if avatar and session.get("sender_avatar", "") != avatar:
+        session["sender_avatar"] = avatar
+        changed = True
+
+    return portrait, avatar, changed
+
+
 def _resolve_session_runtime_character_id(session):
     if not isinstance(session, dict):
         return ""
@@ -437,6 +538,11 @@ def register_session_routes(app, server):
             if timeline_changed:
                 session_store.set_session(sid, session)
             archived = bool(session.get("archived"))
+            sender_portrait, sender_avatar, visuals_changed = _repair_session_visuals(
+                server, session, sessions_data
+            )
+            if visuals_changed:
+                session_store.set_session(sid, session)
             favorite_collections = _normalize_message_favorite_collections(
                 session.get("message_favorites", [])
             )
@@ -466,8 +572,8 @@ def register_session_routes(app, server):
                     "system_prompt": session.get("system_prompt", ""),
                     "character_id": session.get("character_id", ""),
                     "sender_name": session.get("sender_name", ""),
-                    "sender_avatar": session.get("sender_avatar", ""),
-                    "sender_portrait": session.get("sender_portrait", ""),
+                    "sender_avatar": sender_avatar,
+                    "sender_portrait": sender_portrait,
                     "scenario": session.get("scenario", ""),
                     "tags": _normalize_tags(session.get("tags", [])),
                     "favorite": bool(session.get("favorite")),
@@ -1404,6 +1510,16 @@ def register_session_routes(app, server):
         if archive_id:
             archive = session_store.get_session(archive_id)
             if archive:
+                _, _, visuals_changed = _repair_session_visuals(
+                    server,
+                    archive,
+                    {
+                        source_session_id: source_session,
+                        archive_id: archive,
+                    },
+                )
+                if visuals_changed:
+                    session_store.set_session(archive_id, archive)
                 return archive
         now = datetime.now().isoformat()
         base_name = source_session.get("name", f"会话 {source_session_id[:8]}")
@@ -1427,6 +1543,14 @@ def register_session_routes(app, server):
             "sender_portrait": source_session.get("sender_portrait", ""),
             "scenario": source_session.get("scenario", ""),
         }
+        _repair_session_visuals(
+            server,
+            archive,
+            {
+                source_session_id: source_session,
+                archive_id: archive,
+            },
+        )
         session_store.set_session(archive_id, archive)
         source_session["archive_session_id"] = archive_id
         session_store.set_session(source_session_id, source_session)

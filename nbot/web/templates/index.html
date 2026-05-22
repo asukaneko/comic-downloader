@@ -708,11 +708,11 @@
                                     }"
                                     @click="openSession(session)"
                                 >
-                                    <div class="session-icon" :class="{ 'has-portrait': session.sender_portrait }">
+                                    <div class="session-icon" :class="{ 'has-portrait': getSessionPortrait(session) }">
                                         <!-- 有立绘时显示立绘 -->
-                                        <img v-if="session.sender_portrait" :src="session.sender_portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
+                                        <img v-if="getSessionPortrait(session)" :src="getSessionPortrait(session)" @error="handleSessionPortraitError(session)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
                                         <!-- 无立绘有头像时显示头像图标 -->
-                                        <i v-else-if="session.sender_avatar" :class="session.sender_avatar"></i>
+                                        <i v-else-if="getSessionAvatar(session)" :class="getSessionAvatar(session)"></i>
                                         <!-- 都没有则显示默认图标 -->
                                         <i v-else :class="session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'"></i>
                                     </div>

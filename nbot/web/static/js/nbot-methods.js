@@ -8429,6 +8429,23 @@ def main(params):
                     return { portrait: null, avatar: 'fas fa-user-circle' };
                 },
 
+                getSessionPortrait(session) {
+                    if (!session) return '';
+                    if (session.sender_portrait) return session.sender_portrait;
+                    return this.getCharacterPortraitByName(session.sender_name).portrait || '';
+                },
+
+                getSessionAvatar(session) {
+                    if (!session) return '';
+                    if (session.sender_avatar) return session.sender_avatar;
+                    return this.getCharacterPortraitByName(session.sender_name).avatar || '';
+                },
+
+                handleSessionPortraitError(session) {
+                    if (!session) return;
+                    session.sender_portrait = '';
+                },
+
                 getPriorityLabel(priority) {
                     const labels = {
                         high: '高优先级',
