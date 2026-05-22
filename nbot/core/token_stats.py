@@ -154,7 +154,20 @@ class TokenStatsManager:
         return sorted(result, key=lambda x: x["date"])
 
     @staticmethod
-    def _filter_records(records: List[Dict], date_range: str) -> List[Dict]:
+    def _filter_records(
+        records: List[Dict],
+        date_range: str,
+        start_date: str = "",
+        end_date: str = "",
+    ) -> List[Dict]:
+        if start_date or end_date:
+            start = start_date or "0000-00-00"
+            end = end_date or "9999-99-99"
+            return [
+                r for r in records
+                if start <= (r.get("date") or "") <= end
+            ]
+
         today_str = datetime.now().strftime("%Y-%m-%d")
         if date_range == "today":
             return [r for r in records if r.get("date") == today_str]
@@ -165,6 +178,20 @@ class TokenStatsManager:
             cutoff = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
             return [r for r in records if (r.get("date") or "") >= cutoff]
         return list(records)
+
+    def get_records(
+        self,
+        date_range: str = "today",
+        *,
+        start_date: str = "",
+        end_date: str = "",
+    ) -> List[Dict[str, Any]]:
+        """返回指定时间段内的全部明细记录。"""
+        with self._lock:
+            records = list(self._stats.get("records", []))
+
+        filtered = self._filter_records(records, date_range, start_date, end_date)
+        return sorted(filtered, key=lambda item: item.get("timestamp", ""))
 
     # ------------------------------------------------------------------
     # 记录用量
@@ -314,7 +341,13 @@ class TokenStatsManager:
     # 查询统计
     # ------------------------------------------------------------------
 
-    def get_stats(self, date_range: str = "today") -> Dict[str, Any]:
+    def get_stats(
+        self,
+        date_range: str = "today",
+        *,
+        start_date: str = "",
+        end_date: str = "",
+    ) -> Dict[str, Any]:
         """返回指定时间范围的统计数据。"""
         with self._lock:
             stats = self._stats
@@ -325,14 +358,22 @@ class TokenStatsManager:
             users = dict(stats.get("users", {}))
 
         today_str = datetime.now().strftime("%Y-%m-%d")
-        records = self._filter_records(records, date_range)
+        has_custom_range = bool(start_date or end_date)
+        records = self._filter_records(records, date_range, start_date, end_date)
         recent_records = sorted(
             records,
             key=lambda item: item.get("timestamp", ""),
             reverse=True,
         )[:100]
 
-        if date_range == "today":
+        if has_custom_range:
+            start = start_date or "0000-00-00"
+            end = end_date or "9999-99-99"
+            history = [
+                h for h in history
+                if start <= (h.get("date") or "") <= end
+            ]
+        elif date_range == "today":
             history = [h for h in history if h.get("date") == today_str]
             # 如果今日无历史记录，使用 today 计数器兜底
             if not history:
@@ -352,6 +393,8 @@ class TokenStatsManager:
                     "history": [],
                     "recent_records": recent_records,
                     "records": recent_records,
+                    "range_start": today_str,
+                    "range_end": today_str,
                     "sessions": sessions,
                     "models": models,
                     "users": users,
@@ -364,6 +407,15 @@ class TokenStatsManager:
             history = [h for h in history if h.get("date", "") >= cutoff]
 
         # 汇总
+        total_input = sum(h.get("input", 0) for h in history)
+        range_dates = [
+            item.get("date")
+            for item in [*history, *records]
+            if item.get("date")
+        ]
+        range_start = min(range_dates) if range_dates else (start_date or today_str)
+        range_end = max(range_dates) if range_dates else (end_date or today_str)
+
         total_input = sum(h.get("input", 0) for h in history)
         total_output = sum(h.get("output", 0) for h in history)
         total_tokens = sum(h.get("total", h.get("input", 0) + h.get("output", 0)) for h in history)
@@ -404,6 +456,8 @@ class TokenStatsManager:
             "history": history,
             "recent_records": recent_records,
             "records": recent_records,
+            "range_start": range_start,
+            "range_end": range_end,
             "sessions": sessions,
             "models": models,
             "users": users,

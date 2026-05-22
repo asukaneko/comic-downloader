@@ -4,10 +4,12 @@ import os
 import time
 import sys
 import importlib
+import csv
+import io
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from flask import jsonify, request
+from flask import Response, jsonify, request
 
 from nbot.web.log_cleanup import cleanup_logs_dir, normalize_log_cleanup_settings
 
@@ -97,12 +99,32 @@ def register_admin_misc_routes(app, server):
     @app.route("/api/tokens")
     def get_token_stats():
         date_range = request.args.get("dateRange", "today")
+        start_date = request.args.get("startDate", "").strip()
+        end_date = request.args.get("endDate", "").strip()
+
+        def _valid_date(value: str) -> bool:
+            if not value:
+                return True
+            try:
+                datetime.strptime(value, "%Y-%m-%d")
+                return True
+            except ValueError:
+                return False
+
+        if not _valid_date(start_date) or not _valid_date(end_date):
+            return jsonify({"success": False, "error": "日期格式必须为 YYYY-MM-DD"}), 400
+        if start_date and end_date and start_date > end_date:
+            return jsonify({"success": False, "error": "开始日期不能晚于结束日期"}), 400
 
         try:
             from nbot.core.token_stats import get_token_stats_manager
 
             manager = get_token_stats_manager()
-            return jsonify(manager.get_stats(date_range))
+            return jsonify(manager.get_stats(
+                date_range,
+                start_date=start_date,
+                end_date=end_date,
+            ))
         except RuntimeError:
             # TokenStatsManager 未初始化，返回空数据
             return jsonify({
@@ -123,6 +145,84 @@ def register_admin_misc_routes(app, server):
             return jsonify(get_token_stats_manager().get_rankings())
         except RuntimeError:
             return jsonify({"sessions": [], "models": [], "users": []})
+
+    @app.route("/api/tokens/export")
+    def export_token_records():
+        date_range = request.args.get("dateRange", "today")
+        start_date = request.args.get("startDate", "").strip()
+        end_date = request.args.get("endDate", "").strip()
+
+        def _valid_date(value: str) -> bool:
+            if not value:
+                return True
+            try:
+                datetime.strptime(value, "%Y-%m-%d")
+                return True
+            except ValueError:
+                return False
+
+        if not _valid_date(start_date) or not _valid_date(end_date):
+            return jsonify({"success": False, "error": "日期格式必须为 YYYY-MM-DD"}), 400
+        if start_date and end_date and start_date > end_date:
+            return jsonify({"success": False, "error": "开始日期不能晚于结束日期"}), 400
+
+        try:
+            from nbot.core.token_stats import get_token_stats_manager
+
+            records = get_token_stats_manager().get_records(
+                date_range,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except RuntimeError:
+            records = []
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "时间",
+            "日期",
+            "来源",
+            "模型",
+            "会话",
+            "频道",
+            "用户",
+            "输入Token",
+            "输出Token",
+            "总计",
+            "费用",
+            "耗时ms",
+            "记录ID",
+        ])
+        for item in records:
+            writer.writerow([
+                item.get("timestamp", ""),
+                item.get("date", ""),
+                item.get("source") or item.get("channel_type") or "api",
+                item.get("model") or "unknown",
+                item.get("session_id", ""),
+                item.get("channel_type", ""),
+                item.get("user_id", ""),
+                item.get("input", 0),
+                item.get("output", 0),
+                item.get("total", (item.get("input", 0) or 0) + (item.get("output", 0) or 0)),
+                item.get("cost", 0),
+                item.get("duration_ms", ""),
+                item.get("id", ""),
+            ])
+
+        period = (
+            f"{start_date or 'start'}_{end_date or 'end'}"
+            if start_date or end_date
+            else date_range
+        )
+        filename = f"token_usage_records_{period}_{datetime.now().strftime('%Y%m%d%H%M%S')}.csv"
+        csv_body = "\ufeff" + output.getvalue()
+        return Response(
+            csv_body,
+            mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
 
     @app.route("/api/tokens/record", methods=["POST"])
     def record_token_usage():

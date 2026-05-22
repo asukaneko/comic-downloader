@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260523';
+        window.__nbotAssetVersion = '20260526';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css?v=20260523">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260523">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260526">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260526">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -4639,16 +4639,23 @@
                         <div class="usage-filters">
                             <div class="filter-group">
                                 <label class="filter-label">时间范围</label>
-                                <div class="filter-buttons">
-                                    <button 
-                                        v-for="range in dateRanges" 
-                                        :key="range.value"
-                                        class="filter-btn"
-                                        :class="{ active: tokenFilter.dateRange === range.value }"
-                                        @click="setTokenDateRange(range.value)"
-                                    >
-                                        {{ range.label }}
-                                    </button>
+                                <div class="token-range-row">
+                                    <div class="filter-buttons">
+                                        <button 
+                                            v-for="range in dateRanges" 
+                                            :key="range.value"
+                                            class="filter-btn"
+                                            :class="{ active: tokenFilter.dateRange === range.value }"
+                                            @click="setTokenDateRange(range.value)"
+                                        >
+                                            {{ range.label }}
+                                        </button>
+                                    </div>
+                                    <div class="token-date-range">
+                                        <input v-model="tokenFilter.startDate" type="date" class="token-date-input" @change="setTokenCustomDateRange">
+                                        <span class="token-date-separator"></span>
+                                        <input v-model="tokenFilter.endDate" type="date" class="token-date-input" @change="setTokenCustomDateRange">
+                                    </div>
                                 </div>
                             </div>
                             <div class="filter-group">
@@ -4809,7 +4816,7 @@
                             <div class="card-header">
                                 <span class="card-title">详细使用记录</span>
                                 <button class="btn btn-secondary" @click="exportTokenData">
-                                    <i class="fas fa-download"></i> 导出
+                                    <i class="fas fa-download"></i> 导出全部记录
                                 </button>
                             </div>
                             <div class="card-body" style="padding: 0;">
@@ -7923,7 +7930,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260523"></script>
+    <script src="/static/js/nbot-methods.js?v=20260526"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -8631,6 +8638,8 @@
                     tokenRecords: [],
                     tokenFilter: {
                         dateRange: 'today',
+                        startDate: '',
+                        endDate: '',
                         unit: 'tokens'
                     },
                     dateRanges: [

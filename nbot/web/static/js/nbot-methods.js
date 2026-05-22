@@ -3497,14 +3497,43 @@ def main(params):
                     }
                 },
 
+                formatTokenDateValue(date) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                },
+
+                getTokenPresetRange(range) {
+                    const end = new Date();
+                    const start = new Date(end);
+                    if (range === '7d') {
+                        start.setDate(end.getDate() - 6);
+                    } else if (range === '30d') {
+                        start.setDate(end.getDate() - 29);
+                    } else if (range !== 'today') {
+                        return { startDate: '', endDate: '' };
+                    }
+                    return {
+                        startDate: this.formatTokenDateValue(start),
+                        endDate: this.formatTokenDateValue(end)
+                    };
+                },
+
                 async loadTokenStats() {
                     try {
                         const params = new URLSearchParams();
                         params.append('dateRange', this.tokenFilter.dateRange);
+                        if (this.tokenFilter.startDate) params.append('startDate', this.tokenFilter.startDate);
+                        if (this.tokenFilter.endDate) params.append('endDate', this.tokenFilter.endDate);
                         const res = await api.get(`/api/tokens?${params.toString()}`);
                         this.tokenStats = { ...this.tokenStats, ...res.data };
                         this.tokenHistory = res.data.history || [];
                         this.tokenRecords = res.data.recent_records || res.data.records || [];
+                        if (this.tokenFilter.dateRange !== 'custom' && res.data.range_start && res.data.range_end) {
+                            this.tokenFilter.startDate = res.data.range_start;
+                            this.tokenFilter.endDate = res.data.range_end;
+                        }
                         await this.loadTokenRankings();
                         this.updateTokenTrendChart();
                     } catch (e) {
@@ -3547,6 +3576,16 @@ def main(params):
 
                 setTokenDateRange(range) {
                     this.tokenFilter.dateRange = range;
+                    const presetRange = this.getTokenPresetRange(range);
+                    this.tokenFilter.startDate = presetRange.startDate;
+                    this.tokenFilter.endDate = presetRange.endDate;
+                    this.loadTokenStats();
+                },
+
+                setTokenCustomDateRange() {
+                    if (this.tokenFilter.startDate || this.tokenFilter.endDate) {
+                        this.tokenFilter.dateRange = 'custom';
+                    }
                     this.loadTokenStats();
                 },
 
@@ -3632,34 +3671,39 @@ def main(params):
                     this.tokenTrendChart.setOption(option, true);
                 },
 
-                exportTokenData() {
-                    const source = this.tokenRecords && this.tokenRecords.length
-                        ? this.tokenRecords
-                        : this.tokenHistory;
-                    const data = source.map(item => this.tokenRecords && this.tokenRecords.length ? ({
-                        时间: item.timestamp || item.date,
-                        来源: item.source || item.channel_type || 'api',
-                        模型: item.model || 'unknown',
-                        会话: item.session_id || '',
-                        输入Token: item.input || 0,
-                        输出Token: item.output || 0,
-                        总计: item.total || ((item.input || 0) + (item.output || 0)),
-                        费用: item.cost || 0
-                    }) : ({
-                        日期: item.date,
-                        调用数: item.message_count || 0,
-                        输入Token: item.input,
-                        输出Token: item.output,
-                        总计: item.total || ((item.input || 0) + (item.output || 0)),
-                        费用: item.cost
-                    }));
+                async exportTokenData() {
+                    const startDate = (this.tokenFilter?.startDate || '').trim();
+                    const endDate = (this.tokenFilter?.endDate || '').trim();
+                    if (startDate && endDate && startDate > endDate) {
+                        this.showToast('开始日期不能晚于结束日期', 'warning');
+                        return;
+                    }
 
-                    const csv = this.convertToCSV(data);
-                    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `token_usage_${new Date().toISOString().split('T')[0]}.csv`;
-                    link.click();
+                    const params = new URLSearchParams();
+                    params.append('dateRange', this.tokenFilter.dateRange || 'today');
+                    if (startDate) params.append('startDate', startDate);
+                    if (endDate) params.append('endDate', endDate);
+
+                    try {
+                        const res = await api.get(`/api/tokens/export?${params.toString()}`, {
+                            responseType: 'blob'
+                        });
+                        const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        const disposition = res.headers?.['content-disposition'] || '';
+                        const match = disposition.match(/filename="?([^"]+)"?/i);
+                        link.href = url;
+                        link.download = match ? match[1] : `token_usage_records_${new Date().toISOString().split('T')[0]}.csv`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        this.showToast('Token 记录已导出', 'success');
+                    } catch (e) {
+                        console.error('Failed to export token records:', e);
+                        this.showToast(e.response?.data?.error || '导出 Token 记录失败', 'error');
+                    }
                 },
 
                 convertToCSV(data) {
