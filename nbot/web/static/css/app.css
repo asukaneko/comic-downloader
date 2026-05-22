@@ -6559,7 +6559,7 @@
             .chat-actions .context-indicator {
                 width: 40px;
                 height: 40px;
-                margin-right: 4px;
+                margin-right: 0;
             }
 
             .chat-actions .context-indicator:hover {
@@ -6579,14 +6579,13 @@
             .chat-actions .context-indicator.context-tooltip-active .context-tooltip {
                 opacity: 1 !important;
                 visibility: visible !important;
-                bottom: auto;
-                top: auto;
+                inset: auto auto calc(48px + env(safe-area-inset-bottom)) 50%;
                 left: 50%;
                 transform: translateX(-50%);
-                bottom: calc(100% + 8px);
-                width: min(340px, calc(100vw - 16px));
-                max-width: calc(100vw - 16px);
-                position: absolute;
+                width: min(276px, calc(100vw - 24px));
+                min-width: 0;
+                max-width: calc(100vw - 24px);
+                position: fixed;
                 z-index: 2000;
                 box-sizing: border-box;
             }
@@ -16953,6 +16952,79 @@
 
             .chat-actions .context-indicator {
                 display: flex;
+                width: 38px;
+                height: 38px;
+                min-width: 38px;
+                margin-right: 0;
+            }
+
+            .chat-actions .context-indicator:hover {
+                transform: none;
+            }
+
+            .chat-actions .context-indicator svg {
+                width: 38px;
+                height: 38px;
+            }
+
+            .chat-actions .context-indicator .percentage {
+                font-size: 10px;
+            }
+
+            .chat-actions .context-indicator .context-tooltip {
+                inset: auto auto calc(52px + env(safe-area-inset-bottom)) 50%;
+                left: 50%;
+                transform: translateX(-50%);
+                width: min(276px, calc(100vw - 24px));
+                min-width: 0;
+                max-width: calc(100vw - 24px);
+                position: fixed;
+                margin-bottom: 0;
+                box-sizing: border-box;
+                pointer-events: none;
+                transition: opacity 0.16s ease, visibility 0s linear 0.16s;
+            }
+
+            .chat-actions .context-indicator:hover .context-tooltip,
+            .chat-actions .context-indicator:focus .context-tooltip {
+                opacity: 0;
+                visibility: hidden;
+            }
+
+            .chat-actions .context-indicator.context-tooltip-active .context-tooltip {
+                opacity: 1 !important;
+                visibility: visible !important;
+                inset: auto auto calc(52px + env(safe-area-inset-bottom)) 50%;
+                left: 50%;
+                transform: translateX(-50%);
+                width: min(276px, calc(100vw - 24px));
+                min-width: 0;
+                max-width: calc(100vw - 24px);
+                position: fixed;
+                z-index: 2000;
+                box-sizing: border-box;
+                pointer-events: auto;
+                transition: opacity 0.16s ease, visibility 0s linear 0s;
+            }
+
+            .chat-actions .context-indicator.context-tooltip-active .context-stats {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 6px;
+            }
+
+            .chat-actions .context-indicator.context-tooltip-active .stat-item {
+                min-width: 0;
+                padding: 5px 6px;
+                box-sizing: border-box;
+                overflow: hidden;
+            }
+
+            .chat-actions .context-indicator.context-tooltip-active .stat-label {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: block;
             }
 
             .chat-actions .btn,
@@ -17527,12 +17599,22 @@
 
             .chat-actions .btn,
             .chat-actions .btn-icon,
+            .chat-actions .context-indicator,
             .chat-actions .chat-input-expand-btn,
             .chat-actions .btn-primary {
                 width: 36px;
                 height: 36px;
                 min-width: 36px;
                 font-size: 14px;
+            }
+
+            .chat-actions .context-indicator {
+                margin-right: 0;
+            }
+
+            .chat-actions .context-indicator svg {
+                width: 36px;
+                height: 36px;
             }
 
             .chat-input {
