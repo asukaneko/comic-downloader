@@ -10,6 +10,9 @@ import json
 import logging
 import os
 import threading
+import time
+import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -19,21 +22,65 @@ _log = logging.getLogger(__name__)
 class JsonStore:
     """通用 JSON 文件存储，带线程安全读写和自动缓存失效"""
 
+    _process_locks: Dict[str, threading.Lock] = {}
+    _process_locks_guard = threading.Lock()
+
     def __init__(self, file_path: str):
         self.file_path = file_path
+        self._abs_file_path = os.path.abspath(file_path)
+        with JsonStore._process_locks_guard:
+            self._process_lock = JsonStore._process_locks.setdefault(
+                self._abs_file_path,
+                threading.Lock(),
+            )
         self._lock = threading.Lock()
         self._cache: Optional[Dict[str, Any]] = None
         self._cache_mtime: float = 0.0
 
-    def _load(self) -> Dict[str, Any]:
+    @contextmanager
+    def _file_lock(self):
+        lock_path = f"{self.file_path}.lock"
+        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        deadline = time.time() + 30
+        fd = None
+        while True:
+            try:
+                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode("ascii", errors="ignore"))
+                break
+            except FileExistsError:
+                try:
+                    if time.time() - os.path.getmtime(lock_path) > 30:
+                        os.remove(lock_path)
+                        continue
+                except OSError:
+                    pass
+                if time.time() >= deadline:
+                    raise TimeoutError(f"Timed out waiting for JSON store lock: {lock_path}")
+                time.sleep(0.05)
+
+        try:
+            yield
+        finally:
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                try:
+                    os.remove(lock_path)
+                except OSError:
+                    pass
+
+    def _load(self, *, force: bool = False) -> Dict[str, Any]:
         """从文件加载数据，自动检测文件修改并刷新缓存"""
         try:
             if os.path.exists(self.file_path):
                 mtime = os.path.getmtime(self.file_path)
-                if self._cache is not None and mtime <= self._cache_mtime:
+                if not force and self._cache is not None and mtime <= self._cache_mtime:
                     return self._cache
             else:
-                if self._cache is not None:
+                if not force and self._cache is not None:
                     return self._cache
                 return {}
 
@@ -52,12 +99,25 @@ class JsonStore:
     def _save(self, data: Dict[str, Any]) -> None:
         """保存数据到文件"""
         os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        tmp_path = (
+            f"{self.file_path}.{os.getpid()}."
+            f"{threading.get_ident()}.{uuid.uuid4().hex}.tmp"
+        )
         try:
-            with open(self.file_path, "w", encoding="utf-8") as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-            self._cache = data
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.file_path)
+            self._cache = dict(data)
+            self._cache_mtime = os.path.getmtime(self.file_path)
         except Exception as exc:
             _log.error("[JsonStore] 保存失败 %s: %s", self.file_path, exc)
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except OSError:
+                pass
 
     def get(self, key: str) -> Optional[Any]:
         """获取指定 key 的数据"""
@@ -68,19 +128,23 @@ class JsonStore:
     def set(self, key: str, value: Any) -> None:
         """设置指定 key 的数据"""
         with self._lock:
-            data = self._load()
-            data[key] = value
-            self._save(data)
+            with self._process_lock:
+                with self._file_lock():
+                    data = self._load(force=True)
+                    data[key] = value
+                    self._save(data)
 
     def delete(self, key: str) -> bool:
         """删除指定 key 的数据"""
         with self._lock:
-            data = self._load()
-            if key in data:
-                del data[key]
-                self._save(data)
-                return True
-            return False
+            with self._process_lock:
+                with self._file_lock():
+                    data = self._load(force=True)
+                    if key in data:
+                        del data[key]
+                        self._save(data)
+                        return True
+                    return False
 
     def list_all(self) -> Dict[str, Any]:
         """返回所有数据"""
