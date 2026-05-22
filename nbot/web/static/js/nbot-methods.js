@@ -8431,8 +8431,15 @@ def main(params):
 
                 getSessionPortrait(session) {
                     if (!session) return '';
-                    if (session.sender_portrait) return session.sender_portrait;
-                    return this.getCharacterPortraitByName(session.sender_name).portrait || '';
+                    const directPortrait = session.sender_portrait || '';
+                    if (directPortrait && !this.failedPortraitUrls[directPortrait]) {
+                        return directPortrait;
+                    }
+                    const fallbackPortrait = this.getCharacterPortraitByName(session.sender_name).portrait || '';
+                    if (fallbackPortrait && !this.failedPortraitUrls[fallbackPortrait]) {
+                        return fallbackPortrait;
+                    }
+                    return '';
                 },
 
                 getSessionAvatar(session) {
@@ -8441,7 +8448,15 @@ def main(params):
                     return this.getCharacterPortraitByName(session.sender_name).avatar || '';
                 },
 
-                handleSessionPortraitError(session) {
+                handleSessionPortraitError(session, event) {
+                    const failedUrl = event?.target?.currentSrc || event?.target?.src || '';
+                    if (failedUrl) {
+                        this.failedPortraitUrls[failedUrl] = true;
+                        try {
+                            const parsed = new URL(failedUrl, window.location.origin);
+                            this.failedPortraitUrls[parsed.pathname] = true;
+                        } catch (_) {}
+                    }
                     if (!session) return;
                     session.sender_portrait = '';
                 },

@@ -1,11 +1,10 @@
 // NekoBot Service Worker
-const CACHE_NAME = 'nekobot-v1';
+const CACHE_NAME = 'nekobot-v20260527';
 const STATIC_ASSETS = [
     '/',
     '/static/css/app.css',
     '/static/js/nbot-shared.js',
     '/static/js/nbot-methods.js',
-    '/static/js/nbot-router.js',
     '/static/vendor/socket.io.min.js',
     '/static/vendor/vue.global.prod.js',
     '/static/vendor/vue-router.global.prod.js',
@@ -16,82 +15,62 @@ const STATIC_ASSETS = [
     '/static/neko.png'
 ];
 
-// 安装：预缓存静态资源
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(STATIC_ASSETS);
-        }).then(() => {
-            return self.skipWaiting();
-        })
+        caches.open(CACHE_NAME)
+            .then((cache) => cache.addAll(STATIC_ASSETS))
+            .then(() => self.skipWaiting())
     );
 });
 
-// 激活：清理旧缓存
 self.addEventListener('activate', (event) => {
     event.waitUntil(
-        caches.keys().then((cacheNames) => {
-            return Promise.all(
+        caches.keys()
+            .then((cacheNames) => Promise.all(
                 cacheNames
                     .filter((name) => name !== CACHE_NAME)
                     .map((name) => caches.delete(name))
-            );
-        }).then(() => {
-            return self.clients.claim();
-        })
+            ))
+            .then(() => self.clients.claim())
     );
 });
 
-// 请求拦截：网络优先，离线回退缓存
 self.addEventListener('fetch', (event) => {
     const { request } = event;
+    const url = new URL(request.url);
 
-    // 非 GET 请求不缓存
     if (request.method !== 'GET') return;
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
+    if (url.pathname.startsWith('/static/uploads/')) return;
 
-    // API 请求和 Socket.IO 不缓存
-    if (request.url.includes('/api/') || request.url.includes('/socket.io/')) return;
-
-    // HTML 页面：网络优先
     if (request.headers.get('accept')?.includes('text/html')) {
         event.respondWith(
-            fetch(request)
+            fetch(request, { cache: 'no-store' })
                 .then((response) => {
                     const clone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(request, clone);
-                    });
+                    caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
                     return response;
                 })
-                .catch(() => {
-                    return caches.match(request).then((cached) => {
-                        return cached || caches.match('/');
-                    });
-                })
+                .catch(() => caches.match(request).then((cached) => cached || caches.match('/')))
         );
         return;
     }
 
-    // 静态资源：缓存优先，网络回退
     event.respondWith(
-        caches.match(request).then((cached) => {
-            if (cached) return cached;
-            return fetch(request).then((response) => {
+        fetch(request)
+            .then((response) => {
                 if (response.ok) {
                     const clone = response.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(request, clone);
-                    });
+                    caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
                 }
                 return response;
-            }).catch(() => {
-                return new Response('', { status: 408, statusText: 'Offline' });
-            });
-        })
+            })
+            .catch(() => caches.match(request).then(
+                (cached) => cached || new Response('', { status: 408, statusText: 'Offline' })
+            ))
     );
 });
 
-// Push 通知
 self.addEventListener('push', (event) => {
     let data = {};
 
@@ -119,7 +98,6 @@ self.addEventListener('push', (event) => {
     event.waitUntil(self.registration.showNotification(title, options));
 });
 
-// 通知点击
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
     const targetUrl = event.notification.data?.url || '/';
@@ -135,6 +113,7 @@ self.addEventListener('notificationclick', (event) => {
             if (clients.openWindow) {
                 return clients.openWindow(targetUrl);
             }
+            return undefined;
         })
     );
 });
