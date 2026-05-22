@@ -9679,7 +9679,7 @@ def main(params):
                         const res = await api.post('/api/logs/cleanup');
                         const result = res.data || {};
                         await this.loadSettings();
-                        this.showToast(`日志清理完成，删除 ${result.deleted_count || 0} 个文件`, 'success');
+                        this.showToast(`日志清理完成，删除 ${result.deleted_count || 0} 个文件，裁剪 ${result.deleted_entries || 0} 条记录`, 'success');
                     } catch (e) {
                         this.showToast('日志清理失败', 'error');
                     } finally {
@@ -9690,10 +9690,14 @@ def main(params):
                 async saveLogCleanupSettings(options = {}) {
                     const cleanup = {
                         enabled: !!this.settings.log_cleanup?.enabled,
+                        include_logs_dir: this.settings.log_cleanup?.include_logs_dir !== false,
+                        include_system_logs: !!this.settings.log_cleanup?.include_system_logs,
+                        include_token_stats: !!this.settings.log_cleanup?.include_token_stats,
                         retention_days: Math.max(0, parseInt(this.settings.log_cleanup?.retention_days, 10) || 0),
                         max_size_mb: Math.max(0, parseInt(this.settings.log_cleanup?.max_size_mb, 10) || 0),
                         last_run: this.settings.log_cleanup?.last_run || null,
                         last_deleted_count: this.settings.log_cleanup?.last_deleted_count || 0,
+                        last_deleted_entries: this.settings.log_cleanup?.last_deleted_entries || 0,
                         last_freed_bytes: this.settings.log_cleanup?.last_freed_bytes || 0,
                         last_error: this.settings.log_cleanup?.last_error || ''
                     };

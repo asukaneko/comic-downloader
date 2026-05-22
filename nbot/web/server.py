@@ -605,16 +605,33 @@ class WebChatServer:
                             {
                                 "last_run": datetime.now().isoformat(),
                                 "last_deleted_count": result.get("deleted_count", 0),
+                                "last_deleted_entries": result.get("deleted_entries", 0),
                                 "last_freed_bytes": result.get("freed_bytes", 0),
                                 "last_error": result.get("error", ""),
                             }
                         )
                         self.settings["log_cleanup"] = cleanup
+                        system_logs_result = result.get("system_logs") or {}
+                        token_stats_result = result.get("token_stats") or {}
+                        if system_logs_result.get("data") is not None:
+                            self.system_logs = system_logs_result["data"]
+                        if token_stats_result.get("data") is not None:
+                            try:
+                                with self.token_stats_manager._lock:
+                                    self.token_stats_manager._stats = token_stats_result["data"]
+                                self.token_stats = self.token_stats_manager.data
+                            except Exception:
+                                pass
                         self._save_data("settings")
                         if result.get("deleted_count", 0):
-                            self.add_system_log(
-                                f"Log cleanup deleted {result['deleted_count']} files, freed {result['freed_bytes']} bytes",
+                            self.log_message(
                                 "info",
+                                f"Log cleanup deleted {result['deleted_count']} files, freed {result['freed_bytes']} bytes",
+                            )
+                        elif result.get("deleted_entries", 0):
+                            self.log_message(
+                                "info",
+                                f"Log cleanup deleted {result['deleted_entries']} JSON entries, freed {result['freed_bytes']} bytes",
                             )
                 except Exception as e:
                     _log.warning("Log cleanup loop failed: %s", e, exc_info=True)

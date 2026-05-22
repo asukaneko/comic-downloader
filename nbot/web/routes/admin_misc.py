@@ -167,16 +167,36 @@ def register_admin_misc_routes(app, server):
             {
                 "last_run": datetime.now().isoformat(),
                 "last_deleted_count": result.get("deleted_count", 0),
+                "last_deleted_entries": result.get("deleted_entries", 0),
                 "last_freed_bytes": result.get("freed_bytes", 0),
                 "last_error": result.get("error", ""),
             }
         )
         server.settings["log_cleanup"] = cleanup
+        system_logs_result = result.get("system_logs") or {}
+        token_stats_result = result.get("token_stats") or {}
+        if system_logs_result.get("data") is not None:
+            server.system_logs = system_logs_result["data"]
+        if token_stats_result.get("data") is not None:
+            try:
+                from nbot.core.token_stats import get_token_stats_manager
+
+                manager = get_token_stats_manager()
+                with manager._lock:
+                    manager._stats = token_stats_result["data"]
+                server.token_stats = manager.data
+            except Exception:
+                pass
         server._save_data("settings")
         if result.get("deleted_count", 0):
-            server.add_system_log(
-                f"Log cleanup deleted {result['deleted_count']} files, freed {result['freed_bytes']} bytes",
+            server.log_message(
                 "info",
+                f"Log cleanup deleted {result['deleted_count']} files, freed {result['freed_bytes']} bytes",
+            )
+        elif result.get("deleted_entries", 0):
+            server.log_message(
+                "info",
+                f"Log cleanup deleted {result['deleted_entries']} JSON entries, freed {result['freed_bytes']} bytes",
             )
         return jsonify(result)
 

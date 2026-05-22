@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260522';
+        window.__nbotAssetVersion = '20260523';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css?v=20260522">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260522">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260523">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260523">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -5024,6 +5024,35 @@
                                         </label>
                                     </div>
                                     <div class="grid-2" v-if="settings.log_cleanup.enabled" style="margin-bottom: 12px;">
+                                        <div class="feature-switch-item" @click="settings.log_cleanup.include_logs_dir = !settings.log_cleanup.include_logs_dir; saveLogCleanupSettings()">
+                                            <div class="feature-switch-info">
+                                                <i class="fas fa-folder-open feature-switch-icon"></i>
+                                                <span class="feature-switch-label">logs 目录日志</span>
+                                            </div>
+                                            <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_logs_dir }">
+                                                <div class="toggle-slider"></div>
+                                            </label>
+                                        </div>
+                                        <div class="feature-switch-item" @click="settings.log_cleanup.include_system_logs = !settings.log_cleanup.include_system_logs; saveLogCleanupSettings()">
+                                            <div class="feature-switch-info">
+                                                <i class="fas fa-list-ul feature-switch-icon"></i>
+                                                <span class="feature-switch-label">system_logs.json</span>
+                                            </div>
+                                            <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_system_logs }">
+                                                <div class="toggle-slider"></div>
+                                            </label>
+                                        </div>
+                                        <div class="feature-switch-item" @click="settings.log_cleanup.include_token_stats = !settings.log_cleanup.include_token_stats; saveLogCleanupSettings()">
+                                            <div class="feature-switch-info">
+                                                <i class="fas fa-coins feature-switch-icon"></i>
+                                                <span class="feature-switch-label">token_stats.json</span>
+                                            </div>
+                                            <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_token_stats }">
+                                                <div class="toggle-slider"></div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="grid-2" v-if="settings.log_cleanup.enabled" style="margin-bottom: 12px;">
                                         <div class="form-group">
                                             <label class="form-label">保留天数</label>
                                             <input v-model.number="settings.log_cleanup.retention_days" type="number" min="0" class="form-input" placeholder="0 表示不按天数删除" @change="saveLogCleanupSettings">
@@ -5036,7 +5065,8 @@
                                         </div>
                                     </div>
                                     <div v-if="settings.log_cleanup.enabled" class="form-hint" style="margin-bottom: 12px;">
-                                        上次清理：{{ settings.log_cleanup.last_run || '尚未执行' }}；删除 {{ settings.log_cleanup.last_deleted_count || 0 }} 个文件；释放 {{ formatBytes(settings.log_cleanup.last_freed_bytes || 0) }}。
+                                        上次清理：{{ settings.log_cleanup.last_run || '尚未执行' }}；删除 {{ settings.log_cleanup.last_deleted_count || 0 }} 个文件；裁剪 {{ settings.log_cleanup.last_deleted_entries || 0 }} 条记录；释放 {{ formatBytes(settings.log_cleanup.last_freed_bytes || 0) }}。
+                                        勾选 system_logs.json / token_stats.json 时会按同样规则裁剪 JSON 内的旧记录。
                                         <span v-if="settings.log_cleanup.last_error" style="color: var(--danger-color);">错误：{{ settings.log_cleanup.last_error }}</span>
                                     </div>
                                     <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -7901,8 +7931,8 @@
         </div>
     </div>
 
-    <script src="/static/js/nbot-shared.js?v=20260522"></script>
-    <script src="/static/js/nbot-methods.js?v=20260522"></script>
+    <script src="/static/js/nbot-shared.js?v=20260523"></script>
+    <script src="/static/js/nbot-methods.js?v=20260523"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -8640,10 +8670,14 @@
                         role_card_platform_token: '',
                         log_cleanup: {
                             enabled: false,
+                            include_logs_dir: true,
+                            include_system_logs: false,
+                            include_token_stats: false,
                             retention_days: 0,
                             max_size_mb: 0,
                             last_run: null,
                             last_deleted_count: 0,
+                            last_deleted_entries: 0,
                             last_freed_bytes: 0,
                             last_error: ''
                         },
