@@ -5,6 +5,7 @@ from datetime import datetime
 from nbot.web.sessions_db import load_sessions as load_sessions_from_db
 from nbot.web.sessions_db import save_sessions as save_sessions_to_db
 from nbot.web.secure_store import read_secure_json, write_secure_json
+from nbot.web.log_cleanup import DEFAULT_LOG_CLEANUP
 
 _log = logging.getLogger(__name__)
 
@@ -332,6 +333,7 @@ def init_default_data(server):
             "web": True,
             "live2d": True,
         },
+        "log_cleanup": dict(DEFAULT_LOG_CLEANUP),
     }
     server.channels_config = _merge_channel_configs([])
     _sync_channel_registry(server)

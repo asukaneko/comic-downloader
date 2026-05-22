@@ -3687,6 +3687,7 @@ def main(params):
                     try {
                         const res = await api.get('/api/settings');
                         const currentFeatures = this.settings.features || {};
+                        const currentLogCleanup = this.settings.log_cleanup || {};
                         const loadedSettings = res.data || {};
                         this.settings = {
                             ...this.settings,
@@ -3694,6 +3695,10 @@ def main(params):
                             features: {
                                 ...currentFeatures,
                                 ...(loadedSettings.features || {})
+                            },
+                            log_cleanup: {
+                                ...currentLogCleanup,
+                                ...(loadedSettings.log_cleanup || {})
                             }
                         };
                         // 同步 Live2D 显隐状态
@@ -9645,7 +9650,15 @@ def main(params):
                     };
                     return colors[level] || 'var(--text-primary)';
                 },
-                
+
+                formatBytes(bytes) {
+                    const value = Number(bytes) || 0;
+                    if (value < 1024) return `${value} B`;
+                    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+                    if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+                    return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
+                },
+                 
                 // Settings Functions
                 async saveSettings() {
                     this.isLoading = true;
@@ -9656,6 +9669,52 @@ def main(params):
                         this.showToast('保存失败', 'error');
                     } finally {
                         this.isLoading = false;
+                    }
+                },
+
+                async cleanupLogFiles() {
+                    this.isLoading = true;
+                    try {
+                        await this.saveLogCleanupSettings({ silent: true });
+                        const res = await api.post('/api/logs/cleanup');
+                        const result = res.data || {};
+                        await this.loadSettings();
+                        this.showToast(`日志清理完成，删除 ${result.deleted_count || 0} 个文件`, 'success');
+                    } catch (e) {
+                        this.showToast('日志清理失败', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async saveLogCleanupSettings(options = {}) {
+                    const cleanup = {
+                        enabled: !!this.settings.log_cleanup?.enabled,
+                        retention_days: Math.max(0, parseInt(this.settings.log_cleanup?.retention_days, 10) || 0),
+                        max_size_mb: Math.max(0, parseInt(this.settings.log_cleanup?.max_size_mb, 10) || 0),
+                        last_run: this.settings.log_cleanup?.last_run || null,
+                        last_deleted_count: this.settings.log_cleanup?.last_deleted_count || 0,
+                        last_freed_bytes: this.settings.log_cleanup?.last_freed_bytes || 0,
+                        last_error: this.settings.log_cleanup?.last_error || ''
+                    };
+                    this.settings.log_cleanup = cleanup;
+                    try {
+                        const res = await api.put('/api/settings', {
+                            log_cleanup: cleanup,
+                            _skip_log_cleanup: true
+                        });
+                        this.settings.log_cleanup = {
+                            ...cleanup,
+                            ...((res.data?.settings || {}).log_cleanup || {})
+                        };
+                        if (!options.silent) {
+                            this.showToast('日志清理配置已保存', 'success');
+                        }
+                    } catch (e) {
+                        if (!options.silent) {
+                            this.showToast('日志清理配置保存失败', 'error');
+                        }
+                        throw e;
                     }
                 },
 

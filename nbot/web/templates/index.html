@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260521';
+        window.__nbotAssetVersion = '20260522';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css?v=20260521">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260521">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260522">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260522">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -5014,7 +5014,35 @@
                                 </div>
                                 <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
                                     <label class="form-label">数据维护</label>
+                                    <div class="feature-switch-item" style="margin-bottom: 12px;" @click="settings.log_cleanup.enabled = !settings.log_cleanup.enabled; saveLogCleanupSettings()">
+                                        <div class="feature-switch-info">
+                                            <i class="fas fa-file-circle-minus feature-switch-icon"></i>
+                                            <span class="feature-switch-label">自动删除 logs 目录日志</span>
+                                        </div>
+                                        <label class="toggle-switch" :class="{ active: settings.log_cleanup.enabled }">
+                                            <div class="toggle-slider"></div>
+                                        </label>
+                                    </div>
+                                    <div class="grid-2" v-if="settings.log_cleanup.enabled" style="margin-bottom: 12px;">
+                                        <div class="form-group">
+                                            <label class="form-label">保留天数</label>
+                                            <input v-model.number="settings.log_cleanup.retention_days" type="number" min="0" class="form-input" placeholder="0 表示不按天数删除" @change="saveLogCleanupSettings">
+                                            <div class="form-hint">超过该天数的日志文件会被删除，填 0 则关闭此规则。</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">最大目录大小 MB</label>
+                                            <input v-model.number="settings.log_cleanup.max_size_mb" type="number" min="0" class="form-input" placeholder="0 表示不按大小删除" @change="saveLogCleanupSettings">
+                                            <div class="form-hint">logs 目录超过该大小时，从最早修改的日志开始删除。</div>
+                                        </div>
+                                    </div>
+                                    <div v-if="settings.log_cleanup.enabled" class="form-hint" style="margin-bottom: 12px;">
+                                        上次清理：{{ settings.log_cleanup.last_run || '尚未执行' }}；删除 {{ settings.log_cleanup.last_deleted_count || 0 }} 个文件；释放 {{ formatBytes(settings.log_cleanup.last_freed_bytes || 0) }}。
+                                        <span v-if="settings.log_cleanup.last_error" style="color: var(--danger-color);">错误：{{ settings.log_cleanup.last_error }}</span>
+                                    </div>
                                     <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+                                        <button class="btn btn-secondary" @click="cleanupLogFiles" :disabled="isLoading || !settings.log_cleanup.enabled">
+                                            <i class="fas fa-broom"></i> 立即清理日志
+                                        </button>
                                         <button class="btn btn-secondary" @click="cleanUnusedPortraits" :disabled="isCleaningPortraits">
                                             <i class="fas fa-broom"></i> {{ isCleaningPortraits ? '清理中...' : '清理未使用角色立绘' }}
                                         </button>
@@ -7873,8 +7901,8 @@
         </div>
     </div>
 
-    <script src="/static/js/nbot-shared.js?v=20260521"></script>
-    <script src="/static/js/nbot-methods.js?v=20260521"></script>
+    <script src="/static/js/nbot-shared.js?v=20260522"></script>
+    <script src="/static/js/nbot-methods.js?v=20260522"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -8610,6 +8638,15 @@
                         public_base_url: '',
                         role_card_platform_url: 'http://127.0.0.1:7861',
                         role_card_platform_token: '',
+                        log_cleanup: {
+                            enabled: false,
+                            retention_days: 0,
+                            max_size_mb: 0,
+                            last_run: null,
+                            last_deleted_count: 0,
+                            last_freed_bytes: 0,
+                            last_error: ''
+                        },
                         features: {
                             ai: true,
                             memory: true,

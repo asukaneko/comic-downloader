@@ -66,6 +66,7 @@ from nbot.web.routes import (
     register_workspace_misc_routes,
 )
 from nbot.web.secure_store import read_secure_json, write_secure_json
+from nbot.web.log_cleanup import cleanup_logs_dir
 from nbot.web.socket_events import register_socket_events
 
 _log = logging.getLogger(__name__)
@@ -534,6 +535,7 @@ class WebChatServer:
         self.startup_ready = False
         self.startup_error: Optional[str] = None
         self.startup_thread: Optional[threading.Thread] = None
+        self.log_cleanup_thread: Optional[threading.Thread] = None
 
 
         self._load_ai_config()
@@ -571,6 +573,7 @@ class WebChatServer:
                 self._init_workflow_scheduler()
                 self._init_custom_task_scheduler()
                 self._start_proactive_chat_loop()
+                self._start_log_cleanup_loop()
                 # 检查并重建知识库索引（如有需要）
                 self._check_knowledge_index()
                 # 自动启动飞书长连接频道
@@ -587,6 +590,42 @@ class WebChatServer:
             daemon=True,
         )
         self.startup_thread.start()
+
+    def _start_log_cleanup_loop(self):
+        if self.log_cleanup_thread and self.log_cleanup_thread.is_alive():
+            return
+
+        def run():
+            while True:
+                try:
+                    cleanup = (self.settings or {}).get("log_cleanup") or {}
+                    if cleanup.get("enabled"):
+                        result = cleanup_logs_dir(self.base_dir, cleanup)
+                        cleanup.update(
+                            {
+                                "last_run": datetime.now().isoformat(),
+                                "last_deleted_count": result.get("deleted_count", 0),
+                                "last_freed_bytes": result.get("freed_bytes", 0),
+                                "last_error": result.get("error", ""),
+                            }
+                        )
+                        self.settings["log_cleanup"] = cleanup
+                        self._save_data("settings")
+                        if result.get("deleted_count", 0):
+                            self.add_system_log(
+                                f"Log cleanup deleted {result['deleted_count']} files, freed {result['freed_bytes']} bytes",
+                                "info",
+                            )
+                except Exception as e:
+                    _log.warning("Log cleanup loop failed: %s", e, exc_info=True)
+                time.sleep(3600)
+
+        self.log_cleanup_thread = threading.Thread(
+            target=run,
+            name="log-cleanup",
+            daemon=True,
+        )
+        self.log_cleanup_thread.start()
 
     def _format_uptime(self, seconds):
         """格式化运行时间"""

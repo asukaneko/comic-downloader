@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 
 from flask import jsonify, request
 
+from nbot.web.log_cleanup import cleanup_logs_dir, normalize_log_cleanup_settings
+
 
 _log = logging.getLogger(__name__)
 
@@ -33,6 +35,7 @@ def register_admin_misc_routes(app, server):
         features = dict(default_features)
         features.update(server.settings.get("features") or {})
         server.settings["features"] = features
+        normalize_log_cleanup_settings(server.settings)
         return server.settings
 
     @app.route("/api/commands")
@@ -155,6 +158,28 @@ def register_admin_misc_routes(app, server):
         server._save_data("logs")
         return jsonify({"success": True})
 
+    @app.route("/api/logs/cleanup", methods=["POST"])
+    def cleanup_log_files():
+        _normalize_settings()
+        result = cleanup_logs_dir(server.base_dir, server.settings.get("log_cleanup") or {})
+        cleanup = server.settings.get("log_cleanup") or {}
+        cleanup.update(
+            {
+                "last_run": datetime.now().isoformat(),
+                "last_deleted_count": result.get("deleted_count", 0),
+                "last_freed_bytes": result.get("freed_bytes", 0),
+                "last_error": result.get("error", ""),
+            }
+        )
+        server.settings["log_cleanup"] = cleanup
+        server._save_data("settings")
+        if result.get("deleted_count", 0):
+            server.add_system_log(
+                f"Log cleanup deleted {result['deleted_count']} files, freed {result['freed_bytes']} bytes",
+                "info",
+            )
+        return jsonify(result)
+
     @app.route("/api/settings")
     def get_settings():
         return jsonify(_normalize_settings())
@@ -163,6 +188,7 @@ def register_admin_misc_routes(app, server):
     def update_settings():
         _normalize_settings()
         data = request.json or {}
+        skip_log_cleanup = bool(data.pop("_skip_log_cleanup", False))
         if "features" in data and isinstance(data.get("features"), dict):
             merged_features = dict(server.settings.get("features") or {})
             merged_features.update(data["features"])
@@ -171,6 +197,8 @@ def register_admin_misc_routes(app, server):
         server.settings.update(data)
         _normalize_settings()
         server._save_data("settings")
+        if not skip_log_cleanup and server.settings.get("log_cleanup", {}).get("enabled"):
+            cleanup_log_files()
         return jsonify({"success": True, "settings": server.settings})
 
     @app.route("/api/stats")
