@@ -64,6 +64,28 @@ def _resolve_session_character_name(server, session):
     return ""
 
 
+def _resolve_session_runtime_character_id(session):
+    if not isinstance(session, dict):
+        return ""
+
+    snapshot = session.get("character_runtime_snapshot")
+    if isinstance(snapshot, dict):
+        character_id = str(snapshot.get("character_id") or "").strip()
+        if character_id:
+            return character_id
+
+    timeline = session.get("character_runtime_timeline")
+    if isinstance(timeline, list):
+        for entry in reversed(timeline):
+            if not isinstance(entry, dict):
+                continue
+            character_id = str(entry.get("character_id") or "").strip()
+            if character_id:
+                return character_id
+
+    return str(session.get("character_id") or session.get("sender_name") or "").strip()
+
+
 def _runtime_snapshot_signature(snapshot):
     if not isinstance(snapshot, dict):
         return {}
@@ -230,16 +252,34 @@ def _save_character_runtime_snapshot(server, character_id, target_session_id, sn
     )
 
 
-def _copy_character_runtime_state(server, character_id, source_session_id, target_session_id, snapshot=None):
-    if not character_id or not source_session_id or not target_session_id:
+def _copy_character_runtime_state(
+    server,
+    character_id,
+    source_session_id,
+    target_session_id,
+    snapshot=None,
+):
+    if not source_session_id or not target_session_id:
         return
 
     try:
+        source_session = getattr(server, "sessions", {}).get(source_session_id, {}) or {}
+        character_id = str(
+            (
+                snapshot.get("character_id")
+                if isinstance(snapshot, dict)
+                else None
+            )
+            or character_id
+            or _resolve_session_runtime_character_id(source_session)
+        ).strip()
+        if not character_id:
+            return
+
         if isinstance(snapshot, dict):
-            snapshot_character_id = str(snapshot.get("character_id") or character_id).strip()
             _save_character_runtime_snapshot(
                 server,
-                snapshot_character_id or character_id,
+                character_id,
                 target_session_id,
                 snapshot,
             )
@@ -261,7 +301,6 @@ def _copy_character_runtime_state(server, character_id, source_session_id, targe
             state_repo.save(state)
 
         relationship_repo = RelationshipRepository(base_dir)
-        source_session = getattr(server, "sessions", {}).get(source_session_id, {}) or {}
         source_targets = [
             source_scope,
             source_session.get("user_id"),
@@ -1043,7 +1082,13 @@ def register_session_routes(app, server):
             "archived_at": None,
             "messages": forked_messages,
             "system_prompt": system_prompt,
-            "character_id": session.get("character_id") or session.get("sender_name", ""),
+            "character_id": _resolve_session_runtime_character_id(
+                {
+                    **session,
+                    "character_runtime_snapshot": fork_snapshot,
+                    "character_runtime_timeline": fork_timeline,
+                }
+            ),
             "sender_name": session.get("sender_name", ""),
             "sender_avatar": session.get("sender_avatar", ""),
             "sender_portrait": session.get("sender_portrait", ""),

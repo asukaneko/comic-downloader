@@ -27,7 +27,12 @@ def _get_base_dir(server) -> str:
 
 
 def _resolve_web_character_id(server, session: Dict[str, Any]) -> str:
+    runtime_snapshot = session.get("character_runtime_snapshot")
+    timeline = session.get("character_runtime_timeline")
+    timeline_snapshot = timeline[-1] if isinstance(timeline, list) and timeline else {}
     candidates = [
+        runtime_snapshot.get("character_id") if isinstance(runtime_snapshot, dict) else None,
+        timeline_snapshot.get("character_id") if isinstance(timeline_snapshot, dict) else None,
         session.get("character_id"),
         session.get("sender_name"),
         getattr(server, "personality", {}).get("id"),
@@ -47,7 +52,11 @@ def _resolve_web_character_id(server, session: Dict[str, Any]) -> str:
     return "default"
 
 
-def get_web_character_context(server, session_store, session_id: str) -> Optional[CharacterIdentity]:
+def get_web_character_context(
+    server,
+    session_store,
+    session_id: str,
+) -> Optional[CharacterIdentity]:
     """从 Web 会话中解析角色身份
 
     Args:
