@@ -596,7 +596,12 @@ const NbotMethods = {
                     const estimatedTokens = this.contextTokenEstimate || 0;
                     this.contextUsage = Math.min(100, (estimatedTokens / maxTokens) * 100);
                 },
-                
+
+                toggleContextTooltip() {
+                    // 移动端点击上下文指示器切换详情面板
+                    this.showContextTooltip = !this.showContextTooltip;
+                },
+
                 async compressContext() {
                     if (this.isCompressing || !this.currentSession) return;
 

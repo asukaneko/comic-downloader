@@ -1689,11 +1689,13 @@
                                             </div>
                                         </div>
                                         <div class="chat-actions">
-                                            <!-- Context Length Indicator -->
-                                            <div v-if="currentSession && !currentSession.read_only" class="context-indicator" tabindex="0">
+                                            <!-- 上下文占比按钮（移动端可点击展开详情） -->
+                                            <div v-if="currentSession && !currentSession.read_only" class="context-indicator"
+                                                 :class="{ 'context-tooltip-active': showContextTooltip }"
+                                                 tabindex="0" @click="toggleContextTooltip"
+                                                 v-click-outside="() => showContextTooltip = false">
                                                 <svg>
-                                                    <circle class="progress-ring-circle progress-ring-bg"
-                                                            :cx="20" :cy="20" :r="16"></circle>
+                                                    <circle class="progress-ring-circle progress-ring-bg" :cx="20" :cy="20" :r="16"></circle>
                                                     <circle class="progress-ring-circle progress-ring-fill"
                                                             :class="{ warning: contextUsage > 70, danger: contextUsage > 90 }"
                                                             :cx="20" :cy="20" :r="16"
@@ -1702,7 +1704,7 @@
                                                 </svg>
                                                 <span class="percentage">{{ Math.round(contextUsage) }}%</span>
 
-                                                <!-- Tooltip -->
+                                                <!-- 详情面板（hover 或点击展开） -->
                                                 <div class="context-tooltip">
                                                     <h4>上下文使用情况</h4>
                                                     <p>当前会话的消息统计</p>
@@ -1725,7 +1727,7 @@
                                                         </div>
                                                     </div>
                                                     <button class="compress-btn"
-                                                            @click="compressContext"
+                                                            @click.stop="compressContext"
                                                             :disabled="isCompressing">
                                                         {{ isCompressing ? '压缩中...' : '压缩上下文' }}
                                                     </button>
@@ -1767,17 +1769,6 @@
                                                 <input type="file" ref="fileInput" @change="handleFileSelect" multiple accept="image/*,.pdf,.doc,.docx,.txt,.json,.xml" style="display: none;">
                                                 <input type="file" ref="workspaceFileInput" @change="handleWorkspaceFileUpload" multiple accept="*/*" style="display: none;">
                                             </div>
-                                            <!-- 语音录音按钮 -->
-                                            <button
-                                                v-if="!currentSession?.read_only"
-                                                class="btn btn-icon"
-                                                :class="{ 'btn-danger': isRecording, 'btn-secondary': !isRecording, 'btn-warning': isTranscribing }"
-                                                @click="toggleRecording"
-                                                :disabled="isLoading || isTranscribing"
-                                                :title="isRecording ? '停止录音' : '语音输入'"
-                                            >
-                                                <i :class="isTranscribing ? 'fas fa-spinner fa-spin' : (isRecording ? 'fas fa-stop' : 'fas fa-microphone')"></i>
-                                            </button>
                                             <button
                                                 class="btn"
                                                 :class="isLoading && (!inputMessage.trim() && uploadedFiles.length === 0) ? 'btn-danger' : 'btn-primary'"
@@ -8182,6 +8173,7 @@
                     contextTokenEstimate: 0,  // 预估token数
                     contextUsage: 0,  // 使用百分比
                     contextMessageCount: 0,
+                    showContextTooltip: false,  // 移动端上下文详情面板展开状态
                     isCompressing: false,
                     isSummarizing: false,
                     showAiSummaryModal: false,

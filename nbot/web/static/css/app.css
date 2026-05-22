@@ -6357,9 +6357,9 @@
                 line-height: 1.45;
             }
 
-            /* 上下文指示器在移动端隐藏 */
+            /* 上下文指示器在移动端显示（可点击展开详情） */
             .context-indicator {
-                display: none;
+                display: flex;
             }
 
             /* 附件预览优化 */
@@ -6562,6 +6562,10 @@
                 margin-right: 4px;
             }
 
+            .chat-actions .context-indicator:hover {
+                transform: none;
+            }
+
             .chat-actions .context-indicator svg {
                 width: 40px;
                 height: 40px;
@@ -6569,6 +6573,44 @@
 
             .chat-actions .context-indicator .percentage {
                 font-size: 10px;
+            }
+
+            /* 移动端上下文详情面板：点击展开时从按钮上方弹出 */
+            .chat-actions .context-indicator.context-tooltip-active .context-tooltip {
+                opacity: 1 !important;
+                visibility: visible !important;
+                bottom: auto;
+                top: auto;
+                left: 50%;
+                transform: translateX(-50%);
+                bottom: calc(100% + 8px);
+                width: min(340px, calc(100vw - 16px));
+                max-width: calc(100vw - 16px);
+                position: absolute;
+                z-index: 2000;
+                box-sizing: border-box;
+            }
+
+            /* 移动端上下文统计：固定像素宽度，杜绝跳动 */
+            .chat-actions .context-indicator.context-tooltip-active .context-stats {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 6px;
+            }
+
+            .chat-actions .context-indicator.context-tooltip-active .stat-item {
+                min-width: 0;
+                padding: 5px 6px;
+                box-sizing: border-box;
+                overflow: hidden;
+            }
+
+            .chat-actions .context-indicator.context-tooltip-active .stat-label {
+                font-size: 10px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: block;
             }
 
             /* 移动端扩大按钮 */
@@ -8284,7 +8326,8 @@
         }
 
         .context-indicator:hover .context-tooltip,
-        .context-indicator:focus .context-tooltip {
+        .context-indicator:focus .context-tooltip,
+        .context-indicator.context-tooltip-active .context-tooltip {
             opacity: 1;
             visibility: visible;
         }
@@ -16909,7 +16952,7 @@
             }
 
             .chat-actions .context-indicator {
-                display: none;
+                display: flex;
             }
 
             .chat-actions .btn,
