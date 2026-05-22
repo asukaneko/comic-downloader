@@ -216,6 +216,24 @@ class RelationshipRepository:
             return None
         return RelationshipState.from_dict(data)
 
+    def get_by_target(self, target_id: str) -> Optional[RelationshipState]:
+        """Return the newest relationship for a target, regardless of character id."""
+        target_id = str(target_id or "").strip()
+        if not target_id:
+            return None
+
+        matches = [
+            item
+            for item in self._store.list_all()
+            if isinstance(item, dict) and str(item.get("target_id") or "") == target_id
+        ]
+        if not matches:
+            return None
+
+        return RelationshipState.from_dict(
+            max(matches, key=lambda item: str(item.get("updated_at") or ""))
+        )
+
     def get_or_create(
         self,
         character_id: str,

@@ -26,26 +26,58 @@ def _get_base_dir(server) -> str:
     )
 
 
-def _resolve_web_character_id(server, session: Dict[str, Any]) -> str:
+def _resolve_web_character_id(
+    server,
+    session: Dict[str, Any],
+    session_id: str = "",
+) -> str:
     runtime_snapshot = session.get("character_runtime_snapshot")
     timeline = session.get("character_runtime_timeline")
     timeline_snapshot = timeline[-1] if isinstance(timeline, list) and timeline else {}
-    candidates = [
+    runtime_candidates = [
         runtime_snapshot.get("character_id") if isinstance(runtime_snapshot, dict) else None,
         timeline_snapshot.get("character_id") if isinstance(timeline_snapshot, dict) else None,
+    ]
+    session_candidates = [
         session.get("character_id"),
         session.get("sender_name"),
-        getattr(server, "personality", {}).get("id"),
-        getattr(server, "personality", {}).get("name"),
     ]
 
     repo = ProfileRepository(_get_base_dir(server))
-    for candidate in candidates:
+    for candidate in runtime_candidates:
         candidate = str(candidate or "").strip()
         if candidate and repo.get(candidate):
             return candidate
 
-    for candidate in candidates:
+    for candidate in runtime_candidates:
+        candidate = str(candidate or "").strip()
+        if candidate:
+            return candidate
+
+    if session_id:
+        try:
+            from nbot.character.repository import RelationshipRepository
+
+            relationship = RelationshipRepository(_get_base_dir(server)).get_by_target(
+                f"web:{session_id}"
+            )
+            if relationship and relationship.character_id:
+                return str(relationship.character_id)
+        except Exception:
+            pass
+
+    for candidate in session_candidates:
+        candidate = str(candidate or "").strip()
+        if candidate and repo.get(candidate):
+            return candidate
+
+    for candidate in session_candidates:
+        candidate = str(candidate or "").strip()
+        if candidate:
+            return candidate
+
+    personality = getattr(server, "personality", {}) or {}
+    for candidate in (personality.get("id"), personality.get("name")):
         candidate = str(candidate or "").strip()
         if candidate:
             return candidate
@@ -72,7 +104,7 @@ def get_web_character_context(
         session = {}
 
     # 角色ID：优先从会话中获取，避免全局当前角色切换后污染旧会话
-    character_id = _resolve_web_character_id(server, session)
+    character_id = _resolve_web_character_id(server, session, session_id=session_id)
 
     # 目标ID：Web 会话标识。关系状态需要按会话隔离，避免新会话继承旧会话的六维进行时。
     target_id = f"web:{session_id}"

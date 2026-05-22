@@ -218,6 +218,10 @@ class RelationshipJsonStore:
         prefix = f"{character_id}::"
         return [v for k, v in all_data.items() if k.startswith(prefix)]
 
+    def list_all(self) -> List[Dict[str, Any]]:
+        """列出所有关系"""
+        return list(self._store.list_all().values())
+
 
 class ProfileJsonStore:
     """角色卡的 JSON 存储"""
