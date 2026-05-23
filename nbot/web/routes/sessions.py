@@ -1092,6 +1092,47 @@ def register_session_routes(app, server):
         merged["messages"] = meaningful + main_messages
         return merged
 
+    def _copy_archive_for_fork(source_session, target_session_id, target_name, now):
+        source_archive_id = source_session.get("archive_session_id") if isinstance(source_session, dict) else None
+        if not source_archive_id:
+            return ""
+
+        source_archive = session_store.get_session(source_archive_id)
+        if not source_archive:
+            source_archive = get_session_from_db(server.data_dir, source_archive_id)
+        if not source_archive:
+            _log.warning(
+                "[ForkSession] source archive not found for fork: %s",
+                source_archive_id,
+            )
+            return ""
+
+        archive_id = str(uuid.uuid4())
+        archive = deepcopy(source_archive)
+        archive["id"] = archive_id
+        archive["name"] = f"📦 {target_name} - 归档"
+        archive["type"] = "web"
+        archive["created_at"] = now
+        archive["archived"] = True
+        archive["archived_at"] = now
+        archive["is_archive"] = True
+        archive["read_only"] = True
+        archive["source_session_id"] = target_session_id
+        archive["forked_from_archive_session_id"] = source_archive_id
+        archive["messages"] = deepcopy(source_archive.get("messages", []))
+
+        _repair_session_visuals(
+            server,
+            archive,
+            {
+                str(source_archive_id): source_archive,
+                target_session_id: source_session,
+                archive_id: archive,
+            },
+        )
+        session_store.set_session(archive_id, archive)
+        return archive_id
+
     @app.route("/api/sessions/<session_id>/export")
     def export_session(session_id):
         session = _get_web_session(session_id)
@@ -1208,6 +1249,14 @@ def register_session_routes(app, server):
                 "created_at": now,
             },
         }
+        archive_id = _copy_archive_for_fork(
+            session,
+            new_id,
+            new_session["name"],
+            now,
+        )
+        if archive_id:
+            new_session["archive_session_id"] = archive_id
         session_store.set_session(new_id, new_session)
         _copy_character_runtime_state(
             server,
