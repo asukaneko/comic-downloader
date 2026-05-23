@@ -120,10 +120,13 @@ class CharacterRuntime:
             _log.warning("[CharacterRuntime] after_turn skipped: state_machine is None")
             return
 
+        old_state = self._refresh_latest_state(turn_context.state)
+        old_relationship = self._refresh_latest_relationship(turn_context.relationship)
+
         # 应用状态变化
         new_state, new_relationship = self.state_machine.apply(
-            old_state=turn_context.state,
-            old_relationship=turn_context.relationship,
+            old_state=old_state,
+            old_relationship=old_relationship,
             signals=turn_context.signals,
             plan=turn_context.plan,
             user_message=getattr(chat_request, "content", ""),
@@ -155,11 +158,11 @@ class CharacterRuntime:
         _log.debug(
             "[CharacterRuntime] after_turn: old_rel=%s new_rel=%s state_repo=%s rel_repo=%s",
             {
-                "affection": turn_context.relationship.affection,
-                "trust": turn_context.relationship.trust,
-                "familiarity": turn_context.relationship.familiarity,
-                "dependency": turn_context.relationship.dependency,
-                "security": turn_context.relationship.security,
+                "affection": old_relationship.affection,
+                "trust": old_relationship.trust,
+                "familiarity": old_relationship.familiarity,
+                "dependency": old_relationship.dependency,
+                "security": old_relationship.security,
             },
             {
                 "affection": new_relationship.affection,
@@ -179,6 +182,13 @@ class CharacterRuntime:
         if self.relationship_repo and new_relationship:
             self.relationship_repo.save(new_relationship)
 
+        # Web snapshot / timeline are written after after_turn from this context.
+        # Keep them on the just-saved values instead of the before_turn baseline.
+        if new_state:
+            turn_context.state = new_state
+        if new_relationship:
+            turn_context.relationship = new_relationship
+
         # 记忆抽取（如果配置了记忆服务）
         if self.memory_service:
             try:
@@ -189,6 +199,27 @@ class CharacterRuntime:
                 )
             except Exception as exc:
                 _log.warning("[CharacterRuntime] 记忆抽取异常: %s", exc)
+
+    def _refresh_latest_state(self, state: CharacterState) -> CharacterState:
+        if not self.state_repo or not state:
+            return state
+        try:
+            latest = self.state_repo.get(state.character_id, state.scope_id)
+            return latest or state
+        except Exception:
+            return state
+
+    def _refresh_latest_relationship(self, relationship: RelationshipState) -> RelationshipState:
+        if not self.relationship_repo or not relationship:
+            return relationship
+        try:
+            latest = self.relationship_repo.get(
+                relationship.character_id,
+                relationship.target_id,
+            )
+            return latest or relationship
+        except Exception:
+            return relationship
 
     def _get_profile(self, identity: CharacterIdentity) -> CharacterProfile:
         """获取角色卡"""
