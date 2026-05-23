@@ -905,6 +905,14 @@
                                             <i class="fas fa-folder-open"></i>
                                             <span>收藏面板</span>
                                         </div>
+                                        <div v-if="currentSession?.archive_session_id" class="mobile-chat-actions-item" @click="openArchiveSession(); showMobileChatActions = false">
+                                            <i class="fas fa-box-archive"></i>
+                                            <span>查看归档</span>
+                                        </div>
+                                        <div v-if="currentSession?.archive_session_id && !currentSession.is_archive && !currentSession.archived" class="mobile-chat-actions-item" @click="restoreTurnsFromArchive(); showMobileChatActions = false">
+                                            <i class="fas fa-level-up-alt"></i>
+                                            <span>提取归档</span>
+                                        </div>
                                         <div v-if="currentSession && (currentSession.is_archive || currentSession.archived)" class="mobile-chat-actions-item" @click="aiSummarySession(); showMobileChatActions = false" :class="{ disabled: isSummarizing || isLoading }">
                                             <i :class="isSummarizing ? 'fas fa-spinner fa-spin' : 'fas fa-magic'"></i>
                                             <span>AI总结</span>
