@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260527';
+        window.__nbotAssetVersion = '20260531';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css?v=20260527">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260527">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260531">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260531">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -1751,6 +1751,48 @@
                                                     <i class="fas fa-paperclip"></i>
                                                 </button>
                                                 <div class="file-menu-dropdown" v-show="showFileMenu">
+                                                    <div v-if="currentSession && !currentSession.read_only" class="file-menu-context-panel">
+                                                        <div class="file-menu-context-head">
+                                                            <div class="file-menu-context-ring">
+                                                                <svg>
+                                                                    <circle class="progress-ring-circle progress-ring-bg" :cx="20" :cy="20" :r="16"></circle>
+                                                                    <circle class="progress-ring-circle progress-ring-fill"
+                                                                            :class="{ warning: contextUsage > 70, danger: contextUsage > 90 }"
+                                                                            :cx="20" :cy="20" :r="16"
+                                                                            :stroke-dasharray="circumference"
+                                                                            :stroke-dashoffset="circumference - (contextUsage / 100 * circumference)"></circle>
+                                                                </svg>
+                                                                <span>{{ Math.round(contextUsage) }}%</span>
+                                                            </div>
+                                                            <div class="file-menu-context-title">
+                                                                <strong>上下文</strong>
+                                                                <span>当前会话使用情况</span>
+                                                            </div>
+                                                            <button class="file-menu-context-compress"
+                                                                    @click.stop="compressContext"
+                                                                    :disabled="isCompressing">
+                                                                {{ isCompressing ? '压缩中...' : '压缩' }}
+                                                            </button>
+                                                        </div>
+                                                        <div class="file-menu-context-stats">
+                                                            <div>
+                                                                <span>消息</span>
+                                                                <strong>{{ contextMessageCount }}</strong>
+                                                            </div>
+                                                            <div>
+                                                                <span>字符</span>
+                                                                <strong>{{ formatNumber(contextCharCount) }}</strong>
+                                                            </div>
+                                                            <div>
+                                                                <span>Token</span>
+                                                                <strong>{{ formatNumber(contextTokenEstimate) }}</strong>
+                                                            </div>
+                                                            <div>
+                                                                <span>上限</span>
+                                                                <strong>{{ formatNumber(aiConfig.max_context_length || 100000) }}</strong>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <div class="file-menu-item" @click="triggerFileUpload">
                                                         <i class="fas fa-comment-dots"></i>
                                                         <div class="file-menu-item-info">
