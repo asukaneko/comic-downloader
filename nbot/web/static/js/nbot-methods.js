@@ -893,9 +893,7 @@ const NbotMethods = {
                 getRuntimeTimelineNodes(timeline, limit = 5) {
                     if (!Array.isArray(timeline) || timeline.length === 0) return [];
                     const fields = [
-                        'character_id', 'mood', 'mood_intensity', 'energy',
-                        'affection', 'trust', 'security', 'familiarity',
-                        'dependency', 'jealousy', 'visible_emotion', 'hidden_emotion'
+                        'character_id', 'mood', 'visible_emotion', 'affection', 'trust'
                     ];
                     const nodes = [];
                     let lastSignature = '';
