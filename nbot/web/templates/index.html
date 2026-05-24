@@ -3137,7 +3137,7 @@
                                     <button class="btn btn-ghost btn-sm" @click="navigateTo('personality')">
                                         <i class="fas fa-chevron-left"></i> 返回角色设置
                                     </button>
-                                    <button class="btn btn-primary" @click="refreshPersonalityTimelineSessions(true)" :disabled="personalityTimelineLoading">
+                                    <button class="btn btn-primary" @click="refreshPersonalityTimelineSessions(false)" :disabled="personalityTimelineLoading">
                                         <i class="fas fa-rotate-right" :class="{ 'fa-spin': personalityTimelineLoading }"></i> 刷新历程
                                     </button>
                                 </div>

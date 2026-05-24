@@ -187,6 +187,67 @@ def _resolve_session_runtime_character_id(session):
     return str(session.get("character_id") or session.get("sender_name") or "").strip()
 
 
+def _is_same_session_character(old_character_id, old_name, new_character_id, new_name):
+    old_values = {
+        str(value or "").strip()
+        for value in (old_character_id, old_name)
+        if str(value or "").strip()
+    }
+    new_values = {
+        str(value or "").strip()
+        for value in (new_character_id, new_name)
+        if str(value or "").strip()
+    }
+    return bool(old_values and new_values and old_values.intersection(new_values))
+
+
+def _retarget_session_runtime_character(server, session_id, session, old_character_id, new_character_id):
+    old_character_id = str(old_character_id or "").strip()
+    new_character_id = str(new_character_id or "").strip()
+    if not old_character_id or not new_character_id or old_character_id == new_character_id:
+        return
+
+    snapshot = session.get("character_runtime_snapshot")
+    if isinstance(snapshot, dict) and str(snapshot.get("character_id") or "").strip() == old_character_id:
+        snapshot["character_id"] = new_character_id
+
+    timeline = session.get("character_runtime_timeline")
+    if isinstance(timeline, list):
+        for entry in timeline:
+            if isinstance(entry, dict) and str(entry.get("character_id") or "").strip() == old_character_id:
+                entry["character_id"] = new_character_id
+
+    try:
+        from nbot.character.repository import (
+            CharacterStateRepository,
+            RelationshipRepository,
+        )
+
+        base_dir = _get_base_dir(server)
+        target_scope = f"web:{session_id}"
+
+        state_repo = CharacterStateRepository(base_dir)
+        state = state_repo.get(old_character_id, target_scope)
+        if state:
+            state.character_id = new_character_id
+            state_repo.save(state)
+
+        relationship_repo = RelationshipRepository(base_dir)
+        relationship = relationship_repo.get(old_character_id, target_scope)
+        if relationship:
+            relationship.character_id = new_character_id
+            relationship_repo.save(relationship)
+    except Exception as exc:
+        _log.warning(
+            "[CharacterRuntime] failed to retarget runtime state %s -> %s for session %s: %s",
+            old_character_id,
+            new_character_id,
+            session_id,
+            exc,
+            exc_info=True,
+        )
+
+
 def _runtime_snapshot_signature(snapshot):
     if not isinstance(snapshot, dict):
         return {}
@@ -1315,7 +1376,21 @@ def register_session_routes(app, server):
         if messages and messages[0].get("role") == "system":
             messages[0]["content"] = system_prompt
 
-        if old_character_id and new_character_id and old_character_id != new_character_id:
+        same_character = _is_same_session_character(
+            old_character_id,
+            old_name,
+            new_character_id,
+            sender_name,
+        )
+        if same_character:
+            _retarget_session_runtime_character(
+                server,
+                session_id,
+                session,
+                old_character_id,
+                new_character_id,
+            )
+        else:
             session["character_runtime_timeline"] = []
             session["character_runtime_snapshot"] = None
 

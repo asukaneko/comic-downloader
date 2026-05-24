@@ -1362,7 +1362,15 @@ const NbotMethods = {
                         const { systemPrompt, ...dataWithoutPrompt } = this.personality;
                         const res = await api.put('/api/personality', dataWithoutPrompt);
                         if (res.data && res.data.personality) {
+                            const savedState = this.personality?.state || null;
+                            const savedPortrait = this.personality?.portrait || null;
                             this.personality = { ...res.data.personality };
+                            if (savedState && typeof savedState === 'object') {
+                                this.personality.state = savedState;
+                            }
+                            if (savedPortrait) {
+                                this.personality.portrait = savedPortrait;
+                            }
                         }
                         this.activePersonality = { ...this.personality };
                         this.personalityHasUnsavedChanges = false;
@@ -2137,8 +2145,20 @@ const NbotMethods = {
                 async loadPersonality() {
                     try {
                         const res = await api.get('/api/personality');
+                        // 保留运行时状态字段（心情/好感度等），避免刷新后被服务端默认值覆盖
+                        const preservedState = this.personality?.state || null;
+                        const preservedPortrait = this.personality?.portrait || null;
                         this.personality = res.data;
+                        if (preservedState && typeof preservedState === 'object') {
+                            this.personality.state = preservedState;
+                        }
+                        if (preservedPortrait) {
+                            this.personality.portrait = preservedPortrait;
+                        }
                         this.activePersonality = { ...res.data };
+                        if (preservedState && typeof preservedState === 'object') {
+                            this.activePersonality.state = preservedState;
+                        }
                         this.personalityTagsInput = (this.personality.tags || []).join(' ');
                         // 重新应用聊天背景（personality.portrait 可能已更新）
                         this.applyChatBackground();
@@ -7373,12 +7393,22 @@ def main(params):
                 async savePersonality() {
                     this.isLoading = true;
                     try {
+                        // 保存运行时状态，避免被服务端返回值覆盖
+                        const preservedState = this.personality?.state || null;
+                        const preservedPortrait = this.personality?.portrait || null;
                         // systemPrompt 由后端自动编译生成，前端不再发送
                         const { systemPrompt, ...dataWithoutPrompt } = this.personality;
                         const res = await api.put('/api/personality', dataWithoutPrompt);
                         // 用后端返回的 personality 更新本地状态（包含自动编译的 systemPrompt）
                         if (res.data && res.data.personality) {
                             this.personality = { ...res.data.personality };
+                        }
+                        // 恢复运行时状态（心情/好感度等不会被服务端默认值覆盖）
+                        if (preservedState && typeof preservedState === 'object') {
+                            this.personality.state = preservedState;
+                        }
+                        if (preservedPortrait) {
+                            this.personality.portrait = preservedPortrait;
                         }
                         // 始终同步更新 activePersonality，确保角色卡预览立即刷新
                         this.activePersonality = { ...this.personality };
@@ -12118,6 +12148,7 @@ def main(params):
                         });
 
                         if (res.data?.success) {
+                            const updatedSession = res.data.session || {};
                             // 更新前端会话数据
                             Object.assign(this.currentSession, {
                                 sender_name: preset.name || '',
@@ -12126,6 +12157,8 @@ def main(params):
                                 sender_portrait: preset.portrait || '',
                                 scenario: scenario,
                                 system_prompt: preset.systemPrompt || '',
+                                character_runtime_snapshot: updatedSession.character_runtime_snapshot ?? this.currentSession.character_runtime_snapshot,
+                                character_runtime_timeline: updatedSession.character_runtime_timeline ?? this.currentSession.character_runtime_timeline,
                             });
 
                             // 更新会话列表中的对应会话
@@ -12138,6 +12171,8 @@ def main(params):
                                     sender_portrait: preset.portrait || '',
                                     scenario: scenario,
                                     system_prompt: preset.systemPrompt || '',
+                                    character_runtime_snapshot: updatedSession.character_runtime_snapshot ?? sessionInList.character_runtime_snapshot,
+                                    character_runtime_timeline: updatedSession.character_runtime_timeline ?? sessionInList.character_runtime_timeline,
                                 });
                             }
 
