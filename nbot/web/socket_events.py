@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import logging
 import uuid
+from datetime import datetime
 
 from flask import request
 from flask_socketio import emit, join_room, leave_room
@@ -127,7 +128,7 @@ def register_socket_events(server):
             "role": "assistant",
             "sender": "Stream Demo",
             "content": "",
-            "timestamp": "",
+            "timestamp": datetime.now().isoformat(),
             "session_id": session_id,
         }
 

@@ -165,10 +165,9 @@ class BaseChannelAdapter:
             conversation_id=conversation_id,
             metadata=message_metadata,
         )
-        channel_message["id"] = message.get("id", channel_message["id"])
-        channel_message["timestamp"] = message.get(
-            "timestamp", channel_message["timestamp"]
-        )
+        channel_message["id"] = message.get("id") or channel_message["id"]
+        channel_message["sender"] = message.get("sender") or sender or channel_message["sender"]
+        channel_message["timestamp"] = message.get("timestamp") or channel_message["timestamp"]
         return channel_message
 
     def normalize_inbound_message(self, content: str) -> str:

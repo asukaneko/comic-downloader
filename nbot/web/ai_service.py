@@ -407,6 +407,15 @@ class WebCallbacks(PipelineCallbacks):
         ).strip()
 
     def save_assistant_message(self, ctx: PipelineContext, message: Dict) -> None:
+        if not message.get("sender"):
+            session = self.session_store.get_session(self.session_id) or {}
+            message["sender"] = session.get("sender_name") or "AI"
+        if not message.get("timestamp"):
+            message["timestamp"] = datetime.now().isoformat()
+        if not message.get("session_id"):
+            message["session_id"] = self.session_id
+        if not message.get("source"):
+            message["source"] = "web"
         if ctx.metadata.get("is_proactive_chat"):
             message["source"] = "proactive_chat"
             message["is_proactive_chat"] = True

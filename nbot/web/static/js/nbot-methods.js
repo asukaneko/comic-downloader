@@ -5455,15 +5455,223 @@ def main(params):
                     });
                 },
 
-                editSession(session) {
+                async editSession(session) {
+                    const baseSession = { ...(session || {}) };
                     this.editingSession = {
-                        ...session,
-                        tags: [...(session.tags || [])],
-                        tagsText: (session.tags || []).join(', '),
-                        favorite: !!session.favorite,
-                        pinned: !!session.pinned,
+                        ...baseSession,
+                        tags: [...(baseSession.tags || [])],
+                        tagsText: (baseSession.tags || []).join(', '),
+                        favorite: !!baseSession.favorite,
+                        pinned: !!baseSession.pinned,
+                        messages: [],
+                        originalMessages: {},
+                    };
+                    this.editingNewMessage = {
+                        role: 'user',
+                        content: '',
+                        insertTarget: 0,
+                        insertSide: 'after',
                     };
                     this.showEditSessionModal = true;
+
+                    try {
+                        const res = await api.get(`/api/sessions/${baseSession.id}`);
+                        if (!this.showEditSessionModal || this.editingSession?.id !== baseSession.id) return;
+                        const fullSession = res.data || {};
+                        const fallbackSessionTime = fullSession.updated_at || fullSession.created_at || new Date().toISOString();
+                        const fallbackSenderForRole = (role) => {
+                            if (role === 'assistant') {
+                                return fullSession.sender_name || baseSession.sender_name || 'AI';
+                            }
+                            return fullSession.user_id || baseSession.user_id || this.username || 'web_user';
+                        };
+                        const editableMessages = (fullSession.messages || [])
+                            .filter(msg => msg && msg.role !== 'system')
+                            .map(msg => {
+                                const role = msg.role || 'user';
+                                return {
+                                    ...msg,
+                                    role,
+                                    content: typeof msg.content === 'string'
+                                        ? msg.content
+                                        : JSON.stringify(msg.content ?? '', null, 2),
+                                    sender: msg.sender || fallbackSenderForRole(role),
+                                    timestamp: msg.timestamp || msg.created_at || msg.updated_at || fallbackSessionTime,
+                                };
+                            });
+                        this.editingSession = {
+                            ...this.editingSession,
+                            ...fullSession,
+                            tags: [...(fullSession.tags || this.editingSession.tags || [])],
+                            tagsText: (fullSession.tags || this.editingSession.tags || []).join(', '),
+                            favorite: !!fullSession.favorite,
+                            pinned: !!fullSession.pinned,
+                            messages: editableMessages,
+                            originalMessages: Object.fromEntries(
+                                editableMessages.map(msg => [
+                                    msg.id,
+                                    {
+                                        role: msg.role,
+                                        content: msg.content,
+                                        sender: msg.sender || '',
+                                        timestamp: msg.timestamp || '',
+                                    }
+                                ])
+                            ),
+                        };
+                        this.editingNewMessage.insertTarget = editableMessages.length
+                            ? editableMessages.length
+                            : 0;
+                        this.editingNewMessage.insertSide = editableMessages.length
+                            ? 'after'
+                            : 'before';
+                    } catch (e) {
+                        console.error('加载会话编辑数据失败:', e);
+                        this.showToast('加载会话消息失败', 'error');
+                    }
+                },
+
+                getEditingSessionMessages() {
+                    return Array.isArray(this.editingSession?.messages)
+                        ? this.editingSession.messages
+                        : [];
+                },
+
+                getEditingMessageLabel(msg, index) {
+                    const roleMap = {
+                        user: '用户',
+                        assistant: 'AI',
+                        system: '系统',
+                    };
+                    return `${String(index + 1).padStart(2, '0')} · ${roleMap[msg?.role] || msg?.role || '消息'}`;
+                },
+
+                getEditingInsertTargetOptions() {
+                    const messages = this.getEditingSessionMessages();
+                    if (!messages.length) {
+                        return [{ value: 0, label: '空会话' }];
+                    }
+                    return messages.map((msg, index) => ({
+                        value: index + 1,
+                        label: `${String(index + 1).padStart(2, '0')}号`,
+                    }));
+                },
+
+                normalizeEditingInsertIndex() {
+                    const messages = this.getEditingSessionMessages();
+                    if (!messages.length) return 0;
+                    const parsed = Number(this.editingNewMessage?.insertTarget);
+                    const targetNumber = Number.isFinite(parsed)
+                        ? Math.max(1, Math.min(parsed, messages.length))
+                        : messages.length;
+                    const side = this.editingNewMessage?.insertSide === 'before' ? 'before' : 'after';
+                    return side === 'before' ? targetNumber - 1 : targetNumber;
+                },
+
+                async addEditingSessionMessage() {
+                    if (!this.editingSession?.id) return;
+                    const content = String(this.editingNewMessage?.content || '').trim();
+                    if (!content) {
+                        this.showToast('新增对话内容不能为空', 'warning');
+                        return;
+                    }
+
+                    try {
+                        const role = this.editingNewMessage.role || 'user';
+                        const insertIndex = this.normalizeEditingInsertIndex();
+                        const res = await api.post(`/api/sessions/${this.editingSession.id}/messages`, {
+                            role,
+                            content,
+                            sender: role === 'assistant'
+                                ? (this.editingSession.sender_name || 'AI')
+                                : (this.editingSession.user_id || this.username || 'web_user'),
+                            insert_index: insertIndex,
+                        });
+                        const message = res.data || {};
+                        if (!Array.isArray(this.editingSession.messages)) {
+                            this.editingSession.messages = [];
+                        }
+                        this.editingSession.messages.splice(insertIndex, 0, {
+                            ...message,
+                            content: typeof message.content === 'string'
+                                ? message.content
+                                : JSON.stringify(message.content ?? '', null, 2),
+                        });
+                        this.editingSession.originalMessages = {
+                            ...(this.editingSession.originalMessages || {}),
+                            [message.id]: {
+                                role: message.role,
+                                content: message.content,
+                                sender: message.sender || '',
+                                timestamp: message.timestamp || '',
+                            },
+                        };
+                        this.editingSession.message_count = (this.editingSession.message_count || 0) + 1;
+                        this.editingNewMessage.content = '';
+                        this.editingNewMessage.insertTarget = this.getEditingSessionMessages().length;
+                        this.editingNewMessage.insertSide = 'after';
+                        this.syncEditedSessionLocally(this.editingSession);
+                        if (this.currentSession?.id === this.editingSession.id) {
+                            await this.loadMessages(false);
+                        }
+                        this.showToast('已添加对话', 'success');
+                    } catch (e) {
+                        console.error('添加会话对话失败:', e);
+                        this.showToast('添加失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                deleteEditingSessionMessage(msg) {
+                    if (!this.editingSession?.id || !msg?.id) return;
+                    this.showConfirmDialogFn({
+                        title: '删除对话',
+                        message: '确定要删除这条对话吗？',
+                        danger: true,
+                        onConfirm: async () => {
+                            try {
+                                await api.delete(`/api/sessions/${this.editingSession.id}/messages/${msg.id}`);
+                                this.editingSession.messages = this.getEditingSessionMessages()
+                                    .filter(item => item.id !== msg.id);
+                                if (this.editingSession.originalMessages) {
+                                    delete this.editingSession.originalMessages[msg.id];
+                                }
+                                this.editingSession.message_count = Math.max(
+                                    0,
+                                    (this.editingSession.message_count || 1) - 1
+                                );
+                                this.syncEditedSessionLocally(this.editingSession);
+                                if (this.currentSession?.id === this.editingSession.id) {
+                                    await this.loadMessages(false);
+                                }
+                                this.showToast('已删除对话', 'success');
+                            } catch (e) {
+                                console.error('删除会话对话失败:', e);
+                                this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
+                            }
+                        }
+                    });
+                },
+
+                syncEditedSessionLocally(session) {
+                    if (!session?.id) return;
+                    const patch = {
+                        name: session.name,
+                        tags: session.tags,
+                        favorite: !!session.favorite,
+                        pinned: !!session.pinned,
+                        system_prompt: session.system_prompt || '',
+                        message_count: session.message_count || this.getEditingSessionMessages().length,
+                    };
+                    const sessionInList = this.sessions.find(s => s.id === session.id);
+                    if (sessionInList) {
+                        Object.assign(sessionInList, patch);
+                    }
+                    if (this.currentSession?.id === session.id) {
+                        Object.assign(this.currentSession, patch);
+                    }
+                    if (this.viewingSession?.id === session.id) {
+                        Object.assign(this.viewingSession, patch);
+                    }
                 },
 
                 normalizeSessionTags(tagsText) {
@@ -5718,12 +5926,40 @@ def main(params):
                     this.isLoading = true;
                     try {
                         this.editingSession.tags = this.normalizeSessionTags(this.editingSession.tagsText);
-                        await api.put(`/api/sessions/${this.editingSession.id}`, this.editingSession);
+                        const metaRes = await api.put(`/api/sessions/${this.editingSession.id}`, this.editingSession);
+                        const originalMessages = this.editingSession.originalMessages || {};
+                        const messageUpdates = this.getEditingSessionMessages()
+                            .filter(msg => msg.id && originalMessages[msg.id])
+                            .filter(msg => {
+                                const original = originalMessages[msg.id] || {};
+                                return msg.role !== original.role
+                                    || msg.content !== original.content
+                                    || (msg.sender || '') !== (original.sender || '')
+                                    || (msg.timestamp || '') !== (original.timestamp || '');
+                            });
+
+                        for (const msg of messageUpdates) {
+                            await api.put(`/api/sessions/${this.editingSession.id}/messages/${msg.id}`, {
+                                role: msg.role,
+                                content: msg.content,
+                                sender: msg.sender || '',
+                                timestamp: msg.timestamp || '',
+                            });
+                        }
+
+                        const updatedSession = metaRes.data?.session || this.editingSession;
+                        Object.assign(this.editingSession, updatedSession, {
+                            message_count: this.getEditingSessionMessages().length,
+                        });
+                        this.syncEditedSessionLocally(this.editingSession);
                         await this.loadSessions();
+                        if (this.currentSession?.id === this.editingSession.id) {
+                            await this.loadMessages(false);
+                        }
                         this.showEditSessionModal = false;
                         this.showToast('会话已更新', 'success');
                     } catch (e) {
-                        this.showToast('更新失败', 'error');
+                        this.showToast('更新失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
                         this.isLoading = false;
                     }

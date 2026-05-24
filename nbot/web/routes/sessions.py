@@ -1574,16 +1574,45 @@ def register_session_routes(app, server):
         if not session:
             return jsonify({"error": "Session not found"}), 404
 
-        data = request.json
+        data = request.get_json(silent=True) or {}
+        role = str(data.get("role", "user") or "user").strip()
+        if role not in {"user", "assistant", "system"}:
+            return jsonify({"error": "Invalid role"}), 400
         message = {
             "id": str(uuid.uuid4()),
-            "role": data.get("role", "user"),
+            "role": role,
             "content": data.get("content", ""),
             "timestamp": datetime.now().isoformat(),
             "sender": data.get("sender", "web_user"),
+            "session_id": session_id,
+            "source": session.get("type", "web"),
         }
 
-        session_store.append_message(session_id, message)
+        if "insert_index" in data:
+            messages = session.setdefault("messages", [])
+            visible_count = len(
+                [msg for msg in messages if isinstance(msg, dict) and msg.get("role") != "system"]
+            )
+            try:
+                insert_index = int(data.get("insert_index"))
+            except (TypeError, ValueError):
+                insert_index = visible_count
+            insert_index = max(0, min(insert_index, visible_count))
+
+            actual_index = len(messages)
+            seen_visible = 0
+            for idx, existing in enumerate(messages):
+                if not isinstance(existing, dict) or existing.get("role") == "system":
+                    continue
+                if seen_visible == insert_index:
+                    actual_index = idx
+                    break
+                seen_visible += 1
+
+            messages.insert(actual_index, message)
+            session_store.set_session(session_id, session)
+        else:
+            session_store.append_message(session_id, message)
         return jsonify(message)
 
     @app.route("/api/sessions/<session_id>/messages/<message_id>", methods=["PUT"])
@@ -1605,8 +1634,18 @@ def register_session_routes(app, server):
         if target_idx is None:
             return jsonify({"error": "Message not found"}), 404
 
+        if "role" in data:
+            role = str(data.get("role") or "").strip()
+            if role not in {"user", "assistant", "system"}:
+                return jsonify({"error": "Invalid role"}), 400
+            messages[target_idx]["role"] = role
+
         if "content" in data:
             messages[target_idx]["content"] = data["content"]
+        if "sender" in data:
+            messages[target_idx]["sender"] = data.get("sender") or ""
+        if "timestamp" in data:
+            messages[target_idx]["timestamp"] = data.get("timestamp") or datetime.now().isoformat()
 
         # 截断该消息之后的所有消息
         if data.get("truncate_after"):
@@ -1614,6 +1653,23 @@ def register_session_routes(app, server):
 
         session_store.set_session(session_id, session)
         return jsonify({"success": True, "message": messages[target_idx]})
+
+    @app.route("/api/sessions/<session_id>/messages/<message_id>", methods=["DELETE"])
+    def delete_message(session_id, message_id):
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        messages = session.get("messages", [])
+        target_idx = _find_message_index(messages, message_id)
+        if target_idx < 0:
+            return jsonify({"error": "Message not found"}), 404
+        if messages[target_idx].get("role") == "system":
+            return jsonify({"error": "System message cannot be deleted here"}), 400
+
+        removed = messages.pop(target_idx)
+        session_store.set_session(session_id, session)
+        return jsonify({"success": True, "message": removed, "message_count": len(messages)})
 
     @app.route("/api/sessions/<session_id>/messages", methods=["DELETE"])
     def clear_messages(session_id):

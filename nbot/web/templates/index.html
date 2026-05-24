@@ -5567,7 +5567,7 @@
         </div>
 
         <!-- 自定义确认对话框 -->
-        <div v-if="showConfirmDialog" class="modal-overlay" @click.self="cancelDialogConfirm">
+        <div v-if="showConfirmDialog" class="modal-overlay confirm-modal-overlay" @click.self="cancelDialogConfirm">
             <div class="modal" style="max-width: 400px;">
                 <div class="modal-header">
                     <span class="modal-title">{{ confirmDialogConfig.title }}</span>
@@ -6979,32 +6979,95 @@
 
         <!-- Edit Session Modal -->
         <div v-if="showEditSessionModal" class="modal-overlay" @click.self="showEditSessionModal = false">
-            <div class="modal">
+            <div class="modal edit-session-modal">
                 <div class="modal-header">
-                    <span class="modal-title">编辑会话</span>
+                    <span class="modal-title"><i class="fas fa-pen"></i> 编辑会话</span>
                     <button class="modal-close" @click="showEditSessionModal = false">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
-                        <label class="form-label">会话名称</label>
-                        <input v-model="editingSession.name" type="text" class="form-input">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">标签</label>
-                        <input v-model="editingSession.tagsText" type="text" class="form-input" placeholder="重要, 剧情, 待总结">
-                        <div class="form-hint">多个标签用逗号分隔。</div>
-                    </div>
-                    <div class="form-group">
-                        <label class="checkbox-label" style="margin-right: 14px;">
-                            <input type="checkbox" v-model="editingSession.favorite"> 收藏
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" v-model="editingSession.pinned"> 置顶
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">系统提示词</label>
-                        <textarea v-model="editingSession.system_prompt" class="form-textarea" rows="6"></textarea>
+                    <div class="edit-session-grid">
+                        <div class="form-section edit-session-basic-section">
+                            <div class="form-section-title">基础信息</div>
+                            <div class="form-group">
+                                <label class="form-label">会话名称</label>
+                                <input v-model="editingSession.name" type="text" class="form-input">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">标签</label>
+                                <input v-model="editingSession.tagsText" type="text" class="form-input" placeholder="重要, 剧情, 待总结">
+                                <div class="form-hint">多个标签用逗号分隔。</div>
+                            </div>
+                            <div class="edit-session-flags">
+                                <label class="pretty-checkbox">
+                                    <input type="checkbox" v-model="editingSession.favorite">
+                                    <span class="pretty-checkbox-box"><i class="fas fa-check"></i></span>
+                                    <span class="pretty-checkbox-text"><i class="fas fa-star"></i> 收藏</span>
+                                </label>
+                                <label class="pretty-checkbox">
+                                    <input type="checkbox" v-model="editingSession.pinned">
+                                    <span class="pretty-checkbox-box"><i class="fas fa-check"></i></span>
+                                    <span class="pretty-checkbox-text"><i class="fas fa-thumbtack"></i> 置顶</span>
+                                </label>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">系统提示词</label>
+                                <textarea v-model="editingSession.system_prompt" class="form-textarea edit-session-system-prompt" rows="6"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-section edit-session-messages-section">
+                            <div class="form-section-title">
+                                对话内容
+                                <span class="form-hint">{{ getEditingSessionMessages().length }} 条可编辑对话</span>
+                            </div>
+                            <div class="edit-message-list">
+                                <div v-if="!getEditingSessionMessages().length" class="empty-state" style="padding: 24px;">
+                                    暂无对话，可以在下方添加第一条。
+                                </div>
+                                <div v-for="(msg, index) in getEditingSessionMessages()" :key="msg.id" class="edit-message-item" :class="msg.role">
+                                    <div class="edit-message-head">
+                                        <div class="edit-message-title">{{ getEditingMessageLabel(msg, index) }}</div>
+                                        <div class="edit-message-actions">
+                                            <select v-model="msg.role" class="form-select edit-message-role">
+                                                <option value="user">用户</option>
+                                                <option value="assistant">AI</option>
+                                            </select>
+                                            <button class="btn btn-danger btn-small" @click="deleteEditingSessionMessage(msg)" :disabled="isLoading">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <textarea v-model="msg.content" class="form-textarea edit-message-content" rows="3" placeholder="对话内容"></textarea>
+                                    <div class="edit-message-meta">
+                                        <input v-model="msg.sender" type="text" class="form-input" placeholder="发送者">
+                                        <span>{{ formatFullTime(msg.timestamp) || '无时间戳' }}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="edit-message-add">
+                                <div class="edit-message-add-head">
+                                    <select v-model="editingNewMessage.role" class="form-select edit-message-role">
+                                        <option value="user">用户</option>
+                                        <option value="assistant">AI</option>
+                                    </select>
+                                    <span class="edit-message-insert-label">插入到</span>
+                                    <select v-model.number="editingNewMessage.insertTarget" class="form-select edit-message-index-select">
+                                        <option v-for="option in getEditingInsertTargetOptions()" :key="option.value" :value="option.value">
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
+                                    <select v-model="editingNewMessage.insertSide" class="form-select edit-message-side-select">
+                                        <option value="after">后面</option>
+                                        <option value="before">前面</option>
+                                    </select>
+                                    <button class="btn btn-primary btn-small" @click="addEditingSessionMessage" :disabled="isLoading">
+                                        <i class="fas fa-plus"></i> 添加对话
+                                    </button>
+                                </div>
+                                <textarea v-model="editingNewMessage.content" class="form-textarea" rows="3" placeholder="输入要插入到指定位置的新对话"></textarea>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -8759,6 +8822,10 @@
                     toasts: [],
                     showEditSessionModal: false,
                     editingSession: {},
+                    editingNewMessage: {
+                        role: 'user',
+                        content: ''
+                    },
                     showSessionDetailsModal: false,
                     viewingSession: null,
                     isEditingSessionTitle: false,
