@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260533';
+        window.__nbotAssetVersion = '20260539';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css?v=20260533">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260533">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260539">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260539">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -1863,6 +1863,24 @@
                                         </select>
                                     </div>
                                     <div class="sessions-action-group">
+                                        <div v-if="viewportWidth > 768" class="sessions-view-toggle" title="切换展示方式">
+                                            <button
+                                                type="button"
+                                                :class="{ active: sessionManagerView === 'list' }"
+                                                @click="sessionManagerView = 'list'; localStorage.setItem('nbot_session_manager_view', 'list')"
+                                                title="列表"
+                                            >
+                                                <i class="fas fa-list"></i>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                :class="{ active: sessionManagerView === 'cards' }"
+                                                @click="sessionManagerView = 'cards'; localStorage.setItem('nbot_session_manager_view', 'cards')"
+                                                title="卡片"
+                                            >
+                                                <i class="fas fa-th-large"></i>
+                                            </button>
+                                        </div>
                                         <input ref="sessionImportInput" type="file" accept=".json,application/json" style="display: none;" @change="handleSessionImportFile">
                                         <button class="btn btn-secondary sessions-icon-btn" @click="triggerSessionImport" :disabled="isLoading" title="导入">
                                             <i class="fas fa-file-import"></i>
@@ -1880,7 +1898,7 @@
                                 </div>
                             </div>
                             <div class="card-body" style="padding: 0;">
-                                <table class="data-table sessions-table">
+                                <table v-if="sessionManagerView === 'list' || viewportWidth <= 768" class="data-table sessions-table">
                                     <thead>
                                         <tr>
                                             <th class="sessions-table-check">
@@ -1991,6 +2009,124 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                                <div v-else class="sessions-card-grid">
+                                    <article
+                                        v-for="session in managedSessions"
+                                        :key="session.id"
+                                        class="session-manage-card"
+                                        :class="{ selected: selectedSessions.includes(session.id), archived: session.archived || session.is_archive }"
+                                    >
+                                        <label class="session-card-check" title="选择会话">
+                                            <input type="checkbox" :value="session.id" v-model="selectedSessions">
+                                            <span></span>
+                                        </label>
+                                        <div class="session-card-main">
+                                            <div class="session-card-visual">
+                                                <img
+                                                    v-if="getSessionPortrait(session)"
+                                                    :src="getSessionPortrait(session)"
+                                                    class="session-card-portrait"
+                                                    @error="handleSessionPortraitError(session, $event)"
+                                                >
+                                                <div v-else class="session-card-avatar-fallback">
+                                                    <i :class="getCharacterPortraitByName(session.sender_name).avatar || (session.is_archive ? 'fas fa-archive' : 'fas fa-comment')"></i>
+                                                </div>
+                                            </div>
+                                            <div class="session-card-info">
+                                                <div class="session-card-head">
+                                                    <div class="session-card-title-block">
+                                                        <div class="session-card-title-line">
+                                                            <span class="session-name-text">{{ session.name }}</span>
+                                                        </div>
+                                                        <div class="session-card-subline">
+                                                            <span class="session-card-type" :class="'type-' + (session.type || 'unknown')">
+                                                                {{ session.type === 'qq' ? 'QQ' : session.type === 'cli' ? 'CLI' : session.type === 'web' ? 'Web' : (session.type || '未知') }}
+                                                            </span>
+                                                            <span v-if="session.is_archive" class="session-card-status archive">归档</span>
+                                                            <span v-else class="session-card-status" :class="session.archived ? 'archive' : 'active'">
+                                                                {{ session.archived ? '已归档' : '未归档' }}
+                                                            </span>
+                                                            <span v-if="session.is_public" class="session-card-public" title="此会话已公开">
+                                                                <i class="fas fa-globe"></i> 已公开
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="session-card-quick">
+                                                        <button class="session-icon-toggle" :class="{ active: session.pinned }" @click.stop="toggleSessionPinned(session)" :title="session.pinned ? '取消置顶' : '置顶'">
+                                                            <i class="fas fa-thumbtack"></i>
+                                                        </button>
+                                                        <button class="session-icon-toggle" :class="{ active: session.favorite }" @click.stop="toggleSessionFavorite(session)" :title="session.favorite ? '取消收藏' : '收藏'">
+                                                            <i class="fas fa-star"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div class="session-card-character">
+                                                    <span v-if="session.sender_name" class="session-character-tag">
+                                                        <img v-if="getCharacterPortraitByName(session.sender_name).portrait" :src="getCharacterPortraitByName(session.sender_name).portrait" class="session-character-avatar">
+                                                        <i v-else :class="getCharacterPortraitByName(session.sender_name).avatar || 'fas fa-user-circle'" class="session-character-icon"></i>
+                                                        {{ session.sender_name }}
+                                                    </span>
+                                                    <span v-else class="session-card-muted">
+                                                        <i class="fas fa-user-slash"></i> 未绑定角色
+                                                    </span>
+                                                </div>
+
+                                                <div v-if="session.tags && session.tags.length" class="session-tags-row">
+                                                    <button v-for="tag in session.tags" :key="tag" class="session-tag-chip" @click.stop="sessionFilter = 'tag:' + tag; selectedSessions = []">
+                                                        {{ tag }}
+                                                    </button>
+                                                </div>
+
+                                                <div class="session-card-stats">
+                                                    <div>
+                                                        <span>消息</span>
+                                                        <strong>{{ session.message_count || 0 }}</strong>
+                                                    </div>
+                                                    <div>
+                                                        <span>创建</span>
+                                                        <strong>{{ formatFullTime(session.created_at) }}</strong>
+                                                    </div>
+                                                </div>
+
+                                                <div class="session-card-actions">
+                                                    <button class="btn btn-secondary btn-small" @click="openSession(session)" :disabled="isLoading">
+                                                        打开
+                                                    </button>
+                                                    <button class="btn btn-secondary btn-small" @click="viewSessionDetails(session)" :disabled="isLoading">
+                                                        详情
+                                                    </button>
+                                                    <details class="session-more-menu">
+                                                        <summary title="更多操作"><i class="fas fa-ellipsis-h"></i></summary>
+                                                        <div class="session-more-popover">
+                                                            <button v-if="session.is_archive || session.archived" @click="openSessionForAiSummary(session)" :disabled="isLoading">
+                                                                <i class="fas fa-magic"></i> 总结
+                                                            </button>
+                                                            <button @click="exportSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-file-export"></i> 导出
+                                                            </button>
+                                                            <button v-if="!session.is_archive" @click="editSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-pen"></i> 编辑
+                                                            </button>
+                                                            <button v-if="!session.archived && !session.is_archive" @click="archiveSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-archive"></i> 归档
+                                                            </button>
+                                                            <button v-if="session.archived && !session.is_archive" @click="restoreSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-undo"></i> 恢复
+                                                            </button>
+                                                            <button class="danger" @click="deleteWebSession(session)" :disabled="isLoading">
+                                                                <i class="fas fa-trash-alt"></i> 删除
+                                                            </button>
+                                                        </div>
+                                                    </details>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </article>
+                                    <div v-if="managedSessions.length === 0" class="sessions-empty-state">
+                                        暂无匹配的会话
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -8043,7 +8179,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260533"></script>
+    <script src="/static/js/nbot-methods.js?v=20260539"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -8081,6 +8217,7 @@
                     isUserScrolling: false,
                     isSidebarCollapsed: false,
                     isMobileMenuOpen: false,
+                    viewportWidth: window.innerWidth || 1200,
                     isMobileChatPickerOpen: false,
                     showMobileChatActions: false,  // 移动端聊天操作菜单
                     username: sessionStorage.getItem('username') || '',
@@ -8820,6 +8957,7 @@
                     
                     // UI State
                     toasts: [],
+                    sessionManagerView: localStorage.getItem('nbot_session_manager_view') || 'list',
                     showEditSessionModal: false,
                     editingSession: {},
                     editingNewMessage: {

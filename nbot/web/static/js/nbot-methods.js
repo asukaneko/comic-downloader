@@ -1726,6 +1726,7 @@ const NbotMethods = {
                 },
                 
                 handleResize() {
+                    this.viewportWidth = window.innerWidth || this.viewportWidth || 1200;
                     if (this.trendChart) this.trendChart.resize();
                     if (this.platformChart) this.platformChart.resize();
                     if (this.personalityTimelineChart && this.currentPage === 'personality-journey') {
