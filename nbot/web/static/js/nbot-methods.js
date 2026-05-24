@@ -7384,6 +7384,7 @@ def main(params):
                         this.activePersonality = { ...this.personality };
                         this.personalityHasUnsavedChanges = false;
                         this.refreshPersonalityTimelineSessions(true);
+                        await this.savePersonalityAsPreset({ overwriteExisting: true, fromApply: true });
                         this.showToast('人格设置已保存', 'success');
                     } catch (e) {
                         this.showToast('保存失败', 'error');
@@ -7629,18 +7630,27 @@ def main(params):
                 },
 
                 // 保存当前角色到自定义预设
-                async savePersonalityAsPreset() {
+                async savePersonalityAsPreset(options = {}) {
                     if (!this.personality.name) {
                         this.showToast('请填写角色名称', 'error');
                         return;
                     }
 
                     // 检查是否已存在同名角色
+                    if (options.overwriteExisting) {
+                        await this.loadCustomPersonalityPresets();
+                    }
+
                     const existingPreset = this.customPersonalityPresets.find(
                         p => p.name === this.personality.name
                     );
 
                     if (existingPreset) {
+                        if (options.overwriteExisting) {
+                            await this.updateExistingPreset(existingPreset.id, { suppressToast: options.fromApply });
+                            return;
+                        }
+
                         // 使用自定义弹窗询问用户
                         this.confirmModalConfig = {
                             title: '角色已存在',
@@ -7667,11 +7677,11 @@ def main(params):
                     }
 
                     // 没有同名角色，直接创建
-                    await this.createNewPreset();
+                    await this.createNewPreset({ suppressToast: options.fromApply });
                 },
 
                 // 创建新角色预设
-                async createNewPreset() {
+                async createNewPreset(options = {}) {
                     try {
                         const presetData = {
                             name: this.personality.name,
