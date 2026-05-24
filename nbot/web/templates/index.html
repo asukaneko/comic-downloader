@@ -398,7 +398,7 @@
                         <div class="dashboard-character-section" v-if="customPersonalityPresets.length > 0">
                             <div class="dashboard-section-header">
                                 <div class="dashboard-section-copy">
-                                    <div class="chart-title"><i class="fas fa-users" style="color: var(--accent-primary);"></i> 我的角色卡</div>
+                                    <div class="chart-title"><i class="fas fa-users" style="color: var(--accent-primary);"></i> {{ $t('personality.my_cards') }}</div>
                                     <div class="chart-subtitle">快速选择角色开始对话</div>
                                 </div>
                                 <button class="btn btn-sm btn-secondary" @click="navigateTo('personality')">
@@ -1232,23 +1232,23 @@
                                                 <strong>{{ currentSession.character_runtime_snapshot.mood }}</strong>
                                             </div>
                                             <div class="runtime-stat">
-                                                <label>情绪强度</label>
+                                                <label>{{ $t('personality.mood_intensity') }}</label>
                                                 <strong>{{ Math.round((currentSession.character_runtime_snapshot.mood_intensity || 0) * 100) }}%</strong>
                                             </div>
                                             <div class="runtime-stat">
-                                                <label>精力</label>
+                                                <label>{{ $t('personality.energy') }}</label>
                                                 <strong>{{ currentSession.character_runtime_snapshot.energy }}</strong>
                                             </div>
                                             <div class="runtime-stat">
-                                                <label>好感</label>
+                                                <label>{{ $t('personality.affection') }}</label>
                                                 <strong>{{ currentSession.character_runtime_snapshot.affection }}</strong>
                                             </div>
                                             <div class="runtime-stat">
-                                                <label>信任</label>
+                                                <label>{{ $t('personality.trust') }}</label>
                                                 <strong>{{ currentSession.character_runtime_snapshot.trust }}</strong>
                                             </div>
                                             <div class="runtime-stat">
-                                                <label>安全感</label>
+                                                <label>{{ $t('personality.security') }}</label>
                                                 <strong>{{ currentSession.character_runtime_snapshot.security }}</strong>
                                             </div>
                                         </div>
@@ -2641,7 +2641,7 @@
                                                     <i class="fas fa-download"></i> 导出为 ZIP
                                                 </button>
                                                 <button class="dropdown-item" @click="triggerImportPersonality">
-                                                    <i class="fas fa-upload"></i> 导入角色卡
+                                                    <i class="fas fa-upload"></i> {{ $t('personality.import_card') }}
                                                 </button>
                                             </div>
                                         </div>
@@ -2847,35 +2847,35 @@
                                                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
                                                         <div class="relation-stat-item">
                                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                                                <span style="font-size: 13px; color: var(--text-secondary);">❤️ 好感</span>
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">❤️ {{ $t('personality.affection') }}</span>
                                                                 <span style="font-size: 13px; font-weight: 600; color: #ff6b9d;">{{ personality.state.affection || 50 }}</span>
                                                             </div>
                                                             <input v-model.number="personality.state.affection" type="range" min="0" max="100" class="form-range" style="--range-color: #ff6b9d;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
                                                         </div>
                                                         <div class="relation-stat-item">
                                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                                                <span style="font-size: 13px; color: var(--text-secondary);">🤝 信任</span>
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">🤝 {{ $t('personality.trust') }}</span>
                                                                 <span style="font-size: 13px; font-weight: 600; color: #4fc3f7;">{{ personality.state.trust || 50 }}</span>
                                                             </div>
                                                             <input v-model.number="personality.state.trust" type="range" min="0" max="100" class="form-range" style="--range-color: #4fc3f7;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
                                                         </div>
                                                         <div class="relation-stat-item">
                                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                                                <span style="font-size: 13px; color: var(--text-secondary);">🌿 熟悉</span>
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">🌿 {{ $t('personality.familiarity') }}</span>
                                                                 <span style="font-size: 13px; font-weight: 600; color: #81c784;">{{ personality.state.familiarity || 30 }}</span>
                                                             </div>
                                                             <input v-model.number="personality.state.familiarity" type="range" min="0" max="100" class="form-range" style="--range-color: #81c784;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
                                                         </div>
                                                         <div class="relation-stat-item">
                                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                                                <span style="font-size: 13px; color: var(--text-secondary);">💫 依赖</span>
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">💫 {{ $t('personality.dependency') }}</span>
                                                                 <span style="font-size: 13px; font-weight: 600; color: #ce93d8;">{{ personality.state.dependency || 30 }}</span>
                                                             </div>
                                                             <input v-model.number="personality.state.dependency" type="range" min="0" max="100" class="form-range" style="--range-color: #ce93d8;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
                                                         </div>
                                                         <div class="relation-stat-item">
                                                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                                                <span style="font-size: 13px; color: var(--text-secondary);">🏠 安全感</span>
+                                                                <span style="font-size: 13px; color: var(--text-secondary);">🏠 {{ $t('personality.security') }}</span>
                                                                 <span style="font-size: 13px; font-weight: 600; color: #ffb74d;">{{ personality.state.security || 50 }}</span>
                                                             </div>
                                                             <input v-model.number="personality.state.security" type="range" min="0" max="100" class="form-range" style="--range-color: #ffb74d;" @change="personalityHasUnsavedChanges = true" @input="updateRangeProgress">
@@ -2932,7 +2932,7 @@
                                             <!-- 角色名和副标题 -->
                                             <div class="glass-header">
                                                 <h3 class="glass-name">{{ activePersonality.name }}</h3>
-                                                <span class="glass-subtitle">当前角色</span>
+                                                <span class="glass-subtitle">{{ $t('personality.current_role') }}</span>
                                             </div>
                                             
                                             <!-- 简介 -->
@@ -2949,7 +2949,7 @@
                                                 <div class="glass-stats-row">
                                                     <div class="glass-stat">
                                                         <span class="glass-stat-icon">❤️</span>
-                                                        <span class="glass-stat-label">好感</span>
+                                                        <span class="glass-stat-label">{{ $t('personality.affection') }}</span>
                                                         <span class="glass-stat-value">{{ activePersonality.state?.affection || 50 }}</span>
                                                         <div class="glass-progress-bar">
                                                             <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.affection || 50)) + '%', background: 'linear-gradient(90deg, #ff6b9d, #ff4081)' }"></div>
@@ -2958,7 +2958,7 @@
                                                     <div class="glass-stat-divider"></div>
                                                     <div class="glass-stat">
                                                         <span class="glass-stat-icon">🤝</span>
-                                                        <span class="glass-stat-label">信任</span>
+                                                        <span class="glass-stat-label">{{ $t('personality.trust') }}</span>
                                                         <span class="glass-stat-value">{{ activePersonality.state?.trust || 50 }}</span>
                                                         <div class="glass-progress-bar">
                                                             <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.trust || 50)) + '%', background: 'linear-gradient(90deg, #4fc3f7, #2196f3)' }"></div>
@@ -2967,7 +2967,7 @@
                                                     <div class="glass-stat-divider"></div>
                                                     <div class="glass-stat">
                                                         <span class="glass-stat-icon">🌿</span>
-                                                        <span class="glass-stat-label">熟悉</span>
+                                                        <span class="glass-stat-label">{{ $t('personality.familiarity') }}</span>
                                                         <span class="glass-stat-value">{{ activePersonality.state?.familiarity || 30 }}</span>
                                                         <div class="glass-progress-bar">
                                                             <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.familiarity || 30)) + '%', background: 'linear-gradient(90deg, #81c784, #4caf50)' }"></div>
@@ -2978,7 +2978,7 @@
                                                 <div class="glass-stats-row">
                                                     <div class="glass-stat">
                                                         <span class="glass-stat-icon">💫</span>
-                                                        <span class="glass-stat-label">依赖</span>
+                                                        <span class="glass-stat-label">{{ $t('personality.dependency') }}</span>
                                                         <span class="glass-stat-value">{{ activePersonality.state?.dependency || 30 }}</span>
                                                         <div class="glass-progress-bar">
                                                             <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.dependency || 30)) + '%', background: 'linear-gradient(90deg, #ce93d8, #9c27b0)' }"></div>
@@ -2987,7 +2987,7 @@
                                                     <div class="glass-stat-divider"></div>
                                                     <div class="glass-stat">
                                                         <span class="glass-stat-icon">🏠</span>
-                                                        <span class="glass-stat-label">安全感</span>
+                                                        <span class="glass-stat-label">{{ $t('personality.security') }}</span>
                                                         <span class="glass-stat-value">{{ activePersonality.state?.security || 50 }}</span>
                                                         <div class="glass-progress-bar">
                                                             <div class="glass-progress-fill" :style="{ width: Math.max(0, Math.min(100, activePersonality.state?.security || 50)) + '%', background: 'linear-gradient(90deg, #ffb74d, #ff9800)' }"></div>
@@ -3057,31 +3057,31 @@
                                                     <div class="preset-glass-stats" v-if="preset.state">
                                                         <div class="preset-stat">
                                                             <span class="preset-stat-icon">❤️</span>
-                                                            <span class="preset-stat-label">好感</span>
+                                                            <span class="preset-stat-label">{{ $t('personality.affection') }}</span>
                                                             <span class="preset-stat-value">{{ preset.state.affection || 50 }}</span>
                                                         </div>
                                                         <div class="preset-stat-divider"></div>
                                                         <div class="preset-stat">
                                                             <span class="preset-stat-icon">🤝</span>
-                                                            <span class="preset-stat-label">信任</span>
+                                                            <span class="preset-stat-label">{{ $t('personality.trust') }}</span>
                                                             <span class="preset-stat-value">{{ preset.state.trust || 50 }}</span>
                                                         </div>
                                                         <div class="preset-stat-divider"></div>
                                                         <div class="preset-stat">
                                                             <span class="preset-stat-icon">🌿</span>
-                                                            <span class="preset-stat-label">熟悉</span>
+                                                            <span class="preset-stat-label">{{ $t('personality.familiarity') }}</span>
                                                             <span class="preset-stat-value">{{ preset.state.familiarity || 30 }}</span>
                                                         </div>
                                                         <div class="preset-stat-divider"></div>
                                                         <div class="preset-stat">
                                                             <span class="preset-stat-icon">💫</span>
-                                                            <span class="preset-stat-label">依赖</span>
+                                                            <span class="preset-stat-label">{{ $t('personality.dependency') }}</span>
                                                             <span class="preset-stat-value">{{ preset.state.dependency || 30 }}</span>
                                                         </div>
                                                         <div class="preset-stat-divider"></div>
                                                         <div class="preset-stat">
                                                             <span class="preset-stat-icon">🏠</span>
-                                                            <span class="preset-stat-label">安全感</span>
+                                                            <span class="preset-stat-label">{{ $t('personality.security') }}</span>
                                                             <span class="preset-stat-value">{{ preset.state.security || 50 }}</span>
                                                         </div>
                                                     </div>
@@ -3094,7 +3094,7 @@
                                 <!-- 自定义人格预设 -->
                                 <div class="card">
                                     <div class="card-header">
-                                        <span class="card-title">我的角色卡</span>
+                                        <span class="card-title">{{ $t('personality.my_cards') }}</span>
                                         <div style="display: flex; gap: 8px;">
                                             <!-- 视图切换按钮 -->
                                             <div class="view-toggle-group" style="display: flex; background: var(--bg-tertiary); border-radius: 6px; padding: 2px; gap: 2px;">
@@ -3266,15 +3266,15 @@
                             <div class="personality-journey-page-top">
                                 <div class="personality-journey-page-copy">
                                     <div class="personality-journey-kicker">State Timeline</div>
-                                    <h2>角色状态历程</h2>
-                                    <p>这里专门用来回看不同会话里角色六维关系的变化轨迹。你可以切换会话、播放节点、拖动时间线，观察情绪和关系是怎么一步步变动的。</p>
+                                    <h2>{{ $t('journey.title') }}</h2>
+                                    <p>{{ $t('journey.description') }}</p>
                                 </div>
                                 <div class="personality-journey-page-actions">
                                     <button class="btn btn-ghost btn-sm" @click="navigateTo('personality')">
-                                        <i class="fas fa-chevron-left"></i> 返回角色设置
+                                        <i class="fas fa-chevron-left"></i> {{ $t('journey.back_to_personality') }}
                                     </button>
                                     <button class="btn btn-primary" @click="refreshPersonalityTimelineSessions(false)" :disabled="personalityTimelineLoading">
-                                        <i class="fas fa-rotate-right" :class="{ 'fa-spin': personalityTimelineLoading }"></i> 刷新历程
+                                        <i class="fas fa-rotate-right" :class="{ 'fa-spin': personalityTimelineLoading }"></i> {{ $t('journey.refresh') }}
                                     </button>
                                 </div>
                             </div>
@@ -3283,13 +3283,13 @@
                                 <div ref="personalityJourneySection" class="personality-journey-panel">
                                     <div class="personality-journey-toolbar">
                                         <select class="form-select personality-journey-select" v-model="personalityTimelineSelectedCharacter" @change="selectPersonalityTimelineCharacter(personalityTimelineSelectedCharacter)">
-                                            <option value="">全部角色</option>
+                                            <option value="">{{ $t('journey.all_characters') }}</option>
                                             <option v-for="character in personalityTimelineCharacters" :key="character" :value="character">
                                                 {{ character }}
                                             </option>
                                         </select>
                                         <select class="form-select personality-journey-select" v-model="personalityTimelineSelectedSessionId" @change="selectPersonalityTimelineSession(personalityTimelineSelectedSessionId)">
-                                            <option value="">选择一个会话</option>
+                                            <option value="">{{ $t('journey.select_session') }}</option>
                                             <option v-for="session in personalityTimelineSessions" :key="session.id" :value="session.id">
                                                 {{ session.name || session.id }} · {{ session.sender_name || '未绑定角色' }} · {{ session.type || 'web' }}
                                             </option>
@@ -3300,7 +3300,7 @@
                                             </button>
                                             <button class="btn btn-primary btn-sm" @click="togglePersonalityTimelinePlayback()" :disabled="personalityTimelineData.length < 2">
                                                 <i :class="personalityTimelinePlaying ? 'fas fa-pause' : 'fas fa-play'"></i>
-                                                {{ personalityTimelinePlaying ? '暂停' : '播放' }}
+                                                {{ personalityTimelinePlaying ? $t('journey.pause') : $t('journey.play') }}
                                             </button>
                                             <button class="btn btn-secondary btn-sm" @click="stepPersonalityTimeline(1)" :disabled="!personalityTimelineData.length">
                                                 <i class="fas fa-forward-step"></i>
@@ -3309,7 +3309,7 @@
                                     </div>
 
                                     <div v-if="personalityTimelineData.length" class="personality-journey-trend-toolbar">
-                                        <span class="personality-journey-trend-label">趋势字段</span>
+                                        <span class="personality-journey-trend-label">{{ $t('journey.trend_field') }}</span>
                                         <div class="personality-journey-trend-pills">
                                             <button
                                                 v-for="metric in getPersonalityTimelineMetricDefs()"
@@ -3327,19 +3327,19 @@
 
                                     <div v-if="personalityTimelineData.length" class="personality-journey-meta">
                                         <div class="journey-metric">
-                                            <span class="journey-metric-label">当前节点</span>
+                                            <span class="journey-metric-label">{{ $t('journey.current_node') }}</span>
                                             <strong>{{ personalityTimelineIndex + 1 }}/{{ personalityTimelineData.length }}</strong>
                                         </div>
                                         <div class="journey-metric">
-                                            <span class="journey-metric-label">记录时间</span>
+                                            <span class="journey-metric-label">{{ $t('journey.record_time') }}</span>
                                             <strong>{{ formatFullTime(personalityTimelineCurrentPoint()?.timestamp) || '-' }}</strong>
                                         </div>
                                         <div class="journey-metric">
-                                            <span class="journey-metric-label">当前心情</span>
+                                            <span class="journey-metric-label">{{ $t('personality.current_mood') }}</span>
                                             <strong>{{ personalityTimelineCurrentPoint()?.mood || '-' }}</strong>
                                         </div>
                                         <div class="journey-metric">
-                                            <span class="journey-metric-label">表层情绪</span>
+                                            <span class="journey-metric-label">{{ $t('journey.visible_emotion') }}</span>
                                             <strong>{{ personalityTimelineCurrentPoint()?.visible_emotion || '-' }}</strong>
                                         </div>
                                     </div>
@@ -3396,8 +3396,8 @@
 
                                     <div v-else class="empty-state personality-journey-empty">
                                         <div class="empty-state-icon"><i class="fas fa-wave-square"></i></div>
-                                        <div class="empty-state-title">还没有可展示的会话轨迹</div>
-                                        <div class="empty-state-subtitle">先用这个角色和用户对话几轮，角色运行时就会开始积累六维变化时间线。</div>
+                                        <div class="empty-state-title">{{ $t('journey.empty_title') }}</div>
+                                        <div class="empty-state-subtitle">{{ $t('journey.empty_subtitle') }}</div>
                                     </div>
                                 </div>
                             </div>
@@ -3459,7 +3459,7 @@
                                     <input v-model="memorySearch" type="text" placeholder="搜索记忆...">
                                 </div>
                                 <select v-model="memoryCharacterFilter" class="memory-filter-select">
-                                    <option value="">全部角色</option>
+                                    <option value="">{{ $t('journey.all_characters') }}</option>
                                     <option v-for="name in memoryCharacterNames" :key="name" :value="name">{{ name }}</option>
                                 </select>
                                 <div class="memory-filter">
@@ -3742,14 +3742,14 @@
                                             <span class="ai-hero-glyph">✦</span>
                                         </div>
                                         <div class="ai-hero-copy">
-                                            <h2>AI 控制中心</h2>
-                                            <p>配置模型能力，管理 API 密钥，掌控 AI 服务全局</p>
+                                            <h2>{{ $t('ai_config.control_center') }}</h2>
+                                            <p>{{ $t('ai_config.control_center_desc') }}</p>
                                         </div>
                                     </div>
                                     <!-- 配置进度条 -->
                                     <div class="ai-progress-section">
                                         <div class="ai-progress-header">
-                                            <span class="ai-progress-label">配置进度</span>
+                                            <span class="ai-progress-label">{{ $t('ai_config.config_progress') }}</span>
                                             <span class="ai-progress-count">{{ Object.values(activeModelsByPurpose).filter(m => m && m.has_config).length }}/{{ Object.keys(modelPurposes).length }} 能力已配置</span>
                                         </div>
                                         <div class="ai-progress-bar-bg">
@@ -3779,7 +3779,7 @@
                                     <div class="ai-status-panel">
                                         <div class="ai-status-top">
                                             <div>
-                                                <div class="ai-status-title">系统状态</div>
+                                                <div class="ai-status-title">{{ $t('ai_config.system_status') }}</div>
                                                 <div class="ai-status-name">
                                                     {{ Object.values(activeModelsByPurpose).filter(m => m && m.has_config).length }} 项已就绪
                                                 </div>
@@ -3803,7 +3803,7 @@
                             <div class="ai-pane-header">
                                 <div class="ai-pane-title">
                                     <i class="fas fa-th-large"></i>
-                                    <span>能力模块</span>
+                                    <span>{{ $t('ai_config.capabilities_module') }}</span>
                                 </div>
                                 <span class="ai-pane-badge">{{ Object.keys(modelPurposes).length }} 项</span>
                             </div>
@@ -3848,7 +3848,7 @@
                             <div class="ai-pane-header">
                                 <div class="ai-pane-title">
                                     <i class="fas fa-layer-group"></i>
-                                    <span>配置资产库</span>
+                                    <span>{{ $t('ai_config.asset_library') }}</span>
                                 </div>
                                 <span class="ai-pane-badge">{{ aiModels.length }} 个</span>
                             </div>
@@ -4824,7 +4824,7 @@
                         <!-- 筛选器 -->
                         <div class="usage-filters">
                             <div class="filter-group">
-                                <label class="filter-label">时间范围</label>
+                                <label class="filter-label">{{ $t('tokens.time_range') }}</label>
                                 <div class="token-range-row">
                                     <div class="filter-buttons">
                                         <button 
@@ -4845,7 +4845,7 @@
                                 </div>
                             </div>
                             <div class="filter-group">
-                                <label class="filter-label">显示单位</label>
+                                <label class="filter-label">{{ $t('tokens.display_unit') }}</label>
                                 <div class="filter-toggle">
                                     <button 
                                         class="toggle-btn"
@@ -4877,7 +4877,7 @@
                                     <i class="fas fa-comments"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">调用数</div>
+                                    <div class="overview-label">{{ $t('tokens.overview_calls') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.message_count || 0) }}</div>
                                     <div class="overview-sub">{{ tokenStats.message_change || '+0' }} 较上期</div>
                                 </div>
@@ -4887,7 +4887,7 @@
                                     <i class="fas fa-microchip"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">Token 调用</div>
+                                    <div class="overview-label">{{ $t('tokens.overview_tokens') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.total_tokens || 0) }}</div>
                                     <div class="overview-sub">{{ tokenStats.token_change || '+0' }} 较上期</div>
                                 </div>
@@ -4897,7 +4897,7 @@
                                     <i class="fas fa-dollar-sign"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">预估费用</div>
+                                    <div class="overview-label">{{ $t('tokens.overview_cost') }}</div>
                                     <div class="overview-value">${{ tokenStats.estimated_cost || '0.00' }}</div>
                                     <div class="overview-sub">{{ tokenStats.cost_change || '+0%' }} 较上期</div>
                                 </div>
@@ -4907,7 +4907,7 @@
                                     <i class="fas fa-chart-line"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">平均 Token/调用</div>
+                                    <div class="overview-label">{{ $t('tokens.overview_avg_tokens') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.avg_tokens_per_msg || 0) }}</div>
                                     <div class="overview-sub">{{ tokenStats.avg_change || '+0%' }} 较上期</div>
                                 </div>
@@ -4917,7 +4917,7 @@
                                     <i class="fas fa-tachometer-alt"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">平均响应时间</div>
+                                    <div class="overview-label">{{ $t('tokens.avg_response_time') }}</div>
                                     <div class="overview-value">{{ tokenStats.avg_response_time || '0' }}s</div>
                                     <div class="overview-sub">{{ tokenStats.response_change || '-0%' }} 较上期</div>
                                 </div>
@@ -4927,7 +4927,7 @@
                                     <i class="fas fa-users"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">活跃会话</div>
+                                    <div class="overview-label">{{ $t('tokens.active_sessions') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.active_sessions || 0) }}</div>
                                     <div class="overview-sub">{{ tokenStats.session_change || '+0' }} 较上期</div>
                                 </div>
@@ -4940,8 +4940,8 @@
                             <div class="chart-card">
                                 <div class="chart-header">
                                     <div>
-                                        <div class="chart-title">Token 使用趋势</div>
-                                        <div class="chart-subtitle">{{ tokenFilter.unit === 'tokens' ? 'Token 数量' : '费用 ($)' }} 随时间变化</div>
+                                        <div class="chart-title">{{ $t('tokens.usage_trend') }}</div>
+                                        <div class="chart-subtitle">{{ tokenFilter.unit === 'tokens' ? $t('tokens.token_count') : $t('tokens.estimated_cost') }} {{ $t('tokens.over_time') }}</div>
                                     </div>
                                 </div>
                                 <div class="chart-body" style="height: 300px;">
@@ -4953,7 +4953,7 @@
                             <div class="rankings-panel">
                                 <div class="ranking-section">
                                     <div class="ranking-title">
-                                        <i class="fas fa-trophy"></i> 用量排行
+                                        <i class="fas fa-trophy"></i> {{ $t('tokens.ranking_title') }}
                                     </div>
                                     <div class="ranking-tabs">
                                         <button 
@@ -4961,21 +4961,21 @@
                                             :class="{ active: tokenRankingTab === 'sessions' }"
                                             @click="tokenRankingTab = 'sessions'"
                                         >
-                                            会话
+                                            {{ $t('tokens.tab_sessions') }}
                                         </button>
                                         <button 
                                             class="ranking-tab"
                                             :class="{ active: tokenRankingTab === 'models' }"
                                             @click="tokenRankingTab = 'models'"
                                         >
-                                            模型
+                                            {{ $t('tokens.tab_models') }}
                                         </button>
                                         <button 
                                             class="ranking-tab"
                                             :class="{ active: tokenRankingTab === 'users' }"
                                             @click="tokenRankingTab = 'users'"
                                         >
-                                            用户
+                                            {{ $t('tokens.tab_users') }}
                                         </button>
                                     </div>
                                     <div class="ranking-list">
@@ -4990,7 +4990,7 @@
                                             <div class="ranking-value">{{ formatNumber(item.value) }}</div>
                                         </div>
                                         <div v-if="tokenRankings[tokenRankingTab].length === 0" class="ranking-empty">
-                                            暂无数据
+                                            {{ $t('tokens.no_data') }}
                                         </div>
                                     </div>
                                 </div>
@@ -5000,7 +5000,7 @@
                         <!-- 历史记录表格 -->
                         <div class="card" style="margin-top: 20px;">
                             <div class="card-header">
-                                <span class="card-title">详细使用记录</span>
+                                <span class="card-title">{{ $t('tokens.detailed_records') }}</span>
                                 <button class="btn btn-secondary" @click="exportTokenData">
                                     <i class="fas fa-download"></i> 导出全部记录
                                 </button>
@@ -5133,7 +5133,7 @@
                                     </div>
                                 </div>
                                 <div class="form-group" style="margin-top: 20px;">
-                                    <label class="form-label">功能开关</label>
+                                    <label class="form-label">{{ $t('settings.feature_toggles') }}</label>
                                     <div class="feature-switches-grid">
                                         <!-- 知识库 -->
                                         <div class="feature-switch-item" @click="settings.features.knowledge = !settings.features.knowledge">
@@ -5197,7 +5197,7 @@
                                     </div>
                                 </div>
                                 <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                                    <label class="form-label">数据维护</label>
+                                    <label class="form-label">{{ $t('settings.data_maintenance') }}</label>
                                     <div class="feature-switch-item" style="margin-bottom: 12px;" @click="settings.log_cleanup.enabled = !settings.log_cleanup.enabled; saveLogCleanupSettings()">
                                         <div class="feature-switch-info">
                                             <i class="fas fa-file-circle-minus feature-switch-icon"></i>
@@ -5773,7 +5773,7 @@
         <div v-if="showAvatarPicker" class="modal-overlay" @click.self="showAvatarPicker = false">
             <div class="modal" style="max-width: 500px; max-height: 90vh;">
                 <div class="modal-header">
-                    <span class="modal-title"><i class="fas fa-image"></i> 选择头像</span>
+                    <span class="modal-title"><i class="fas fa-image"></i> {{ $t('personality.select_avatar') }}</span>
                     <button class="modal-close" @click="showAvatarPicker = false">&times;</button>
                 </div>
                 <div class="modal-body" style="overflow-y: auto;">
@@ -6352,7 +6352,7 @@
                     <div class="form-group">
                         <label class="form-label">所属角色</label>
                         <select v-model="editingMemory.character_name" class="form-select">
-                            <option value="">通用记忆（所有角色共享）</option>
+                            <option value="">{{ $t('personality.general_memory') }}</option>
                             <optgroup label="我的角色卡">
                                 <option v-for="preset in customPersonalityPresets" :key="preset.id" :value="preset.name">
                                     {{ preset.name }}
@@ -6910,11 +6910,11 @@
                                 <span>{{ viewingSession.character_runtime_snapshot.mood }}</span>
                             </div>
                             <div class="detail-item">
-                                <label>情绪强度</label>
+                                <label>{{ $t('personality.mood_intensity') }}</label>
                                 <span>{{ (viewingSession.character_runtime_snapshot.mood_intensity * 100).toFixed(0) }}%</span>
                             </div>
                             <div class="detail-item">
-                                <label>精力</label>
+                                <label>{{ $t('personality.energy') }}</label>
                                 <span>{{ viewingSession.character_runtime_snapshot.energy }}</span>
                             </div>
                         </div>
@@ -6931,7 +6931,7 @@
                                     </div>
                                 </div>
                                 <div class="detail-item">
-                                    <label>信任</label>
+                                    <label>{{ $t('personality.trust') }}</label>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
                                             <div :style="{ width: viewingSession.character_runtime_snapshot.trust + '%', height: '100%', background: 'linear-gradient(90deg, #4fc3f7, #2196f3)', borderRadius: '3px' }"></div>
@@ -6940,7 +6940,7 @@
                                     </div>
                                 </div>
                                 <div class="detail-item">
-                                    <label>熟悉</label>
+                                    <label>{{ $t('personality.familiarity') }}</label>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
                                             <div :style="{ width: viewingSession.character_runtime_snapshot.familiarity + '%', height: '100%', background: 'linear-gradient(90deg, #81c784, #4caf50)', borderRadius: '3px' }"></div>
@@ -6949,7 +6949,7 @@
                                     </div>
                                 </div>
                                 <div class="detail-item">
-                                    <label>依赖</label>
+                                    <label>{{ $t('personality.dependency') }}</label>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
                                             <div :style="{ width: viewingSession.character_runtime_snapshot.dependency + '%', height: '100%', background: 'linear-gradient(90deg, #ce93d8, #9c27b0)', borderRadius: '3px' }"></div>
@@ -6958,7 +6958,7 @@
                                     </div>
                                 </div>
                                 <div class="detail-item">
-                                    <label>安全感</label>
+                                    <label>{{ $t('personality.security') }}</label>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <div style="flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden;">
                                             <div :style="{ width: viewingSession.character_runtime_snapshot.security + '%', height: '100%', background: 'linear-gradient(90deg, #ffb74d, #ff9800)', borderRadius: '3px' }"></div>
@@ -8056,7 +8056,7 @@
                     <div style="display: flex; align-items: center; gap: 16px;">
                         <span class="modal-title" style="font-size: 20px;">
                             <i class="fas fa-users" style="color: var(--accent-primary);"></i>
-                            我的角色卡
+                            {{ $t('personality.my_cards') }}
                         </span>
                         <span style="color: var(--text-secondary); font-size: 14px;">
                             共 {{ customPersonalityPresets.length }} 个角色
@@ -8771,13 +8771,13 @@
                     },
                     // 模型用途配置
                     modelPurposes: {
-                        chat: { name: '对话模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.4-5A8 8 0 1 1 21 12Z"/></svg>', description: '用于日常对话和问答', color: '#3b82f6' },
-                        vision: { name: '图片理解模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="2"/><path d="m21 16-5-5L5 19"/></svg>', description: '用于识别和理解图片内容', color: '#8b5cf6' },
-                        video: { name: '视频理解模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/><path d="M7 5v14M17 5v14"/></svg>', description: '用于分析视频内容', color: '#ec4899' },
-                        tts: { name: 'TTS语音合成', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10H4Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg>', description: '用于文字转语音', color: '#10b981' },
-                        stt: { name: 'STT语音识别', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>', description: '用于语音转文字', color: '#f59e0b' },
-                        embedding: { name: '向量嵌入模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V8"/><path d="M2 19h22"/></svg>', description: '用于知识库和语义搜索', color: '#6366f1' },
-                        image_generation: { name: '图片生成模型', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>', description: '用于AI生成图片，如角色立绘', color: '#ec4899' }
+                        chat: { name: 'ai_config.purpose_chat', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3 1.4-5A8 8 0 1 1 21 12Z"/></svg>', description: 'ai_config.purpose_chat_desc', color: '#3b82f6' },
+                        vision: { name: 'ai_config.purpose_vision', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8" cy="10" r="2"/><path d="m21 16-5-5L5 19"/></svg>', description: 'ai_config.purpose_vision_desc', color: '#8b5cf6' },
+                        video: { name: 'ai_config.purpose_video', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3V9Z"/><path d="M7 5v14M17 5v14"/></svg>', description: 'ai_config.purpose_video_desc', color: '#ec4899' },
+                        tts: { name: 'ai_config.purpose_tts', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10H4Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg>', description: 'ai_config.purpose_tts_desc', color: '#10b981' },
+                        stt: { name: 'ai_config.purpose_stt', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>', description: 'ai_config.purpose_stt_desc', color: '#f59e0b' },
+                        embedding: { name: 'ai_config.purpose_embedding', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V8"/><path d="M2 19h22"/></svg>', description: 'ai_config.purpose_embedding_desc', color: '#6366f1' },
+                        image_generation: { name: 'ai_config.purpose_image_gen', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>', description: '用于AI生成图片，如角色立绘', color: '#ec4899' }
                     },
                     // 各用途的活跃模型
                     activeModelsByPurpose: {
