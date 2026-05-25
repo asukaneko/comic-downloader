@@ -2265,6 +2265,14 @@ async def handle_get_admin(msg, is_group=True):
     else:
         await bot.api.post_private_msg(msg.user_id, text="管理员列表："+str(admin))
 
+@register_command("/myid","/id",help_text = "/myid 或者 /id -> 获取你的用户ID(用于添加管理员)",category = "4")
+async def handle_my_id(msg, is_group=True):
+    uid = str(msg.user_id)
+    text = f"你的用户ID是: {uid}\n请将此ID发送给root管理员来添加你为管理员喵~"
+    if is_group:
+        await msg.reply(text=text)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=text)
 
 @register_command("/set_ids",help_text = "/set_ids <昵称> <个性签名> <性别> -> 设置账号信息(管理员)",category = "4",admin_show=True)
 async def handle_set(msg, is_group=True):
