@@ -438,6 +438,7 @@ def register_socket_events(server):
                     effective_session_id,
                     followup_prompt,
                     "system",
+                    channel_id="web",
                 )
             _log.info(
                 f"[confirm_exec] result emitted sid={request.sid}, session={effective_session_id}, approved={approved}"
@@ -477,6 +478,7 @@ def register_socket_events(server):
                 session_id,
                 "请根据上述执行结果继续",
                 "system",
+                channel_id="web",
             )
         except Exception as e:
             _log.error(f"[confirm_exec] 处理出错: {e}", exc_info=True)

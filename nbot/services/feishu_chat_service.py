@@ -370,9 +370,20 @@ class FeishuChatService:
         parent_message_id: str,
         attachments: list = None
     ):
-        """通过统一管道处理 AI 响应。"""
+        """通过统一管道处理 AI 响应（含 Gateway 日志记录）"""
         from nbot.channels.feishu import FeishuChannelAdapter
         from nbot.core.ai_pipeline import handle_tool_confirmation
+
+        # === Gateway 事件记录：开始 ===
+        trace_id = ""
+        if hasattr(self.server, '_record_gateway_event_start'):
+            trace_id = self.server._record_gateway_event_start(
+                channel_id="feishu",
+                session_id=session_id,
+                user_content=content,
+                sender=user_id,
+                attachments=attachments,
+            )
 
         # === 确认/拒绝待执行命令检测 ===
         content = handle_tool_confirmation(
@@ -408,16 +419,37 @@ class FeishuChatService:
         except Exception as e:
             print(f"[FeishuChat] 加载工具失败: {e}")
 
-        pipeline = AIPipeline()
-        result = pipeline.process(ctx, callbacks, tools=tools)
+        try:
+            pipeline = AIPipeline()
+            result = pipeline.process(ctx, callbacks, tools=tools)
 
-        if result.error:
-            self._send_feishu_reply(
-                credentials, chat_id,
-                f"AI 处理失败: {result.error}"
-            )
-        else:
-            print(f"[FeishuChat] AI 回复: {result.final_content[:100]}...")
+            if result.error:
+                self._send_feishu_reply(
+                    credentials, chat_id,
+                    f"AI 处理失败: {result.error}"
+                )
+                # 记录失败
+                if trace_id and hasattr(self.server, '_record_gateway_event_failed'):
+                    self.server._record_gateway_event_failed(
+                        trace_id=trace_id, channel_id="feishu",
+                        session_id=session_id, error=result.error,
+                    )
+            else:
+                print(f"[FeishuChat] AI 回复: {result.final_content[:100]}...")
+                # 记录成功
+                if trace_id and hasattr(self.server, '_record_gateway_event_delivered'):
+                    self.server._record_gateway_event_delivered(
+                        trace_id=trace_id, channel_id="feishu",
+                        session_id=session_id,
+                        reply_preview=(result.final_content or "")[:200],
+                    )
+        except Exception as e:
+            print(f"[FeishuChat] AI 处理异常: {e}")
+            if trace_id and hasattr(self.server, '_record_gateway_event_failed'):
+                self.server._record_gateway_event_failed(
+                    trace_id=trace_id, channel_id="feishu",
+                    session_id=session_id, error=str(e),
+                )
 
     def _send_feishu_reply(
         self,

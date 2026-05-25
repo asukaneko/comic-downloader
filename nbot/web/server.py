@@ -772,6 +772,7 @@ class WebChatServer:
                     "is_proactive_chat": True,
                     "proactive_chat_triggered_at": now.isoformat(),
                 },
+                channel_id="proactive",
             )
 
     def _get_proactive_chat_target_session_ids(self) -> list[str]:
@@ -1986,6 +1987,7 @@ class WebChatServer:
                 session_id=session_id,
                 user_content=prompt,
                 sender="scheduler",
+                channel_id="proactive",
             )
         except Exception as e:
             _log.error(f"Failed to execute custom task {task_id}: {e}", exc_info=True)
@@ -2628,11 +2630,13 @@ class WebChatServer:
 
         将已创建的 agent_service 注入到 Gateway 的 Dispatcher 中，
         使 Gateway 可以通过统一入口调度 AI Core。
+        同时启用 SQLite 持久化存储，用于 Web 日志界面展示。
         """
         try:
             from nbot.gateway import ChannelGateway
             from nbot.gateway.dispatcher import GatewayDispatcher
             from nbot.gateway.gateway import set_gateway
+            from nbot.gateway.storage import init_gateway_storage
 
             if not hasattr(self, "agent_service") or self.agent_service is None:
                 _log.warning("[Gateway] AgentService 未就绪，Gateway 将使用延迟初始化")
@@ -2641,16 +2645,21 @@ class WebChatServer:
             # 创建带 AgentService 的 Dispatcher
             dispatcher = GatewayDispatcher(agent_service=self.agent_service)
 
-            # 创建 Gateway 实例（同步模式，无持久化）
+            # 初始化 SQLite 持久化存储（用于事件日志记录和去重）
+            storage = init_gateway_storage(data_dir=self.data_dir)
+
+            # 创建 Gateway 实例（同步模式，带持久化）
             gateway = ChannelGateway(
                 dispatcher=dispatcher,
+                storage=storage,
             )
 
             # 设置为全局实例
             set_gateway(gateway)
 
             _log.info(
-                "[Gateway] 初始化完成 mode=sync dispatcher=%s",
+                "[Gateway] 初始化完成 mode=sync storage=%s dispatcher=%s",
+                storage._db_path if storage else "none",
                 "injected" if self.agent_service else "none",
             )
         except ImportError:
@@ -2771,8 +2780,13 @@ class WebChatServer:
         attachments=None,
         parent_message_id=None,
         metadata=None,
+        channel_id: str = "web",
     ):
-        """?? AI ????????"""
+        """触发 AI 响应处理（通过 Gateway 记录事件）
+
+        Args:
+            channel_id: 频道标识（web/qq/feishu/telegram/proactive），用于日志分类展示
+        """
         adapter = _resolve_web_adapter(self.web_channel_adapter)
         chat_request = adapter.build_chat_request(
             conversation_id=session_id,
@@ -2782,7 +2796,176 @@ class WebChatServer:
             parent_message_id=parent_message_id,
             metadata=metadata,
         )
-        self.agent_service.process(chat_request, adapter=adapter)
+
+        # 生成 trace_id 并通过通用方法记录到 Gateway 日志
+        trace_id = self._record_gateway_event_start(
+            channel_id=channel_id,
+            session_id=session_id,
+            user_content=user_content,
+            sender=sender,
+            attachments=attachments,
+        )
+
+        # 调用 AI 处理
+        try:
+            result = self.agent_service.process(chat_request, adapter=adapter)
+
+            reply_preview = ""
+            if result and hasattr(result, 'final_content') and result.final_content:
+                reply_preview = result.final_content[:200]
+            elif result and isinstance(result, dict):
+                reply_preview = str(result.get('final_content', ''))[:200]
+            elif result and hasattr(result, 'content'):
+                reply_preview = str(result.content)[:200]
+
+            self._record_gateway_event_delivered(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                session_id=session_id,
+                reply_preview=reply_preview,
+            )
+        except Exception as e:
+            self._record_gateway_event_failed(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                session_id=session_id,
+                error=str(e)[:500],
+            )
+            raise
+
+    def _record_gateway_event_start(
+        self,
+        *,
+        channel_id: str,
+        session_id: str,
+        user_content: str,
+        sender: str,
+        attachments=None,
+    ) -> str:
+        """记录 Gateway 事件的起始阶段（received + dispatched）
+
+        供所有频道统一调用，返回 trace_id 用于后续状态更新。
+        外部服务（飞书/Telegram/QQ）可直接调用此方法记录事件。
+
+        Returns:
+            trace_id: 事件追踪 ID（Gateway 不可用时返回空字符串）
+        """
+        from nbot.gateway.gateway import get_gateway
+        from nbot.gateway.trace import TraceFactory
+
+        gateway = get_gateway()
+        trace_id = ""
+        if not gateway or not gateway.event_store:
+            return trace_id
+
+        trace_factory = getattr(gateway, 'trace_factory', None) or TraceFactory()
+        trace_id = trace_factory.new_trace_id()
+
+        session_name = ""
+        session_data = self.sessions.get(session_id) or {}
+        if session_data:
+            session_name = session_data.get("name", "")
+
+        content_preview = user_content[:150] if user_content else ""
+
+        attachment_summary = ""
+        if attachments and isinstance(attachments, list):
+            att_names = [a.get("name", "file") for a in attachments if isinstance(a, dict)]
+            if att_names:
+                attachment_summary = f"[{len(att_names)}个附件: {', '.join(att_names[:3])}]"
+
+        try:
+            gateway.event_store.record(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status="received",
+                event_type="message",
+                conversation_id=session_id,
+                user_id=str(sender),
+                raw_event={
+                    "content": content_preview,
+                    "sender": sender,
+                    "attachments": attachment_summary,
+                    "session_name": session_name,
+                },
+                metadata={
+                    "content_length": len(user_content),
+                    "has_attachments": bool(attachments),
+                    "session_name": session_name,
+                },
+            )
+            gateway.event_store.record(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status="dispatched",
+                conversation_id=session_id,
+                metadata={"session_name": session_name},
+            )
+        except Exception as e:
+            _log.debug("[Gateway] 事件记录失败: %s", str(e))
+
+        return trace_id
+
+    def _record_gateway_event_delivered(
+        self,
+        *,
+        trace_id: str,
+        channel_id: str,
+        session_id: str,
+        reply_preview: str = "",
+    ) -> None:
+        """记录 Gateway 事件完成（delivered）"""
+        from nbot.gateway.gateway import get_gateway
+
+        gateway = get_gateway()
+        if not gateway or not gateway.event_store or not trace_id:
+            return
+
+        session_name = ""
+        session_data = self.sessions.get(session_id) or {}
+        if session_data:
+            session_name = session_data.get("name", "")
+
+        try:
+            gateway.event_store.record(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status="delivered",
+                conversation_id=session_id,
+                raw_event={"reply_preview": reply_preview} if reply_preview else None,
+                metadata={
+                    "reply_length": len(reply_preview),
+                    "session_name": session_name,
+                } if reply_preview else {"session_name": session_name},
+            )
+        except Exception as e:
+            _log.debug("[Gateway] delivered 事件记录失败: %s", str(e))
+
+    def _record_gateway_event_failed(
+        self,
+        *,
+        trace_id: str,
+        channel_id: str,
+        session_id: str,
+        error: str,
+    ) -> None:
+        """记录 Gateway 事件失败（dispatch_failed）"""
+        from nbot.gateway.gateway import get_gateway
+
+        gateway = get_gateway()
+        if not gateway or not gateway.event_store or not trace_id:
+            return
+
+        try:
+            gateway.event_store.record(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status="dispatch_failed",
+                conversation_id=session_id,
+                error=error,
+            )
+        except Exception:
+            pass
 
     def add_message_to_session(
         self, session_id: str, role: str, content: str, sender: str, source: str = "qq"

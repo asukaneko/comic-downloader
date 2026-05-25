@@ -1501,6 +1501,9 @@ const NbotMethods = {
                             break;
                         case 'logs':
                             await this.loadLogs();
+                            if (this.logTab === 'gateway') {
+                                await this.loadGatewayLogs();
+                            }
                             break;
                         case 'settings':
                             await this.loadSettings();
@@ -3749,6 +3752,301 @@ def main(params):
                     } catch (e) {
                         console.error('Failed to load recent activities:', e);
                     }
+                },
+
+                // Gateway Logs
+                async loadGatewayLogs() {
+                    try {
+                        const params = new URLSearchParams();
+                        if (this.gatewayLogFilter.status) params.append('status', this.gatewayLogFilter.status);
+                        if (this.gatewayLogFilter.channel_id) params.append('channel_id', this.gatewayLogFilter.channel_id);
+                        params.append('limit', String(this.gatewayLogFilter.limit));
+                        params.append('offset', String(this.gatewayLogFilter.offset));
+                        const res = await api.get(`/api/gateway/events?${params.toString()}`);
+                        if (res.data.ok) {
+                            this.gatewayLogs = res.data.events || [];
+                        } else {
+                            this.gatewayLogs = [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to load gateway logs:', e);
+                        this.gatewayLogs = [];
+                    }
+                },
+
+                async refreshGatewayLogs() {
+                    this.gatewayLogFilter.offset = 0;
+                    await this.loadGatewayLogs();
+                    this.showToast('Gateway 日志已刷新', 'success');
+                },
+
+                async showGatewayTrace(trace_id) {
+                    this.gatewayTraceModal.show = true;
+                    this.gatewayTraceModal.trace_id = trace_id;
+                    this.gatewayTraceModal.loading = true;
+                    this.gatewayTraceModal.events = [];
+                    try {
+                        const res = await api.get(`/api/gateway/events/${trace_id}`);
+                        if (res.data.ok) {
+                            this.gatewayTraceModal.events = res.data.events || [];
+                        }
+                    } catch (e) {
+                        console.error('Failed to load gateway trace:', e);
+                    } finally {
+                        this.gatewayTraceModal.loading = false;
+                    }
+                },
+
+                formatGatewayTime(isoString) {
+                    if (!isoString) return '-';
+                    const d = new Date(isoString);
+                    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                },
+
+                formatFullGatewayTime(isoString) {
+                    if (!isoString) return '-';
+                    const d = new Date(isoString);
+                    return d.toLocaleString('zh-CN', {
+                        month: '2-digit', day: '2-digit',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit',
+                    });
+                },
+
+                getGatewayStatusClass(status) {
+                    const map = {
+                        received: 'info',
+                        verified: 'info',
+                        parsed: 'info',
+                        deduped: 'info',
+                        queued: 'warning',
+                        dispatched: 'warning',
+                        delivering: 'warning',
+                        delivered: 'success',
+                        built: 'success',
+                        duplicated: 'secondary',
+                        ignored: 'secondary',
+                        failed: 'danger',
+                        parse_failed: 'danger',
+                        dispatch_failed: 'danger',
+                        delivery_failed: 'danger',
+                        rate_limited: 'danger',
+                        unknown_channel: 'danger',
+                        missing_parser: 'danger',
+                        queue_full: 'danger',
+                        no_sender: 'warning',
+                    };
+                    return map[status] || 'secondary';
+                },
+
+                // 状态中文标签（短）
+                getGatewayStatusLabel(status) {
+                    const map = {
+                        received: '接收',
+                        verified: '验证',
+                        parsed: '解析',
+                        deduped: '去重',
+                        queued: '入队',
+                        dispatched: '调度',
+                        delivering: '投递中',
+                        delivered: '完成',
+                        built: '构建',
+                        duplicated: '重复',
+                        ignored: '忽略',
+                        failed: '失败',
+                        parse_failed: '解析错误',
+                        dispatch_failed: '调度失败',
+                        delivery_failed: '投递失败',
+                        rate_limited: '限流',
+                        unknown_channel: '未知频道',
+                        missing_parser: '缺少解析器',
+                        queue_full: '队列满',
+                        no_sender: '无发送器',
+                    };
+                    return map[status] || status;
+                },
+
+                // 状态描述（详细，用于 tooltip 和 Trace 弹窗）
+                getGatewayStatusDesc(status) {
+                    const map = {
+                        received: '消息已被 Gateway 接收，等待处理',
+                        verified: '安全鉴权通过（HMAC / Token 验证）',
+                        parsed: '平台事件已解析为统一格式',
+                        deduped: '去重检查通过，非重复消息',
+                        queued: '事件已进入异步处理队列',
+                        dispatched: '已调度到 AI Core 进行处理',
+                        delivering: 'AI 回复正在投递到目标频道',
+                        delivered: '消息处理完成，回复已成功投递',
+                        built: '回复内容已构建完成（内部频道）',
+                        duplicated: '检测到重复消息，已跳过处理',
+                        ignored: '空事件或无需处理的事件',
+                        failed: '通用失败状态',
+                        parse_failed: '平台事件格式无法解析',
+                        dispatch_failed: 'AI Core 处理异常或超时',
+                        delivery_failed: '回复投递到目标频道失败',
+                        rate_limited: '触发频率限制，请求被拒绝',
+                        unknown_channel: '未注册的频道标识符',
+                        missing_parser: '频道适配器缺少解析方法',
+                        queue_full: '异步队列已满，事件被丢弃',
+                        no_sender: '目标频道无可用发送器',
+                    };
+                    return map[status] || `${status} 事件`;
+                },
+
+                // 判断是否为错误状态
+                isGatewayErrorStatus(status) {
+                    return ['failed', 'parse_failed', 'dispatch_failed', 'delivery_failed',
+                            'rate_limited', 'unknown_channel', 'missing_parser', 'queue_full'].includes(status);
+                },
+
+                // 从 raw_event 中提取用户消息内容
+                getGatewayMessageContent(log) {
+                    try {
+                        const raw = typeof log.raw_event_json === 'string'
+                            ? JSON.parse(log.raw_event_json)
+                            : log.raw_event_json;
+                        return raw?.content || '';
+                    } catch {
+                        return '';
+                    }
+                },
+
+                // 从 raw_event 中提取附件信息
+                getGatewayAttachments(log) {
+                    try {
+                        const raw = typeof log.raw_event_json === 'string'
+                            ? JSON.parse(log.raw_event_json)
+                            : log.raw_event_json;
+                        return raw?.attachments || '';
+                    } catch {
+                        return '';
+                    }
+                },
+
+                // 从 delivered 状态中提取 AI 回复预览（多源回退）
+                getGatewayReplyContent(log) {
+                    try {
+                        // 优先从 raw_event 提取
+                        const raw = typeof log.raw_event_json === 'string'
+                            ? JSON.parse(log.raw_event_json)
+                            : log.raw_event_json;
+                        if (raw?.reply_preview) {
+                            const preview = raw.reply_preview;
+                            return preview.length > 100 ? preview.slice(0, 100) + '…' : preview;
+                        }
+                    } catch { /* 继续尝试其他来源 */ }
+
+                    // 回退：从 metadata 获取回复长度信息
+                    try {
+                        const meta = typeof log.metadata_json === 'string'
+                            ? JSON.parse(log.metadata_json)
+                            : log.metadata_json;
+                        if (meta?.reply_length) {
+                            return `回复已投递（${meta.reply_length} 字符）`;
+                        }
+                    } catch { /* ignore */ }
+
+                    return '回复已成功投递';
+                },
+
+                // 获取会话名称（从 metadata 中提取）
+                getSessionName(log) {
+                    try {
+                        const meta = typeof log.metadata_json === 'string'
+                            ? JSON.parse(log.metadata_json)
+                            : log.metadata_json;
+                        return meta?.session_name || '';
+                    } catch {
+                        return '';
+                    }
+                },
+
+                // 缩短 ID 显示
+                shortenId(id, maxLen) {
+                    if (!id) return '-';
+                    return id.length > maxLen ? id.slice(0, maxLen) + '…' : id;
+                },
+
+                // 安全解析 JSON 字符串
+                parseJson(jsonStr) {
+                    if (!jsonStr) return null;
+                    if (typeof jsonStr === 'object') return jsonStr;
+                    try { return JSON.parse(jsonStr); } catch { return null; }
+                },
+
+                // ========== Trace 弹窗辅助方法 ==========
+
+                getLastTraceStatus() {
+                    const events = this.gatewayTraceModal.events;
+                    return events.length > 0 ? events[events.length - 1].status : '-';
+                },
+
+                getTraceChannel() {
+                    const events = this.gatewayTraceModal.events;
+                    return events.length > 0 ? (events[0].channel_id || '-') : '-';
+                },
+
+                getTraceDuration() {
+                    const events = this.gatewayTraceModal.events;
+                    if (events.length < 2) return '-';
+                    try {
+                        const first = new Date(events[0].created_at).getTime();
+                        const last = new Date(events[events.length - 1].created_at).getTime();
+                        const ms = last - first;
+                        if (ms < 1000) return ms + 'ms';
+                        if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+                        return (ms / 60000).toFixed(1) + 'min';
+                    } catch { return '-'; }
+                },
+
+                getTraceItemClass(status) {
+                    if (this.isGatewayErrorStatus(status)) return 'failed';
+                    if (status === 'delivered' || status === 'built') return 'delivered';
+                    if (status === 'received') return 'received';
+                    return 'processing';
+                },
+
+                getTraceStepIcon(status) {
+                    const icons = {
+                        received: 'fas fa-arrow-down',
+                        verified: 'fas fa-shield-alt',
+                        parsed: 'fas fa-code',
+                        deduped: 'fas fa-copy',
+                        queued: 'fas fa-clock',
+                        dispatched: 'fas fa-paper-plane',
+                        delivering: 'fas fa-spinner fa-spin',
+                        delivered: 'fas fa-check-circle',
+                        built: 'fas fa-hammer',
+                        duplicated: 'fas fa-clone',
+                        failed: 'fas fa-times-circle',
+                        parse_failed: 'fas fa-exclamation-triangle',
+                        dispatch_failed: 'fas fa-bolt',
+                        delivery_failed: 'fas fa-unlink',
+                        rate_limited: 'fas fa-tachometer-alt',
+                    };
+                    return icons[status] || 'fas fa-circle';
+                },
+
+                // ========== 频道名称/图标映射 ==========
+                getChannelName(channelId) {
+                    const map = {
+                        web: 'Web',
+                        qq: 'QQ',
+                        feishu: '飞书',
+                        telegram: 'Telegram',
+                        proactive: '主动聊天',
+                    };
+                    return map[channelId] || channelId;
+                },
+
+                getChannelIcon(channelId) {
+                    const map = {
+                        web: 'fas fa-globe',
+                        qq: 'fab fa-qq',
+                        feishu: 'fas fa-feather-alt',
+                        telegram: 'fab fa-telegram',
+                        proactive: 'fas fa-robot',
+                    };
+                    return map[channelId] || 'fas fa-plug';
                 },
                 
                 async loadSettings() {

@@ -237,4 +237,70 @@ def register_gateway_routes(app):
                 500,
             )
 
+    @app.route("/api/gateway/events", methods=["GET"])
+    def gateway_events():
+        """查询 Gateway 事件日志
+
+        Query 参数：
+            channel_id: 按频道筛选（可选）
+            status: 按状态筛选（可选）
+            limit: 返回条数（默认 50，最大 200）
+            offset: 偏移量（默认 0）
+        """
+        gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
+
+        channel_id = request.args.get("channel_id", "")
+        status = request.args.get("status", "")
+        limit = min(int(request.args.get("limit", 50)), 200)
+        offset = int(request.args.get("offset", 0))
+
+        try:
+            if gateway.event_store:
+                events = gateway.event_store.query(
+                    channel_id=channel_id,
+                    status=status,
+                    limit=limit,
+                    offset=offset,
+                )
+                return jsonify({
+                    "ok": True,
+                    "events": events,
+                    "count": len(events),
+                    "limit": limit,
+                    "offset": offset,
+                })
+            return jsonify({
+                "ok": False,
+                "error": "Event store not available",
+            })
+        except Exception as e:
+            _log.error("[Routes] 查询 Gateway 事件失败 error=%s", str(e))
+            return jsonify({"ok": False, "error": str(e)}), 500
+
+    @app.route("/api/gateway/events/<trace_id>", methods=["GET"])
+    def gateway_event_trace(trace_id: str):
+        """查询指定 trace_id 的完整事件链路"""
+        gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
+
+        try:
+            if gateway.event_store:
+                events = gateway.event_store.get_by_trace(trace_id)
+                return jsonify({
+                    "ok": True,
+                    "trace_id": trace_id,
+                    "events": events,
+                    "count": len(events),
+                })
+            return jsonify({
+                "ok": False,
+                "error": "Event store not available",
+            })
+        except Exception as e:
+            _log.error("[Routes] 查询 Gateway trace 失败 trace=%s error=%s", trace_id, str(e))
+            return jsonify({"ok": False, "error": str(e)}), 500
+
     _log.info("[Routes] Gateway 路由已注册（含 Worker 管理端点）")

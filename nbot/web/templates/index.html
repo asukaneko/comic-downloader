@@ -5042,7 +5042,26 @@
 
                     <!-- Logs -->
                     <div v-if="currentPage === 'logs'" class="fade-in">
-                        <div class="card">
+                        <!-- 日志类型标签页 -->
+                        <div class="tab-bar" style="margin-bottom: 16px;">
+                            <div
+                                class="tab-item"
+                                :class="{ active: logTab === 'system' }"
+                                @click="logTab = 'system'"
+                            >
+                                <i class="fas fa-file-alt"></i> 系统日志
+                            </div>
+                            <div
+                                class="tab-item"
+                                :class="{ active: logTab === 'gateway' }"
+                                @click="logTab = 'gateway'"
+                            >
+                                <i class="fas fa-network-wired"></i> Gateway 日志
+                            </div>
+                        </div>
+
+                        <!-- 系统日志 -->
+                        <div v-if="logTab === 'system'" class="card">
                             <div class="card-header">
                                 <span class="card-title">{{ $t('page.logs') }}</span>
                                 <div style="display: flex; gap: 8px;">
@@ -5067,6 +5086,235 @@
                                     </div>
                                     <div v-if="filteredLogs.length === 0" style="color: var(--text-muted); text-align: center; padding: 20px;">
                                         暂无日志
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gateway 日志 -->
+                        <div v-if="logTab === 'gateway'" class="card">
+                            <div class="card-header">
+                                <span class="card-title">Gateway 事件日志</span>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select v-model="gatewayLogFilter.status" class="form-select" style="width: 130px;">
+                                        <option value="">全部状态</option>
+                                        <option value="received">已接收</option>
+                                        <option value="verified">已验证</option>
+                                        <option value="parsed">已解析</option>
+                                        <option value="deduped">已去重</option>
+                                        <option value="queued">已入队</option>
+                                        <option value="dispatched">调度中</option>
+                                        <option value="delivering">投递中</option>
+                                        <option value="delivered">已完成</option>
+                                        <option value="built">已构建</option>
+                                        <option value="failed">失败</option>
+                                        <option value="duplicated">重复消息</option>
+                                    </select>
+                                    <button class="btn btn-secondary" @click="refreshGatewayLogs" :disabled="isLoading">
+                                        <i class="fas fa-sync-alt"></i> 刷新
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div v-if="gatewayLogs.length === 0" style="color: var(--text-muted); text-align: center; padding: 40px;">
+                                    <i class="fas fa-inbox" style="font-size: 32px; margin-bottom: 12px; display: block;"></i>
+                                    暂无 Gateway 事件日志
+                                    <div style="font-size: 12px; margin-top: 8px;">通过 Web UI 发送消息后将在此显示处理记录</div>
+                                </div>
+                                <div v-else class="gateway-log-table-wrapper" style="max-height: 600px; overflow-y: auto;">
+                                    <table class="data-table gateway-log-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 62px;">时间</th>
+                                                <th style="width: 68px;">状态</th>
+                                                <th style="width: 50px;">频道</th>
+                                                <th style="width: 38%;">消息 / 回复</th>
+                                                <th>会话</th>
+                                                <th style="width: 38px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="log in gatewayLogs" :key="log.id"
+                                                :class="{ 'gw-row-error': isGatewayErrorStatus(log.status) }">
+                                                <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">{{ formatGatewayTime(log.created_at) }}</td>
+                                                <td>
+                                                    <span class="badge"
+                                                        :class="'badge-' + getGatewayStatusClass(log.status)"
+                                                        :title="getGatewayStatusDesc(log.status)">
+                                                        {{ getGatewayStatusLabel(log.status) }}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge" :class="'badge-channel-' + log.channel_id">
+                                                        <i :class="getChannelIcon(log.channel_id)"></i>
+                                                        {{ getChannelName(log.channel_id) }}
+                                                    </span>
+                                                </td>
+                                                <td style="font-size: 13px;">
+                                                    <div class="gw-content-cell">
+                                                        <!-- received 状态：显示用户消息内容 -->
+                                                        <template v-if="log.status === 'received'">
+                                                            <span class="gw-msg-content">{{ getGatewayMessageContent(log) }}</span>
+                                                            <span v-if="getGatewayAttachments(log)" class="gw-att-tag">
+                                                                <i class="fas fa-paperclip"></i> {{ getGatewayAttachments(log) }}
+                                                            </span>
+                                                        </template>
+                                                        <!-- delivered 状态：显示 AI 回复预览 -->
+                                                        <template v-else-if="log.status === 'delivered'">
+                                                            <span class="gw-reply-content"><i class="fas fa-reply"></i> {{ getGatewayReplyContent(log) }}</span>
+                                                        </template>
+                                                        <!-- failed 状态：显示错误信息 -->
+                                                        <template v-else-if="isGatewayErrorStatus(log.status)">
+                                                            <span class="gw-error-text">{{ log.error || '处理异常' }}</span>
+                                                        </template>
+                                                        <!-- 其他中间状态：显示状态描述 -->
+                                                        <template v-else>
+                                                            <span style="color: var(--text-muted); font-size: 12px;">{{ getGatewayStatusDesc(log.status) }}</span>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                                <td style="font-size: 12px;">
+                                                    <div class="gw-session-cell">
+                                                        <span v-if="getSessionName(log)" class="gw-session-name" :title="log.conversation_id">{{ getSessionName(log) }}</span>
+                                                        <span v-else class="gw-session-id" :title="log.conversation_id">{{ shortenId(log.conversation_id, 8) }}</span>
+                                                        <div v-if="log.user_id && log.user_id !== log.conversation_id" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">
+                                                            {{ log.user_id }}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <button class="btn-icon-sm" @click="showGatewayTrace(log.trace_id)" title="查看完整链路">
+                                                        <i class="fas fa-stream"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gateway Trace 详情弹窗 -->
+                        <div v-if="gatewayTraceModal.show" class="trace-modal-overlay" @click.self="gatewayTraceModal.show = false">
+                            <div class="trace-modal">
+                                <div class="trace-modal-header">
+                                    <div class="trace-modal-title">
+                                        <i class="fas fa-route"></i>
+                                        <span>事件链路追踪</span>
+                                        <code style="font-size: 12px; margin-left: 8px; opacity: 0.7;">{{ gatewayTraceModal.trace_id }}</code>
+                                    </div>
+                                    <button class="trace-modal-close" @click="gatewayTraceModal.show = false">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="trace-modal-body">
+                                    <div v-if="gatewayTraceModal.loading" style="text-align: center; padding: 40px;">
+                                        <div class="spinner"></div>
+                                        <p style="margin-top: 12px; color: var(--text-muted);">加载链路数据...</p>
+                                    </div>
+                                    <div v-else-if="gatewayTraceModal.events.length === 0" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                        <i class="fas fa-search" style="font-size: 28px; margin-bottom: 10px; display: block;"></i>
+                                        暂无链路数据
+                                    </div>
+                                    <div v-else>
+                                        <!-- 链路摘要卡片 -->
+                                        <div class="trace-summary-card">
+                                            <div class="trace-summary-item">
+                                                <span class="trace-summary-label">事件总数</span>
+                                                <span class="trace-summary-value">{{ gatewayTraceModal.events.length }} 步</span>
+                                            </div>
+                                            <div class="trace-summary-item">
+                                                <span class="trace-summary-label">最终状态</span>
+                                                <span class="badge"
+                                                    :class="'badge-' + getGatewayStatusClass(getLastTraceStatus())">
+                                                    {{ getLastTraceStatus() }}
+                                                </span>
+                                            </div>
+                                            <div class="trace-summary-item">
+                                                <span class="trace-summary-label">频道</span>
+                                                <span class="trace-summary-value">{{ getTraceChannel() }}</span>
+                                            </div>
+                                            <div class="trace-summary-item">
+                                                <span class="trace-summary-label">耗时</span>
+                                                <span class="trace-summary-value">{{ getTraceDuration() }}</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- 时间线 -->
+                                        <div class="trace-timeline">
+                                            <div
+                                                v-for="(evt, idx) in gatewayTraceModal.events"
+                                                :key="evt.id"
+                                                class="trace-timeline-item"
+                                                :class="getTraceItemClass(evt.status)"
+                                            >
+                                                <div class="trace-timeline-dot"></div>
+                                                <div class="trace-timeline-body">
+                                                    <div class="trace-timeline-header">
+                                                        <span class="trace-timeline-stage">
+                                                            <i :class="getTraceStepIcon(evt.status)"></i>
+                                                            {{ getGatewayStatusLabel(evt.status) }}
+                                                        </span>
+                                                        <span class="trace-timeline-time">{{ formatFullGatewayTime(evt.created_at) }}</span>
+                                                    </div>
+
+                                                    <!-- 状态描述 -->
+                                                    <div class="trace-timeline-desc">{{ getGatewayStatusDesc(evt.status) }}</div>
+
+                                                    <!-- 用户消息（received 阶段） -->
+                                                    <div v-if="evt.status === 'received' && parseJson(evt.raw_event_json)" class="trace-detail-box">
+                                                        <div class="trace-detail-label"><i class="fas fa-comment-dots"></i> 用户消息</div>
+                                                        <div class="trace-detail-content msg-content">
+                                                            {{ parseJson(evt.raw_event_json).content || '(空消息)' }}
+                                                        </div>
+                                                        <div v-if="parseJson(evt.raw_event_json).attachments" class="trace-detail-meta">
+                                                            <i class="fas fa-paperclip"></i> {{ parseJson(evt.raw_event_json).attachments }}
+                                                        </div>
+                                                        <div v-if="parseJson(evt.raw_event_json).sender" class="trace-detail-meta">
+                                                            <i class="fas fa-user"></i> 发送者: {{ parseJson(evt.raw_event_json).sender }}
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- AI 回复（delivered 阶段）-->
+                                                    <div v-if="evt.status === 'delivered' && parseJson(evt.raw_event_json)" class="trace-detail-box reply-box">
+                                                        <div class="trace-detail-label"><i class="fas fa-robot"></i> AI 回复</div>
+                                                        <div class="trace-detail-content reply-content">
+                                                            {{ parseJson(evt.raw_event_json).reply_preview || '(无回复内容)' }}
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- 错误信息 -->
+                                                    <div v-if="evt.error" class="trace-detail-box error-box">
+                                                        <div class="trace-detail-label"><i class="fas fa-exclamation-triangle"></i> 错误信息</div>
+                                                        <div class="trace-detail-content error-content">{{ evt.error }}</div>
+                                                    </div>
+
+                                                    <!-- 元数据 -->
+                                                    <div v-if="parseJson(evt.metadata_json)" class="trace-meta-grid">
+                                                        <div v-if="parseJson(evt.metadata_json).session_name" class="trace-meta-item">
+                                                            <span class="trace-meta-label">会话名称</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).session_name }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).content_length !== undefined" class="trace-meta-item">
+                                                            <span class="trace-meta-label">消息长度</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).content_length }} 字符</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).reply_length !== undefined" class="trace-meta-item">
+                                                            <span class="trace-meta-label">回复长度</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).reply_length }} 字符</span>
+                                                        </div>
+                                                        <div v-if="evt.conversation_id" class="trace-meta-item">
+                                                            <span class="trace-meta-label">会话 ID</span>
+                                                            <span class="trace-meta-value">{{ evt.conversation_id }}</span>
+                                                        </div>
+                                                        <div v-if="evt.user_id" class="trace-meta-item">
+                                                            <span class="trace-meta-label">用户 ID</span>
+                                                            <span class="trace-meta-value">{{ evt.user_id }}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -8909,7 +9157,23 @@
                     
                     // Logs
                     logLevel: 'all',
+                    logTab: 'system',
                     logs: [],
+
+                    // Gateway Logs
+                    gatewayLogs: [],
+                    gatewayLogFilter: {
+                        status: '',
+                        channel_id: '',
+                        limit: 50,
+                        offset: 0,
+                    },
+                    gatewayTraceModal: {
+                        show: false,
+                        trace_id: '',
+                        events: [],
+                        loading: false,
+                    },
                     
                     // Settings
                     settings: {

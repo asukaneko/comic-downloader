@@ -536,6 +536,7 @@ def _run_qq_chat_request(
     user_id = chat_request.user_id
     group_id = chat_request.metadata.get("group_id")
     group_user_id = chat_request.metadata.get("group_user_id")
+    session_id = chat_request.conversation_id
     now_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     qq_store = _get_qq_store()
 
@@ -543,6 +544,29 @@ def _run_qq_chat_request(
         user_id = str(user_id)
     if group_id:
         group_id = str(group_id)
+
+    # === Gateway 事件记录：开始（QQ 频道）===
+    trace_id = ""
+    try:
+        from nbot.gateway.gateway import get_gateway as _get_gw
+        from nbot.gateway.trace import TraceFactory
+        _gw = _get_gw()
+        if _gw and _gw.event_store:
+            _tf = getattr(_gw, 'trace_factory', None) or TraceFactory()
+            trace_id = _tf.new_trace_id()
+            _gw.event_store.record(
+                trace_id=trace_id, channel_id="qq", status="received",
+                event_type="message", conversation_id=session_id,
+                user_id=str(group_user_id or user_id),
+                raw_event={"content": content[:150], "sender": group_user_id or user_id},
+                metadata={"content_length": len(content), "group_id": group_id or ""},
+            )
+            _gw.event_store.record(
+                trace_id=trace_id, channel_id="qq", status="dispatched",
+                conversation_id=session_id,
+            )
+    except Exception:
+        trace_id = ""
 
     # === 确认/拒绝待执行命令检测 ===
     if content and TOOLS_AVAILABLE:
@@ -587,6 +611,22 @@ def _run_qq_chat_request(
 
     pipeline = AIPipeline()
     result = pipeline.process(ctx, callbacks, tools=tools, max_context_chars=100000)
+
+    # === Gateway 事件记录：完成（QQ 频道）===
+    if trace_id:
+        try:
+            from nbot.gateway.gateway import get_gateway as _get_gw2
+            _gw2 = _get_gw2()
+            if _gw2 and _gw2.event_store:
+                reply_preview = (result.final_content or "")[:200]
+                _gw2.event_store.record(
+                    trace_id=trace_id, channel_id="qq", status="delivered",
+                    conversation_id=session_id,
+                    raw_event={"reply_preview": reply_preview} if reply_preview else None,
+                    metadata={"reply_length": len(reply_preview)} if reply_preview else None,
+                )
+        except Exception:
+            pass
 
     # === 后处理 ===
     assistant_response = clean_response_content(result.final_content)
