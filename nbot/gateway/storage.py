@@ -232,11 +232,20 @@ class GatewayStorage:
                 (status, error, trace_id),
             )
 
-    def event_get_by_trace(self, trace_id: str) -> dict | None:
-        """根据 trace_id 查询事件"""
+    def event_get_by_trace(self, trace_id: str) -> list[dict]:
+        """根据 trace_id 查询事件完整链路（按时间排序）"""
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {TABLE_EVENTS} WHERE trace_id = ? ORDER BY id",
+                (trace_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def event_get_latest_by_trace(self, trace_id: str) -> dict | None:
+        """根据 trace_id 查询最新一条事件"""
         with self._connect() as conn:
             row = conn.execute(
-                f"SELECT * FROM {TABLE_EVENTS} WHERE trace_id = ? ORDER BY id",
+                f"SELECT * FROM {TABLE_EVENTS} WHERE trace_id = ? ORDER BY id DESC",
                 (trace_id,),
             ).fetchone()
             return dict(row) if row else None

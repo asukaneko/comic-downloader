@@ -161,6 +161,21 @@ class GatewayWorker:
                     # 队列为空，继续等待
                     continue
 
+                # 检查是否需要延迟重试
+                if item.status.value == "failed" and item.next_retry_at:
+                    wait_seconds = item.next_retry_at - time.time()
+                    if wait_seconds > 0:
+                        _log.info(
+                            "[Worker] 延迟重试 item=%s trace=%s wait=%.1fs",
+                            item.item_id,
+                            item.trace_id,
+                            wait_seconds,
+                        )
+                        # 将 item 放回队列尾部，稍后重试
+                        await self._queue.enqueue(item)
+                        await asyncio.sleep(min(wait_seconds, 1.0))
+                        continue
+
                 # 处理事件
                 await self.process_single(item)
 

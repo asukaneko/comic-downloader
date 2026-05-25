@@ -59,10 +59,14 @@ class SecurityProvider:
         raw_event: dict[str, Any],
         headers: dict[str, str],
         remote_addr: str = "",
+        raw_body: str = "",
     ) -> None:
         """执行完整的安全验证链
 
         按顺序执行：IP 白名单 → 时间戳 → Nonce → Token/HMAC 签名
+
+        Args:
+            raw_body: 原始请求体字符串（HMAC 签名必需）
 
         Raises:
             SecurityVerificationError: 验证失败时抛出对应子类异常
@@ -80,7 +84,7 @@ class SecurityProvider:
             return
 
         if self.mode == "hmac":
-            await self._verify_hmac(raw_event, headers, channel_id)
+            await self._verify_hmac(raw_event, headers, channel_id, raw_body=raw_body)
             return
 
         if self.mode == "ip":
@@ -136,6 +140,7 @@ class SecurityProvider:
         raw_event: dict[str, Any],
         headers: dict[str, str],
         channel_id: str,
+        raw_body: str = "",
     ) -> None:
         """HMAC-SHA256 签名验证
 
@@ -144,7 +149,7 @@ class SecurityProvider:
         2. 检查 nonce 是否已被使用（防重放）
         3. 计算并比对 HMAC 签名
 
-        签名计算方式：
+        签名计算方式（raw_body 必须参与）：
             signing_payload = timestamp + "\\n" + nonce + "\\n" + raw_body
             signature = hex(hmac_sha256(secret, signing_payload))
         """
@@ -152,41 +157,46 @@ class SecurityProvider:
             _log.warning("[Security] HMAC 模式但未配置 secret channel_id=%s", channel_id)
             return
 
-        # 提取请求头字段
+        # 提取请求头字段（HMAC 模式下强制要求）
         timestamp_str = headers.get("X-NekoBot-Timestamp", "")
         nonce = headers.get("X-NekoBot-Nonce", "")
         signature = headers.get("X-NekoBot-Signature", "")
 
+        if not timestamp_str:
+            _log.warning("[Security] HMAC 模式缺少时间戳 header channel_id=%s", channel_id)
+            raise TimestampExpiredError("X-NekoBot-Timestamp is required for HMAC mode")
+
+        if not nonce:
+            _log.warning("[Security] HMAC 模式缺少 nonce header channel_id=%s", channel_id)
+            raise ReplayDetectedError("X-NekoBot-Nonce is required for HMAC mode")
+
+        if not signature:
+            _log.warning("[Security] HMAC 模式缺少签名 header channel_id=%s", channel_id)
+            raise InvalidSignatureError("X-NekoBot-Signature is required for HMAC mode")
+
         # 时间戳校验
-        if timestamp_str:
-            try:
-                ts = int(timestamp_str)
-                now = int(time.time())
-                if abs(now - ts) > self.timestamp_tolerance:
-                    _log.warning(
-                        "[Security] 时间戳过期 channel_id=%s diff=%ds",
-                        channel_id,
-                        abs(now - ts),
-                    )
-                    raise TimestampExpiredError()
-            except (ValueError, TypeError) as err:
-                _log.warning("[Security] 无效的时间戳格式 channel_id=%s", channel_id)
-                raise TimestampExpiredError() from err
+        try:
+            ts = int(timestamp_str)
+            now = int(time.time())
+            if abs(now - ts) > self.timestamp_tolerance:
+                _log.warning(
+                    "[Security] 时间戳过期 channel_id=%s diff=%ds",
+                    channel_id,
+                    abs(now - ts),
+                )
+                raise TimestampExpiredError()
+        except (ValueError, TypeError) as err:
+            _log.warning("[Security] 无效的时间戳格式 channel_id=%s", channel_id)
+            raise TimestampExpiredError() from err
 
         # Nonce 防重放
-        if nonce:
-            if nonce in self._used_nonces:
-                _log.warning("[Security] 重放检测 channel_id=%s nonce=%s", channel_id, nonce)
-                raise ReplayDetectedError()
-            self._used_nonces.add(nonce)
+        if nonce in self._used_nonces:
+            _log.warning("[Security] 重放检测 channel_id=%s nonce=%s", channel_id, nonce)
+            raise ReplayDetectedError()
+        self._used_nonces.add(nonce)
 
-        # 签名校验
-        if not signature:
-            _log.warning("[Security] 缺少签名 header channel_id=%s", channel_id)
-            raise InvalidSignatureError()
-
-        # 构造签名字符串
-        signing_payload = f"{timestamp_str}\n{nonce}\n"
+        # 签名校验（raw_body 必须参与签名）
+        signing_payload = f"{timestamp_str}\n{nonce}\n{raw_body}"
         expected = hmac.new(
             self.secret.encode("utf-8"),
             signing_payload.encode("utf-8"),

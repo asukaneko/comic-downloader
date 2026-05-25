@@ -21,10 +21,20 @@ class QQChannelAdapter(BaseChannelAdapter):
         group_id = metadata.get("group_id")
         user_id = kwargs.get("user_id") or metadata.get("user_id") or ""
 
-        if group_id:
-            conversation_id = f"qq:group:{group_id}"
-        else:
-            conversation_id = f"qq:private:{user_id}"
+        # 优先使用传入的 conversation_id，支持外部配置会话隔离模式
+        conversation_id = kwargs.get("conversation_id")
+        if not conversation_id:
+            if group_id:
+                # 支持两种群聊会话模式：
+                # - group:      群共享上下文（默认）
+                # - group_user: 群内用户隔离上下文
+                group_mode = metadata.get("group_session_mode", "group")
+                if group_mode == "group_user" and user_id:
+                    conversation_id = f"qq:group:{group_id}:{user_id}"
+                else:
+                    conversation_id = f"qq:group:{group_id}"
+            else:
+                conversation_id = f"qq:private:{user_id}"
 
         return ChannelEnvelope(
             channel=self.channel_name,

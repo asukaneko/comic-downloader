@@ -4,6 +4,7 @@
 并返回 ChatResponse。
 """
 
+import inspect
 import logging
 import time
 from typing import TYPE_CHECKING, Any, Optional
@@ -63,8 +64,10 @@ class GatewayDispatcher:
                 chat_request.conversation_id,
             )
 
-            # 调用 AgentService.process()
-            result = await self._agent_service.process(chat_request, adapter=adapter, **kwargs)
+            # 调用 AgentService.process()（兼容同步/异步）
+            result = self._agent_service.process(chat_request, adapter=adapter, **kwargs)
+            if inspect.isawaitable(result):
+                result = await result
 
             elapsed = time.time() - start_time
             _log.info(

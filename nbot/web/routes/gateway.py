@@ -32,6 +32,18 @@ def set_gateway(gateway) -> None:
     _set_core_gateway(gateway)
 
 
+def _gateway_unavailable_response():
+    """Gateway 未初始化时的统一响应"""
+    return (
+        jsonify({
+            "ok": False,
+            "status": "gateway_not_initialized",
+            "error": "Gateway is not initialized",
+        }),
+        503,
+    )
+
+
 def register_gateway_routes(app):
     """注册 Gateway Webhook 路由
 
@@ -56,9 +68,14 @@ def register_gateway_routes(app):
             错误：     {"ok": false, "trace_id": "...", "status": "error_code", "error": "..."}
         """
         gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
 
         headers = dict(request.headers)
         remote_addr = request.remote_addr or ""
+
+        # 获取原始请求体（用于 HMAC 签名验证）
+        raw_body = request.get_data(as_text=True)
 
         # 解析请求体
         content_type = request.content_type or ""
@@ -82,6 +99,7 @@ def register_gateway_routes(app):
                 raw_event=raw_event,
                 headers=headers,
                 remote_addr=remote_addr,
+                raw_body=raw_body,
             )
             return jsonify(result.to_dict())
         except Exception as e:
@@ -106,6 +124,12 @@ def register_gateway_routes(app):
     @app.route("/api/gateway/health", methods=["GET"])
     def gateway_health():
         """Gateway 健康检查端点"""
+        gateway = get_gateway()
+        if gateway is None:
+            return jsonify({
+                "status": "not_initialized",
+                "service": "NekoBot Gateway",
+            })
         return jsonify({"status": "ok", "service": "NekoBot Gateway"})
 
     @app.route("/api/gateway/stats", methods=["GET"])
@@ -115,6 +139,8 @@ def register_gateway_routes(app):
         返回模式、去重后端、持久化状态、队列统计、Worker 统计等。
         """
         gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
         stats = gateway.get_stats()
         return jsonify(stats)
 
@@ -125,6 +151,8 @@ def register_gateway_routes(app):
         返回队列大小、各状态条目数等。
         """
         gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
         if not gateway.queue:
             return jsonify({
                 "status": "not_available",
@@ -142,6 +170,8 @@ def register_gateway_routes(app):
         启动后 Worker 会持续消费队列中的事件。
         """
         gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
 
         if not gateway.async_mode:
             return (
@@ -177,6 +207,8 @@ def register_gateway_routes(app):
         Query 参数：?force=true 强制关闭
         """
         gateway = get_gateway()
+        if gateway is None:
+            return _gateway_unavailable_response()
 
         if not gateway.worker:
             return (

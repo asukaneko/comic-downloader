@@ -70,9 +70,13 @@ class EventStore:
         """更新已有事件的状态"""
         self._storage.event_update_status(trace_id, status, error)
 
-    def get_by_trace(self, trace_id: str) -> dict[str, Any] | None:
-        """根据 trace_id 查询事件"""
+    def get_by_trace(self, trace_id: str) -> list[dict[str, Any]]:
+        """根据 trace_id 查询事件完整链路"""
         return self._storage.event_get_by_trace(trace_id)
+
+    def get_latest_by_trace(self, trace_id: str) -> dict[str, Any] | None:
+        """根据 trace_id 查询最新一条事件"""
+        return self._storage.event_get_latest_by_trace(trace_id)
 
     def query(
         self,

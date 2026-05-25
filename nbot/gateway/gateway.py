@@ -173,6 +173,7 @@ class ChannelGateway:
         raw_event: dict[str, Any],
         headers: dict[str, str] | None = None,
         remote_addr: str = "",
+        raw_body: str = "",
     ) -> GatewayResult:
         """接收并处理外部事件（核心入口方法）
 
@@ -184,6 +185,7 @@ class ChannelGateway:
             raw_event: 平台原始事件数据
             headers: HTTP 请求头
             remote_addr: 请求来源 IP
+            raw_body: 原始请求体字符串（用于 HMAC 签名验证）
 
         Returns:
             GatewayResult 处理结果
@@ -214,6 +216,7 @@ class ChannelGateway:
                     raw_event=raw_event,
                     headers=headers,
                     remote_addr=remote_addr,
+                    raw_body=raw_body,
                 )
             except GatewayError as e:
                 _log.warning(
@@ -350,7 +353,7 @@ class ChannelGateway:
                     error=e.message,
                 )
 
-            # === Step 6: 消息去重 ===
+            # === Step 6: 消息去重（仅检查，不标记）===
             message_id = self._extract_message_id(channel_id, parsed)
             if message_id:
                 is_dup = await self.dedupe_store.exists(message_id)
@@ -374,14 +377,6 @@ class ChannelGateway:
                     )
 
             self._record_event(trace_id=trace_id, channel_id=channel_id, status="deduped")
-
-            # 标记消息已处理
-            if message_id:
-                await self.dedupe_store.mark(
-                    message_id,
-                    channel_id=channel_id,
-                    message_id=message_id.split(":")[-1] if ":" in message_id else "",
-                )
 
             # ========================
             # 分支：异步模式 vs 同步模式
@@ -457,6 +452,14 @@ class ChannelGateway:
                 channel_id=channel_id,
                 status="queue_full",
                 error="event queue is full",
+            )
+
+        # 异步模式：入队成功后标记去重（避免队列满时错误标记）
+        if message_id:
+            await self.dedupe_store.mark(
+                message_id,
+                channel_id=channel_id,
+                message_id=message_id.split(":")[-1] if ":" in message_id else "",
             )
 
         # 记录事件：queued
@@ -647,6 +650,14 @@ class ChannelGateway:
             trace_id=trace_id, channel_id=channel_id, status="delivered",
             conversation_id=chat_request.conversation_id,
         )
+
+        # 同步模式：投递成功后标记去重
+        if message_id:
+            await self.dedupe_store.mark(
+                message_id,
+                channel_id=channel_id,
+                message_id=message_id.split(":")[-1] if ":" in message_id else "",
+            )
 
         return GatewayResult(
             ok=True,

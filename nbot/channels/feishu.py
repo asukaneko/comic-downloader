@@ -18,7 +18,11 @@ class FeishuChannelAdapter(BaseChannelAdapter):
 
     def build_envelope(self, **kwargs) -> ChannelEnvelope:
         metadata = dict(kwargs.get("metadata") or {})
-        chat_id = metadata.get("chat_id") or metadata.get("open_chat_id")
+        chat_id = (
+            metadata.get("chat_id")
+            or metadata.get("open_chat_id")
+            or metadata.get("feishu_chat_id")
+        )
         conversation_id = kwargs.get("conversation_id") or (
             f"feishu:{chat_id}" if chat_id else ""
         )
@@ -96,6 +100,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         return {
             "chat_id": str(chat_id),
             "chat_type": chat_type,
+            "conversation_id": f"feishu:{chat_id}",
             "message_id": message.get("message_id"),
             "user_id": str(sender_id),
             "sender": sender_name,

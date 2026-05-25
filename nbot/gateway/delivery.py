@@ -333,7 +333,13 @@ class GatewayDelivery:
         chat_response: ChatResponse,
         delivery_req: DeliveryRequest,
     ) -> dict[str, Any]:
-        """通过 ChannelAdapter 构建消息（默认方式）"""
+        """通过 ChannelAdapter 构建消息（默认方式）
+
+        区分三种状态：
+        - delivered: 有 sender 且真实发送成功
+        - built: 通过 Adapter 构建了消息，但未实际发送
+        - no_sender: 没有 sender 也没有 Adapter，仅返回内容
+        """
         from nbot.channels.registry import get_channel_adapter
 
         adapter = get_channel_adapter(channel_id)
@@ -349,18 +355,18 @@ class GatewayDelivery:
                 channel_id,
             )
             return {
-                "status": "delivered",
+                "status": "built",
                 "trace_id": delivery_req.trace_id,
                 "message": message,
             }
 
         _log.debug(
-            "[Delivery] 直接返回内容 trace=%s channel=%s",
+            "[Delivery] 无发送器/适配器，直接返回内容 trace=%s channel=%s",
             delivery_req.trace_id,
             channel_id,
         )
         return {
-            "status": "delivered",
+            "status": "no_sender",
             "trace_id": delivery_req.trace_id,
             "content": delivery_req.content,
         }
