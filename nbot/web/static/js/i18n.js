@@ -166,6 +166,12 @@ const i18nMessages = {
     'dashboard.open_chat': '打开会话',
     'dashboard.ai_config': 'AI 配置',
     'dashboard.refresh_status': '刷新状态',
+    'dashboard.auto_refresh': '自动刷新 30s',
+    'dashboard.select_character_hint': '快速选择角色开始对话',
+    'dashboard.manage_characters': '管理角色',
+    'dashboard.just_updated': '刚刚更新',
+    'dashboard.seconds_ago': '{diff}秒前更新',
+    'dashboard.minutes_ago': '{diff}分钟前更新',
     'dashboard.cumulative_messages': '累计消息',
     'dashboard.cumulative_desc': '覆盖 Web 与 QQ 两个渠道的累计消息数据。',
     'dashboard.active_sessions': '活跃会话',
@@ -1080,6 +1086,7 @@ const i18nMessages = {
 
     // 角色卡
     'personality.my_characters': '我的角色卡',
+    'personality.my_cards': '我的角色卡',
     'personality.generic_memory': '通用记忆（所有角色共享）',
     'personality.memory_character_hint': '选择角色后，该记忆只会在对应角色对话时加载',
     'personality.upload_to_platform': '上传到角色卡平台',
@@ -1315,6 +1322,12 @@ const i18nMessages = {
     'dashboard.open_chat': 'Open Chat',
     'dashboard.ai_config': 'AI Config',
     'dashboard.refresh_status': 'Refresh Status',
+    'dashboard.auto_refresh': 'Auto-refresh 30s',
+    'dashboard.select_character_hint': 'Quick select a character to start chatting',
+    'dashboard.manage_characters': 'Manage Characters',
+    'dashboard.just_updated': 'Just updated',
+    'dashboard.seconds_ago': '{diff}s ago',
+    'dashboard.minutes_ago': '{diff}m ago',
     'dashboard.cumulative_messages': 'Total Messages',
     'dashboard.cumulative_desc': 'Cumulative message data across Web and QQ channels.',
     'dashboard.active_sessions': 'Active Sessions',
@@ -2296,6 +2309,7 @@ const i18nMessages = {
 
     // Character Cards
     'personality.my_characters': 'My Characters',
+    'personality.my_cards': 'My Character Cards',
     'personality.generic_memory': 'Generic Memory (shared by all characters)',
     'personality.memory_character_hint': 'After selecting a character, this memory only loads during conversations with that character',
     'personality.upload_to_platform': 'Upload to Platform',

@@ -345,7 +345,7 @@
                                             <h2>{{ $t('dashboard.title') }}</h2>
                                             <div class="dashboard-refresh-info">
                                                 <i class="fas fa-sync-alt" :class="{ 'spin-animation': isDashboardRefreshing }"></i>
-                                                <span>{{ lastRefreshText }} · 自动刷新 30s</span>
+                                                <span>{{ lastRefreshText }} · {{ $t('dashboard.auto_refresh') }}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -399,10 +399,10 @@
                             <div class="dashboard-section-header">
                                 <div class="dashboard-section-copy">
                                     <div class="chart-title"><i class="fas fa-users" style="color: var(--accent-primary);"></i> {{ $t('personality.my_cards') }}</div>
-                                    <div class="chart-subtitle">快速选择角色开始对话</div>
+                                    <div class="chart-subtitle">{{ $t('dashboard.select_character_hint') }}</div>
                                 </div>
                                 <button class="btn btn-sm btn-secondary" @click="navigateTo('personality')">
-                                    <i class="fas fa-cog"></i> 管理角色
+                                    <i class="fas fa-cog"></i> {{ $t('dashboard.manage_characters') }}
                                 </button>
                             </div>
                             <div class="dashboard-character-scroll">
@@ -9241,11 +9241,11 @@
                 },
 
                 lastRefreshText() {
-                    if (!this.lastRefreshTime) return '刚刚更新';
+                    if (!this.lastRefreshTime) return this.$t('dashboard.just_updated');
                     const diff = Math.floor((Date.now() - this.lastRefreshTime) / 1000);
-                    if (diff < 5) return '刚刚更新';
-                    if (diff < 60) return `${diff}秒前更新`;
-                    return `${Math.floor(diff / 60)}分钟前更新`;
+                    if (diff < 5) return this.$t('dashboard.just_updated');
+                    if (diff < 60) return this.$t('dashboard.seconds_ago', { diff });
+                    return this.$t('dashboard.minutes_ago', { diff: Math.floor(diff / 60) });
                 },
 
                 chatLayoutStyle() {
