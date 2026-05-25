@@ -345,6 +345,18 @@ def register_ai_model_routes(app, server):
             return jsonify({"error": "Cannot delete active model"}), 400
         server.ai_models = [m for m in server.ai_models if m["id"] != model_id]
         server._save_data("ai_models")
+
+        # 记录模型删除操作到 Gateway 日志
+        try:
+            server.record_operation(
+                module="ai_model",
+                action="delete",
+                description=f"删除 AI 模型 → {model_id[:8]}",
+                detail=f"已删除模型 ID: {model_id}",
+            )
+        except Exception:
+            pass
+
         return jsonify({"success": True})
 
     @app.route("/api/ai-models/<model_id>/apply", methods=["POST"])
@@ -365,6 +377,25 @@ def register_ai_model_routes(app, server):
                     break
             model_purpose = purpose or (model.get("purpose", "chat") if model else "chat")
             purpose_name = MODEL_PURPOSES.get(model_purpose, {}).get("name", model_purpose)
+
+            # 记录模型切换操作到 Gateway 日志
+            try:
+                old_model_name = server.active_model_id or "无"
+                for m in server.ai_models:
+                    if m.get("id") == (server.active_model_id or ""):
+                        old_model_name = m.get("name", old_model_name)
+                        break
+                new_model_name = model.get("name", "Unknown") if model else "Unknown"
+                server.record_operation(
+                    module="ai_model",
+                    action="switch",
+                    description=f"切换模型 → {new_model_name}（{purpose_name}）",
+                    detail=f"从 {old_model_name} 切换到 {new_model_name}, 用途={purpose_name}",
+                    metadata={"model_id": model_id, "model_name": new_model_name, "purpose": model_purpose},
+                )
+            except Exception:
+                pass
+
             return jsonify({
                 "success": True, 
                 "message": f"已应用 {purpose_name} 配置: {model.get('name', 'Unknown') if model else 'Unknown'}",

@@ -762,7 +762,19 @@ def register_session_routes(app, server):
             return jsonify({"error": "Invalid session type"}), 400
     
         session_store.set_session(session_id, session)
-    
+
+        # 记录会话创建操作到 Gateway 日志
+        try:
+            server.record_operation(
+                module="session",
+                action="create",
+                description=f"创建会话 → {session.get('name', '未命名')}",
+                detail=f"会话ID={session_id[:8]}, 类型={session.get('type', 'web')}",
+                metadata={"session_id": session_id, "session_name": session.get("name", ""), "type": session.get("type", "web")},
+            )
+        except Exception:
+            pass
+
         # 创建对应的工作区
         if server.WORKSPACE_AVAILABLE:
             server.workspace_manager.get_or_create(
@@ -1056,6 +1068,19 @@ def register_session_routes(app, server):
             if server.WORKSPACE_AVAILABLE and server.workspace_manager:
                 server.workspace_manager.delete_workspace(session_id)
             server.log_message("info", f"删除了会话 {session_id[:8]}...", important=True)
+
+            # 记录会话删除操作到 Gateway 日志
+            try:
+                server.record_operation(
+                    module="session",
+                    action="delete",
+                    description=f"删除会话 → {session_id[:8]}",
+                    detail=f"已删除会话 ID: {session_id}",
+                    metadata={"session_id": session_id},
+                )
+            except Exception:
+                pass
+
             return jsonify({"success": True})
         _log.warning(f"[DeleteSession] 删除会话失败: {session_id}")
         return jsonify({"error": "Session not found"}), 404

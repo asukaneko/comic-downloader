@@ -242,6 +242,7 @@ def register_gateway_routes(app):
         """查询 Gateway 事件日志
 
         Query 参数：
+            event_type: 按事件类型筛选 message/operation（可选）
             channel_id: 按频道筛选（可选）
             status: 按状态筛选（可选）
             limit: 返回条数（默认 50，最大 200）
@@ -251,6 +252,7 @@ def register_gateway_routes(app):
         if gateway is None:
             return _gateway_unavailable_response()
 
+        event_type = request.args.get("event_type", "")
         channel_id = request.args.get("channel_id", "")
         status = request.args.get("status", "")
         limit = min(int(request.args.get("limit", 50)), 200)
@@ -261,6 +263,7 @@ def register_gateway_routes(app):
                 events = gateway.event_store.query(
                     channel_id=channel_id,
                     status=status,
+                    event_type=event_type,
                     limit=limit,
                     offset=offset,
                 )

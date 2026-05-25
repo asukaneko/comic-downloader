@@ -3758,6 +3758,7 @@ def main(params):
                 async loadGatewayLogs() {
                     try {
                         const params = new URLSearchParams();
+                        if (this.gatewayLogFilter.event_type) params.append('event_type', this.gatewayLogFilter.event_type);
                         if (this.gatewayLogFilter.status) params.append('status', this.gatewayLogFilter.status);
                         if (this.gatewayLogFilter.channel_id) params.append('channel_id', this.gatewayLogFilter.channel_id);
                         params.append('limit', String(this.gatewayLogFilter.limit));
@@ -3834,6 +3835,16 @@ def main(params):
                         missing_parser: 'danger',
                         queue_full: 'danger',
                         no_sender: 'warning',
+                        // 操作日志类型
+                        switch: 'info',
+                        update: 'warning',
+                        create: 'success',
+                        delete: 'danger',
+                        upload: 'info',
+                        download: 'info',
+                        execute: 'warning',
+                        import: 'info',
+                        export: 'info',
                     };
                     return map[status] || 'secondary';
                 },
@@ -3861,6 +3872,16 @@ def main(params):
                         missing_parser: '缺少解析器',
                         queue_full: '队列满',
                         no_sender: '无发送器',
+                        // 操作日志类型
+                        switch: '切换',
+                        update: '更新',
+                        create: '创建',
+                        delete: '删除',
+                        upload: '上传',
+                        download: '下载',
+                        execute: '执行',
+                        import: '导入',
+                        export: '导出',
                     };
                     return map[status] || status;
                 },
@@ -3888,6 +3909,16 @@ def main(params):
                         missing_parser: '频道适配器缺少解析方法',
                         queue_full: '异步队列已满，事件被丢弃',
                         no_sender: '目标频道无可用发送器',
+                        // 操作日志类型
+                        switch: '切换配置或模型',
+                        update: '更新数据或设置',
+                        create: '新建资源',
+                        delete: '删除资源',
+                        upload: '上传文件',
+                        download: '下载文件',
+                        execute: '执行操作',
+                        import: '导入数据',
+                        export: '导出数据',
                     };
                     return map[status] || `${status} 事件`;
                 },
@@ -3977,12 +4008,21 @@ def main(params):
 
                 getLastTraceStatus() {
                     const events = this.gatewayTraceModal.events;
-                    return events.length > 0 ? events[events.length - 1].status : '-';
+                    if (events.length === 0) return '-';
+                    const status = events[events.length - 1].status;
+                    return this.getGatewayStatusLabel(status);
                 },
 
                 getTraceChannel() {
                     const events = this.gatewayTraceModal.events;
-                    return events.length > 0 ? (events[0].channel_id || '-') : '-';
+                    if (events.length === 0) return '-';
+                    const channelId = events[0].channel_id || '-';
+                    // 判断是否为操作日志（channel_id 为模块名）
+                    const opModules = ['ai_model', 'character', 'memory', 'knowledge', 'tool', 'config', 'skill', 'session', 'file'];
+                    if (opModules.includes(channelId)) {
+                        return this.getModuleName(channelId);
+                    }
+                    return this.getChannelName(channelId);
                 },
 
                 getTraceDuration() {
@@ -4022,6 +4062,16 @@ def main(params):
                         dispatch_failed: 'fas fa-bolt',
                         delivery_failed: 'fas fa-unlink',
                         rate_limited: 'fas fa-tachometer-alt',
+                        // 操作日志图标
+                        switch: 'fas fa-exchange-alt',
+                        update: 'fas fa-edit',
+                        create: 'fas fa-plus-circle',
+                        delete: 'fas fa-trash-alt',
+                        upload: 'fas fa-cloud-upload-alt',
+                        download: 'fas fa-cloud-download-alt',
+                        execute: 'fas fa-play-circle',
+                        import: 'fas fa-file-import',
+                        export: 'fas fa-file-export',
                     };
                     return icons[status] || 'fas fa-circle';
                 },
@@ -4048,7 +4098,80 @@ def main(params):
                     };
                     return map[channelId] || 'fas fa-plug';
                 },
-                
+
+                // === 操作日志相关方法（Gateway 通用模块日志）===
+
+                getLogEventType(log) {
+                    // 判断事件类型：message 或 operation
+                    try {
+                        const meta = typeof log.metadata_json === 'string' ? JSON.parse(log.metadata_json) : log.metadata_json;
+                        if (meta && meta.event_type === 'operation') return 'operation';
+                    } catch { /* ignore */ }
+                    // operation 事件的 channel_id 是模块名，不在频道列表中
+                    const channelIds = ['web', 'qq', 'feishu', 'telegram', 'proactive', 'feishu_ws'];
+                    if (!channelIds.includes(log.channel_id)) {
+                        // 检查是否为操作类型（通过 status 判断）
+                        const opStatuses = ['switch', 'update', 'create', 'delete', 'upload', 'download', 'execute', 'import', 'export'];
+                        if (opStatuses.includes(log.status)) return 'operation';
+                    }
+                    return log.event_type || 'message';
+                },
+
+                getModuleIcon(moduleId) {
+                    const map = {
+                        ai_model: 'fas fa-brain',
+                        character: 'fas fa-theater-masks',
+                        memory: 'fas fa-database',
+                        knowledge: 'fas fa-book',
+                        tool: 'fas fa-wrench',
+                        config: 'fas fa-cog',
+                        skill: 'fas fa-puzzle-piece',
+                        session: 'fas fa-comments',
+                        file: 'fas fa-file-upload',
+                    };
+                    return map[moduleId] || 'fas fa-cube';
+                },
+
+                getModuleName(moduleId) {
+                    const map = {
+                        ai_model: 'AI模型',
+                        character: '角色卡',
+                        memory: '记忆',
+                        knowledge: '知识库',
+                        tool: '工具',
+                        config: '配置',
+                        skill: '技能',
+                        session: '会话',
+                        file: '文件',
+                    };
+                    return map[moduleId] || moduleId;
+                },
+
+                getActionIcon(action) {
+                    const map = {
+                        switch: 'fas fa-exchange-alt',
+                        update: 'fas fa-edit',
+                        create: 'fas fa-plus-circle',
+                        delete: 'fas fa-trash-alt',
+                        upload: 'fas fa-cloud-upload-alt',
+                        download: 'fas fa-cloud-download-alt',
+                        execute: 'fas fa-play-circle',
+                        import: 'fas fa-file-import',
+                        export: 'fas fa-file-export',
+                    };
+                    return map[action] || 'fas fa-circle';
+                },
+
+                getOperationDescription(log) {
+                    try {
+                        const raw = typeof log.raw_event_json === 'string'
+                            ? JSON.parse(log.raw_event_json)
+                            : log.raw_event_json;
+                        if (raw?.description) return raw.description;
+                    } catch { /* ignore */ }
+                    return log.status || '操作';
+                },
+
                 async loadSettings() {
                     try {
                         const res = await api.get('/api/settings');

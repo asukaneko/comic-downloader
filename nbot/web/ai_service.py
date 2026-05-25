@@ -1165,6 +1165,33 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             # 更新 token 统计
             _update_web_token_stats(server, result.usage, session_id)
 
+            # === AI 完成后，记录 Gateway delivered 事件（Web 异步场景）===
+            if result and hasattr(result, 'final_content') and result.final_content:
+                try:
+                    from nbot.gateway.gateway import get_gateway as _get_gw
+                    gw = _get_gw()
+                    if gw and gw.event_store:
+                        reply_text = result.final_content[:200]
+                        trace_id = (ctx.chat_request.metadata or {}).get('_gateway_trace_id', '') or ''
+                        # 获取会话名称
+                        session_name = ""
+                        try:
+                            sess = server.sessions.get(session_id, {})
+                            session_name = sess.get("name", "") if sess else ""
+                        except Exception:
+                            pass
+                        # 直接 record 完整的 delivered 事件（非 update）
+                        gw.event_store.record(
+                            trace_id=trace_id,
+                            channel_id="web",
+                            status="delivered",
+                            conversation_id=session_id,
+                            raw_event={"reply_preview": reply_text} if reply_text else None,
+                            metadata={"reply_length": len(reply_text), "session_name": session_name},
+                        )
+                except Exception as exc:
+                    _log.debug("[Gateway] Web 异步 delivered 事件记录失败: %s", str(exc))
+
             return result
         finally:
             server.stop_events.pop(session_id, None)

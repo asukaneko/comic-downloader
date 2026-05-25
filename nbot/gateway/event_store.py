@@ -70,6 +70,20 @@ class EventStore:
         """更新已有事件的状态"""
         self._storage.event_update_status(trace_id, status, error)
 
+    def update_event(
+        self,
+        *,
+        trace_id: str,
+        raw_event: dict | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """更新已有事件的 raw_event 和 metadata（用于异步回补内容）"""
+        self._storage.event_update_event(
+            trace_id=trace_id,
+            raw_event=raw_event,
+            metadata=metadata,
+        )
+
     def get_by_trace(self, trace_id: str) -> list[dict[str, Any]]:
         """根据 trace_id 查询事件完整链路"""
         return self._storage.event_get_by_trace(trace_id)
@@ -83,6 +97,7 @@ class EventStore:
         *,
         channel_id: str = "",
         status: str = "",
+        event_type: str = "",
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -90,6 +105,7 @@ class EventStore:
         return self._storage.event_query(
             channel_id=channel_id,
             status=status,
+            event_type=event_type,
             limit=limit,
             offset=offset,
         )

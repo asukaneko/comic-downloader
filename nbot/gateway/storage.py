@@ -232,6 +232,31 @@ class GatewayStorage:
                 (status, error, trace_id),
             )
 
+    def event_update_event(
+        self,
+        *,
+        trace_id: str,
+        raw_event: dict | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """更新已有事件的 raw_event 和 metadata（用于异步回补内容）"""
+        updates = []
+        params = []
+        if raw_event is not None:
+            updates.append("raw_event = ?")
+            params.append(json.dumps(raw_event, ensure_ascii=False))
+        if metadata is not None:
+            updates.append("metadata = ?")
+            params.append(json.dumps(metadata, ensure_ascii=False))
+        if not updates:
+            return
+        params.append(trace_id)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE {TABLE_EVENTS} SET {', '.join(updates)} WHERE trace_id = ?",
+                params,
+            )
+
     def event_get_by_trace(self, trace_id: str) -> list[dict]:
         """根据 trace_id 查询事件完整链路（按时间排序）"""
         with self._connect() as conn:
@@ -255,10 +280,11 @@ class GatewayStorage:
         *,
         channel_id: str = "",
         status: str = "",
+        event_type: str = "",
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
-        """查询事件列表（支持按频道和状态筛选）"""
+        """查询事件列表（支持按频道、状态、事件类型筛选）"""
         conditions = []
         params: list = []
         if channel_id:
@@ -267,6 +293,14 @@ class GatewayStorage:
         if status:
             conditions.append("status = ?")
             params.append(status)
+        if event_type:
+            if event_type == "operation":
+                # operation 事件：event_type='operation' 或 channel_id 为模块名
+                conditions.append("(event_type = ? OR channel_id IN ('ai_model','character','memory','knowledge','tool','config','skill','session','file'))")
+                params.append("operation")
+            else:
+                conditions.append("event_type = ? OR (event_type IS NULL OR event_TYPE = '')")
+                params.append(event_type)
 
         where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
         with self._connect() as conn:

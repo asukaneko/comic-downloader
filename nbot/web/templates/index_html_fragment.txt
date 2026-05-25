@@ -1,0 +1,36 @@
+                                                <td>
+                                                    <span class="badge" :class="'badge-channel-' + (getLogEventType(log) === 'operation' ? 'module-' + log.channel_id : log.channel_id)">
+                                                        <i :class="getLogEventType(log) === 'operation' ? getModuleIcon(log.channel_id) : getChannelIcon(log.channel_id)"></i>
+                                                        {{ getLogEventType(log) === 'operation' ? getModuleName(log.channel_id) : getChannelName(log.channel_id) }}
+                                                    </span>
+                                                </td>
+                                                <td style="font-size: 13px;">
+                                                    <div class="gw-content-cell">
+                                                        <!-- operation 类型：显示操作描述 -->
+                                                        <template v-if="getLogEventType(log) === 'operation'">
+                                                            <span class="gw-op-content">
+                                                                <i :class="getActionIcon(log.status)"></i>
+                                                                {{ getOperationDescription(log) }}
+                                                            </span>
+                                                        </template>
+                                                        <!-- received 状态：显示用户消息内容 -->
+                                                        <template v-else-if="log.status === 'received'">
+                                                            <span class="gw-msg-content">{{ getGatewayMessageContent(log) }}</span>
+                                                            <span v-if="getGatewayAttachments(log)" class="gw-att-tag">
+                                                                <i class="fas fa-paperclip"></i> {{ getGatewayAttachments(log) }}
+                                                            </span>
+                                                        </template>
+                                                        <!-- delivered 状态：显示 AI 回复预览 -->
+                                                        <template v-else-if="log.status === 'delivered'">
+                                                            <span class="gw-reply-content"><i class="fas fa-reply"></i> {{ getGatewayReplyContent(log) }}</span>
+                                                        </template>
+                                                        <!-- failed 状态：显示错误信息 -->
+                                                        <template v-else-if="isGatewayErrorStatus(log.status)">
+                                                            <span class="gw-error-text">{{ log.error || '处理异常' }}</span>
+                                                        </template>
+                                                        <!-- 其他中间状态：显示状态描述 -->
+                                                        <template v-else>
+                                                            <span style="color: var(--text-muted); font-size: 12px;">{{ getGatewayStatusDesc(log.status) }}</span>
+                                                        </template>
+                                                    </div>
+                                                </td>

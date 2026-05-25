@@ -110,6 +110,20 @@ def register_memory_routes(app, server):
             if success:
                 server.memories = prompt_manager.get_memories()
                 server._save_data("memories")
+
+                # 记录记忆更新操作到 Gateway 日志
+                try:
+                    mem_title = updates.get("title", memory_id[:8])
+                    server.record_operation(
+                        module="memory",
+                        action="update",
+                        description=f"更新记忆 → {mem_title}",
+                        detail=f"记忆ID={memory_id[:8]}, 更新字段={list(updates.keys())}",
+                        metadata={"memory_id": memory_id, "title": mem_title},
+                    )
+                except Exception:
+                    pass
+
                 # 返回更新后的记忆
                 for mem in server.memories:
                     if mem.get("id") == memory_id:

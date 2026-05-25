@@ -189,6 +189,18 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
                             "warning", f"Read workspace text preview failed: {e}"
                         )
 
+                # 记录文件上传操作到 Gateway 日志
+                try:
+                    server.record_operation(
+                        module="file",
+                        action="upload",
+                        description=f"上传文件 → {file.filename}",
+                        detail=f"文件大小={file_size}字节, 会话={session_id or '无'}",
+                        metadata={"filename": file.filename, "size": file_size, "session_id": session_id},
+                    )
+                except Exception:
+                    pass
+
                 return jsonify(
                     {
                         "success": True,

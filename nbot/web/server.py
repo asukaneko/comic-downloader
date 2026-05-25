@@ -2806,6 +2806,12 @@ class WebChatServer:
             attachments=attachments,
         )
 
+        # 将 trace_id 传递给后续处理（Web 异步任务需要用它回补回复内容）
+        if metadata is None:
+            metadata = {}
+        metadata["_gateway_trace_id"] = trace_id
+        chat_request.metadata = metadata
+
         # 调用 AI 处理
         try:
             result = self.agent_service.process(chat_request, adapter=adapter)
@@ -2818,12 +2824,21 @@ class WebChatServer:
             elif result and hasattr(result, 'content'):
                 reply_preview = str(result.content)[:200]
 
-            self._record_gateway_event_delivered(
-                trace_id=trace_id,
-                channel_id=channel_id,
-                session_id=session_id,
-                reply_preview=reply_preview,
-            )
+            # 检测是否为异步调度（Web 频道返回 scheduled=True 的空响应）
+            is_async_scheduled = False
+            if result and hasattr(result, 'metadata') and result.metadata:
+                is_async_scheduled = result.metadata.get('scheduled', False) or result.metadata.get('_gateway_trace_id')
+
+            if not is_async_scheduled or reply_preview:
+                # 同步完成 或 有实际内容 → 立即记录 delivered
+                self._record_gateway_event_delivered(
+                    trace_id=trace_id,
+                    channel_id=channel_id,
+                    session_id=session_id,
+                    reply_preview=reply_preview,
+                )
+            # else: Web 异步场景，跳过此处，由后台任务 run_pipeline 回补完整 delivered 记录
+
         except Exception as e:
             self._record_gateway_event_failed(
                 trace_id=trace_id,
@@ -2966,6 +2981,70 @@ class WebChatServer:
             )
         except Exception:
             pass
+
+    # ============================================================
+    # 通用操作日志 API（供所有模块使用）
+    # ============================================================
+
+    def record_operation(
+        self,
+        *,
+        module: str,
+        action: str,
+        description: str = "",
+        detail: str = "",
+        status: str = "completed",
+        metadata: dict | None = None,
+        error: str = "",
+    ) -> None:
+        """记录任意模块的操作日志到 Gateway 事件表
+
+        所有模块（AI 配置、角色卡、记忆、知识库、工具等）都应通过此方法
+        记录关键操作，统一在 Web 日志界面展示。
+
+        Args:
+            module: 模块标识（ai_model/character/memory/knowledge/tool/config/skill/session）
+            action: 操作类型（switch/create/update/delete/execute/upload/download/import/export）
+            description: 用户可读的操作描述，如 "切换模型 → GPT-4o"
+            detail: 详细内容（截断到 300 字符），如配置变更的 JSON 片段
+            status: 操作结果（completed/failed/pending/skipped）
+            metadata: 结构化附加数据
+            error: 错误信息（仅 failed 状态时填写）
+
+        用法示例:
+            self.record_operation(
+                module="ai_model", action="switch",
+                description=f"切换模型 → {model_name}",
+                detail=f"从 {old_model} 切换到 {model_name}",
+            )
+        """
+        from nbot.gateway.gateway import get_gateway
+        from nbot.gateway.trace import TraceFactory
+
+        gateway = get_gateway()
+        if not gateway or not gateway.event_store:
+            return
+
+        trace_factory = getattr(gateway, 'trace_factory', None) or TraceFactory()
+        trace_id = trace_factory.new_trace_id()
+
+        # 根据状态决定记录的字段
+        raw_event = None
+        if description or detail:
+            raw_event = {"description": description[:200], "detail": detail[:300]}
+
+        try:
+            gateway.event_store.record(
+                trace_id=trace_id,
+                channel_id=module,
+                status=action,
+                event_type="operation",
+                raw_event=raw_event,
+                metadata=metadata,
+                error=error if status == "failed" else "",
+            )
+        except Exception as e:
+            _log.debug("[Gateway] 操作日志记录失败 module=%s action=%s: %s", module, action, str(e))
 
     def add_message_to_session(
         self, session_id: str, role: str, content: str, sender: str, source: str = "qq"

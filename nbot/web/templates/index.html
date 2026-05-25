@@ -5054,7 +5054,7 @@
                             <div
                                 class="tab-item"
                                 :class="{ active: logTab === 'gateway' }"
-                                @click="logTab = 'gateway'"
+                                @click="logTab = 'gateway'; loadGatewayLogs()"
                             >
                                 <i class="fas fa-network-wired"></i> Gateway 日志
                             </div>
@@ -5096,6 +5096,11 @@
                             <div class="card-header">
                                 <span class="card-title">Gateway 事件日志</span>
                                 <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select v-model="gatewayLogFilter.event_type" class="form-select" style="width: 130px;">
+                                        <option value="">全部类型</option>
+                                        <option value="message">消息事件</option>
+                                        <option value="operation">操作日志</option>
+                                    </select>
                                     <select v-model="gatewayLogFilter.status" class="form-select" style="width: 130px;">
                                         <option value="">全部状态</option>
                                         <option value="received">已接收</option>
@@ -5109,6 +5114,11 @@
                                         <option value="built">已构建</option>
                                         <option value="failed">失败</option>
                                         <option value="duplicated">重复消息</option>
+                                        <option value="switch">切换</option>
+                                        <option value="update">更新</option>
+                                        <option value="create">创建</option>
+                                        <option value="delete">删除</option>
+                                        <option value="upload">上传</option>
                                     </select>
                                     <button class="btn btn-secondary" @click="refreshGatewayLogs" :disabled="isLoading">
                                         <i class="fas fa-sync-alt"></i> 刷新
@@ -5145,15 +5155,22 @@
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <span class="badge" :class="'badge-channel-' + log.channel_id">
-                                                        <i :class="getChannelIcon(log.channel_id)"></i>
-                                                        {{ getChannelName(log.channel_id) }}
+                                                    <span class="badge" :class="'badge-channel-' + (getLogEventType(log) === 'operation' ? 'module-' + log.channel_id : log.channel_id)">
+                                                        <i :class="getLogEventType(log) === 'operation' ? getModuleIcon(log.channel_id) : getChannelIcon(log.channel_id)"></i>
+                                                        {{ getLogEventType(log) === 'operation' ? getModuleName(log.channel_id) : getChannelName(log.channel_id) }}
                                                     </span>
                                                 </td>
                                                 <td style="font-size: 13px;">
                                                     <div class="gw-content-cell">
+                                                        <!-- operation 类型：显示操作描述 -->
+                                                        <template v-if="getLogEventType(log) === 'operation'">
+                                                            <span class="gw-op-content">
+                                                                <i :class="getActionIcon(log.status)"></i>
+                                                                {{ getOperationDescription(log) }}
+                                                            </span>
+                                                        </template>
                                                         <!-- received 状态：显示用户消息内容 -->
-                                                        <template v-if="log.status === 'received'">
+                                                        <template v-else-if="log.status === 'received'">
                                                             <span class="gw-msg-content">{{ getGatewayMessageContent(log) }}</span>
                                                             <span v-if="getGatewayAttachments(log)" class="gw-att-tag">
                                                                 <i class="fas fa-paperclip"></i> {{ getGatewayAttachments(log) }}
@@ -5259,7 +5276,14 @@
                                                     </div>
 
                                                     <!-- 状态描述 -->
-                                                    <div class="trace-timeline-desc">{{ getGatewayStatusDesc(evt.status) }}</div>
+                                                    <div class="trace-timeline-desc">
+                                                        <template v-if="getLogEventType(evt) === 'operation'">
+                                                            {{ getOperationDescription(evt) }}
+                                                        </template>
+                                                        <template v-else>
+                                                            {{ getGatewayStatusDesc(evt.status) }}
+                                                        </template>
+                                                    </div>
 
                                                     <!-- 用户消息（received 阶段） -->
                                                     <div v-if="evt.status === 'received' && parseJson(evt.raw_event_json)" class="trace-detail-box">
@@ -9163,6 +9187,7 @@
                     // Gateway Logs
                     gatewayLogs: [],
                     gatewayLogFilter: {
+                        event_type: '',
                         status: '',
                         channel_id: '',
                         limit: 50,

@@ -272,6 +272,19 @@ def register_personality_routes(app, server):
         except Exception as e:
             _log.error(f"Failed to sync profile to character engine: {e}")
 
+        # 记录角色卡更新操作到 Gateway 日志
+        try:
+            char_name = server.personality.get("name", "未命名")
+            server.record_operation(
+                module="character",
+                action="update",
+                description=f"更新角色卡 → {char_name}",
+                detail=f"名称={char_name}, 标签={server.personality.get('tags', [])}",
+                metadata={"character_name": char_name, "tags": server.personality.get("tags", [])},
+            )
+        except Exception:
+            pass
+
         return jsonify({"success": True, "personality": server.personality})
 
     @app.route("/api/personality/presets")

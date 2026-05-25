@@ -66,6 +66,18 @@ def register_knowledge_routes(app, server):
 
             doc = km.add_document("default", title, content, source, tags)
 
+            # 记录知识库添加操作到 Gateway 日志
+            try:
+                server.record_operation(
+                    module="knowledge",
+                    action="create",
+                    description=f"添加知识文档 → {title}",
+                    detail=f"文档ID={doc.id[:8]}, 标签={tags}, 来源={source or '手动输入'}",
+                    metadata={"doc_id": doc.id, "title": title, "tags": tags, "source": source},
+                )
+            except Exception:
+                pass
+
             return jsonify(
                 {
                     "success": True,
@@ -175,6 +187,17 @@ def register_knowledge_routes(app, server):
             km = server.get_knowledge_manager()
             success = km.delete_document("default", doc_id)
             if success:
+                # 记录知识库删除操作到 Gateway 日志
+                try:
+                    server.record_operation(
+                        module="knowledge",
+                        action="delete",
+                        description=f"删除知识文档 → {doc_id[:8]}",
+                        detail=f"已删除文档 ID: {doc_id}",
+                        metadata={"doc_id": doc_id},
+                    )
+                except Exception:
+                    pass
                 return jsonify({"success": True})
             return jsonify({"success": False, "error": "Document not found"}), 404
         except Exception as e:
