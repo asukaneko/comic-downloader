@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelEnvelope
 
@@ -31,7 +31,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
             metadata=metadata,
         )
 
-    def parse_event(self, event: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_event(self, event: dict[str, Any]) -> dict[str, Any] | None:
         """解析飞书事件回调数据
 
         支持的消息类型:
@@ -112,7 +112,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
             },
         }
 
-    def parse_challenge(self, data: Dict[str, Any]) -> Optional[str]:
+    def parse_challenge(self, data: dict[str, Any]) -> str | None:
         """解析飞书URL验证请求
 
         飞书在配置事件订阅时，会发送challenge进行URL验证

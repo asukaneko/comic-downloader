@@ -1,7 +1,7 @@
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
-import uuid
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from nbot.core.chat_models import ChatRequest, ChatResponse
@@ -21,8 +21,8 @@ class ChannelEnvelope:
     conversation_id: str
     user_id: str = ""
     sender: str = ""
-    attachments: List[Dict[str, Any]] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    attachments: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseChannelAdapter:
@@ -37,13 +37,13 @@ class BaseChannelAdapter:
     def build_chat_request(
         self,
         *,
-        conversation_id: Optional[str] = None,
+        conversation_id: str | None = None,
         content: str,
         sender: str = "",
-        user_id: Optional[str] = None,
-        attachments: Optional[List[Dict[str, Any]]] = None,
-        parent_message_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        user_id: str | None = None,
+        attachments: list[dict[str, Any]] | None = None,
+        parent_message_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> "ChatRequest":
         from nbot.core.chat_models import ChatRequest
 
@@ -74,10 +74,10 @@ class BaseChannelAdapter:
         content: str,
         sender: str = "",
         conversation_id: str = "",
-        attachments: Optional[List[Dict[str, Any]]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        source: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        attachments: list[dict[str, Any]] | None = None,
+        metadata: dict[str, Any] | None = None,
+        source: str | None = None,
+    ) -> dict[str, Any]:
         message = {
             "id": str(uuid.uuid4()),
             "role": role,
@@ -101,10 +101,11 @@ class BaseChannelAdapter:
         content: str,
         sender: str = "",
         conversation_id: str = "",
-        attachments: Optional[List[Dict[str, Any]]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        source: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        attachments: list[dict[str, Any]] | None = None,
+        metadata: dict[str, Any] | None = None,
+        source: str | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
         payload = {
             "role": role,
             "content": content,
@@ -116,20 +117,24 @@ class BaseChannelAdapter:
             payload["attachments"] = list(attachments)
         if metadata:
             payload["metadata"] = dict(metadata)
+        # 将 extra 参数（如 user_id, group_id 等）合并到 metadata
+        if extra:
+            payload.setdefault("metadata", {})
+            payload["metadata"].update(extra)
         return payload
 
     def build_manager_payload_from_message(
         self,
-        message: Dict[str, Any],
+        message: dict[str, Any],
         *,
         default_role: str,
         default_content: str,
         default_sender: str = "",
         default_conversation_id: str = "",
-        default_source: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        default_source: str | None = None,
+        metadata: dict[str, Any] | None = None,
         **extra: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         merged_metadata = dict(message.get("metadata") or {})
         if metadata:
             merged_metadata.update(metadata)
@@ -150,8 +155,8 @@ class BaseChannelAdapter:
         *,
         conversation_id: str,
         sender: str = "AI",
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         message = chat_response.to_assistant_message(sender=sender)
         message_metadata = dict(metadata or {})
         for key in ("can_continue", "tool_call_history", "error"):
@@ -174,6 +179,23 @@ class BaseChannelAdapter:
         return (content or "").strip()
 
     def normalize_attachments(
-        self, attachments: Optional[List[Dict[str, Any]]]
-    ) -> List[Dict[str, Any]]:
+        self, attachments: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
         return list(attachments or [])
+
+    def parse_event(self, raw_event: dict[str, Any]) -> dict[str, Any] | None:
+        """解析平台原始事件为 Gateway 统一格式
+
+        子类应覆盖此方法以支持各自平台的事件格式。
+        返回字典包含以下字段（供 build_chat_request 使用）：
+          - conversation_id: 会话 ID
+          - user_id: 用户 ID
+          - sender: 发送者名称
+          - content: 消息文本内容
+          - message_id: 平台消息 ID（用于去重）
+          - attachments: 附件列表
+          - metadata: 平台特定元数据
+
+        返回 None 表示忽略该事件（非消息事件等）。
+        """
+        return None

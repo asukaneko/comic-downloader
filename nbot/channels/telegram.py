@@ -1,16 +1,18 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelEnvelope
 
 
 class TelegramChannelAdapter(BaseChannelAdapter):
+    """Telegram 频道适配器"""
+
     channel_name = "telegram"
 
     def get_capabilities(self) -> ChannelCapabilities:
         return ChannelCapabilities(
             supports_stream=False,
             supports_progress_updates=False,
-            supports_file_send=False,
+            supports_file_send=True,
             supports_stop=False,
         )
 
@@ -29,7 +31,12 @@ class TelegramChannelAdapter(BaseChannelAdapter):
             metadata=metadata,
         )
 
-    def parse_update(self, update: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def parse_event(self, raw_event: dict[str, Any]) -> dict[str, Any] | None:
+        """解析 Telegram Update 事件格式（兼容 parse_update 别名）"""
+        return self.parse_update(raw_event)
+
+    def parse_update(self, update: dict[str, Any]) -> dict[str, Any] | None:
+        """解析 Telegram Bot API Update 对象"""
         message = update.get("message") or update.get("edited_message")
         if not isinstance(message, dict):
             return None
@@ -48,11 +55,12 @@ class TelegramChannelAdapter(BaseChannelAdapter):
         username = sender.get("username") or sender.get("first_name") or "telegram_user"
         user_id = sender.get("id")
         return {
-            "chat_id": str(chat_id),
-            "message_id": message.get("message_id"),
+            "conversation_id": f"telegram:{chat_id}",
             "user_id": str(user_id) if user_id is not None else "",
             "sender": username,
             "content": text,
+            "message_id": message.get("message_id"),
+            "attachments": [],
             "metadata": {
                 "telegram_update_id": update.get("update_id"),
                 "telegram_chat_id": str(chat_id),

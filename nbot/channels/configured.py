@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any
 
 from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelEnvelope
 
@@ -6,7 +6,7 @@ from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelE
 class ConfiguredChannelAdapter(BaseChannelAdapter):
     """Generic adapter backed by a channel config record."""
 
-    def __init__(self, channel_config: Dict[str, Any]):
+    def __init__(self, channel_config: dict[str, Any]):
         self.channel_config = dict(channel_config or {})
         self.channel_name = str(self.channel_config.get("id") or "custom").strip()
 
@@ -34,10 +34,40 @@ class ConfiguredChannelAdapter(BaseChannelAdapter):
             metadata=metadata,
         )
 
-    def public_config(self) -> Dict[str, Any]:
+    def public_config(self) -> dict[str, Any]:
         return {
             "id": self.channel_config.get("id"),
             "name": self.channel_config.get("name"),
             "type": self.channel_config.get("type"),
             "transport": self.channel_config.get("transport"),
+        }
+
+    def parse_event(self, raw_event: dict[str, Any]) -> dict[str, Any] | None:
+        """解析通用配置频道的事件
+
+        期望格式与 Web 前端类似，支持自定义字段映射。
+        """
+        content = raw_event.get("content") or raw_event.get("message", "")
+        if not content and not raw_event.get("attachments"):
+            return None
+
+        content = self.normalize_inbound_message(content)
+        conversation_id = (
+            raw_event.get("conversation_id")
+            or f"{self.channel_name}:{raw_event.get('user_id', '')}"
+        )
+        user_id = str(raw_event.get("user_id", ""))
+        sender = raw_event.get("sender") or f"{self.channel_name}_user"
+
+        return {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "sender": sender,
+            "content": content,
+            "message_id": raw_event.get("message_id", ""),
+            "attachments": list(raw_event.get("attachments") or []),
+            "metadata": {
+                "channel_id": self.channel_name,
+                **dict(raw_event.get("metadata") or {}),
+            },
         }

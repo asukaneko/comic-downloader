@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Set, Type, Union
+from collections.abc import Callable
 
 from nbot.channels.base import BaseChannelAdapter
 
@@ -10,14 +10,14 @@ class ChannelRegistry:
     """Registry for channel adapters and optional agent handlers."""
 
     def __init__(self):
-        self._adapter_factories: Dict[str, AdapterFactory] = {}
-        self._handlers: Dict[str, Handler] = {}
-        self._configured_channels: Set[str] = set()
+        self._adapter_factories: dict[str, AdapterFactory] = {}
+        self._handlers: dict[str, Handler] = {}
+        self._configured_channels: set[str] = set()
 
     def register_adapter(
         self,
         channel: str,
-        adapter: Union[Type[BaseChannelAdapter], AdapterFactory, BaseChannelAdapter],
+        adapter: type[BaseChannelAdapter] | AdapterFactory | BaseChannelAdapter,
     ) -> None:
         channel_name = self._normalize_channel(channel)
 
@@ -28,13 +28,13 @@ class ChannelRegistry:
         else:
             self._adapter_factories[channel_name] = adapter
 
-    def get_adapter(self, channel: str) -> Optional[BaseChannelAdapter]:
+    def get_adapter(self, channel: str) -> BaseChannelAdapter | None:
         factory = self._adapter_factories.get(self._normalize_channel(channel))
         if not factory:
             return None
         return factory()
 
-    def list_adapters(self) -> List[str]:
+    def list_adapters(self) -> list[str]:
         return sorted(self._adapter_factories.keys())
 
     def unregister_adapter(self, channel: str) -> None:
@@ -43,10 +43,10 @@ class ChannelRegistry:
     def register_handler(self, channel: str, handler: Handler) -> None:
         self._handlers[self._normalize_channel(channel)] = handler
 
-    def get_handler(self, channel: str) -> Optional[Handler]:
+    def get_handler(self, channel: str) -> Handler | None:
         return self._handlers.get(self._normalize_channel(channel))
 
-    def list_handlers(self) -> List[str]:
+    def list_handlers(self) -> list[str]:
         return sorted(self._handlers.keys())
 
     def unregister_handler(self, channel: str) -> None:
@@ -62,12 +62,12 @@ channel_registry = ChannelRegistry()
 
 def register_channel_adapter(
     channel: str,
-    adapter: Union[Type[BaseChannelAdapter], AdapterFactory, BaseChannelAdapter],
+    adapter: type[BaseChannelAdapter] | AdapterFactory | BaseChannelAdapter,
 ) -> None:
     channel_registry.register_adapter(channel, adapter)
 
 
-def get_channel_adapter(channel: str) -> Optional[BaseChannelAdapter]:
+def get_channel_adapter(channel: str) -> BaseChannelAdapter | None:
     return channel_registry.get_adapter(channel)
 
 
@@ -79,7 +79,7 @@ def register_channel_handler(channel: str, handler: Handler) -> None:
     channel_registry.register_handler(channel, handler)
 
 
-def get_channel_handler(channel: str) -> Optional[Handler]:
+def get_channel_handler(channel: str) -> Handler | None:
     return channel_registry.get_handler(channel)
 
 

@@ -3,19 +3,22 @@ Web 聊天服务后端
 提供 REST API 和 WebSocket 接口
 """
 
+import hashlib
 import json
-import uuid
 import logging
 import os
 import re
+import secrets
 import threading
 import time
-import hashlib
-import secrets
+import uuid
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
-from flask import Flask, request, jsonify, g
+from typing import Any
+
+from flask import Flask, g, jsonify, request
 from flask_socketio import SocketIO
+
+from nbot.core.prompt_format import format_skills_prompt
 from nbot.web.ai_service import (
     get_ai_response,
     get_ai_response_with_images,
@@ -25,6 +28,7 @@ from nbot.web.ai_service import (
     stream_send_response,
     trigger_ai_response_for_request,
 )
+from nbot.web.log_cleanup import cleanup_logs_dir
 from nbot.web.persistence import (
     init_default_data,
     init_default_skills,
@@ -32,7 +36,6 @@ from nbot.web.persistence import (
     load_all_data,
     save_data,
 )
-from nbot.core.prompt_format import format_skills_prompt
 from nbot.web.routes import (
     register_admin_misc_routes,
     register_ai_config_routes,
@@ -44,6 +47,7 @@ from nbot.web.routes import (
     register_config_legacy_routes,
     register_config_transfer_routes,
     register_file_routes,
+    register_gateway_routes,
     register_heartbeat_routes,
     register_knowledge_routes,
     register_live2d_routes,
@@ -61,12 +65,11 @@ from nbot.web.routes import (
     register_voice_routes,
     register_web_agent_routes,
     register_workflow_routes,
+    register_workspace_misc_routes,
     register_workspace_private_routes,
     register_workspace_shared_routes,
-    register_workspace_misc_routes,
 )
 from nbot.web.secure_store import read_secure_json, write_secure_json
-from nbot.web.log_cleanup import cleanup_logs_dir
 from nbot.web.socket_events import register_socket_events
 
 _log = logging.getLogger(__name__)
@@ -195,7 +198,7 @@ def _build_web_manager_payload(
     default_content: str,
     default_sender: str,
     default_conversation_id: str,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict:
     manager_adapter = _resolve_web_adapter(adapter)
     if manager_adapter:
@@ -264,7 +267,7 @@ except ImportError:
 
 # 导入知识库管理器
 try:
-    from nbot.core.knowledge import get_knowledge_manager, configure_knowledge_embedding
+    from nbot.core.knowledge import configure_knowledge_embedding, get_knowledge_manager
 
     KNOWLEDGE_MANAGER_AVAILABLE = True
 except ImportError:
@@ -275,9 +278,15 @@ except ImportError:
 
 # 导入统一消息模块
 try:
-    from nbot.core import AgentService, ChatResponse, WebSessionStore, message_manager, create_message
     from nbot.channels.registry import get_channel_adapter, register_channel_handler
     from nbot.channels.web import WebChannelAdapter
+    from nbot.core import (
+        AgentService,
+        ChatResponse,
+        WebSessionStore,
+        create_message,
+        message_manager,
+    )
 
     MESSAGE_MODULE_AVAILABLE = True
 except ImportError:
@@ -312,7 +321,7 @@ except ImportError:
 
 # 导入进度卡片管理器
 try:
-    from nbot.core.progress_card import progress_card_manager, ProgressCard, StepType
+    from nbot.core.progress_card import ProgressCard, StepType, progress_card_manager
 
     PROGRESS_CARD_AVAILABLE = True
 except ImportError:
@@ -322,7 +331,7 @@ except ImportError:
 
 # 导入 Todo 卡片管理器
 try:
-    from nbot.core.todo_card import todo_card_manager, TodoCard
+    from nbot.core.todo_card import TodoCard, todo_card_manager
 
     TODO_CARD_AVAILABLE = True
 except ImportError:
@@ -346,8 +355,8 @@ try:
         get_api_config,
         get_pic_config,
         get_search_config,
-        resolve_runtime_api_key,
         get_video_config,
+        resolve_runtime_api_key,
     )
 
     CONFIG_LOADER_AVAILABLE = True
@@ -399,7 +408,7 @@ class WebChatServer:
         self.FILE_PARSER_AVAILABLE = FILE_PARSER_AVAILABLE
         self.file_parser = file_parser
 
-        self.sessions: Dict[str, Dict[str, Any]] = {}
+        self.sessions: dict[str, dict[str, Any]] = {}
         self.session_store = WebSessionStore(
             self.sessions, save_callback=lambda: self._save_data("sessions")
         )
@@ -425,9 +434,9 @@ class WebChatServer:
             todo_card_manager.set_socketio(socketio)
             todo_card_manager.set_sessions(self.sessions)
             _log.info("[TodoCard] Todo 卡片管理器已初始化")
-        self.web_users: Dict[str, str] = {}
-        self.active_connections: Dict[str, str] = {}
-        self.visible_web_sessions: Dict[str, str] = {}
+        self.web_users: dict[str, str] = {}
+        self.active_connections: dict[str, str] = {}
+        self.visible_web_sessions: dict[str, str] = {}
 
         # 数据存储目录
         self.data_dir = os.path.join(
@@ -438,32 +447,32 @@ class WebChatServer:
         # Token 统计管理器（统一持久化，必须最先初始化）
         from nbot.core.token_stats import init_token_stats_manager
         self.token_stats_manager = init_token_stats_manager(self.data_dir)
-        self.token_stats: Dict = self.token_stats_manager.data  # 兼容旧引用
+        self.token_stats: dict = self.token_stats_manager.data  # 兼容旧引用
 
         # 内存数据存储
-        self.workflows: List[Dict] = []
-        self.memories: List[Dict] = []
+        self.workflows: list[dict] = []
+        self.memories: list[dict] = []
         # knowledge_docs 已移除，由 knowledge_manager 管理
-        self.ai_config: Dict = {}
-        self.custom_personality_presets: List[Dict] = []  # 自定义人格预设
-        self.personality: Dict = {}
-        self.system_logs: List[Dict] = []
-        self.settings: Dict = {}
+        self.ai_config: dict = {}
+        self.custom_personality_presets: list[dict] = []  # 自定义人格预设
+        self.personality: dict = {}
+        self.system_logs: list[dict] = []
+        self.settings: dict = {}
 
         # 性能优化：统计缓存
-        self._stats_cache: Dict = {}
+        self._stats_cache: dict = {}
         self._stats_cache_time: float = 0
         self._stats_cache_ttl: float = 5.0  # 缓存5秒
 
         # Skills 配置
-        self.skills_config: List[Dict] = []
+        self.skills_config: list[dict] = []
 
         # Tools 配置
-        self.tools_config: List[Dict] = []
-        self.channels_config: List[Dict] = []
+        self.tools_config: list[dict] = []
+        self.channels_config: list[dict] = []
 
         # Heartbeat 配置
-        self.heartbeat_config: Dict = {
+        self.heartbeat_config: dict = {
             "enabled": False,
             "interval_minutes": 60,
             "content_file": "heartbeat.md",
@@ -475,9 +484,9 @@ class WebChatServer:
 
         # Heartbeat 调度器
         self.heartbeat_job = None
-        self.proactive_chat_thread: Optional[threading.Thread] = None
-        self.scheduled_tasks: List[Dict[str, Any]] = []
-        self.scheduled_task_jobs: Dict[str, Any] = {}
+        self.proactive_chat_thread: threading.Thread | None = None
+        self.scheduled_tasks: list[dict[str, Any]] = []
+        self.scheduled_task_jobs: dict[str, Any] = {}
         self.running_task_ids: set = set()
         self.running_workflow_ids: set = set()
 
@@ -491,9 +500,9 @@ class WebChatServer:
         self.ai_base_url = None
 
         # 多模型配置管理
-        self.ai_models: List[Dict] = []
+        self.ai_models: list[dict] = []
         self.active_model_id: str = None
-        self.active_models_by_purpose: Dict[str, str] = {}
+        self.active_models_by_purpose: dict[str, str] = {}
 
         # 工作流调度器
         self.scheduler = None
@@ -521,21 +530,21 @@ class WebChatServer:
         self._web_password_is_hash = False
 
         # 登录失败限流：{ip: {'count': int, 'first_fail': float}}
-        self._login_fail_records: Dict[str, Dict[str, Any]] = {}
+        self._login_fail_records: dict[str, dict[str, Any]] = {}
         self._login_rate_limit = 5          # 最大失败次数
         self._login_rate_window = 300       # 限流窗口（秒）
 
         # 登录 Token 管理（用于长时间免登录）
         # key 为 token 的 SHA-256 hash，value 为 {'username': str, 'expires_at': datetime, 'created_at': datetime}
-        self.login_tokens: Dict[str, Dict[str, Any]] = {}
+        self.login_tokens: dict[str, dict[str, Any]] = {}
         self.token_expire_days = 30  # Token 有效期 30 天
 
         # 停止事件字典（用于取消 AI 生成）
-        self.stop_events: Dict[str, threading.Event] = {}
+        self.stop_events: dict[str, threading.Event] = {}
         self.startup_ready = False
-        self.startup_error: Optional[str] = None
-        self.startup_thread: Optional[threading.Thread] = None
-        self.log_cleanup_thread: Optional[threading.Thread] = None
+        self.startup_error: str | None = None
+        self.startup_thread: threading.Thread | None = None
+        self.log_cleanup_thread: threading.Thread | None = None
 
 
         self._load_ai_config()
@@ -552,8 +561,8 @@ class WebChatServer:
     def _auto_start_feishu_ws_channels(self):
         """自动启动所有已启用的飞书长连接频道"""
         try:
-            from nbot.web.routes.channels import auto_start_feishu_ws_clients
             from nbot.services.feishu_ws_service import feishu_ws_service
+            from nbot.web.routes.channels import auto_start_feishu_ws_clients
             # 设置服务器实例
             feishu_ws_service.set_server(self)
             auto_start_feishu_ws_clients(self)
@@ -657,7 +666,7 @@ class WebChatServer:
         else:
             return f"{minutes}分钟"
 
-    def _get_proactive_chat_config(self) -> Dict[str, Any]:
+    def _get_proactive_chat_config(self) -> dict[str, Any]:
         default_prompt = (
             "你正在一个 Web 会话里主动开口。请根据当前上下文，以角色本身的语气自然发起一条简短消息。"
             "可以关心近况、延续上一轮话题、提出一个轻量问题，或分享一个贴合关系的小观察。"
@@ -684,7 +693,7 @@ class WebChatServer:
             config["prompt"] = default_prompt
         return config
 
-    def _get_session_proactive_chat_config(self, session: Dict[str, Any]) -> Dict[str, Any]:
+    def _get_session_proactive_chat_config(self, session: dict[str, Any]) -> dict[str, Any]:
         config = self._get_proactive_chat_config()
         saved = session.get("proactive_chat")
         if isinstance(saved, dict):
@@ -765,7 +774,7 @@ class WebChatServer:
                 },
             )
 
-    def _get_proactive_chat_target_session_ids(self) -> List[str]:
+    def _get_proactive_chat_target_session_ids(self) -> list[str]:
         return [
             session_id
             for session_id, session in self.sessions.items()
@@ -777,7 +786,7 @@ class WebChatServer:
         ]
 
     def _proactive_chat_session_is_due(
-        self, session: Dict[str, Any], now: datetime, config: Dict[str, Any]
+        self, session: dict[str, Any], now: datetime, config: dict[str, Any]
     ) -> bool:
         last_activity = self._get_session_last_activity(session)
         if not last_activity:
@@ -794,7 +803,7 @@ class WebChatServer:
 
         return True
 
-    def _proactive_chat_has_unanswered_reply(self, session: Dict[str, Any]) -> bool:
+    def _proactive_chat_has_unanswered_reply(self, session: dict[str, Any]) -> bool:
         # 如果主动聊天正在等待 AI 回复（pending_since 存在且 AI 尚未回复），跳过
         pending_since = self._parse_iso_datetime(session.get("proactive_chat_pending_since"))
         if pending_since:
@@ -822,7 +831,7 @@ class WebChatServer:
         return False
 
     def _has_user_message_after(
-        self, messages: List[Dict[str, Any]], timestamp: datetime
+        self, messages: list[dict[str, Any]], timestamp: datetime
     ) -> bool:
         for message in messages:
             if message.get("role") != "user":
@@ -832,7 +841,7 @@ class WebChatServer:
                 return True
         return False
 
-    def _get_session_last_activity(self, session: Dict[str, Any]) -> Optional[datetime]:
+    def _get_session_last_activity(self, session: dict[str, Any]) -> datetime | None:
         latest = None
         for message in session.get("messages", []):
             if message.get("role") == "system":
@@ -843,7 +852,7 @@ class WebChatServer:
         return latest
 
     @staticmethod
-    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    def _parse_iso_datetime(value: Any) -> datetime | None:
         if not value:
             return None
         if isinstance(value, (int, float)):
@@ -893,7 +902,7 @@ class WebChatServer:
         self._save_login_tokens()
         return token
 
-    def _validate_login_token(self, token: str) -> Optional[str]:
+    def _validate_login_token(self, token: str) -> str | None:
         """
         验证登录 Token
 
@@ -942,7 +951,7 @@ class WebChatServer:
         except Exception as e:
             _log.error(f"[Auth] 保存登录 Token 失败: {e}")
 
-    def _check_login_rate_limit(self, ip: str) -> Optional[int]:
+    def _check_login_rate_limit(self, ip: str) -> int | None:
         """
         检查 IP 是否超过登录失败限流
 
@@ -1011,10 +1020,10 @@ class WebChatServer:
         self,
         *,
         provider_type: str = None,
-        stream_enabled: Optional[bool] = None,
-        supports_tools: Optional[bool] = None,
-        supports_reasoning: Optional[bool] = None,
-        supports_stream: Optional[bool] = None,
+        stream_enabled: bool | None = None,
+        supports_tools: bool | None = None,
+        supports_reasoning: bool | None = None,
+        supports_stream: bool | None = None,
     ) -> bool:
         resolved_provider_type = provider_type or self.ai_config.get(
             "provider_type", self.ai_config.get("provider", "openai_compatible")
@@ -1298,7 +1307,7 @@ class WebChatServer:
                 self.data_dir, "custom_personality_presets.json"
             )
             if os.path.exists(custom_presets_file):
-                with open(custom_presets_file, "r", encoding="utf-8") as f:
+                with open(custom_presets_file, encoding="utf-8") as f:
                     self.custom_personality_presets = json.load(f)
                 _log.info(f"已加载 {len(self.custom_personality_presets)} 个自定义角色卡预设")
         except Exception as e:
@@ -1314,7 +1323,7 @@ class WebChatServer:
             )
             if os.path.exists(personality_file):
                 import json
-                with open(personality_file, "r", encoding="utf-8") as f:
+                with open(personality_file, encoding="utf-8") as f:
                     loaded_personality = json.load(f)
                 # 确保所有必需字段都存在
                 if loaded_personality.get("systemPrompt"):
@@ -1615,8 +1624,9 @@ class WebChatServer:
             # 重新初始化AI客户端
             if False and self.ai_api_key and self.ai_base_url:
                 try:
-                    from nbot.services.ai import AIClient
                     import configparser
+
+                    from nbot.services.ai import AIClient
 
                     config = configparser.ConfigParser()
                     config.read("config.ini", encoding="utf-8")
@@ -1688,7 +1698,7 @@ class WebChatServer:
             if workflow.get("enabled") and workflow.get("trigger") == "cron":
                 self._schedule_workflow(workflow)
 
-    def _schedule_workflow(self, workflow: Dict):
+    def _schedule_workflow(self, workflow: dict):
         """调度一个工作流任务"""
         if not self.scheduler:
             workflow["next_run"] = None
@@ -1759,7 +1769,7 @@ class WebChatServer:
             if task.get("enabled"):
                 self._schedule_custom_task(task)
 
-    def _build_custom_task_trigger(self, task: Dict[str, Any]):
+    def _build_custom_task_trigger(self, task: dict[str, Any]):
         config = task.get("config") or {}
         trigger_type = task.get("trigger", "interval")
 
@@ -1791,7 +1801,7 @@ class WebChatServer:
             )
         }
 
-    def _validate_custom_task(self, task: Dict[str, Any]):
+    def _validate_custom_task(self, task: dict[str, Any]):
         if not (task.get("name") or "").strip():
             raise ValueError("Task name is required")
         if not (task.get("prompt") or "").strip():
@@ -1803,7 +1813,7 @@ class WebChatServer:
 
     def _mark_task_status(
         self,
-        task: Dict[str, Any],
+        task: dict[str, Any],
         status: str,
         *,
         error: str = None,
@@ -1825,7 +1835,7 @@ class WebChatServer:
         if save:
             self._save_data("scheduled_tasks")
 
-    def _schedule_custom_task(self, task: Dict[str, Any]):
+    def _schedule_custom_task(self, task: dict[str, Any]):
         if not self.scheduler:
             task["next_run"] = None
             task["last_error"] = "Scheduler is not available"
@@ -2086,7 +2096,7 @@ class WebChatServer:
 
         return items
 
-    def _validate_workflow(self, workflow: Dict[str, Any]):
+    def _validate_workflow(self, workflow: dict[str, Any]):
         if not (workflow.get("name") or "").strip():
             raise ValueError("Workflow name is required")
         if not (workflow.get("description") or "").strip():
@@ -2101,7 +2111,7 @@ class WebChatServer:
 
     def _mark_workflow_status(
         self,
-        workflow: Dict[str, Any],
+        workflow: dict[str, Any],
         status: str,
         *,
         error: str = None,
@@ -2123,7 +2133,7 @@ class WebChatServer:
         if save:
             self._save_data("workflows")
 
-    def _execute_workflow(self, workflow_id: str, trigger_data: Dict = None):
+    def _execute_workflow(self, workflow_id: str, trigger_data: dict = None):
         """执行工作流 - 支持多轮工具调用"""
         workflow = None
         workflow_adapter = _resolve_web_adapter(self.web_channel_adapter)
@@ -2212,7 +2222,7 @@ class WebChatServer:
         # 调用 AI（支持多轮工具调用）
         def run_workflow_with_tools():
             try:
-                from nbot.services.tools import get_all_tool_definitions, execute_tool
+                from nbot.services.tools import execute_tool, get_all_tool_definitions
 
                 all_tools = get_all_tool_definitions(include_workspace=True)
                 tool_context = {"session_id": session_id, "session_type": "workflow"}
@@ -2343,7 +2353,7 @@ class WebChatServer:
 
         self.socketio.start_background_task(run_workflow_with_tools)
 
-    def _create_workflow_session(self, workflow: Dict) -> str:
+    def _create_workflow_session(self, workflow: dict) -> str:
         """为工作流创建专属会话"""
         session_id = str(uuid.uuid4())
         session = {
@@ -2367,7 +2377,7 @@ class WebChatServer:
 
         return session_id
 
-    def _send_workflow_result(self, workflow: Dict, result: str):
+    def _send_workflow_result(self, workflow: dict, result: str):
         """发送工作流结果到指定目标"""
         config = workflow.get("config", {})
         target_type = config.get(
@@ -2381,8 +2391,8 @@ class WebChatServer:
         try:
             if target_type in ["qq_group", "qq_private"] and self.qq_bot:
                 # 发送到 QQ - 使用线程运行异步任务
-                import threading
                 import asyncio
+                import threading
 
                 async def send_qq_message():
                     try:
@@ -2451,7 +2461,7 @@ class WebChatServer:
 
     def _generate_session_name(
         self,
-        messages: List[Dict],
+        messages: list[dict],
         session_id: str = None,
         parent_message_id: str = None,
     ) -> str:
@@ -2579,29 +2589,29 @@ class WebChatServer:
                 progress_card.complete()
             return None
 
-    def _get_ai_response(self, messages: List[Dict]) -> str:
+    def _get_ai_response(self, messages: list[dict]) -> str:
         return get_ai_response(self, messages)
 
-    def _stream_ai_response(self, messages: List[Dict], session_id: str, callback):
+    def _stream_ai_response(self, messages: list[dict], session_id: str, callback):
         return stream_ai_response(self, messages, session_id, callback)
 
     def _stream_send_response(
-        self, session_id: str, message: Dict, thinking_content: str = None
+        self, session_id: str, message: dict, thinking_content: str = None
     ):
         return stream_send_response(self, session_id, message, thinking_content)
 
     def _get_ai_response_with_images(
-        self, messages: List[Dict], image_urls: List[str], user_question: str = None
+        self, messages: list[dict], image_urls: list[str], user_question: str = None
     ) -> str:
         return get_ai_response_with_images(self, messages, image_urls, user_question)
 
     def _get_ai_response_with_tools(
         self,
-        messages: List[Dict],
-        tools: List[Dict],
+        messages: list[dict],
+        tools: list[dict],
         use_silicon: bool = False,
         stop_event=None,
-    ) -> Dict:
+    ) -> dict:
         return get_ai_response_with_tools(
             self,
             messages,
@@ -2613,6 +2623,41 @@ class WebChatServer:
     def _parse_tool_call_from_text(self, content: str) -> list:
         return parse_tool_call_from_text(self, content)
 
+    def _init_gateway(self):
+        """初始化 Gateway 并注入 AgentService
+
+        将已创建的 agent_service 注入到 Gateway 的 Dispatcher 中，
+        使 Gateway 可以通过统一入口调度 AI Core。
+        """
+        try:
+            from nbot.gateway import ChannelGateway
+            from nbot.gateway.dispatcher import GatewayDispatcher
+            from nbot.gateway.gateway import set_gateway
+
+            if not hasattr(self, "agent_service") or self.agent_service is None:
+                _log.warning("[Gateway] AgentService 未就绪，Gateway 将使用延迟初始化")
+                return
+
+            # 创建带 AgentService 的 Dispatcher
+            dispatcher = GatewayDispatcher(agent_service=self.agent_service)
+
+            # 创建 Gateway 实例（同步模式，无持久化）
+            gateway = ChannelGateway(
+                dispatcher=dispatcher,
+            )
+
+            # 设置为全局实例
+            set_gateway(gateway)
+
+            _log.info(
+                "[Gateway] 初始化完成 mode=sync dispatcher=%s",
+                "injected" if self.agent_service else "none",
+            )
+        except ImportError:
+            _log.warning("[Gateway] 模块导入失败，跳过 Gateway 初始化")
+        except Exception as e:
+            _log.error("[Gateway] 初始化异常 error=%s", str(e))
+
     def _register_routes(self):
         """注册 HTTP 路由"""
         register_admin_misc_routes(self.app, self)
@@ -2621,6 +2666,7 @@ class WebChatServer:
         register_auth_routes(self.app, self)
         register_channel_routes(self.app, self)
         register_character_routes(self.app, self)
+        register_gateway_routes(self.app)
         register_heartbeat_routes(self.app, self)
         register_knowledge_routes(self.app, self)
         register_live2d_routes(self.app, self)
@@ -2641,6 +2687,9 @@ class WebChatServer:
         register_workspace_misc_routes(self.app, self)
         register_config_legacy_routes(self.app, self)
         register_config_transfer_routes(self.app, self)
+
+        # 初始化 Gateway 并注入 AgentService
+        self._init_gateway()
 
     def _extract_request_token(self) -> str:
         """Extract auth token from request."""
@@ -3121,7 +3170,7 @@ class WebChatServer:
         for path in possible_paths:
             if os.path.exists(path):
                 try:
-                    with open(path, "r", encoding="utf-8") as f:
+                    with open(path, encoding="utf-8") as f:
                         return f.read().strip()
                 except Exception as e:
                     _log.error(f"Failed to read heartbeat file {path}: {e}")
@@ -3181,7 +3230,7 @@ class WebChatServer:
         self, user_id: str, group_id: str = None, create_if_not_exists: bool = True
     ):
         """同步 QQ 消息到 Web 会话"""
-        from nbot.services.chat_service import user_messages, group_messages
+        from nbot.services.chat_service import group_messages, user_messages
 
         target_id = group_id or user_id
         if not target_id:
@@ -3247,8 +3296,9 @@ def parse_document_with_mineru(
         api_key: MinerU API Key
         file_relative_url: 文件相对 URL（可选，如 /static/uploads/xxx.pdf）
     """
-    import requests
     import os
+
+    import requests
 
     url = "https://mineru.net/api/v4/extract/task"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
@@ -3296,7 +3346,7 @@ def parse_document_with_mineru(
         return None
 
 
-def create_web_app(config: Dict[str, Any] = None) -> tuple[Flask, SocketIO]:
+def create_web_app(config: dict[str, Any] = None) -> tuple[Flask, SocketIO]:
     """创建 Flask 应用"""
     app = Flask(__name__, static_folder=None)
     app.config["SECRET_KEY"] = (
