@@ -15,7 +15,7 @@ import logging
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 _log = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ _log = logging.getLogger(__name__)
 _DEFAULT_HISTORY_MAX = 100
 
 
-class EventBusTopic(StrEnum):
+class EventBusTopic(str, Enum):
     """预定义的事件主题"""
 
     # Gateway 生命周期

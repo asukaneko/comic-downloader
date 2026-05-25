@@ -18,12 +18,12 @@ Scope（权限范围）：
 
 import logging
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 
 _log = logging.getLogger(__name__)
 
 
-class PermissionScope(StrEnum):
+class PermissionScope(str, Enum):
     """预定义的权限范围"""
 
     # 管理员

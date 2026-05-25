@@ -19,7 +19,7 @@ import secrets
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 _log = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ _PAIRING_CODE_LENGTH = 8
 _DEFAULT_TTL_SECONDS = 300
 
 
-class PairingStatus(StrEnum):
+class PairingStatus(str, Enum):
     """配对状态"""
 
     PENDING = "pending"       # 等待管理员确认

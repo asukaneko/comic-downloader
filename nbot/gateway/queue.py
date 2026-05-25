@@ -16,13 +16,13 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
-class QueueItemStatus(StrEnum):
+class QueueItemStatus(str, Enum):
     """队列项处理状态"""
 
     PENDING = "pending"

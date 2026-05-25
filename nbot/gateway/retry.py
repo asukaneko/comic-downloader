@@ -10,14 +10,14 @@
 import logging
 import time
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 
 from nbot.gateway.queue import QueueItem
 
 _log = logging.getLogger(__name__)
 
 
-class ErrorCategory(StrEnum):
+class ErrorCategory(str, Enum):
     """错误分类，决定是否值得重试"""
 
     RECOVERABLE = "recoverable"       # 可恢复：网络超时、AI 限流等

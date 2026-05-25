@@ -18,13 +18,13 @@
 
 import logging
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
-class ChannelCapability(StrEnum):
+class ChannelCapability(str, Enum):
     """预定义的频道能力"""
 
     # 基础消息
@@ -66,7 +66,7 @@ class ChannelCapability(StrEnum):
     TYPING_INDICATOR = "channel.typing.indicator"
 
 
-class ToolCapability(StrEnum):
+class ToolCapability(str, Enum):
     """预定义的工具能力"""
 
     # 信息获取

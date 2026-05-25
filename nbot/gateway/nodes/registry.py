@@ -17,13 +17,13 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
-class NodeStatus(StrEnum):
+class NodeStatus(str, Enum):
     """节点状态"""
 
     ONLINE = "online"
@@ -33,7 +33,7 @@ class NodeStatus(StrEnum):
     DRAINING = "draining"  # 正在排空中（不再接收新任务）
 
 
-class NodeType(StrEnum):
+class NodeType(str, Enum):
     """节点类型"""
 
     GATEWAY = "gateway"

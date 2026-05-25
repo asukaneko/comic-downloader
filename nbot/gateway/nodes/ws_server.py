@@ -25,13 +25,13 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Any
 
 _log = logging.getLogger(__name__)
 
 
-class WSCommand(StrEnum):
+class WSCommand(str, Enum):
     """WebSocket 命令类型"""
 
     # 节点管理
@@ -57,7 +57,7 @@ class WSCommand(StrEnum):
     PAIRING_LIST = "pairing.list"
 
 
-class WSEventType(StrEnum):
+class WSEventType(str, Enum):
     """WebSocket 推送事件类型"""
 
     EVENT_PUBLISHED = "event.published"
