@@ -22,13 +22,13 @@
     <link rel="stylesheet" href="/static/vendor/styles/highlight-github-dark.min.css">
     <script src="/static/vendor/highlight.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/styles/font-awesome.min.css">
-    <script src="/static/js/i18n.js"></script>
+    <script src="/static/js/i18n.js?v=20260525"></script>
     <script src="/static/js/push.js"></script>
     <script>
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260539';
+        window.__nbotAssetVersion = '20260525';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260539">
     <link rel="stylesheet" href="/static/css/app.css?v=20260539">
@@ -3789,7 +3789,7 @@
                                         <div class="ai-capability-status-list">
                                             <div v-for="(info, purpose, index) in modelPurposes" v-show="index < 4" :key="purpose" class="ai-capability-status-item" :class="{ 'is-configured': activeModelsByPurpose[purpose]?.has_config }">
                                                 <div class="capability-dot" :style="{ backgroundColor: info.color }"></div>
-                                                <span class="capability-name">{{ info.name }}</span>
+                                                <span class="capability-name">{{ $t(info.name) }}</span>
                                                 <span class="capability-state">{{ activeModelsByPurpose[purpose]?.has_config ? '已启用' : '未配置' }}</span>
                                             </div>
                                         </div>
@@ -3823,8 +3823,8 @@
                                                 <div class="purpose-icon" :style="{ background: 'linear-gradient(135deg, ' + info.color + '30, ' + info.color + '15)', color: info.color }" v-html="info.iconSvg">
                                                 </div>
                                                 <div class="purpose-info">
-                                                    <div class="purpose-name">{{ info.name }}</div>
-                                                    <div class="purpose-desc">{{ info.description }}</div>
+                                                    <div class="purpose-name">{{ $t(info.name) }}</div>
+                                                    <div class="purpose-desc">{{ $t(info.description) }}</div>
                                                 </div>
                                             </div>
                                             <div class="purpose-status">
@@ -4686,7 +4686,7 @@
                                 <div class="modal-header">
                                     <h3 class="modal-title">
                                         <span class="purpose-icon-inline" v-html="modelPurposes[editingPurpose].iconSvg"></span>
-                                        {{ modelPurposes[editingPurpose].name }}配置
+                                        {{ $t(modelPurposes[editingPurpose].name) }}{{ $t('ai_config.config_suffix') }}
                                     </h3>
                                     <button class="modal-close" @click="closePurposeConfigModal">
                                         <i class="fas fa-times"></i>
@@ -4700,8 +4700,8 @@
                                         border-radius: 8px;
                                         margin-bottom: 20px;
                                     ">
-                                        <div style="font-weight: 600; margin-bottom: 4px;">{{ modelPurposes[editingPurpose].name }}</div>
-                                        <div style="color: var(--text-secondary); font-size: 14px;">{{ modelPurposes[editingPurpose].description }}</div>
+                                        <div style="font-weight: 600; margin-bottom: 4px;">{{ $t(modelPurposes[editingPurpose].name) }}</div>
+                                        <div style="color: var(--text-secondary); font-size: 14px;">{{ $t(modelPurposes[editingPurpose].description) }}</div>
                                     </div>
 
                                     <!-- 当前配置状态 -->
@@ -4744,15 +4744,15 @@
                                         margin-bottom: 20px;
                                     ">
                                         <i class="fas fa-exclamation-circle" style="font-size: 32px; color: var(--text-secondary); margin-bottom: 8px;"></i>
-                                        <div style="color: var(--text-secondary);">尚未配置{{ modelPurposes[editingPurpose].name }}</div>
-                                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">点击下方按钮创建配置</div>
+                                        <div style="color: var(--text-secondary);">{{ $t('ai_config.not_configured_yet') }}{{ $t(modelPurposes[editingPurpose].name) }}</div>
+                                        <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">{{ $t('ai_config.create_config_hint') }}</div>
                                     </div>
 
                                     <!-- 该用途的模型列表 -->
                                     <div class="purpose-models">
-                                        <div style="font-weight: 600; margin-bottom: 12px;">{{ modelPurposes[editingPurpose].name }}配置列表</div>
+                                        <div style="font-weight: 600; margin-bottom: 12px;">{{ $t(modelPurposes[editingPurpose].name) }}{{ $t('ai_config.config_list_suffix') }}</div>
                                         <div v-if="getModelsByPurpose(editingPurpose).length === 0" class="empty-state" style="padding: 20px; text-align: center;">
-                                            <p style="color: var(--text-secondary);">暂无{{ modelPurposes[editingPurpose].name }}配置</p>
+                                            <p style="color: var(--text-secondary);">{{ $t('ai_config.no_config') }}{{ $t(modelPurposes[editingPurpose].name) }}</p>
                                         </div>
                                         <div v-else class="purpose-models-list" style="display: flex; flex-direction: column; gap: 8px;">
                                             <div 
@@ -4812,7 +4812,7 @@
                                 <div class="modal-footer">
                                     <button class="btn btn-secondary" @click="closePurposeConfigModal">关闭</button>
                                     <button class="btn btn-primary" @click="openModelEditModal(); closePurposeConfigModal();">
-                                        <i class="fas fa-plus"></i> 新建{{ modelPurposes[editingPurpose].name }}配置
+                                        <i class="fas fa-plus"></i> {{ $t('ai_config.new_config_prefix') }}{{ $t(modelPurposes[editingPurpose].name) }}{{ $t('ai_config.config_suffix') }}
                                     </button>
                                 </div>
                             </div>
@@ -8777,7 +8777,7 @@
                         tts: { name: 'ai_config.purpose_tts', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4h4l5 4V6L8 10H4Z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6a8 8 0 0 1 0 12"/></svg>', description: 'ai_config.purpose_tts_desc', color: '#10b981' },
                         stt: { name: 'ai_config.purpose_stt', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8 21h8"/></svg>', description: 'ai_config.purpose_stt_desc', color: '#f59e0b' },
                         embedding: { name: 'ai_config.purpose_embedding', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V8"/><path d="M2 19h22"/></svg>', description: 'ai_config.purpose_embedding_desc', color: '#6366f1' },
-                        image_generation: { name: 'ai_config.purpose_image_gen', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>', description: '用于AI生成图片，如角色立绘', color: '#ec4899' }
+                        image_generation: { name: 'ai_config.purpose_image_gen', iconSvg: '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>', description: 'ai_config.purpose_image_gen_desc', color: '#ec4899' }
                     },
                     // 各用途的活跃模型
                     activeModelsByPurpose: {

@@ -1009,6 +1009,34 @@ const i18nMessages = {
     'ai_config.asset_library': '配置资产库',
     'ai_config.asset_library_subtitle': '管理已保存的模型配置方案',
 
+    // AI 配置 - 能力用途短名称
+    'ai_config.purpose_chat': '对话模型',
+    'ai_config.purpose_chat_desc': '用于日常对话和问答',
+    'ai_config.purpose_vision': '图片理解模型',
+    'ai_config.purpose_vision_desc': '用于识别和理解图片内容',
+    'ai_config.purpose_video': '视频理解模型',
+    'ai_config.purpose_video_desc': '用于分析视频内容',
+    'ai_config.purpose_tts': 'TTS语音合成',
+    'ai_config.purpose_tts_short': 'TTS语音合成',
+    'ai_config.purpose_tts_desc': '用于文字转语音',
+    'ai_config.purpose_stt': 'STT语音识别',
+    'ai_config.purpose_stt_short': 'STT语音识别',
+    'ai_config.purpose_stt_desc': '用于语音转文字',
+    'ai_config.purpose_embedding': '向量嵌入模型',
+    'ai_config.purpose_embedding_short': '向量嵌入模型',
+    'ai_config.purpose_embedding_desc': '用于知识库和语义搜索',
+    'ai_config.purpose_image_gen': '图片生成模型',
+    'ai_config.purpose_image_gen_short': '图片生成模型',
+    'ai_config.purpose_image_gen_desc': '用于AI生成图片，如角色立绘',
+
+    // AI 配置 - 用途配置弹窗
+    'ai_config.config_suffix': '配置',
+    'ai_config.config_list_suffix': '配置列表',
+    'ai_config.not_configured_yet': '尚未配置',
+    'ai_config.no_config': '暂无',
+    'ai_config.new_config_prefix': '新建',
+    'ai_config.create_config_hint': '点击下方按钮创建配置',
+
     // Token 用量页面
     'tokens.title': 'Token 用量',
     'tokens.time_range': '时间范围',
@@ -2155,14 +2183,25 @@ const i18nMessages = {
     'ai_config.purpose_vision_desc': '用于识别和理解图片内容',
     'ai_config.purpose_video': '视频理解模型',
     'ai_config.purpose_video_desc': '用于分析视频内容',
+    'ai_config.purpose_tts': 'TTS语音合成',
     'ai_config.purpose_tts_short': 'TTS语音合成',
     'ai_config.purpose_tts_desc': '用于文字转语音',
+    'ai_config.purpose_stt': 'STT语音识别',
     'ai_config.purpose_stt_short': 'STT语音识别',
     'ai_config.purpose_stt_desc': '用于语音转文字',
+    'ai_config.purpose_embedding': '向量嵌入模型',
     'ai_config.purpose_embedding_short': '向量嵌入模型',
     'ai_config.purpose_embedding_desc': '用于知识库和语义搜索',
+    'ai_config.purpose_image_gen': '图片生成模型',
     'ai_config.purpose_image_gen_short': '图片生成模型',
     'ai_config.purpose_image_gen_desc': '用于AI生成图片，如角色立绘',
+
+    // AI Config - UI labels for purpose config modal
+    'ai_config.config_suffix': '配置',
+    'ai_config.config_list_suffix': '配置列表',
+    'ai_config.not_configured_yet': '尚未配置',
+    'ai_config.no_config': '暂无',
+    'ai_config.new_config_prefix': '新建',
 
     // API Documentation categories
     'api_doc.sessions': '会话管理',
@@ -2179,14 +2218,26 @@ const i18nMessages = {
     'ai_config.purpose_vision_desc': 'For image recognition and understanding',
     'ai_config.purpose_video': 'Video Model',
     'ai_config.purpose_video_desc': 'For video content analysis',
+    'ai_config.purpose_tts': 'TTS Text-to-Speech',
     'ai_config.purpose_tts_short': 'TTS Text-to-Speech',
     'ai_config.purpose_tts_desc': 'For converting text to speech',
+    'ai_config.purpose_stt': 'STT Speech-to-Text',
     'ai_config.purpose_stt_short': 'STT Speech-to-Text',
     'ai_config.purpose_stt_desc': 'For converting speech to text',
+    'ai_config.purpose_embedding': 'Embedding Model',
     'ai_config.purpose_embedding_short': 'Embedding Model',
     'ai_config.purpose_embedding_desc': 'For knowledge base and semantic search',
+    'ai_config.purpose_image_gen': 'Image Generation Model',
     'ai_config.purpose_image_gen_short': 'Image Generation Model',
     'ai_config.purpose_image_gen_desc': 'For AI-generated images like character portraits',
+
+    // AI Config - UI labels for purpose config modal
+    'ai_config.config_suffix': 'Config',
+    'ai_config.config_list_suffix': 'Config List',
+    'ai_config.not_configured_yet': 'Not configured yet: ',
+    'ai_config.no_config': 'No ',
+    'ai_config.new_config_prefix': 'New ',
+    'ai_config.create_config_hint': 'Click the button below to create a configuration',
 
     // API Documentation categories
     'api_doc.sessions': 'Sessions',
