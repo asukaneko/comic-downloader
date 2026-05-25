@@ -78,6 +78,10 @@ class DeliveryStore:
         """标记为死信（多次重试仍失败）"""
         self._storage.delivery_update_status(delivery_id, "dead", error=error)
 
+    def mark_built(self, delivery_id: int | str, status: str = "built") -> None:
+        """标记为已构建消息（但未真实发送，如 Web/内部频道）"""
+        self._storage.delivery_update_status(delivery_id, status)
+
     def get_by_trace(self, trace_id: str) -> dict[str, Any] | None:
         """根据 trace_id 查询投递记录"""
         return self._storage.delivery_get_by_trace(trace_id)

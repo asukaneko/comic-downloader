@@ -43,6 +43,7 @@ class GatewayWorker:
         delivery: GatewayDelivery | None = None,
         retry_handler: RetryHandler | None = None,
         trace_factory: TraceFactory | None = None,
+        dedupe_store=None,
         concurrency: int = 1,
         idle_timeout: float = 30.0,
     ):
@@ -52,6 +53,7 @@ class GatewayWorker:
         self._delivery = delivery or GatewayDelivery()
         self._retry_handler = retry_handler or RetryHandler()
         self._trace_factory = trace_factory or TraceFactory()
+        self._dedupe_store = dedupe_store
 
         # Worker 控制状态
         self._running = False
@@ -375,20 +377,38 @@ class GatewayWorker:
         self._processed_count += 1
         self._queue.mark_completed(item, result=delivery_result)
 
+        # Worker 处理成功后标记去重（异步模式 dedupe 推迟到这里）
+        delivery_status = delivery_result.get("status", "unknown")
+        if self._dedupe_store and delivery_status in ("delivered", "built"):
+            parsed = item.parsed_data or {}
+            message_id = self._extract_message_id(channel_id, parsed)
+            if message_id:
+                try:
+                    await self._dedupe_store.mark(
+                        message_id,
+                        channel_id=channel_id,
+                        message_id=message_id.split(":")[-1] if ":" in message_id else "",
+                    )
+                except Exception as e:
+                    _log.debug(
+                        "[Worker] dedupe 标记失败 trace=%s error=%s", trace_id, str(e)
+                    )
+
         _log.info(
-            "[Worker] 处理完成 item=%s trace=%s channel=%s status=delivered耗时=%.2fs",
+            "[Worker] 处理完成 item=%s trace=%s channel=%s status=%s耗时=%.2fs",
             item.item_id,
             trace_id,
             channel_id,
+            delivery_status,
             total_elapsed,
         )
 
         return GatewayResult(
-            ok=True,
+            ok=delivery_status in ("delivered", "built"),
             trace_id=trace_id,
             channel_id=channel_id,
             conversation_id=chat_request.conversation_id,
-            status="delivered",
+            status=delivery_status,
             data={
                 "delivery": delivery_result,
                 "response_content": chat_response.final_content,
@@ -431,6 +451,16 @@ class GatewayWorker:
         self._handle_item_error(
             item, str(error), non_recoverable=non_recoverable
         )
+
+    def _extract_message_id(self, channel_id: str, parsed: dict[str, Any]) -> str:
+        """从解析结果中提取消息 ID，构建去重键"""
+        metadata = parsed.get("metadata") or {}
+        raw_id = (
+            metadata.get("message_id")
+            or metadata.get(f"{channel_id}_message_id")
+            or parsed.get("message_id")
+        )
+        return f"{channel_id}:{raw_id}" if raw_id else ""
 
     def get_stats(self) -> dict[str, Any]:
         """获取 Worker 运行统计"""

@@ -157,6 +157,7 @@ class ChannelGateway:
                 delivery=self.delivery,
                 retry_handler=RetryHandler(),
                 trace_factory=self.trace_factory,
+                dedupe_store=self.dedupe_store,
             )
         if self._worker:
             await self._worker.start()
@@ -454,15 +455,7 @@ class ChannelGateway:
                 error="event queue is full",
             )
 
-        # 异步模式：入队成功后标记去重（避免队列满时错误标记）
-        if message_id:
-            await self.dedupe_store.mark(
-                message_id,
-                channel_id=channel_id,
-                message_id=message_id.split(":")[-1] if ":" in message_id else "",
-            )
-
-        # 记录事件：queued
+        # 记录事件：queued（dedupe 标记推迟到 Worker 处理成功后）
         self._record_event(trace_id=trace_id, channel_id=channel_id, status="queued")
 
         _log.info(
@@ -638,21 +631,38 @@ class ChannelGateway:
             )
 
         total_elapsed = time.time() - start_time
+        delivery_status = delivery_result.get("status", "unknown")
+
+        # 根据 delivery 实际状态决定 Gateway 最终状态
+        if delivery_status == "delivered":
+            final_status = "delivered"
+            should_mark_dedupe = True
+        elif delivery_status == "built":
+            final_status = "built"
+            should_mark_dedupe = True  # Web/内部频道可以 mark
+        elif delivery_status == "no_sender":
+            final_status = "no_sender"
+            should_mark_dedupe = False  # 外部频道没有 sender，不要 mark
+        else:
+            final_status = "delivery_failed"
+            should_mark_dedupe = False
+
         _log.info(
-            "[Gateway] 处理完成 trace=%s channel=%s conv=%s status=delivered耗时=%.2fs",
+            "[Gateway] 处理完成 trace=%s channel=%s conv=%s status=%s耗时=%.2fs",
             trace_id,
             channel_id,
             chat_request.conversation_id,
+            final_status,
             total_elapsed,
         )
 
         self._record_event(
-            trace_id=trace_id, channel_id=channel_id, status="delivered",
+            trace_id=trace_id, channel_id=channel_id, status=final_status,
             conversation_id=chat_request.conversation_id,
         )
 
-        # 同步模式：投递成功后标记去重
-        if message_id:
+        # 同步模式：只有真正成功或 built 后才标记去重
+        if message_id and should_mark_dedupe:
             await self.dedupe_store.mark(
                 message_id,
                 channel_id=channel_id,
@@ -660,11 +670,11 @@ class ChannelGateway:
             )
 
         return GatewayResult(
-            ok=True,
+            ok=final_status in ("delivered", "built"),
             trace_id=trace_id,
             channel_id=channel_id,
             conversation_id=chat_request.conversation_id,
-            status="delivered",
+            status=final_status,
             data={
                 "delivery": delivery_result,
                 "response_content": chat_response.final_content,

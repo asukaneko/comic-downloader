@@ -241,16 +241,31 @@ class GatewayDelivery:
                         result.get("status"),
                     )
 
-            # 汇总结果
-            all_ok = all(r.get("status") == "delivered" for r in results)
-            final_status = "delivered" if all_ok else "partial_failed"
+            # 汇总结果：区分 delivered / built / no_sender / partial_failed
+            statuses = {r.get("status") for r in results}
+
+            if statuses == {"delivered"}:
+                final_status = "delivered"
+            elif statuses <= {"built"}:
+                final_status = "built"
+            elif statuses <= {"no_sender"}:
+                final_status = "no_sender"
+            elif "failed" in statuses:
+                final_status = "partial_failed"
+            else:
+                final_status = "partial_failed"
 
             if self._delivery_store and delivery_id is not None:
                 try:
-                    if all_ok:
+                    if final_status == "delivered":
                         self._delivery_store.mark_delivered(delivery_id)
+                    elif final_status in ("built", "no_sender"):
+                        # built/no_sender 不是真正的失败，记录为 built 状态
+                        self._delivery_store.mark_built(delivery_id, status=final_status)
                     else:
-                        self._delivery_store.mark_failed(delivery_id=delivery_id, error="partial failure")
+                        self._delivery_store.mark_failed(
+                            delivery_id=delivery_id, error="partial failure"
+                        )
                 except Exception as e:
                     _log.warning("[Delivery] 投递状态更新失败 trace=%s error=%s", trace_id, str(e))
 

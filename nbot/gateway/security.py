@@ -43,14 +43,27 @@ class SecurityProvider:
         secret: str = "",
         allowed_ips: list[str] | None = None,
         timestamp_tolerance: int = DEFAULT_TIMESTAMP_TOLERANCE_SECONDS,
+        nonce_ttl_seconds: int = 600,
     ):
         self.mode = mode
         self.token = token
         self.secret = secret
         self.allowed_ips = allowed_ips or []
         self.timestamp_tolerance = timestamp_tolerance
-        # 已使用的 nonce 集合（防重放）
-        self._used_nonces: set = set()
+        self.nonce_ttl_seconds = nonce_ttl_seconds
+        # 已使用的 nonce 字典：nonce -> timestamp，支持 TTL 清理
+        self._used_nonces: dict[str, int] = {}
+
+    def _cleanup_expired_nonces(self) -> None:
+        """清理过期的 nonce 记录，防止内存无限增长"""
+        if not self._used_nonces:
+            return
+        cutoff = int(time.time()) - self.nonce_ttl_seconds
+        expired = [n for n, ts in self._used_nonces.items() if ts < cutoff]
+        for n in expired:
+            del self._used_nonces[n]
+        if expired:
+            _log.debug("[Security] 清理 %d 个过期 nonce", len(expired))
 
     async def verify(
         self,
@@ -157,10 +170,11 @@ class SecurityProvider:
             _log.warning("[Security] HMAC 模式但未配置 secret channel_id=%s", channel_id)
             return
 
-        # 提取请求头字段（HMAC 模式下强制要求）
-        timestamp_str = headers.get("X-NekoBot-Timestamp", "")
-        nonce = headers.get("X-NekoBot-Nonce", "")
-        signature = headers.get("X-NekoBot-Signature", "")
+        # Header 大小写兼容：统一转小写后读取
+        headers_norm = {k.lower(): v for k, v in headers.items()}
+        timestamp_str = headers_norm.get("x-nekobot-timestamp", "")
+        nonce = headers_norm.get("x-nekobot-nonce", "")
+        signature = headers_norm.get("x-nekobot-signature", "")
 
         if not timestamp_str:
             _log.warning("[Security] HMAC 模式缺少时间戳 header channel_id=%s", channel_id)
@@ -189,11 +203,13 @@ class SecurityProvider:
             _log.warning("[Security] 无效的时间戳格式 channel_id=%s", channel_id)
             raise TimestampExpiredError() from err
 
-        # Nonce 防重放
+        # 清理过期 nonce（防止内存无限增长）
+        self._cleanup_expired_nonces()
+
+        # Nonce 防重放检查（签名验证前）
         if nonce in self._used_nonces:
             _log.warning("[Security] 重放检测 channel_id=%s nonce=%s", channel_id, nonce)
             raise ReplayDetectedError()
-        self._used_nonces.add(nonce)
 
         # 签名校验（raw_body 必须参与签名）
         signing_payload = f"{timestamp_str}\n{nonce}\n{raw_body}"
@@ -206,6 +222,9 @@ class SecurityProvider:
         if not hmac.compare_digest(signature, expected):
             _log.warning("[Security] 签名不匹配 channel_id=%s", channel_id)
             raise InvalidSignatureError()
+
+        # 签名验证通过后再记录 nonce（防止错误签名占用合法 nonce）
+        self._used_nonces[nonce] = int(time.time())
 
         _log.debug("[Security] HMAC 验证通过 channel_id=%s", channel_id)
 
