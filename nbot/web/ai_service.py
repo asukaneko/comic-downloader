@@ -698,7 +698,10 @@ class WebCallbacks(PipelineCallbacks):
             # 首次命名：默认名称 + 至少一轮对话
             # 后续更新：每 10 条消息（约 5 轮对话）更新一次
             last_rename_count = session.get("_last_rename_count", 0)
-            should_rename = is_default_name or (total_count - last_rename_count >= 10)
+            was_auto_named = bool(session.get("_auto_name_generated"))
+            should_rename = is_default_name or (
+                was_auto_named and total_count - last_rename_count >= 10
+            )
 
             if not should_rename:
                 return
@@ -719,6 +722,7 @@ class WebCallbacks(PipelineCallbacks):
                     new_name = self.server._generate_session_name(recent_msgs, session_id=self.session_id)
                     if new_name:
                         session["name"] = new_name
+                        session["_auto_name_generated"] = True
                         session["_last_rename_count"] = total_count
                         self.session_store.set_session(self.session_id, session)
                         self.server.socketio.emit(

@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260526';
+        window.__nbotAssetVersion = '20260528';
     </script>
-    <link rel="stylesheet" href="/static/css/boot.css?v=20260540">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260540">
+    <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260542">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -5131,7 +5131,7 @@
                                     暂无 Gateway 事件日志
                                     <div style="font-size: 12px; margin-top: 8px;">通过 Web UI 发送消息后将在此显示处理记录</div>
                                 </div>
-                                <div v-else class="gateway-log-table-wrapper" style="max-height: 600px; overflow-y: auto;">
+                                <div v-else class="gateway-log-table-wrapper gateway-trace-table-wrapper" style="max-height: 600px; overflow-y: auto;">
                                     <table class="data-table gateway-log-table">
                                         <thead>
                                             <tr>
@@ -5143,8 +5143,31 @@
                                                 <th style="width: 38px;"></th>
                                             </tr>
                                         </thead>
-                                        <tbody>
-                                            <tr v-for="log in gatewayLogs" :key="log.id"
+                                        <tbody
+                                            v-for="group in gatewayLogTraceGroups"
+                                            :key="group.traceId"
+                                            class="gateway-trace-tbody"
+                                            :class="{ 'has-error': group.hasError }"
+                                        >
+                                            <tr class="gateway-trace-summary-row">
+                                                <td colspan="6">
+                                                    <div class="gateway-trace-summary">
+                                                        <div class="gateway-trace-group-title">
+                                                            <span class="gateway-trace-dot"></span>
+                                                            <span class="gateway-trace-id" :title="group.traceId">{{ shortenId(group.traceId, 12) }}</span>
+                                                            <span class="badge badge-secondary">{{ group.logs.length }} steps</span>
+                                                        </div>
+                                                        <div class="gateway-trace-group-meta">
+                                                            <span>{{ formatGatewayTime(group.first.created_at) }}</span>
+                                                            <span v-if="getSessionName(group.first)">{{ getSessionName(group.first) }}</span>
+                                                            <button class="btn-icon-sm" @click="showGatewayTrace(group.traceId)" title="&#26597;&#30475;&#23436;&#25972;&#38142;&#36335;">
+                                                                <i class="fas fa-stream"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr v-for="log in group.logs" :key="log.id"
                                                 :class="{ 'gw-row-error': isGatewayErrorStatus(log.status) }">
                                                 <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">{{ formatGatewayTime(log.created_at) }}</td>
                                                 <td>
@@ -9567,6 +9590,33 @@
                 },
 
                 // 消息样式预览计算属性
+                gatewayLogTraceGroups() {
+                    const groups = [];
+                    const byTrace = new Map();
+                    (this.gatewayLogs || []).forEach((log) => {
+                        const traceId = log.trace_id || `event-${log.id || groups.length}`;
+                        let group = byTrace.get(traceId);
+                        if (!group) {
+                            group = {
+                                traceId,
+                                logs: [],
+                                first: log,
+                                hasError: false,
+                            };
+                            byTrace.set(traceId, group);
+                            groups.push(group);
+                        }
+                        group.logs.push(log);
+                        if (this.isGatewayErrorStatus(log.status)) {
+                            group.hasError = true;
+                        }
+                    });
+                    groups.forEach((group) => {
+                        group.first = group.logs[0] || {};
+                    });
+                    return groups;
+                },
+
                 previewContainerStyle() {
                     return {
                         fontFamily: this.messageStyle.fontFamily,

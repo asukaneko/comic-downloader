@@ -19856,6 +19856,93 @@
     border-bottom: none;
 }
 
+.gateway-trace-table-wrapper {
+    padding: 12px;
+    background: var(--bg-primary);
+}
+
+.gateway-trace-table-wrapper .gateway-log-table {
+    border-collapse: separate;
+    border-spacing: 0 8px;
+}
+
+.gateway-trace-tbody {
+    position: relative;
+    outline: 2px solid color-mix(in srgb, var(--accent-primary) 58%, var(--border-color));
+    border-radius: 10px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--accent-primary) 5%, var(--bg-secondary));
+}
+
+.gateway-trace-tbody.has-error {
+    outline-color: color-mix(in srgb, var(--danger) 68%, var(--border-color));
+    background: color-mix(in srgb, var(--danger) 5%, var(--bg-secondary));
+}
+
+.gateway-trace-summary-row td {
+    padding: 7px 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 24%, var(--border-color));
+    background: color-mix(in srgb, var(--accent-primary) 9%, var(--bg-tertiary));
+}
+
+.gateway-trace-tbody.has-error .gateway-trace-summary-row td {
+    border-bottom-color: color-mix(in srgb, var(--danger) 28%, var(--border-color));
+    background: color-mix(in srgb, var(--danger) 9%, var(--bg-tertiary));
+}
+
+.gateway-trace-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 24px;
+}
+
+.gateway-trace-group-title,
+.gateway-trace-group-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.gateway-trace-group-meta {
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.gateway-trace-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 16%, transparent);
+}
+
+.gateway-trace-tbody.has-error .gateway-trace-dot {
+    background: var(--danger);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+.gateway-trace-id {
+    max-width: 150px;
+    overflow: hidden;
+    color: var(--text-primary);
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    font-size: 11px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gateway-trace-tbody tr:not(.gateway-trace-summary-row) td {
+    background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+}
+
+.gateway-trace-tbody tr:not(.gateway-trace-summary-row):last-child td {
+    border-bottom: 0;
+}
+
 .gateway-log-filter-bar {
     display: flex;
     gap: 10px;

@@ -837,7 +837,18 @@ def register_session_routes(app, server):
             return jsonify({"error": "Session not found"}), 404
 
         data = request.json
-        session["name"] = data.get("name", session["name"])
+        old_name = session.get("name", "")
+        if "name" in data:
+            session["name"] = data.get("name", session["name"])
+            if session.get("name") != old_name:
+                session["_auto_name_generated"] = False
+                session["_last_rename_count"] = len(
+                    [
+                        msg
+                        for msg in session.get("messages", [])
+                        if msg.get("role") in ("user", "assistant")
+                    ]
+                )
         if "tags" in data:
             session["tags"] = _normalize_tags(data.get("tags"))
         if "favorite" in data:

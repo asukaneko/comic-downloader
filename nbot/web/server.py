@@ -2561,11 +2561,20 @@ class WebChatServer:
                 model=self.ai_model, messages=prompt_messages, stream=False
             )
 
-            name = response.choices[0].message.content.strip()
+            name = str(response.choices[0].message.content or "").strip()
             # 清理可能的引号和多余字符
             name = name.strip("\"'「」『』【】()（）")
 
-            if name and len(name) <= 20:
+            name = name.splitlines()[0].strip() if name else ""
+            for prefix in ("标题:", "标题：", "会话标题:", "会话标题：", "Title:", "title:"):
+                if name.startswith(prefix):
+                    name = name[len(prefix):].strip()
+                    break
+            name = name.strip("`*_# \t\r\n\"'[](){}<>:：-—,.，。!！?？")
+            if len(name) > 15:
+                name = name[:15].rstrip("`*_# \t\r\n\"'[](){}<>:：-—,.，。!！?？")
+
+            if name and 2 <= len(name) <= 15:
                 # 完成进度卡片
                 if progress_card:
                     from nbot.core.progress_card import StepType
