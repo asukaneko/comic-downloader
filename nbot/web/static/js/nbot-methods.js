@@ -451,8 +451,12 @@ const NbotMethods = {
                 },
 
                 // 文件上传菜单方法
-                toggleFileMenu() {
-                    this.showFileMenu = !this.showFileMenu;
+                async toggleFileMenu() {
+                    const willOpen = !this.showFileMenu;
+                    this.showFileMenu = willOpen;
+                    if (willOpen) {
+                        await this.refreshActiveChatConfig();
+                    }
                 },
                 closeFileMenu() {
                     this.showFileMenu = false;
@@ -3502,6 +3506,24 @@ def main(params):
                     } catch (e) {
                         console.error('Failed to load AI config:', e);
                     }
+                },
+
+                syncActiveChatConfigFromPurpose() {
+                    const activeChatModel = this.activeModelsByPurpose?.chat?.model;
+                    if (!activeChatModel) return;
+                    this.aiConfig = { ...this.aiConfig, ...activeChatModel };
+                    this.aiConfig.provider_type = this.aiConfig.provider_type || this.getProviderTypeByProvider(this.aiConfig.provider);
+                    this.syncProviderMetadata(this.aiConfig);
+                },
+
+                async refreshActiveChatConfig() {
+                    await this.loadAIConfig();
+                    if (!this.activeModelsByPurpose?.chat?.model) {
+                        await this.loadActiveModelsByPurpose();
+                        return;
+                    }
+                    this.syncActiveChatConfigFromPurpose();
+                    this.updateContextStats();
                 },
 
                 async loadAIModels() {
@@ -9997,6 +10019,9 @@ def main(params):
                                 this.activeModelId = model.id;
                             }
                             await this.loadActiveModelsByPurpose();
+                            if (purpose === 'chat') {
+                                await this.loadAIConfig();
+                            }
                             this.showToast(res.data.message || `已应用 ${model.name}`, 'success');
                         }
                     } catch (e) {
@@ -10010,6 +10035,8 @@ def main(params):
                         const res = await api.get('/api/ai-models/active-by-purpose');
                         if (res.data.success) {
                             this.activeModelsByPurpose = res.data.active_models;
+                            this.syncActiveChatConfigFromPurpose();
+                            this.updateContextStats();
                         }
                     } catch (e) {
                         console.error('加载活跃模型失败:', e);
@@ -10305,9 +10332,8 @@ def main(params):
                         await api.post(`/api/ai-models/${model.id}/apply`);
                         this.activeModelId = model.id;
                         // 更新当前AI配置（以模型数据为准）
-                        this.aiConfig = { ...this.aiConfig, ...model };
-                        this.syncProviderMetadata(this.aiConfig);
-                        this.updateContextStats();
+                        await this.loadAIConfig();
+                        await this.loadActiveModelsByPurpose();
                         this.showToast(`已应用模型配置: ${model.name}`, 'success');
                     } catch (e) {
                         this.showToast('应用失败: ' + (e.response?.data?.error || e.message), 'error');

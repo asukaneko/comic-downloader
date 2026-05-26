@@ -20,6 +20,14 @@ def register_ai_config_routes(app, server):
     @app.route("/api/ai-config")
     def get_ai_config():
         config = server.ai_config.copy()
+        active_chat_id = (
+            getattr(server, "active_models_by_purpose", {}) or {}
+        ).get("chat") or getattr(server, "active_model_id", None)
+        if active_chat_id:
+            for model in getattr(server, "ai_models", []) or []:
+                if model.get("id") == active_chat_id and model.get("enabled", True):
+                    config.update(model)
+                    break
         config["api_key"] = "********" if config.get("api_key") else ""
         config["model"] = server.ai_model or config.get("model", "gpt-4")
         config["base_url"] = server.ai_base_url or config.get("base_url", "")
