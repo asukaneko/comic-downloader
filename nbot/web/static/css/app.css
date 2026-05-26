@@ -20236,6 +20236,34 @@
     .trace-meta-grid {
         grid-template-columns: 1fr;
     }
+
+    /* 移动端：trace 摘要卡片改为 2x2 网格，避免文字竖排过高 */
+    .trace-summary-card {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .trace-summary-item {
+        padding: 10px 12px;
+        gap: 4px;
+    }
+
+    .trace-summary-item:nth-child(2) {
+        border-right: none;
+    }
+
+    .trace-summary-item:nth-child(1),
+    .trace-summary-item:nth-child(2) {
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .trace-summary-label {
+        font-size: 10px;
+        letter-spacing: 0;
+    }
+
+    .trace-summary-value {
+        font-size: 13px;
+    }
 }
 
 /* ===== Gateway 日志增强样式 ===== */
