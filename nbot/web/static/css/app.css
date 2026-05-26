@@ -42,11 +42,7 @@
         /* 动态背景 */
         body.has-bg-image {
             background-color: var(--bg-primary);
-            background-image: var(--bg-image);
-            background-repeat: no-repeat;
-            background-position: center center;
-            background-attachment: fixed;
-            background-size: cover;
+            background-image: none;
         }
 
         body.has-bg-image::before {
@@ -54,9 +50,16 @@
             position: fixed;
             top: 0;
             left: 0;
-            right: 0;
-            bottom: 0;
-            background: var(--bg-overlay, rgba(13, 17, 23, 0.85));
+            width: 100vw;
+            height: 100vh;
+            height: 100lvh;
+            background-color: var(--bg-primary);
+            background-image:
+                linear-gradient(var(--bg-overlay, rgba(13, 17, 23, 0.85)), var(--bg-overlay, rgba(13, 17, 23, 0.85))),
+                var(--bg-image);
+            background-repeat: no-repeat, no-repeat;
+            background-position: center center, center center;
+            background-size: cover, cover;
             z-index: 0;
             pointer-events: none;
         }
