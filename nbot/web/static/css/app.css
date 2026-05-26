@@ -20289,6 +20289,30 @@
         max-height: 85vh;
     }
 
+    .trace-modal-header {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 14px 16px;
+    }
+
+    .trace-modal-title {
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 14px;
+        min-width: 0;
+    }
+
+    .trace-modal-title span {
+        white-space: nowrap;
+    }
+
+    .trace-modal-title code {
+        font-size: 11px;
+        margin-left: 0;
+        word-break: break-all;
+        max-width: 100%;
+    }
+
     .trace-meta-grid {
         grid-template-columns: 1fr;
     }
