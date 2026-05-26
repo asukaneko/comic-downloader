@@ -14715,11 +14715,32 @@
             .ai-action-group .btn,
             .config-actions .btn {
                 flex: 1;
+                min-width: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
 
             .ai-summary-grid,
             .ai-help-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        /* 更窄屏幕：按钮改为 2x2 网格，避免文字竖排 */
+        @media (max-width: 480px) {
+            .ai-action-group {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .ai-action-group .btn {
+                flex: none;
+                width: 100%;
+                padding: 10px 8px;
+                font-size: 12px;
+                justify-content: center;
             }
         }
 
@@ -18597,6 +18618,10 @@
                 --mobile-chat-bubble-max: min(78vw, calc(100% - 62px));
             }
 
+            .personality-page .mood-selector {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
             .top-bar {
                 height: auto;
                 margin: 8px 12px 0;
@@ -18857,6 +18882,10 @@
         max-width: 100%;
     }
 
+    .personality-page .editor-card {
+        overflow: visible;
+    }
+
     .personality-page .editor-card .card-body,
     .personality-page .personality-side-panel > .card .card-body {
         overflow-x: hidden;
@@ -18892,14 +18921,32 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         width: 100%;
+        gap: 8px;
     }
 
     .personality-page .editor-topbar-actions .btn,
-    .personality-page .editor-topbar-actions .dropdown,
     .personality-page .editor-topbar-actions .dropdown > .btn {
         width: 100%;
         min-width: 0;
         justify-content: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .personality-page .editor-topbar-actions .dropdown {
+        width: 100%;
+        min-width: 0;
+        position: relative;
+        z-index: 200;
+    }
+
+    .personality-page .editor-topbar-actions .dropdown .dropdown-menu {
+        z-index: 201;
+        right: 0;
+        left: auto;
     }
 
     .personality-page .form-section {
@@ -18948,18 +18995,31 @@
 
     .personality-page .textarea-generate-btn {
         position: static;
-        width: 100%;
-        margin-bottom: 8px;
-        min-height: 34px;
+        width: auto;
+        margin-bottom: 0;
+        min-height: 28px;
+        padding: 4px 12px;
+        font-size: 11px;
+        border-radius: 6px;
+        white-space: nowrap;
     }
 
     .personality-page .textarea-wrap .form-textarea {
         padding-bottom: 10px;
     }
 
-    .personality-page .state-card-grid,
-    .personality-page .mood-selector {
+    .personality-page .state-card-grid {
         grid-template-columns: 1fr;
+    }
+
+    .personality-page .mood-selector {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    .personality-page .mood-option {
+        padding: 10px 4px;
+        font-size: 12px;
     }
 
     .personality-page .active-personality-layout,
@@ -19053,11 +19113,7 @@
     }
 }
 
-@media (max-width: 480px) {
-    .personality-page .editor-topbar-actions {
-        grid-template-columns: 1fr;
-    }
-
+@media (max-width: 640px) {
     .personality-page .character-grid-glass {
         grid-template-columns: 1fr;
     }

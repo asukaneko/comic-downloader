@@ -2632,7 +2632,7 @@
                                         <button class="btn btn-star" @click="savePersonalityAsPreset" :disabled="isLoading || !personality.name">
                                             <i class="fas fa-star"></i> 保存到角色库
                                         </button>
-                                        <div class="dropdown">
+                                        <div class="dropdown dropdown-menu-container">
                                             <button class="btn btn-ghost btn-sm" @click="showExportImportDropdown = !showExportImportDropdown">
                                                 <i class="fas fa-exchange-alt"></i> 导出/导入 <i class="fas fa-chevron-down" style="margin-left:4px;font-size:10px;"></i>
                                             </button>
@@ -10169,6 +10169,7 @@
                     if (!clickedInside) {
                         this.showCreateCharacterMenu = false;
                         this.showBulkImportExportMenu = false;
+                        this.showExportImportDropdown = false;
                     }
                 };
                 document.addEventListener('click', this._dropdownClickHandler);
