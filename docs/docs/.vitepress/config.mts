@@ -171,7 +171,20 @@ export default defineConfig({
                 { text: 'dispatcher - 调度器', link: '/guide/nbot/plugins/dispatcher.md' },
               ]
             },
-            { 
+            {
+              text: 'gateway - 消息网关层',
+              collapsed: true,
+              items: [
+                { text: '概述', link: '/guide/nbot/gateway/index.md' },
+                { text: '处理管线', link: '/guide/nbot/gateway/pipeline.md' },
+                { text: '安全认证与限流', link: '/guide/nbot/gateway/security.md' },
+                { text: '存储与追踪', link: '/guide/nbot/gateway/storage.md' },
+                { text: '队列与投递', link: '/guide/nbot/gateway/delivery.md' },
+                { text: '内部任务', link: '/guide/nbot/gateway/internal-tasks.md' },
+                { text: '节点控制平面', link: '/guide/nbot/gateway/nodes.md' },
+              ]
+            },
+            {
               text: 'web - Web后台',
               collapsed: true,
               items: [
