@@ -85,6 +85,13 @@ from nbot.core.model_adapter import (
     resolve_chat_completion_url,
 )
 
+from nbot.core.failover import (
+    FailoverState,
+    ModelHealth,
+    classify_http_error,
+    get_failover_state,
+)
+
 from nbot.core.session_store import (
     QQSessionStore,
     WebSessionStore,
@@ -124,6 +131,12 @@ __all__ = [
     'AgentService',
     'ProviderProfile',
     'NormalizedModelResponse',
+
+    # failover 模块
+    'FailoverState',
+    'ModelHealth',
+    'classify_http_error',
+    'get_failover_state',
 
     'ToolLoopExit',
     'ToolLoopHooks',

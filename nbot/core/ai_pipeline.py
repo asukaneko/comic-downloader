@@ -242,11 +242,15 @@ class PipelineCallbacks(ABC):
     # ---- AI 模型交互 ----
 
     def build_model_call(
-        self, ctx: PipelineContext, tools: List[Dict[str, Any]]
+        self,
+        ctx: PipelineContext,
+        tools: List[Dict[str, Any]],
+        model_configs: Optional[List[Dict[str, Any]]] = None,
     ) -> Callable[..., Dict[str, Any]]:
         """返回 model_call 函数。
 
         默认实现使用全局 ai_client 和运行时配置。
+        如果提供了 model_configs 且包含多个配置，自动启用故障转移。
         """
         from nbot.services.ai import ai_client, refresh_runtime_ai_config
         from nbot.core.model_adapter import (
@@ -256,6 +260,12 @@ class PipelineCallbacks(ABC):
             resolve_chat_completion_url,
         )
         import requests
+
+        # 如果有多个模型配置，启用故障转移
+        if model_configs and len(model_configs) > 1:
+            purpose = model_configs[0].get("purpose", "chat")
+            ai_pipeline = AIPipeline()
+            return ai_pipeline._wrap_with_failover(model_configs, purpose)
 
         def model_call(messages, stop_event=None):
             if stop_event and stop_event.is_set():
@@ -300,7 +310,10 @@ class PipelineCallbacks(ABC):
         return model_call
 
     def build_model_call_streaming(
-        self, ctx: PipelineContext, tools: List[Dict[str, Any]]
+        self,
+        ctx: PipelineContext,
+        tools: List[Dict[str, Any]],
+        model_configs: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[Callable]:
         """返回流式 model_call 或 None（不支持流式）。"""
         return None
@@ -812,11 +825,7 @@ class AIPipeline:
         except Exception as e:
             _log.error(f"Simple model call failed: {e}")
             ctx.error = str(e)
-            error_str = str(e)
-            if "400" in error_str:
-                ctx.final_content = "请求被模型提供商拒绝"
-            else:
-                ctx.final_content = f"AI 调用失败: {e}"
+            ctx.final_content = f"AI 调用失败: {e}"
             return
 
         ctx.final_content = response.get("content", "")
@@ -919,17 +928,14 @@ class AIPipeline:
             error_str = str(e)
             _log.error(f"Tool loop failed: {e}")
             # 如果是 400 错误（如模型不支持工具调用），回退到普通对话
-            if "400" in error_str and ("Bad Request" in error_str or "chat/completions" in error_str):
+            if "400" in error_str:
                 _log.warning("模型返回400错误，跳过工具调用，回退到普通对话")
                 progress.on_thinking_start(ctx)
                 self._run_simple(ctx, callbacks)
                 progress.on_done(ctx)
                 return
             ctx.error = error_str
-            if "400" in error_str:
-                ctx.final_content = "请求被模型提供商拒绝"
-            else:
-                ctx.final_content = f"工具循环执行失败: {error_str}"
+            ctx.final_content = f"工具循环执行失败: {error_str}"
             return
 
         loop_result = execution_result.loop_result
@@ -988,11 +994,7 @@ class AIPipeline:
         except Exception as e:
             _log.error(f"Streaming failed: {e}")
             ctx.error = str(e)
-            error_str = str(e)
-            if "400" in error_str:
-                full_content = full_content or "请求被模型提供商拒绝"
-            else:
-                full_content = full_content or f"流式输出失败: {e}"
+            full_content = full_content or f"流式输出失败: {e}"
 
         ctx.final_content = full_content
         # 流式在首块到达前就失败（如 400），需要创建消息并把错误文本送到前端
@@ -1009,6 +1011,138 @@ class AIPipeline:
             ctx.metadata.pop("streamed", None)
             ctx.metadata.pop("stream_end_pending", None)
             ctx.metadata.pop("stream_message_id", None)
+
+    # ------------------------------------------------------------------
+    # Failover wrapper
+    # ------------------------------------------------------------------
+
+    def _wrap_with_failover(
+        self,
+        model_configs: list,
+        purpose: str = "chat",
+    ) -> Callable:
+        """Wrap model call with automatic failover across model queue.
+
+        Returns a model_call(messages, stop_event) that tries models
+        in priority order, failing over on recoverable HTTP errors.
+
+        Args:
+            model_configs: Ordered list of model config dicts (by priority).
+            purpose: Model purpose for logging.
+        """
+        from nbot.core.failover import (
+            classify_http_error,
+            get_failover_state,
+            _extract_status_code,
+        )
+        from nbot.services.ai import apply_model_config
+        from nbot.core.model_adapter import (
+            build_chat_completion_payload,
+            normalize_chat_completion_data,
+            response_json_utf8,
+            resolve_chat_completion_url,
+        )
+        import requests
+
+        failover = get_failover_state()
+
+        def _build_call_for_config(config: dict):
+            """Create a single-shot model_call for a specific config."""
+            def _call(messages, stop_event=None):
+                if stop_event and stop_event.is_set():
+                    raise StopIteration("User stopped")
+
+                base_url = config.get("base_url") or ""
+                model_name = config.get("model") or ""
+                provider_type = config.get(
+                    "provider_type", "openai_compatible"
+                )
+                key = config.get("api_key") or ""
+                append_path = config.get("append_base_url_path", True)
+
+                url = resolve_chat_completion_url(
+                    base_url,
+                    model=model_name,
+                    provider_type=provider_type,
+                    append_base_url_path=append_path,
+                )
+                headers = {
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                }
+                payload = build_chat_completion_payload(
+                    model_name,
+                    messages,
+                    base_url=base_url,
+                    provider_type=provider_type,
+                    tools=None,
+                    stream=False,
+                )
+                resp = requests.post(
+                    url, json=payload, headers=headers, timeout=120
+                )
+                resp.raise_for_status()
+                normalized = normalize_chat_completion_data(
+                    response_json_utf8(resp),
+                    base_url=base_url,
+                    model=model_name,
+                    provider_type=provider_type,
+                )
+                return normalized.to_dict()
+
+            return _call
+
+        def failover_model_call(messages, stop_event=None):
+            last_error = None
+            attempted = set()
+
+            for _ in range(len(model_configs)):
+                config = failover.select_model(
+                    model_configs, exclude_ids=attempted
+                )
+                if config is None:
+                    break
+
+                model_id = config.get("model_id", "")
+                attempted.add(model_id)
+
+                # Apply this config to global AIClient
+                apply_model_config(config)
+
+                try:
+                    call = _build_call_for_config(config)
+                    result = call(messages, stop_event=stop_event)
+                    failover.record_success(model_id)
+                    return result
+                except StopIteration:
+                    raise
+                except Exception as e:
+                    status = _extract_status_code(e)
+                    category = classify_http_error(status)
+                    if category == "config":
+                        _log.warning(
+                            "[Failover] %s model=%s config error %d, "
+                            "not failing over",
+                            purpose, model_id, status,
+                        )
+                        raise
+                    failover.record_failure(model_id, status)
+                    last_error = e
+                    _log.warning(
+                        "[Failover] %s model=%s failed (%s %d), "
+                        "trying next model",
+                        purpose, model_id, category, status,
+                    )
+                    continue
+
+            # All models exhausted
+            if last_error:
+                raise last_error
+            raise RuntimeError(
+                f"No models available for purpose '{purpose}'"
+            )
+
+        return failover_model_call
 
     # ------------------------------------------------------------------
     # Phase 5: 结果组装

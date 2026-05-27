@@ -131,6 +131,8 @@ def register_ai_model_routes(app, server):
             "volume": data.get("volume", default_config.get("volume", 1.0)),
             "language": data.get("language", default_config.get("language", "zh")),
             "dimensions": data.get("dimensions", default_config.get("dimensions", 1536)),
+            # 故障转移优先级（数值越小优先级越高）
+            "priority": data.get("priority", 0),
             # 图片生成特有配置
             "size": data.get("size", default_config.get("size", "1024x1024")),
             "prompt_template": data.get("prompt_template", ""),
@@ -230,6 +232,8 @@ def register_ai_model_routes(app, server):
             model["volume"] = data.get("volume", model.get("volume", 1.0))
             model["language"] = data.get("language", model.get("language", "zh"))
             model["dimensions"] = data.get("dimensions", model.get("dimensions", 1536))
+            # 故障转移优先级
+            model["priority"] = data.get("priority", model.get("priority", 0))
             # 图片生成特有配置
             model["size"] = data.get("size", model.get("size", "1024x1024"))
             model["prompt_template"] = data.get("prompt_template", model.get("prompt_template", ""))
@@ -537,3 +541,99 @@ def register_ai_model_routes(app, server):
                 return jsonify({"success": False, "message": f"Test failed: {str(e)}"})
 
         return jsonify({"error": "Model not found"}), 404
+
+    # ========== 故障转移队列 API ==========
+
+    @app.route("/api/ai-models/failover-status")
+    def get_failover_status():
+        """获取故障转移队列状态（各模型健康信息）"""
+        from nbot.core.failover import get_failover_state
+
+        state = get_failover_state()
+        return jsonify({
+            "success": True,
+            "health": state.get_all_health_summary(),
+        })
+
+    @app.route("/api/ai-models/failover-reset", methods=["POST"])
+    def reset_failover():
+        """重置故障转移状态（清除冷却）"""
+        from nbot.core.failover import get_failover_state
+
+        data = request.json or {}
+        model_id = data.get("model_id")
+        get_failover_state().reset(model_id)
+        return jsonify({"success": True})
+
+    @app.route("/api/ai-models/failover-queue/<purpose>")
+    def get_failover_queue(purpose):
+        """获取指定用途的故障转移队列"""
+        if purpose not in MODEL_PURPOSES:
+            return jsonify({"error": "Invalid purpose"}), 400
+
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
+        from nbot.core.failover import get_failover_state
+
+        configs = get_model_configs_by_purpose(purpose)
+        state = get_failover_state()
+        health = state.get_all_health_summary()
+
+        queue = []
+        for cfg in configs:
+            mid = cfg.get("model_id", "")
+            queue.append({
+                "model_id": mid,
+                "name": cfg.get("name", ""),
+                "model": cfg.get("model", ""),
+                "provider": cfg.get("provider", ""),
+                "priority": cfg.get("priority", 0),
+                "health": health.get(mid, {}),
+            })
+
+        return jsonify({
+            "success": True,
+            "purpose": purpose,
+            "queue": queue,
+        })
+
+    @app.route("/api/ai-models/failover-reorder", methods=["POST"])
+    def reorder_failover_queue():
+        """批量更新模型优先级并自动应用P0模型。
+
+        请求体: { "purpose": "chat", "priorities": [{"id": "xxx", "priority": 0}, ...] }
+        """
+        data = request.json or {}
+        purpose = data.get("purpose", "chat")
+        priorities = data.get("priorities", [])
+
+        if not priorities:
+            return jsonify({"error": "priorities is required"}), 400
+
+        # Build a lookup of model_id -> new priority
+        priority_map = {p["id"]: p["priority"] for p in priorities if "id" in p}
+
+        updated = []
+        for model in server.ai_models:
+            if model["id"] in priority_map:
+                model["priority"] = priority_map[model["id"]]
+                updated.append(model["id"])
+
+        if updated:
+            server._save_data("ai_models")
+
+        # Auto-apply the P0 model for this purpose
+        p0_model = None
+        for model in server.ai_models:
+            if model["id"] in priority_map and priority_map[model["id"]] == 0:
+                if model.get("purpose", "chat") == purpose:
+                    p0_model = model
+                    break
+
+        if p0_model:
+            server._apply_ai_model(p0_model["id"], purpose=purpose)
+
+        return jsonify({
+            "success": True,
+            "updated": len(updated),
+            "p0_model_id": p0_model["id"] if p0_model else None,
+        })

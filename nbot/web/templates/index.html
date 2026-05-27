@@ -3860,7 +3860,12 @@
                                     <i class="fas fa-layer-group"></i>
                                     <span>{{ $t('ai_config.asset_library') }}</span>
                                 </div>
-                                <span class="ai-pane-badge">{{ aiModels.length }} 个</span>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button class="btn btn-text btn-sm" @click="openFailoverQueue('chat')" title="故障转移队列" style="padding: 4px 8px;">
+                                        <i class="fas fa-shield-alt" style="color: var(--accent-primary);"></i>
+                                    </button>
+                                    <span class="ai-pane-badge">{{ aiModels.length }} 个</span>
+                                </div>
                             </div>
                             <div class="ai-pane-subtitle">管理已保存的模型配置方案</div>
                             <div class="ai-pane-body">
@@ -3898,6 +3903,9 @@
                                                 </span>
                                             </div>
                                             <div class="ai-saved-flags">
+                                                <span class="ai-saved-flag ai-saved-flag-priority" :title="'故障转移优先级: ' + (model.priority ?? 0)">
+                                                    <i class="fas fa-layer-group"></i> P{{ model.priority ?? 0 }}
+                                                </span>
                                                 <span class="ai-saved-flag">{{ model.supports_tools ? '工具调用' : '纯对话' }}</span>
                                                 <span class="ai-saved-flag">{{ model.supports_reasoning ? '推理可见' : '推理隐藏' }}</span>
                                                 <span class="ai-saved-flag">{{ model.supports_stream ? '流式输出' : '非流式' }}</span>
@@ -4488,6 +4496,11 @@
                                         </div>
                                     </div>
                                     <div class="form-group">
+                                        <label class="form-label">故障转移优先级</label>
+                                        <input v-model.number="modelForm.priority" type="number" class="form-input" min="0" max="999" step="1" placeholder="0">
+                                        <div class="form-hint">数值越小优先级越高。同一用途下多个模型按此值排序，优先级最高的模型优先使用，失败时自动转移到下一个。</div>
+                                    </div>
+                                    <div class="form-group">
                                         <div class="switch-field">
                                             <div class="switch-copy">
                                                 <span class="switch-label">支持工具调用</span>
@@ -4614,6 +4627,117 @@
                                     <button class="btn btn-secondary" @click="closeModelEditModal">取消</button>
                                     <button class="btn btn-primary" @click="saveModel" :disabled="isLoading">
                                         <i class="fas fa-save"></i> {{ isLoading ? '保存中...' : '保存' }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 故障转移队列弹窗 -->
+                        <div v-if="showFailoverQueueModal" class="modal-overlay" style="z-index: 1300;" @click.self="closeFailoverQueue">
+                            <div class="modal failover-modal" style="max-width: 720px; max-height: 85vh;">
+                                <div class="modal-header">
+                                    <h3 class="modal-title">
+                                        <i class="fas fa-shield-alt" style="color: var(--accent-primary);"></i>
+                                        故障转移队列
+                                        <span class="fo-purpose-badge" :style="{ background: (modelPurposes[failoverQueuePurpose]?.color || '#3b82f6') + '20', color: modelPurposes[failoverQueuePurpose]?.color || '#3b82f6' }">
+                                            <span v-html="modelPurposes[failoverQueuePurpose]?.iconSvg"></span>
+                                            {{ $t(modelPurposes[failoverQueuePurpose]?.name || 'ai_config.purpose_chat') }}
+                                        </span>
+                                    </h3>
+                                    <button class="modal-close" @click="closeFailoverQueue">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="modal-body" style="overflow-y: auto;">
+                                    <div class="fo-description">
+                                        <i class="fas fa-info-circle"></i>
+                                        同一用途下的模型按优先级从高到低排列。当高优先级模型发生可恢复错误（429/5xx）时，自动转移到下一个模型。拖拽或使用箭头调整顺序。
+                                    </div>
+
+                                    <!-- 用途选择器 -->
+                                    <div class="fo-purpose-tabs">
+                                        <button
+                                            v-for="p in ['chat','vision','video','tts','stt','embedding','image_generation']"
+                                            :key="p"
+                                            class="fo-purpose-tab"
+                                            :class="{ active: failoverQueuePurpose === p }"
+                                            :style="failoverQueuePurpose === p ? { borderColor: modelPurposes[p]?.color, color: modelPurposes[p]?.color } : {}"
+                                            @click="failoverQueuePurpose = p; loadFailoverQueue();"
+                                        >
+                                            <span v-html="modelPurposes[p]?.iconSvg"></span>
+                                            {{ $t(modelPurposes[p]?.name || '') }}
+                                        </button>
+                                    </div>
+
+                                    <!-- 加载中 -->
+                                    <div v-if="failoverLoading" class="fo-loading">
+                                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                                    </div>
+
+                                    <!-- 空状态 -->
+                                    <div v-else-if="failoverQueue.length === 0" class="fo-empty">
+                                        <i class="fas fa-inbox" style="font-size: 36px; opacity: 0.3; margin-bottom: 12px;"></i>
+                                        <p>该用途下暂无模型配置</p>
+                                        <button class="btn btn-primary btn-sm" @click="closeFailoverQueue(); openModelEditModal();" style="margin-top: 8px;">
+                                            <i class="fas fa-plus"></i> 添加模型
+                                        </button>
+                                    </div>
+
+                                    <!-- 队列列表 -->
+                                    <div v-else class="fo-queue-list">
+                                        <div
+                                            v-for="(item, index) in failoverQueue"
+                                            :key="item.model_id"
+                                            class="fo-queue-item"
+                                            :class="{ 'fo-queue-first': index === 0 }"
+                                        >
+                                            <div class="fo-queue-rank">
+                                                <span class="fo-rank-number" :class="{ 'fo-rank-primary': index === 0 }">{{ index + 1 }}</span>
+                                            </div>
+                                            <div class="fo-queue-info">
+                                                <div class="fo-queue-name">
+                                                    {{ item.name }}
+                                                    <span v-if="activeModelsByPurpose[failoverQueuePurpose]?.active_model_id === item.model_id" class="fo-badge-active">当前使用</span>
+                                                    <span v-else-if="index === 0" class="fo-badge-primary">首选</span>
+                                                </div>
+                                                <div class="fo-queue-meta">
+                                                    <span><i :class="getProviderIcon(item.provider)"></i> {{ getProviderLabel(item.provider) }}</span>
+                                                    <span><i class="fas fa-cube"></i> {{ item.model }}</span>
+                                                    <span class="fo-priority-tag">P{{ item.priority }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="fo-queue-health">
+                                                <span class="fo-health-badge" :class="getFailoverHealthBadge(item.model_id).class">
+                                                    <i class="fas" :class="getFailoverHealthBadge(item.model_id).icon"></i>
+                                                    {{ getFailoverHealthBadge(item.model_id).text }}
+                                                </span>
+                                            </div>
+                                            <div class="fo-queue-actions">
+                                                <button class="fo-arrow-btn" :disabled="index === 0" @click="moveQueueItem(index, -1)" title="优先级提高">
+                                                    <i class="fas fa-chevron-up"></i>
+                                                </button>
+                                                <button class="fo-arrow-btn" :disabled="index === failoverQueue.length - 1" @click="moveQueueItem(index, 1)" title="优先级降低">
+                                                    <i class="fas fa-chevron-down"></i>
+                                                </button>
+                                                <button
+                                                    v-if="failoverHealth[item.model_id] && !failoverHealth[item.model_id].available"
+                                                    class="fo-reset-btn"
+                                                    @click="resetFailoverCooldown(item.model_id)"
+                                                    title="重置冷却"
+                                                >
+                                                    <i class="fas fa-undo"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary btn-sm" @click="resetFailoverCooldown()" :disabled="failoverLoading">
+                                        <i class="fas fa-sync-alt"></i> 重置全部冷却
+                                    </button>
+                                    <button class="btn btn-secondary" @click="closeFailoverQueue">关闭</button>
+                                    <button class="btn btn-primary btn-sm" @click="loadFailoverQueue()" :disabled="failoverLoading">
+                                        <i class="fas fa-refresh"></i> 刷新
                                     </button>
                                 </div>
                             </div>
@@ -4836,6 +4960,9 @@
                                 </div>
                                 <div class="modal-footer">
                                     <button class="btn btn-secondary" @click="closePurposeConfigModal">关闭</button>
+                                    <button class="btn btn-secondary" @click="openFailoverQueue(editingPurpose)" style="margin-right: auto;">
+                                        <i class="fas fa-shield-alt"></i> 故障转移队列
+                                    </button>
                                     <button class="btn btn-primary" @click="openModelEditModal(); closePurposeConfigModal();">
                                         <i class="fas fa-plus"></i> {{ $t('ai_config.new_config_prefix') }}{{ $t(modelPurposes[editingPurpose].name) }}{{ $t('ai_config.config_suffix') }}
                                     </button>
@@ -9113,6 +9240,7 @@
                         base_url: '',
                         model: 'gpt-4',
                         enabled: true,
+                        priority: 0,
                         supports_tools: true,
                         supports_reasoning: true,
                         supports_stream: true,
@@ -9164,6 +9292,12 @@
                     // 显示用途配置弹窗
                     showPurposeConfigModal: false,
                     editingPurpose: null,
+                    // 故障转移队列弹窗
+                    showFailoverQueueModal: false,
+                    failoverQueuePurpose: 'chat',
+                    failoverQueue: [],
+                    failoverHealth: {},
+                    failoverLoading: false,
 
                     // Skills 配置
                     skills: [],

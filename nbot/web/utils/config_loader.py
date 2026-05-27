@@ -300,6 +300,81 @@ def get_model_config_by_purpose(purpose: str) -> dict:
     return None
 
 
+def get_model_configs_by_purpose(purpose: str) -> list:
+    """Return all enabled model configs for a purpose, ordered by priority.
+
+    Lower priority value = higher priority (tried first).
+    Models with the same priority preserve their original order
+    in ai_models.json. Used by the failover queue.
+
+    Args:
+        purpose: Model purpose (chat, vision, video, tts, stt, embedding)
+
+    Returns:
+        List of model config dicts, sorted by priority ascending.
+        Each dict includes 'model_id' and 'priority' keys.
+        Empty list if no enabled models found for the purpose.
+    """
+    ai_models = _load_ai_models_from_file()
+
+    matches = []
+    for idx, model in enumerate(ai_models):
+        if model.get("purpose", "chat") != purpose:
+            continue
+        if not model.get("enabled", True):
+            continue
+
+        config = {
+            "model_id": model.get("id", ""),
+            "priority": model.get("priority", 0),
+            "api_key": resolve_runtime_api_key(
+                model.get("api_key", ""),
+                model.get("provider_type", "openai_compatible"),
+            ),
+            "base_url": model.get("base_url", ""),
+            "model": model.get("model", ""),
+            "provider_type": model.get("provider_type", "openai_compatible"),
+            "provider": model.get("provider", "custom"),
+            "append_base_url_path": model.get("append_base_url_path", True),
+            "temperature": model.get("temperature", 0.7),
+            "max_tokens": model.get("max_tokens", 2000),
+            "max_context_length": model.get("max_context_length", 100000),
+            "top_p": model.get("top_p", 0.9),
+            "system_prompt": model.get("system_prompt", ""),
+            "supports_tools": model.get("supports_tools", True),
+            "supports_reasoning": model.get("supports_reasoning", True),
+            "supports_stream": model.get("supports_stream", True),
+            "_order": idx,
+        }
+
+        # Add purpose-specific config
+        if purpose == "tts":
+            config.update({
+                "voice": model.get("voice", "default"),
+                "speed": model.get("speed", 1.0),
+                "pitch": model.get("pitch", 1.0),
+                "volume": model.get("volume", 1.0),
+            })
+        elif purpose == "stt":
+            config.update({
+                "language": model.get("language", "zh"),
+            })
+        elif purpose == "embedding":
+            config.update({
+                "dimensions": model.get("dimensions", 1536),
+            })
+
+        matches.append(config)
+
+    # Sort by priority ascending, then by original order
+    matches.sort(key=lambda x: (x.get("priority", 0), x.get("_order", 0)))
+    # Remove internal sort key
+    for m in matches:
+        m.pop("_order", None)
+
+    return matches
+
+
 def get_chat_model_config() -> dict:
     """鑾峰彇瀵硅瘽妯″瀷閰嶇疆"""
     config = get_model_config_by_purpose("chat")

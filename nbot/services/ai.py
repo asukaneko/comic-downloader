@@ -116,6 +116,7 @@ def get_runtime_ai_config() -> dict:
         "supports_tools": shared.get("supports_tools", supports_tools),
         "supports_reasoning": shared.get("supports_reasoning", supports_reasoning),
         "supports_stream": shared.get("supports_stream", supports_stream),
+        "purpose": shared.get("purpose", "chat"),
     }
     effective["api_key"] = resolve_runtime_api_key(
         shared.get("api_key") or api_key,
@@ -152,6 +153,38 @@ def refresh_runtime_ai_config() -> dict:
         client.supports_stream = supports_stream
 
     return effective
+
+
+def apply_model_config(config: dict) -> None:
+    """Push a specific model config to the global AIClient singleton.
+
+    Used by the failover wrapper to swap models without reloading
+    from file. Accepts a config dict with the same shape as
+    get_runtime_ai_config() returns.
+    """
+    global api_key, base_url, model, provider_type
+    global supports_tools, supports_reasoning, supports_stream
+
+    api_key = config.get("api_key", "")
+    base_url = config.get("base_url", "")
+    model = config.get("model", "")
+    provider_type = config.get("provider_type", "openai_compatible")
+    supports_tools = bool(config.get("supports_tools", True))
+    supports_reasoning = bool(config.get("supports_reasoning", True))
+    supports_stream = bool(config.get("supports_stream", True))
+
+    client = globals().get("ai_client")
+    if client is not None:
+        client.api_key = api_key
+        client.base_url = base_url
+        client.model = model
+        client.provider_type = provider_type
+        client.append_base_url_path = bool(config.get("append_base_url_path", True))
+        client.stream_enabled = bool(config.get("stream", True))
+        client.supports_tools = supports_tools
+        client.supports_reasoning = supports_reasoning
+        client.supports_stream = supports_stream
+
 
 user_messages = {}
 group_messages = {}

@@ -10043,6 +10043,93 @@ def main(params):
                     }
                 },
 
+                // ========== 故障转移队列管理 ==========
+                openFailoverQueue(purpose) {
+                    this.failoverQueuePurpose = purpose || 'chat';
+                    this.showFailoverQueueModal = true;
+                    this.loadFailoverQueue();
+                },
+
+                closeFailoverQueue() {
+                    this.showFailoverQueueModal = false;
+                    this.failoverQueue = [];
+                    this.failoverHealth = {};
+                },
+
+                async loadFailoverQueue() {
+                    this.failoverLoading = true;
+                    try {
+                        const [queueRes, statusRes] = await Promise.all([
+                            api.get(`/api/ai-models/failover-queue/${this.failoverQueuePurpose}`),
+                            api.get('/api/ai-models/failover-status')
+                        ]);
+                        if (queueRes.data.success) {
+                            this.failoverQueue = queueRes.data.queue;
+                        }
+                        if (statusRes.data.success) {
+                            this.failoverHealth = statusRes.data.health;
+                        }
+                    } catch (e) {
+                        this.showToast('加载故障转移队列失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.failoverLoading = false;
+                    }
+                },
+
+                async resetFailoverCooldown(modelId) {
+                    try {
+                        await api.post('/api/ai-models/failover-reset', { model_id: modelId || null });
+                        this.showToast(modelId ? '已重置该模型冷却' : '已重置所有模型冷却', 'success');
+                        await this.loadFailoverQueue();
+                    } catch (e) {
+                        this.showToast('重置失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                async moveQueueItem(index, direction) {
+                    const newIndex = index + direction;
+                    if (newIndex < 0 || newIndex >= this.failoverQueue.length) return;
+
+                    const queue = [...this.failoverQueue];
+                    // Swap positions in array
+                    const moved = queue.splice(index, 1)[0];
+                    queue.splice(newIndex, 0, moved);
+
+                    // Reassign priority 0, 1, 2... based on new order
+                    for (let i = 0; i < queue.length; i++) {
+                        queue[i] = { ...queue[i], priority: i };
+                    }
+                    this.failoverQueue = queue;
+
+                    // Batch save via dedicated endpoint (also auto-applies P0)
+                    try {
+                        const purpose = this.failoverQueuePurpose;
+                        const res = await api.post('/api/ai-models/failover-reorder', {
+                            purpose: purpose,
+                            priorities: queue.map(item => ({ id: item.model_id, priority: item.priority }))
+                        });
+
+                        if (res.data.success) {
+                            await this.loadAIModels();
+                            await this.loadActiveModelsByPurpose();
+                            if (purpose === 'chat') {
+                                await this.loadAIConfig();
+                            }
+                            this.showToast('优先级已更新，已同步首选模型', 'success');
+                        }
+                    } catch (e) {
+                        this.showToast('更新优先级失败: ' + (e.response?.data?.error || e.message), 'error');
+                        await this.loadFailoverQueue();
+                    }
+                },
+
+                getFailoverHealthBadge(modelId) {
+                    const health = this.failoverHealth[modelId];
+                    if (!health) return { class: 'fo-health-ok', text: '健康', icon: 'fa-check-circle' };
+                    if (health.available) return { class: 'fo-health-ok', text: '健康', icon: 'fa-check-circle' };
+                    return { class: 'fo-health-cooldown', text: `冷却中 ${health.cooldown_remaining}s`, icon: 'fa-snowflake' };
+                },
+
                 getProviderTypeByProvider(provider) {
                     const mapping = {
                         openai: 'openai_compatible',
@@ -10199,6 +10286,7 @@ def main(params):
                             ...model,
                             // 确保purpose字段存在
                             purpose: model.purpose || 'chat',
+                            priority: model.priority ?? 0,
                             append_base_url_path: typeof model.append_base_url_path === 'boolean' ? model.append_base_url_path : true,
                             // 确保特有配置字段存在
                             voice: model.voice || 'default',
@@ -10243,6 +10331,7 @@ def main(params):
                             append_base_url_path: true,
                             model: 'gpt-4',
                             enabled: true,
+                            priority: 0,
                             supports_tools: true,
                             supports_reasoning: true,
                             supports_stream: true,

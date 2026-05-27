@@ -427,17 +427,32 @@ class WebCallbacks(PipelineCallbacks):
     # ---- AI 模型交互 ----
 
     def build_model_call(self, ctx, tools):
-        """Web 频道使用服务器的 AI 方法。"""
+        """Web 频道使用服务器的 AI 方法，支持故障转移队列。"""
         server = self.server
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
+        from nbot.services.ai import refresh_runtime_ai_config
+
+        runtime_ai = refresh_runtime_ai_config()
+        purpose = runtime_ai.get("purpose", "chat")
+        model_configs = get_model_configs_by_purpose(purpose)
+
+        if len(model_configs) > 1:
+            # Multiple models: use failover wrapper
+            from nbot.core.ai_pipeline import AIPipeline
+            pipeline = AIPipeline()
+            return pipeline._wrap_with_failover(model_configs, purpose)
+
+        # Single model: direct call
         return lambda messages, stop_event=None: _call_web_ai(
             server, messages, tools, stop_event
         )
 
     def build_model_call_streaming(self, ctx, tools):
-        """返回 provider 级流式迭代器。"""
+        """返回 provider 级流式迭代器，支持故障转移队列。"""
         server = self.server
         session_id = self.session_id
         from nbot.services.ai import refresh_runtime_ai_config
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
 
         runtime_ai = refresh_runtime_ai_config()
         if not runtime_ai.get("supports_stream", True):
@@ -445,8 +460,16 @@ class WebCallbacks(PipelineCallbacks):
         if not runtime_ai.get("stream", True):
             return None
 
+        purpose = runtime_ai.get("purpose", "chat")
+        model_configs = get_model_configs_by_purpose(purpose)
+        if not model_configs:
+            model_configs = [runtime_ai]
+
         def streamer(messages, stop_event=None):
-            return _stream_to_web(server, messages, tools, session_id, stop_event)
+            return _stream_to_web(
+                server, messages, tools, session_id,
+                stop_event, model_configs=model_configs,
+            )
 
         return streamer
 
@@ -900,11 +923,27 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
     return normalized.to_dict()
 
 
-def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, stop_event=None):
-    """Web 频道的 provider 级流式实现，含 chunk 去重。"""
+def _stream_to_web(
+    server,
+    messages: List[Dict],
+    tools: list,
+    session_id: str,
+    stop_event=None,
+    model_configs: list = None,
+):
+    """Web 频道的 provider 级流式实现，含 chunk 去重和故障转移。
+
+    当提供 model_configs 时，在连接阶段（首个 chunk 到达前）尝试
+    按优先级依次使用不同模型。首个 chunk 到达后不再切换模型。
+    """
     import requests
     from nbot.core.model_adapter import normalize_usage_dict
-    from nbot.services.ai import refresh_runtime_ai_config
+    from nbot.services.ai import refresh_runtime_ai_config, apply_model_config
+    from nbot.core.failover import (
+        classify_http_error,
+        get_failover_state,
+        _extract_status_code,
+    )
 
     stream_started_at = time.perf_counter()
     runtime_ai = refresh_runtime_ai_config()
@@ -937,25 +976,101 @@ def _stream_to_web(server, messages: List[Dict], tools: list, session_id: str, s
             extra_body=extra_body,
         )
 
-    payload = _build_stream_payload(include_usage=True)
-    _log.info(
-        "[StreamTiming] session=%s posting provider request model=%s messages=%s chars=%s tools=%s",
-        session_id,
-        model,
-        len(messages),
-        sum(len(str(msg.get("content", ""))) for msg in messages if isinstance(msg, dict)),
-        bool(tools),
-    )
-    resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
-    try:
-        resp.raise_for_status()
-    except requests.HTTPError:
-        if resp.status_code in (400, 422) and payload.get("stream_options"):
-            payload = _build_stream_payload(include_usage=False)
-            resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
+    # ---- 故障转移：连接阶段（首个 chunk 前） ----
+    failover = get_failover_state()
+    configs_to_try = model_configs if model_configs and len(model_configs) > 1 else None
+    resp = None
+    last_error = None
+
+    if configs_to_try:
+        attempted = set()
+        for _ in range(len(configs_to_try)):
+            cfg = failover.select_model(configs_to_try, exclude_ids=attempted)
+            if cfg is None:
+                break
+            mid = cfg.get("model_id", "")
+            attempted.add(mid)
+
+            # Apply this config
+            apply_model_config(cfg)
+            cfg_url = resolve_chat_completion_url(
+                cfg.get("base_url", ""),
+                model=cfg.get("model", ""),
+                provider_type=cfg.get("provider_type", "openai_compatible"),
+                append_base_url_path=cfg.get("append_base_url_path", True),
+            )
+            cfg_headers = {
+                "Authorization": f"Bearer {cfg.get('api_key', '')}",
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream",
+                "Cache-Control": "no-cache",
+            }
+            cfg_payload = build_chat_completion_payload(
+                cfg.get("model", ""),
+                messages,
+                base_url=cfg.get("base_url", ""),
+                provider_type=cfg.get("provider_type", "openai_compatible"),
+                tools=tools if tools else None,
+                tool_choice="auto" if tools else None,
+                stream=True,
+                extra_body={"stream_options": {"include_usage": True}},
+            )
+            try:
+                _log.info(
+                    "[StreamTiming] session=%s failover trying model=%s",
+                    session_id, cfg.get("model", ""),
+                )
+                resp = requests.post(
+                    cfg_url, json=cfg_payload, headers=cfg_headers,
+                    stream=True, timeout=120,
+                )
+                resp.raise_for_status()
+                failover.record_success(mid)
+                # Update local vars for the rest of the function
+                model = cfg.get("model", "")
+                base_url = cfg.get("base_url", "")
+                provider_type = cfg.get("provider_type", "openai_compatible")
+                break
+            except StopIteration:
+                raise
+            except Exception as e:
+                status = _extract_status_code(e)
+                category = classify_http_error(status)
+                if category == "config":
+                    raise
+                failover.record_failure(mid, status)
+                last_error = e
+                _log.warning(
+                    "[StreamTiming] session=%s model=%s failed (%s %d)",
+                    session_id, cfg.get("model", ""), category, status,
+                )
+                resp = None
+                continue
+
+        if resp is None:
+            raise last_error or RuntimeError("All streaming models failed")
+    else:
+        # Single model: original path
+        payload = _build_stream_payload(include_usage=True)
+        _log.info(
+            "[StreamTiming] session=%s posting provider request model=%s messages=%s chars=%s tools=%s",
+            session_id,
+            model,
+            len(messages),
+            sum(len(str(msg.get("content", ""))) for msg in messages if isinstance(msg, dict)),
+            bool(tools),
+        )
+        resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
+        try:
             resp.raise_for_status()
-        else:
-            raise
+        except requests.HTTPError:
+            if resp.status_code in (400, 422) and payload.get("stream_options"):
+                payload = _build_stream_payload(include_usage=False)
+                resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
+                resp.raise_for_status()
+            else:
+                raise
+
     _log.info(
         "[StreamTiming] session=%s provider headers after %.3fs",
         session_id,
