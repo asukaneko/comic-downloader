@@ -50,6 +50,8 @@ ChannelGateway 是 Gateway 模块的核心类，
 - 所有内部组件可替换
 """
 
+import asyncio
+import inspect
 import logging
 import time
 from datetime import datetime
@@ -71,6 +73,53 @@ if TYPE_CHECKING:
     from nbot.gateway.storage import GatewayStorage
 
 _log = logging.getLogger(__name__)
+
+
+def _merge_internal_task_metadata(
+    base_metadata: dict[str, Any],
+    result: Any,
+) -> dict[str, Any]:
+    metadata = dict(base_metadata)
+    if not isinstance(result, dict):
+        metadata.setdefault("result_summary", "task completed")
+        return metadata
+
+    extra_metadata = result.get("metadata")
+    if isinstance(extra_metadata, dict):
+        metadata.update(extra_metadata)
+
+    for key in ("content", "workflow_id", "response_preview", "context_target"):
+        value = result.get(key)
+        if value not in (None, ""):
+            metadata.setdefault(key, value)
+
+    for source_key in ("target_session_id", "session_id", "appended_session_id"):
+        value = result.get(source_key)
+        if value not in (None, ""):
+            metadata.setdefault("target_session_id", value)
+            break
+
+    message_count = result.get("message_count")
+    if not isinstance(message_count, int):
+        messages_sent = result.get("messages_sent")
+        if isinstance(messages_sent, int):
+            message_count = messages_sent
+
+    if isinstance(message_count, int):
+        metadata.setdefault("message_count", message_count)
+        metadata.setdefault(
+            "result_summary",
+            f"sent {message_count} message" if message_count == 1 else f"sent {message_count} messages",
+        )
+
+    if "result_summary" not in metadata:
+        result_summary = result.get("result_summary")
+        if isinstance(result_summary, str) and result_summary.strip():
+            metadata["result_summary"] = result_summary.strip()
+        else:
+            metadata["result_summary"] = "task completed"
+
+    return metadata
 
 
 class ChannelGateway:
@@ -681,6 +730,122 @@ class ChannelGateway:
             },
         )
 
+    async def submit_internal_task(
+        self,
+        *,
+        task_kind: str,
+        task_id: str,
+        handler,
+        task_name: str = "",
+        trigger_source: str = "system",
+        channel_id: str = "internal",
+        conversation_id: str = "",
+        user_id: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> GatewayResult:
+        """Submit an internal scheduled task through Gateway tracing."""
+        trace_id = self.trace_factory.new_trace_id()
+        base_metadata = {
+            "task_kind": task_kind,
+            "task_id": task_id,
+            "task_name": task_name,
+            "trigger_source": trigger_source,
+        }
+        if metadata:
+            base_metadata.update(metadata)
+
+        raw_event = {
+            "task_kind": task_kind,
+            "task_id": task_id,
+            "task_name": task_name,
+            "trigger_source": trigger_source,
+        }
+
+        with trace_context(trace_id):
+            self._record_event(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status="received",
+                conversation_id=conversation_id,
+                user_id=user_id,
+                raw_event=raw_event,
+                event_type="internal_task",
+                metadata=base_metadata,
+            )
+            self._record_event(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status="dispatched",
+                conversation_id=conversation_id,
+                user_id=user_id,
+                event_type="internal_task",
+                metadata=base_metadata,
+            )
+
+            try:
+                result = handler()
+                if inspect.isawaitable(result):
+                    result = await result
+
+                completion_metadata = _merge_internal_task_metadata(base_metadata, result)
+
+                self._record_event(
+                    trace_id=trace_id,
+                    channel_id=channel_id,
+                    status="completed",
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    raw_event=raw_event,
+                    event_type="internal_task",
+                    metadata=completion_metadata,
+                )
+                return GatewayResult(
+                    ok=True,
+                    trace_id=trace_id,
+                    channel_id=channel_id,
+                    conversation_id=conversation_id,
+                    status="completed",
+                    data={
+                        "task_kind": task_kind,
+                        "task_id": task_id,
+                        "task_name": task_name,
+                        "result": result if isinstance(result, dict) else {"value": result},
+                    },
+                )
+            except Exception as e:
+                self._record_event(
+                    trace_id=trace_id,
+                    channel_id=channel_id,
+                    status="failed",
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    raw_event=raw_event,
+                    error=str(e),
+                    event_type="internal_task",
+                    metadata=base_metadata,
+                )
+                return GatewayResult(
+                    ok=False,
+                    trace_id=trace_id,
+                    channel_id=channel_id,
+                    conversation_id=conversation_id,
+                    status="failed",
+                    error=str(e),
+                    data={
+                        "task_kind": task_kind,
+                        "task_id": task_id,
+                        "task_name": task_name,
+                    },
+                )
+
+    def submit_internal_task_sync(self, **kwargs: Any) -> GatewayResult:
+        """Synchronous wrapper for internal task submission."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.submit_internal_task(**kwargs))
+        raise RuntimeError("submit_internal_task_sync cannot run inside an active event loop")
+
     def _record_event(
         self,
         *,
@@ -693,11 +858,16 @@ class ChannelGateway:
         raw_event: dict[str, Any] | None = None,
         error: str = "",
         remote_addr: str = "",
+        event_type: str = "message",
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """记录事件状态变更到 EventStore（如果可用）"""
         if not self.event_store:
             return
         try:
+            merged_metadata = dict(metadata or {})
+            if remote_addr:
+                merged_metadata.setdefault("remote_addr", remote_addr)
             self.event_store.record(
                 trace_id=trace_id,
                 channel_id=channel_id,
@@ -705,9 +875,10 @@ class ChannelGateway:
                 conversation_id=conversation_id,
                 user_id=user_id,
                 message_id=message_id,
+                event_type=event_type,
                 raw_event=raw_event,
                 error=error,
-                metadata={"remote_addr": remote_addr} if remote_addr else None,
+                metadata=merged_metadata or None,
             )
         except Exception as e:
             _log.debug("[Gateway] 事件记录失败 trace=%s status=%s error=%s", trace_id, status, str(e))
@@ -831,7 +1002,7 @@ def get_gateway() -> "ChannelGateway | None":
     return _global_gateway_instance
 
 
-def set_gateway(gateway: "ChannelGateway") -> None:
+def set_gateway(gateway: "ChannelGateway | None") -> None:
     """设置全局 Gateway 实例（用于依赖注入）
 
     Args:

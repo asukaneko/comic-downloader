@@ -2275,6 +2275,13 @@
                                                         <div><i class="fas fa-history"></i> 上次执行：{{ item.last_run ? formatFullTime(item.last_run) : '从未执行' }}</div>
                                                         <div><i class="fas fa-forward"></i> 下次执行：{{ item.next_run ? formatFullTime(item.next_run) : '待触发 / 未调度' }}</div>
                                                         <div v-if="item.target_session_id"><i class="fas fa-comments"></i> 目标会话：{{ getSessionDisplayName(item.target_session_id) }}</div>
+                                                        <div v-if="item.last_trace_id" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                                            <i class="fas fa-route"></i>
+                                                            <code style="font-size: 11px;">{{ shortenId(item.last_trace_id, 18) }}</code>
+                                                            <span v-if="item.last_gateway_status" class="badge" :class="'badge-' + getGatewayStatusClass(item.last_gateway_status)">
+                                                                {{ item.last_gateway_status }}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                                                         <button class="btn btn-secondary" style="flex: 1; padding: 6px; font-size: 12px;" @click="toggleTaskCenterItem(item)" :disabled="isLoading">
@@ -2286,6 +2293,9 @@
                                                         </button>
                                                         <button v-if="item.editable" class="btn btn-secondary" style="flex: 1; padding: 6px; font-size: 12px;" @click="openTaskCenterEditor(item)" :disabled="isLoading">
                                                             <i class="fas fa-edit"></i> 编辑
+                                                        </button>
+                                                        <button v-if="item.last_trace_id" class="btn btn-secondary" style="padding: 6px 10px; font-size: 12px;" @click="showGatewayTrace(item.last_trace_id)" :disabled="isLoading">
+                                                            <i class="fas fa-stream"></i>
                                                         </button>
                                                         <button v-if="item.deletable" class="btn btn-danger" style="padding: 6px 10px; font-size: 12px;" @click="deleteTaskCenterItem(item)" :disabled="isLoading">
                                                             <i class="fas fa-trash"></i>
@@ -5323,6 +5333,39 @@
                                                         </template>
                                                     </div>
 
+                                                    <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).task_kind" class="trace-detail-box">
+                                                        <div class="trace-detail-label"><i class="fas fa-bolt"></i> 任务信息</div>
+                                                        <div class="trace-meta-grid">
+                                                            <div class="trace-meta-item">
+                                                                <span class="trace-meta-label">任务类型</span>
+                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).task_kind }}</span>
+                                                            </div>
+                                                            <div v-if="parseJson(evt.metadata_json).task_name" class="trace-meta-item">
+                                                                <span class="trace-meta-label">任务名称</span>
+                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).task_name }}</span>
+                                                            </div>
+                                                            <div v-if="parseJson(evt.metadata_json).trigger_source" class="trace-meta-item">
+                                                                <span class="trace-meta-label">触发来源</span>
+                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).trigger_source }}</span>
+                                                            </div>
+                                                            <div v-if="parseJson(evt.metadata_json).target_session_id" class="trace-meta-item">
+                                                                <span class="trace-meta-label">目标会话</span>
+                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).target_session_id }}</span>
+                                                            </div>
+                                                            <div v-if="parseJson(evt.metadata_json).workflow_id" class="trace-meta-item">
+                                                                <span class="trace-meta-label">工作流 ID</span>
+                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).workflow_id }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).content" class="trace-detail-box">
+                                                        <div class="trace-detail-label"><i class="fas fa-align-left"></i> 任务内容</div>
+                                                        <div class="trace-detail-content msg-content">
+                                                            {{ parseJson(evt.metadata_json).content }}
+                                                        </div>
+                                                    </div>
+
                                                     <!-- 用户消息（received 阶段） -->
                                                     <div v-if="evt.status === 'received' && parseJson(evt.raw_event_json)" class="trace-detail-box">
                                                         <div class="trace-detail-label"><i class="fas fa-comment-dots"></i> 用户消息</div>
@@ -5338,6 +5381,22 @@
                                                     </div>
 
                                                     <!-- AI 回复（delivered 阶段）-->
+                                                    <div
+                                                        v-if="evt.status === 'completed' && parseJson(evt.metadata_json) && (parseJson(evt.metadata_json).result_summary || parseJson(evt.metadata_json).response_preview || parseJson(evt.metadata_json).message_count !== undefined)"
+                                                        class="trace-detail-box reply-box"
+                                                    >
+                                                        <div class="trace-detail-label"><i class="fas fa-clipboard-check"></i> 执行结果</div>
+                                                        <div class="trace-detail-content reply-content">
+                                                            {{ parseJson(evt.metadata_json).result_summary || '任务已完成' }}
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).response_preview" class="trace-detail-meta">
+                                                            <i class="fas fa-comment-alt"></i> {{ parseJson(evt.metadata_json).response_preview }}
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).message_count !== undefined" class="trace-detail-meta">
+                                                            <i class="fas fa-paper-plane"></i> 消息数 {{ parseJson(evt.metadata_json).message_count }}
+                                                        </div>
+                                                    </div>
+
                                                     <div v-if="evt.status === 'delivered' && parseJson(evt.raw_event_json)" class="trace-detail-box reply-box">
                                                         <div class="trace-detail-label"><i class="fas fa-robot"></i> AI 回复</div>
                                                         <div class="trace-detail-content reply-content">

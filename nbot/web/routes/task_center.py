@@ -23,13 +23,16 @@ def _normalize_task_payload(data):
 
 
 def register_task_center_routes(app, server):
+    def _payload():
+        return request.get_json(silent=True) or {}
+
     @app.route("/api/task-center")
     def get_task_center():
         return jsonify({"items": server.get_task_center_items()})
 
     @app.route("/api/task-center", methods=["POST"])
     def create_task_center_task():
-        payload = _normalize_task_payload(request.json or {})
+        payload = _normalize_task_payload(_payload())
         task = {
             "id": str(uuid.uuid4()),
             "kind": "custom",
@@ -57,7 +60,7 @@ def register_task_center_routes(app, server):
         if not task:
             return jsonify({"error": "Task not found"}), 404
 
-        payload = _normalize_task_payload(request.json or {})
+        payload = _normalize_task_payload(_payload())
         candidate = {**task, **payload}
         try:
             server._validate_custom_task(candidate)
@@ -136,7 +139,7 @@ def register_task_center_routes(app, server):
         if workflow:
             trigger_data = {
                 "source": "task-center",
-                "content": (request.json or {}).get("content", ""),
+                "content": _payload().get("content", ""),
                 "time": datetime.now().isoformat(),
             }
             server._execute_workflow(task_id, trigger_data)
@@ -146,5 +149,9 @@ def register_task_center_routes(app, server):
         if not task:
             return jsonify({"error": "Task not found"}), 404
 
-        server.socketio.start_background_task(server._execute_custom_task, task_id)
+        server.socketio.start_background_task(
+            server._execute_custom_task,
+            task_id,
+            "task-center",
+        )
         return jsonify({"success": True, "message": "Task execution started"})

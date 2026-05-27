@@ -256,7 +256,7 @@ CORE_INSTRUCTIONS = """【重要】你必须严格遵循以下要求：
 现在你可以开始与用户对话了。"""
 
 try:
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.cron import CronTrigger
 
     APSCHEDULER_AVAILABLE = True
@@ -379,6 +379,14 @@ class WebChatServer:
     def get_instance(cls):
         """获取单例实例"""
         return cls._instance
+
+    @staticmethod
+    def _create_scheduler():
+        if not APSCHEDULER_AVAILABLE:
+            return None
+        scheduler = BackgroundScheduler()
+        scheduler.start()
+        return scheduler
 
     def __init__(self, app: Flask, socketio: SocketIO):
         cls = self.__class__
@@ -509,15 +517,7 @@ class WebChatServer:
         if APSCHEDULER_AVAILABLE:
             try:
                 # 尝试获取当前事件循环，如果没有则创建
-                import asyncio
-
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                self.scheduler = AsyncIOScheduler(event_loop=loop)
-                self.scheduler.start()
+                self.scheduler = self._create_scheduler()
             except Exception as e:
                 _log.error(f"Failed to start scheduler: {e}")
                 self.scheduler = None
@@ -1886,10 +1886,42 @@ class WebChatServer:
                 return task
         return None
 
-    def _execute_custom_task(self, task_id: str):
+    def _execute_custom_task(
+        self,
+        task_id: str,
+        trigger_source: str = "scheduler",
+        _from_gateway: bool = False,
+    ):
         task = self._get_custom_task(task_id)
         if not task or not task.get("enabled"):
             return
+        if not _from_gateway:
+            from nbot.gateway.gateway import get_gateway
+
+            gateway = get_gateway()
+            if gateway:
+                result = gateway.submit_internal_task_sync(
+                    task_kind="scheduled_task",
+                    task_id=task_id,
+                    task_name=task.get("name", "scheduled task"),
+                    trigger_source=trigger_source,
+                    metadata={
+                        "target_session_id": task.get("target_session_id", ""),
+                    },
+                    handler=lambda: (
+                        self._run_custom_task_execution(task)
+                        if hasattr(self, "_run_custom_task_execution")
+                        else self._execute_custom_task(
+                            task_id,
+                            trigger_source,
+                            _from_gateway=True,
+                        )
+                    ),
+                )
+                task["last_trace_id"] = result.trace_id
+                task["last_gateway_status"] = result.status
+                self._save_data("scheduled_tasks")
+                return result
         if task_id in self.running_task_ids:
             _log.warning(f"Skip custom task {task_id}: already running")
             return
@@ -2021,6 +2053,8 @@ class WebChatServer:
                 "target_session_id": self.heartbeat_config.get("target_session_id", ""),
                 "last_run": self.heartbeat_config.get("last_run"),
                 "next_run": self.heartbeat_config.get("next_run"),
+                "last_trace_id": self.heartbeat_config.get("last_trace_id", ""),
+                "last_gateway_status": self.heartbeat_config.get("last_gateway_status", ""),
                 "editable": True,
                 "deletable": False,
             }
@@ -2060,6 +2094,8 @@ class WebChatServer:
                     "next_run": next_run,
                     "status": workflow.get("status", "idle"),
                     "last_error": workflow.get("last_error"),
+                    "last_trace_id": workflow.get("last_trace_id", ""),
+                    "last_gateway_status": workflow.get("last_gateway_status", ""),
                     "editable": True,
                     "deletable": False,
                 }
@@ -2089,6 +2125,8 @@ class WebChatServer:
                     "next_run": task.get("next_run"),
                     "status": task.get("status", "idle"),
                     "last_error": task.get("last_error"),
+                    "last_trace_id": task.get("last_trace_id", ""),
+                    "last_gateway_status": task.get("last_gateway_status", ""),
                     "editable": True,
                     "deletable": True,
                     "prompt": task.get("prompt", ""),
@@ -2135,10 +2173,14 @@ class WebChatServer:
         if save:
             self._save_data("workflows")
 
-    def _execute_workflow(self, workflow_id: str, trigger_data: dict = None):
+    def _execute_workflow(
+        self,
+        workflow_id: str,
+        trigger_data: dict = None,
+        _from_gateway: bool = False,
+    ):
         """执行工作流 - 支持多轮工具调用"""
         workflow = None
-        workflow_adapter = _resolve_web_adapter(self.web_channel_adapter)
         for w in self.workflows:
             if w["id"] == workflow_id:
                 workflow = w
@@ -2146,6 +2188,36 @@ class WebChatServer:
 
         if not workflow or not workflow.get("enabled"):
             return
+        if not _from_gateway:
+            from nbot.gateway.gateway import get_gateway
+
+            gateway = get_gateway()
+            if gateway:
+                trigger_source = (trigger_data or {}).get("source", "scheduler")
+                result = gateway.submit_internal_task_sync(
+                    task_kind="workflow",
+                    task_id=workflow_id,
+                    task_name=workflow.get("name", "workflow"),
+                    trigger_source=trigger_source,
+                    metadata={
+                        "workflow_id": workflow_id,
+                        "content": (trigger_data or {}).get("content", ""),
+                    },
+                    handler=lambda: (
+                        self._run_workflow_execution(workflow, trigger_data)
+                        if hasattr(self, "_run_workflow_execution")
+                        else self._execute_workflow(
+                            workflow_id,
+                            trigger_data,
+                            _from_gateway=True,
+                        )
+                    ),
+                )
+                workflow["last_trace_id"] = result.trace_id
+                workflow["last_gateway_status"] = result.status
+                self._save_data("workflows")
+                return result
+        workflow_adapter = _resolve_web_adapter(self.web_channel_adapter)
         if workflow_id in self.running_workflow_ids:
             _log.warning(f"Skip workflow {workflow_id}: already running")
             return
@@ -3169,7 +3241,7 @@ class WebChatServer:
 
                 try:
                     # 尝试获取当前事件循环
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # 如果已经在事件循环中，创建任务
                     asyncio.create_task(self._execute_heartbeat())
                 except RuntimeError:
@@ -3201,7 +3273,7 @@ class WebChatServer:
             except:
                 pass
 
-    async def _execute_heartbeat(self, force: bool = False):
+    async def _execute_heartbeat(self, force: bool = False, _from_gateway: bool = False):
         """执行 Heartbeat 任务
 
         Args:
@@ -3210,6 +3282,29 @@ class WebChatServer:
         if not force and not self.heartbeat_config.get("enabled"):
             _log.info("Heartbeat is disabled, skipping execution")
             return
+        if not _from_gateway:
+            from nbot.gateway.gateway import get_gateway
+
+            gateway = get_gateway()
+            if gateway:
+                result = await gateway.submit_internal_task(
+                    task_kind="heartbeat",
+                    task_id="heartbeat",
+                    task_name="heartbeat",
+                    trigger_source="manual" if force else "scheduler",
+                    metadata={
+                        "target_session_id": self.heartbeat_config.get("target_session_id", ""),
+                    },
+                    handler=lambda: (
+                        self._run_heartbeat_execution(force=force)
+                        if hasattr(self, "_run_heartbeat_execution")
+                        else self._execute_heartbeat(force=force, _from_gateway=True)
+                    ),
+                )
+                self.heartbeat_config["last_trace_id"] = result.trace_id
+                self.heartbeat_config["last_gateway_status"] = result.status
+                self._save_data("heartbeat")
+                return result
 
         config = self.heartbeat_config
         content_file = config.get("content_file", "heartbeat.md")
