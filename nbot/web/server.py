@@ -2264,8 +2264,12 @@ class WebChatServer:
                     f"[工作流触发 - {trigger_source}] 任务内容：{trigger_content}"
                 )
             else:
-                # 没有具体内容时，使用默认提示
-                trigger_msg = f"[工作流触发 - {trigger_source}] 请根据工作流描述执行任务。触发时间：{trigger_time}"
+                # 没有具体内容时，使用工作流自身的描述/提示
+                workflow_desc = workflow.get("description", "").strip() or workflow.get("prompt", "").strip()
+                if workflow_desc:
+                    trigger_msg = f"[工作流触发 - {trigger_source}] 请根据以下工作流描述执行任务。触发时间：{trigger_time}\n\n{workflow_desc}"
+                else:
+                    trigger_msg = f"[工作流触发 - {trigger_source}] 请根据工作流描述执行任务。触发时间：{trigger_time}"
 
             messages.append({"role": "user", "content": trigger_msg})
 

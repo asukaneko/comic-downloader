@@ -5287,12 +5287,12 @@
                                     <table class="data-table gateway-log-table">
                                         <thead>
                                             <tr>
-                                                <th style="width: 62px;">时间</th>
-                                                <th style="width: 68px;">状态</th>
-                                                <th style="width: 50px;">频道</th>
-                                                <th style="width: 38%;">消息 / 回复</th>
-                                                <th>会话</th>
-                                                <th style="width: 38px;"></th>
+                                                <th class="gw-col-time">时间</th>
+                                                <th class="gw-col-status">状态</th>
+                                                <th class="gw-col-channel">频道</th>
+                                                <th class="gw-col-content">消息 / 回复</th>
+                                                <th class="gw-col-session">会话</th>
+                                                <th class="gw-col-action"></th>
                                             </tr>
                                         </thead>
                                         <tbody
@@ -5321,7 +5321,7 @@
                                             </tr>
                                             <tr v-for="log in group.logs" :key="log.id"
                                                 :class="{ 'gw-row-error': isGatewayErrorStatus(log.status) }">
-                                                <td style="font-size: 12px; color: var(--text-muted); white-space: nowrap;">{{ formatGatewayTime(log.created_at) }}</td>
+                                                <td style="font-size: 12px; color: var(--text-muted);">{{ formatGatewayTime(log.created_at) }}</td>
                                                 <td>
                                                     <span class="badge"
                                                         :class="'badge-' + getGatewayStatusClass(log.status)"

@@ -19872,7 +19872,7 @@
 }
 
 .gateway-log-table-wrapper {
-    overflow-x: auto;
+    overflow-x: hidden;
     border-radius: 12px;
     border: 1px solid var(--border-color);
     background: var(--bg-secondary);
@@ -19882,6 +19882,7 @@
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
+    table-layout: fixed;
 }
 
 .gateway-log-table th,
@@ -19889,7 +19890,35 @@
     padding: 10px 14px;
     text-align: left;
     border-bottom: 1px solid var(--border-color);
+    vertical-align: top;
+}
+
+/* 窄列保持不换行 */
+.gateway-log-table th:nth-child(1),
+.gateway-log-table td:nth-child(1),
+.gateway-log-table th:nth-child(2),
+.gateway-log-table td:nth-child(2),
+.gateway-log-table th:nth-child(3),
+.gateway-log-table td:nth-child(3),
+.gateway-log-table th:nth-child(6),
+.gateway-log-table td:nth-child(6) {
     white-space: nowrap;
+}
+
+/* 操作按钮列垂直居中 */
+.gateway-log-table td:nth-child(6) {
+    vertical-align: middle;
+    text-align: center;
+}
+
+/* 内容列和会话列允许换行 */
+.gateway-log-table td:nth-child(4) {
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+.gateway-log-table td:nth-child(5) {
+    word-break: break-all;
+    overflow-wrap: break-word;
 }
 
 .gateway-log-table th {
@@ -19911,6 +19940,14 @@
 .gateway-log-table tr:last-child td {
     border-bottom: none;
 }
+
+/* 列宽分配 */
+.gw-col-time    { width: 70px; }
+.gw-col-status  { width: 72px; }
+.gw-col-channel { width: 60px; }
+.gw-col-content { width: auto; }
+.gw-col-session { width: 120px; }
+.gw-col-action  { width: 40px; }
 
 .gateway-trace-table-wrapper {
     padding: 12px;
@@ -20343,6 +20380,35 @@
 
     .trace-summary-value {
         font-size: 13px;
+    }
+
+    /* 移动端：隐藏频道列和会话列，只保留核心信息 */
+    .gateway-log-table .gw-col-channel,
+    .gateway-log-table td:nth-child(3),
+    .gateway-log-table .gw-col-session,
+    .gateway-log-table td:nth-child(5) {
+        display: none;
+    }
+
+    .gateway-log-table th,
+    .gateway-log-table td {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+
+    .gw-col-time    { width: 55px; }
+    .gw-col-status  { width: 60px; }
+    .gw-col-content { width: auto; }
+    .gw-col-action  { width: 36px; }
+
+    .gateway-trace-summary {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .gateway-trace-group-meta {
+        flex-wrap: wrap;
+        gap: 6px;
     }
 }
 
