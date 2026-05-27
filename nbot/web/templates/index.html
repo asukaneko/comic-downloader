@@ -5385,180 +5385,145 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Gateway Trace 详情弹窗 -->
-                        <div v-if="gatewayTraceModal.show" class="trace-modal-overlay" @click.self="gatewayTraceModal.show = false">
-                            <div class="trace-modal">
-                                <div class="trace-modal-header">
-                                    <div class="trace-modal-title">
-                                        <i class="fas fa-route"></i>
-                                        <span>事件链路追踪</span>
-                                        <code style="font-size: 12px; margin-left: 8px; opacity: 0.7;">{{ gatewayTraceModal.trace_id }}</code>
-                                    </div>
-                                    <button class="trace-modal-close" @click="gatewayTraceModal.show = false">
-                                        <i class="fas fa-times"></i>
-                                    </button>
+                    <!-- Gateway Trace 详情弹窗（页面级别，任何页面都可调用） -->
+                    <div v-if="gatewayTraceModal.show" class="trace-modal-overlay" @click.self="gatewayTraceModal.show = false">
+                        <div class="trace-modal">
+                            <div class="trace-modal-header">
+                                <div class="trace-modal-title">
+                                    <i class="fas fa-route"></i>
+                                    <span>事件链路追踪</span>
+                                    <code style="font-size: 12px; margin-left: 8px; opacity: 0.7;">{{ gatewayTraceModal.trace_id }}</code>
                                 </div>
-                                <div class="trace-modal-body">
-                                    <div v-if="gatewayTraceModal.loading" style="text-align: center; padding: 40px;">
-                                        <div class="spinner"></div>
-                                        <p style="margin-top: 12px; color: var(--text-muted);">加载链路数据...</p>
-                                    </div>
-                                    <div v-else-if="gatewayTraceModal.events.length === 0" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                                        <i class="fas fa-search" style="font-size: 28px; margin-bottom: 10px; display: block;"></i>
-                                        暂无链路数据
-                                    </div>
-                                    <div v-else>
-                                        <!-- 链路摘要卡片 -->
-                                        <div class="trace-summary-card">
-                                            <div class="trace-summary-item">
-                                                <span class="trace-summary-label">事件总数</span>
-                                                <span class="trace-summary-value">{{ gatewayTraceModal.events.length }} 步</span>
-                                            </div>
-                                            <div class="trace-summary-item">
-                                                <span class="trace-summary-label">最终状态</span>
-                                                <span class="badge"
-                                                    :class="'badge-' + getGatewayStatusClass(getLastTraceStatus())">
-                                                    {{ getLastTraceStatus() }}
-                                                </span>
-                                            </div>
-                                            <div class="trace-summary-item">
-                                                <span class="trace-summary-label">频道</span>
-                                                <span class="trace-summary-value">{{ getTraceChannel() }}</span>
-                                            </div>
-                                            <div class="trace-summary-item">
-                                                <span class="trace-summary-label">耗时</span>
-                                                <span class="trace-summary-value">{{ getTraceDuration() }}</span>
-                                            </div>
+                                <button class="trace-modal-close" @click="gatewayTraceModal.show = false">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="trace-modal-body">
+                                <div v-if="gatewayTraceModal.loading" style="text-align: center; padding: 40px;">
+                                    <div class="spinner"></div>
+                                    <p style="margin-top: 12px; color: var(--text-muted);">加载链路数据...</p>
+                                </div>
+                                <div v-else-if="gatewayTraceModal.events.length === 0" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                                    <i class="fas fa-search" style="font-size: 28px; margin-bottom: 10px; display: block;"></i>
+                                    暂无链路数据
+                                </div>
+                                <div v-else>
+                                    <div class="trace-summary-card">
+                                        <div class="trace-summary-item">
+                                            <span class="trace-summary-label">事件总数</span>
+                                            <span class="trace-summary-value">{{ gatewayTraceModal.events.length }} 步</span>
                                         </div>
-
-                                        <!-- 时间线 -->
-                                        <div class="trace-timeline">
-                                            <div
-                                                v-for="(evt, idx) in gatewayTraceModal.events"
-                                                :key="evt.id"
-                                                class="trace-timeline-item"
-                                                :class="getTraceItemClass(evt.status)"
-                                            >
-                                                <div class="trace-timeline-dot"></div>
-                                                <div class="trace-timeline-body">
-                                                    <div class="trace-timeline-header">
-                                                        <span class="trace-timeline-stage">
-                                                            <i :class="getTraceStepIcon(evt.status)"></i>
-                                                            {{ getGatewayStatusLabel(evt.status) }}
-                                                        </span>
-                                                        <span class="trace-timeline-time">{{ formatFullGatewayTime(evt.created_at) }}</span>
-                                                    </div>
-
-                                                    <!-- 状态描述 -->
-                                                    <div class="trace-timeline-desc">
-                                                        <template v-if="getLogEventType(evt) === 'operation'">
-                                                            {{ getOperationDescription(evt) }}
-                                                        </template>
-                                                        <template v-else>
-                                                            {{ getGatewayStatusDesc(evt.status) }}
-                                                        </template>
-                                                    </div>
-
-                                                    <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).task_kind" class="trace-detail-box">
-                                                        <div class="trace-detail-label"><i class="fas fa-bolt"></i> 任务信息</div>
-                                                        <div class="trace-meta-grid">
-                                                            <div class="trace-meta-item">
-                                                                <span class="trace-meta-label">任务类型</span>
-                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).task_kind }}</span>
-                                                            </div>
-                                                            <div v-if="parseJson(evt.metadata_json).task_name" class="trace-meta-item">
-                                                                <span class="trace-meta-label">任务名称</span>
-                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).task_name }}</span>
-                                                            </div>
-                                                            <div v-if="parseJson(evt.metadata_json).trigger_source" class="trace-meta-item">
-                                                                <span class="trace-meta-label">触发来源</span>
-                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).trigger_source }}</span>
-                                                            </div>
-                                                            <div v-if="parseJson(evt.metadata_json).target_session_id" class="trace-meta-item">
-                                                                <span class="trace-meta-label">目标会话</span>
-                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).target_session_id }}</span>
-                                                            </div>
-                                                            <div v-if="parseJson(evt.metadata_json).workflow_id" class="trace-meta-item">
-                                                                <span class="trace-meta-label">工作流 ID</span>
-                                                                <span class="trace-meta-value">{{ parseJson(evt.metadata_json).workflow_id }}</span>
-                                                            </div>
+                                        <div class="trace-summary-item">
+                                            <span class="trace-summary-label">最终状态</span>
+                                            <span class="badge" :class="'badge-' + getGatewayStatusClass(getLastTraceStatus())">
+                                                {{ getLastTraceStatus() }}
+                                            </span>
+                                        </div>
+                                        <div class="trace-summary-item">
+                                            <span class="trace-summary-label">频道</span>
+                                            <span class="trace-summary-value">{{ getTraceChannel() }}</span>
+                                        </div>
+                                        <div class="trace-summary-item">
+                                            <span class="trace-summary-label">耗时</span>
+                                            <span class="trace-summary-value">{{ getTraceDuration() }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="trace-timeline">
+                                        <div v-for="evt in gatewayTraceModal.events" :key="evt.id"
+                                            class="trace-timeline-item" :class="getTraceItemClass(evt.status)">
+                                            <div class="trace-timeline-dot"></div>
+                                            <div class="trace-timeline-body">
+                                                <div class="trace-timeline-header">
+                                                    <span class="trace-timeline-stage">
+                                                        <i :class="getTraceStepIcon(evt.status)"></i>
+                                                        {{ getGatewayStatusLabel(evt.status) }}
+                                                    </span>
+                                                    <span class="trace-timeline-time">{{ formatFullGatewayTime(evt.created_at) }}</span>
+                                                </div>
+                                                <div class="trace-timeline-desc">
+                                                    <template v-if="getLogEventType(evt) === 'operation'">{{ getOperationDescription(evt) }}</template>
+                                                    <template v-else>{{ getGatewayStatusDesc(evt.status) }}</template>
+                                                </div>
+                                                <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).task_kind" class="trace-detail-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-bolt"></i> 任务信息</div>
+                                                    <div class="trace-meta-grid">
+                                                        <div class="trace-meta-item">
+                                                            <span class="trace-meta-label">任务类型</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).task_kind }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).task_name" class="trace-meta-item">
+                                                            <span class="trace-meta-label">任务名称</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).task_name }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).trigger_source" class="trace-meta-item">
+                                                            <span class="trace-meta-label">触发来源</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).trigger_source }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).target_session_id" class="trace-meta-item">
+                                                            <span class="trace-meta-label">目标会话</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).target_session_id }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).workflow_id" class="trace-meta-item">
+                                                            <span class="trace-meta-label">工作流 ID</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).workflow_id }}</span>
                                                         </div>
                                                     </div>
-
-                                                    <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).content" class="trace-detail-box">
-                                                        <div class="trace-detail-label"><i class="fas fa-align-left"></i> 任务内容</div>
-                                                        <div class="trace-detail-content msg-content">
-                                                            {{ parseJson(evt.metadata_json).content }}
-                                                        </div>
+                                                </div>
+                                                <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).content" class="trace-detail-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-align-left"></i> 任务内容</div>
+                                                    <div class="trace-detail-content msg-content">{{ parseJson(evt.metadata_json).content }}</div>
+                                                </div>
+                                                <div v-if="evt.status === 'received' && parseJson(evt.raw_event_json)" class="trace-detail-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-comment-dots"></i> 用户消息</div>
+                                                    <div class="trace-detail-content msg-content">{{ parseJson(evt.raw_event_json).content || '(空消息)' }}</div>
+                                                    <div v-if="parseJson(evt.raw_event_json).attachments" class="trace-detail-meta">
+                                                        <i class="fas fa-paperclip"></i> {{ parseJson(evt.raw_event_json).attachments }}
                                                     </div>
-
-                                                    <!-- 用户消息（received 阶段） -->
-                                                    <div v-if="evt.status === 'received' && parseJson(evt.raw_event_json)" class="trace-detail-box">
-                                                        <div class="trace-detail-label"><i class="fas fa-comment-dots"></i> 用户消息</div>
-                                                        <div class="trace-detail-content msg-content">
-                                                            {{ parseJson(evt.raw_event_json).content || '(空消息)' }}
-                                                        </div>
-                                                        <div v-if="parseJson(evt.raw_event_json).attachments" class="trace-detail-meta">
-                                                            <i class="fas fa-paperclip"></i> {{ parseJson(evt.raw_event_json).attachments }}
-                                                        </div>
-                                                        <div v-if="parseJson(evt.raw_event_json).sender" class="trace-detail-meta">
-                                                            <i class="fas fa-user"></i> 发送者: {{ parseJson(evt.raw_event_json).sender }}
-                                                        </div>
+                                                    <div v-if="parseJson(evt.raw_event_json).sender" class="trace-detail-meta">
+                                                        <i class="fas fa-user"></i> 发送者: {{ parseJson(evt.raw_event_json).sender }}
                                                     </div>
-
-                                                    <!-- AI 回复（delivered 阶段）-->
-                                                    <div
-                                                        v-if="evt.status === 'completed' && parseJson(evt.metadata_json) && (parseJson(evt.metadata_json).result_summary || parseJson(evt.metadata_json).response_preview || parseJson(evt.metadata_json).message_count !== undefined)"
-                                                        class="trace-detail-box reply-box"
-                                                    >
-                                                        <div class="trace-detail-label"><i class="fas fa-clipboard-check"></i> 执行结果</div>
-                                                        <div class="trace-detail-content reply-content">
-                                                            {{ parseJson(evt.metadata_json).result_summary || '任务已完成' }}
-                                                        </div>
-                                                        <div v-if="parseJson(evt.metadata_json).response_preview" class="trace-detail-meta">
-                                                            <i class="fas fa-comment-alt"></i> {{ parseJson(evt.metadata_json).response_preview }}
-                                                        </div>
-                                                        <div v-if="parseJson(evt.metadata_json).message_count !== undefined" class="trace-detail-meta">
-                                                            <i class="fas fa-paper-plane"></i> 消息数 {{ parseJson(evt.metadata_json).message_count }}
-                                                        </div>
+                                                </div>
+                                                <div v-if="evt.status === 'completed' && parseJson(evt.metadata_json) && (parseJson(evt.metadata_json).result_summary || parseJson(evt.metadata_json).response_preview || parseJson(evt.metadata_json).message_count !== undefined)"
+                                                    class="trace-detail-box reply-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-clipboard-check"></i> 执行结果</div>
+                                                    <div class="trace-detail-content reply-content">{{ parseJson(evt.metadata_json).result_summary || '任务已完成' }}</div>
+                                                    <div v-if="parseJson(evt.metadata_json).response_preview" class="trace-detail-meta">
+                                                        <i class="fas fa-comment-alt"></i> {{ parseJson(evt.metadata_json).response_preview }}
                                                     </div>
-
-                                                    <div v-if="evt.status === 'delivered' && parseJson(evt.raw_event_json)" class="trace-detail-box reply-box">
-                                                        <div class="trace-detail-label"><i class="fas fa-robot"></i> AI 回复</div>
-                                                        <div class="trace-detail-content reply-content">
-                                                            {{ parseJson(evt.raw_event_json).reply_preview || '(无回复内容)' }}
-                                                        </div>
+                                                    <div v-if="parseJson(evt.metadata_json).message_count !== undefined" class="trace-detail-meta">
+                                                        <i class="fas fa-paper-plane"></i> 消息数 {{ parseJson(evt.metadata_json).message_count }}
                                                     </div>
-
-                                                    <!-- 错误信息 -->
-                                                    <div v-if="evt.error" class="trace-detail-box error-box">
-                                                        <div class="trace-detail-label"><i class="fas fa-exclamation-triangle"></i> 错误信息</div>
-                                                        <div class="trace-detail-content error-content">{{ evt.error }}</div>
+                                                </div>
+                                                <div v-if="evt.status === 'delivered' && parseJson(evt.raw_event_json)" class="trace-detail-box reply-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-robot"></i> AI 回复</div>
+                                                    <div class="trace-detail-content reply-content">{{ parseJson(evt.raw_event_json).reply_preview || '(无回复内容)' }}</div>
+                                                </div>
+                                                <div v-if="evt.error" class="trace-detail-box error-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-exclamation-triangle"></i> 错误信息</div>
+                                                    <div class="trace-detail-content error-content">{{ evt.error }}</div>
+                                                </div>
+                                                <div v-if="parseJson(evt.metadata_json)" class="trace-meta-grid">
+                                                    <div v-if="parseJson(evt.metadata_json).session_name" class="trace-meta-item">
+                                                        <span class="trace-meta-label">会话名称</span>
+                                                        <span class="trace-meta-value">{{ parseJson(evt.metadata_json).session_name }}</span>
                                                     </div>
-
-                                                    <!-- 元数据 -->
-                                                    <div v-if="parseJson(evt.metadata_json)" class="trace-meta-grid">
-                                                        <div v-if="parseJson(evt.metadata_json).session_name" class="trace-meta-item">
-                                                            <span class="trace-meta-label">会话名称</span>
-                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).session_name }}</span>
-                                                        </div>
-                                                        <div v-if="parseJson(evt.metadata_json).content_length !== undefined" class="trace-meta-item">
-                                                            <span class="trace-meta-label">消息长度</span>
-                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).content_length }} 字符</span>
-                                                        </div>
-                                                        <div v-if="parseJson(evt.metadata_json).reply_length !== undefined" class="trace-meta-item">
-                                                            <span class="trace-meta-label">回复长度</span>
-                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).reply_length }} 字符</span>
-                                                        </div>
-                                                        <div v-if="evt.conversation_id" class="trace-meta-item">
-                                                            <span class="trace-meta-label">会话 ID</span>
-                                                            <span class="trace-meta-value">{{ evt.conversation_id }}</span>
-                                                        </div>
-                                                        <div v-if="evt.user_id" class="trace-meta-item">
-                                                            <span class="trace-meta-label">用户 ID</span>
-                                                            <span class="trace-meta-value">{{ evt.user_id }}</span>
-                                                        </div>
+                                                    <div v-if="parseJson(evt.metadata_json).content_length !== undefined" class="trace-meta-item">
+                                                        <span class="trace-meta-label">消息长度</span>
+                                                        <span class="trace-meta-value">{{ parseJson(evt.metadata_json).content_length }} 字符</span>
+                                                    </div>
+                                                    <div v-if="parseJson(evt.metadata_json).reply_length !== undefined" class="trace-meta-item">
+                                                        <span class="trace-meta-label">回复长度</span>
+                                                        <span class="trace-meta-value">{{ parseJson(evt.metadata_json).reply_length }} 字符</span>
+                                                    </div>
+                                                    <div v-if="evt.conversation_id" class="trace-meta-item">
+                                                        <span class="trace-meta-label">会话 ID</span>
+                                                        <span class="trace-meta-value">{{ evt.conversation_id }}</span>
+                                                    </div>
+                                                    <div v-if="evt.user_id" class="trace-meta-item">
+                                                        <span class="trace-meta-label">用户 ID</span>
+                                                        <span class="trace-meta-value">{{ evt.user_id }}</span>
                                                     </div>
                                                 </div>
                                             </div>
