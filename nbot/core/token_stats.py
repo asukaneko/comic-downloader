@@ -29,10 +29,25 @@ _MODEL_PRICING = {
 }
 
 
-def _estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
-    """基于模型定价估算费用（美元）。"""
-    input_price, output_price = _MODEL_PRICING.get(model, (1.0, 4.0))
-    return (prompt_tokens / 1_000_000) * input_price + (completion_tokens / 1_000_000) * output_price
+def _estimate_cost(
+    model: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    input_price: Optional[float] = None,
+    output_price: Optional[float] = None,
+) -> float:
+    """估算费用。
+
+    优先使用传入的 input_price/output_price（人民币 元/百万token），
+    未传入时从 _MODEL_PRICING 兜底（单位：美元/百万token）。
+    """
+    if input_price is not None and output_price is not None:
+        in_p = input_price if isinstance(input_price, (int, float)) else None
+        out_p = output_price if isinstance(output_price, (int, float)) else None
+
+    if in_p is None or out_p is None:
+        in_p, out_p = _MODEL_PRICING.get(model, (1.0, 4.0))
+    return (prompt_tokens / 1_000_000) * in_p + (completion_tokens / 1_000_000) * out_p
 
 
 class TokenStatsManager:
@@ -209,6 +224,8 @@ class TokenStatsManager:
         user_id: str = "",
         source: str = "api",
         duration_ms: Optional[float] = None,
+        input_price: Optional[float] = None,
+        output_price: Optional[float] = None,
     ):
         """记录一次 AI 调用用量。"""
         try:
@@ -228,7 +245,10 @@ class TokenStatsManager:
         if not total_tokens:
             return
 
-        cost = _estimate_cost(model or "default", prompt_tokens, completion_tokens)
+        cost = _estimate_cost(
+            model or "default", prompt_tokens, completion_tokens,
+            input_price=input_price, output_price=output_price,
+        )
         today_str = datetime.now().strftime("%Y-%m-%d")
         current_month = datetime.now().strftime("%Y-%m")
         timestamp = datetime.now().isoformat(timespec="seconds")

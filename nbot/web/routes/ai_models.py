@@ -86,6 +86,10 @@ def register_ai_model_routes(app, server):
         # 获取该用途的默认配置
         default_config = DEFAULT_PURPOSE_CONFIGS.get(purpose, DEFAULT_PURPOSE_CONFIGS["chat"])
         
+        # 模型价格配置（人民币 元/百万token，null 表示使用兜底定价）
+        raw_input_price = data.get("input_price")
+        raw_output_price = data.get("output_price")
+
         model = {
             "id": str(uuid.uuid4()),
             "name": data.get("name", f"新{purpose}配置"),
@@ -117,6 +121,9 @@ def register_ai_model_routes(app, server):
             "search_api_key": data.get("search_api_key", ""),
             "embedding_model": data.get("embedding_model", default_config.get("model", "") if purpose == "embedding" else ""),
             "max_context_length": data.get("max_context_length", 100000),
+            # 模型价格（null 表示使用兜底定价）
+            "input_price": raw_input_price if raw_input_price not in (None, "", "null") else None,
+            "output_price": raw_output_price if raw_output_price not in (None, "", "null") else None,
             # TTS/STT特有配置
             "voice": data.get("voice", default_config.get("voice", "default")),
             "speed": data.get("speed", default_config.get("speed", 1.0)),
@@ -209,6 +216,13 @@ def register_ai_model_routes(app, server):
             model["max_context_length"] = data.get(
                 "max_context_length", model.get("max_context_length", 8000)
             )
+            # 模型价格
+            if "input_price" in data:
+                raw = data["input_price"]
+                model["input_price"] = None if raw in (None, "", "null") else raw
+            if "output_price" in data:
+                raw = data["output_price"]
+                model["output_price"] = None if raw in (None, "", "null") else raw
             # TTS/STT/Embedding特有配置
             model["voice"] = data.get("voice", model.get("voice", "default"))
             model["speed"] = data.get("speed", model.get("speed", 1.0))

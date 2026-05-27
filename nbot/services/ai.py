@@ -121,6 +121,8 @@ def get_runtime_ai_config() -> dict:
         shared.get("api_key") or api_key,
         effective["provider_type"],
     )
+    effective["input_price"] = shared.get("input_price")
+    effective["output_price"] = shared.get("output_price")
     return effective
 
 

@@ -1218,6 +1218,20 @@ def _update_web_token_stats(server, usage: dict, session_id: str):
 
         from nbot.core.token_stats import get_token_stats_manager
 
+        # 从当前活跃模型配置中查找价格
+        input_price = None
+        output_price = None
+        try:
+            active_model_id = getattr(server, "active_model_id", None)
+            if active_model_id:
+                for m in getattr(server, "ai_models", []) or []:
+                    if m.get("id") == active_model_id:
+                        input_price = m.get("input_price")
+                        output_price = m.get("output_price")
+                        break
+        except Exception:
+            pass
+
         get_token_stats_manager().record_usage(
             usage.get("prompt_tokens", 0),
             usage.get("completion_tokens", 0),
@@ -1227,6 +1241,8 @@ def _update_web_token_stats(server, usage: dict, session_id: str):
             channel_type="web",
             user_id=session_id,
             source="web",
+            input_price=input_price,
+            output_price=output_price,
         )
     except Exception:
         pass

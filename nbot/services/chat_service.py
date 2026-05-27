@@ -274,6 +274,7 @@ class QQCallbacks(PipelineCallbacks):
         from nbot.core.token_stats import get_token_stats_manager
 
         model = _get_active_model_name()
+        runtime_ai = refresh_runtime_ai_config()
         session_id = str(self.user_id) if self.user_id else str(self.group_id)
         channel_type = "private" if self.user_id else "group"
         get_token_stats_manager().record_usage(
@@ -285,6 +286,8 @@ class QQCallbacks(PipelineCallbacks):
             channel_type=channel_type,
             user_id=session_id,
             source="qq",
+            input_price=runtime_ai.get("input_price"),
+            output_price=runtime_ai.get("output_price"),
         )
 
     def send_response(

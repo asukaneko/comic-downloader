@@ -4450,6 +4450,21 @@
                                         <div class="form-hint">模型支持的最大上下文窗口大小，例如 GPT-4o 为 128000，Claude 为 200000</div>
                                     </div>
 
+                                    <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                                        <label class="form-label" style="color: var(--primary-color); font-weight: 600;">💰 价格配置</label>
+                                    </div>
+                                    <div class="form-hint" style="margin-bottom: 8px;">留空即使用兜底定价（美元计价），填写后按人民币计算费用。</div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label">输入价格（元/百万token）</label>
+                                            <input v-model.number="modelForm.input_price" type="number" min="0" step="0.01" class="form-input" placeholder="留空使用兜底">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">输出价格（元/百万token）</label>
+                                            <input v-model.number="modelForm.output_price" type="number" min="0" step="0.01" class="form-input" placeholder="留空使用兜底">
+                                        </div>
+                                    </div>
+
                                     <div class="form-group">
                                         <div class="switch-field">
                                             <div class="switch-copy">
@@ -4894,11 +4909,11 @@
                             </div>
                             <div class="overview-card">
                                 <div class="overview-icon" style="background: linear-gradient(135deg, #10b981, #34d399);">
-                                    <i class="fas fa-dollar-sign"></i>
+                                    <i class="fas fa-yen-sign"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.overview_cost') }}</div>
-                                    <div class="overview-value">${{ tokenStats.estimated_cost || '0.00' }}</div>
+                                    <div class="overview-value">¥{{ tokenStats.estimated_cost || '0.00' }}</div>
                                     <div class="overview-sub">{{ tokenStats.cost_change || '+0%' }} 较上期</div>
                                 </div>
                             </div>
@@ -5032,7 +5047,7 @@
                                             <td>{{ formatNumber(record.input) }}</td>
                                             <td>{{ formatNumber(record.output) }}</td>
                                             <td>{{ formatNumber(record.total || (record.input + record.output)) }}</td>
-                                            <td>${{ record.cost }}</td>
+                                            <td>¥{{ record.cost }}</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -9056,6 +9071,9 @@
                         search_api_key: '',
                         embedding_model: '',
                         max_context_length: 100000,
+                        // 模型价格（人民币 元/百万token，null 表示使用兜底定价）
+                        input_price: null,
+                        output_price: null,
                         // TTS/STT/Embedding特有配置
                         voice: 'default',
                         speed: 1.0,

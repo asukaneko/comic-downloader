@@ -10260,6 +10260,9 @@ def main(params):
                             search_api_key: '',
                             embedding_model: '',
                             max_context_length: 100000,
+                            // 模型价格（人民币 元/百万token，null 表示使用兜底定价）
+                            input_price: null,
+                            output_price: null,
                             // TTS/STT/Embedding特有配置
                             voice: 'default',
                             speed: 1.0,
