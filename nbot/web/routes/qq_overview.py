@@ -12,6 +12,16 @@ from nbot.core import WebSessionStore
 _log = logging.getLogger(__name__)
 
 
+def _build_canonical_qq_session_id(qq_type, qq_id):
+    from nbot.services.chat_service import get_qq_session_id
+
+    if qq_type == "private":
+        return get_qq_session_id(user_id=str(qq_id))
+    if qq_type == "group":
+        return get_qq_session_id(group_id=str(qq_id))
+    return None
+
+
 def register_qq_overview_routes(app, server):
     session_store = WebSessionStore(
         server.sessions, save_callback=lambda: server._save_data("sessions")
@@ -95,6 +105,19 @@ def register_qq_overview_routes(app, server):
     @app.route("/api/qq/messages/<qq_type>/<qq_id>")
     def get_qq_messages(qq_type, qq_id):
         try:
+            canonical_session_id = _build_canonical_qq_session_id(qq_type, qq_id)
+            if canonical_session_id:
+                session = session_store.get_session(canonical_session_id)
+                if session and isinstance(session.get("messages"), list):
+                    messages = []
+                    for msg in session.get("messages", []):
+                        enriched = dict(msg)
+                        enriched["source_type"] = "qq"
+                        enriched["qq_type"] = qq_type
+                        enriched["qq_id"] = qq_id
+                        messages.append(enriched)
+                    return jsonify({"messages": messages})
+
             if qq_type == "private":
                 file_path = os.path.join(
                     server.base_dir, "data", "qq", "private", f"{qq_id}.json"
@@ -183,32 +206,19 @@ def register_qq_overview_routes(app, server):
             return jsonify({"error": "Not a QQ session"}), 400
 
         try:
-            from nbot.chat import group_messages, user_messages
-
             qq_id = session.get("qq_id")
-
-            if session["type"] == "qq_private" and qq_id in user_messages:
-                messages = user_messages[qq_id]
-            elif session["type"] == "qq_group" and qq_id in group_messages:
-                messages = group_messages[qq_id]
+            if session["type"] == "qq_private":
+                target_session_id = server.sync_qq_messages(user_id=qq_id)
             else:
-                messages = []
+                target_session_id = server.sync_qq_messages(group_id=qq_id)
 
-            for msg in messages:
-                session_store.append_message(
-                    session_id,
-                    {
-                        "id": str(uuid.uuid4()),
-                        "role": "user" if msg.get("role") == "user" else "assistant",
-                        "content": msg.get("content", ""),
-                        "timestamp": msg.get("time", datetime.now().isoformat()),
-                        "sender": msg.get("sender", "QQ User"),
-                    },
-                )
-
-            updated_session = session_store.get_session(session_id) or session
+            updated_session = session_store.get_session(target_session_id) or session
             return jsonify(
-                {"success": True, "message_count": len(updated_session.get("messages", []))}
+                {
+                    "success": True,
+                    "session_id": target_session_id,
+                    "message_count": len(updated_session.get("messages", [])),
+                }
             )
         except Exception as e:
             return jsonify({"error": str(e)}), 500
@@ -284,7 +294,10 @@ def register_qq_overview_routes(app, server):
             if session.get("qq_id") == qq_id and session.get("type") == session_type:
                 return jsonify({"success": True, "session_id": session_id, "exists": True})
 
-        session_id = str(uuid.uuid4())
+        session_id = _build_canonical_qq_session_id(
+            "private" if session_type == "qq_private" else "group" if session_type == "qq_group" else session_type,
+            qq_id,
+        ) or str(uuid.uuid4())
         session = {
             "id": session_id,
             "name": name,

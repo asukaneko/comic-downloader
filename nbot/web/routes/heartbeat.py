@@ -30,6 +30,25 @@ def register_heartbeat_routes(app, server):
             if web_targets:
                 target_session_id = web_targets[0].split(":", 1)[1]
 
+        manager = getattr(server, "session_heartbeat_manager", None)
+        if manager and target_session_id:
+            manager.set_config(
+                target_session_id,
+                {
+                    "enabled": bool(enabled),
+                    "interval_minutes": interval_minutes,
+                    "content_file": content_file,
+                    "target_session_id": target_session_id,
+                },
+            )
+            server._refresh_heartbeat_summary_config()
+            if manager.any_enabled():
+                server._start_heartbeat_job(1)
+            else:
+                server._stop_heartbeat_job()
+            server._save_data("heartbeat")
+            return jsonify({"success": True, "config": server.heartbeat_config})
+
         server.heartbeat_config = {
             "enabled": enabled,
             "interval_minutes": interval_minutes,
@@ -53,7 +72,21 @@ def register_heartbeat_routes(app, server):
         try:
             import asyncio
 
-            asyncio.run(server._execute_heartbeat(force=True))
+            target_session_id = (
+                (request.json or {}).get("target_session_id")
+                or server.heartbeat_config.get("target_session_id", "")
+            )
+            manager = getattr(server, "session_heartbeat_manager", None)
+            if manager and target_session_id:
+                asyncio.run(
+                    manager.execute_session(
+                        target_session_id,
+                        force=True,
+                        trigger_source="manual",
+                    )
+                )
+            else:
+                asyncio.run(server._execute_heartbeat(force=True))
             return jsonify({"success": True})
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500

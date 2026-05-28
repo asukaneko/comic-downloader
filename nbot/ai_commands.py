@@ -9,6 +9,7 @@ from nbot.services.chat_service import (
     generate_today_summary,
     get_qq_session_id,
     group_messages,
+    load_canonical_qq_messages,
     summarize_group_text,
     user_messages,
 )
@@ -110,6 +111,106 @@ def history_items_to_text(items):
     return _history_items_to_text(items)
 
 
+def _reset_canonical_qq_session_messages(
+    user_id=None,
+    group_id=None,
+    group_user_id=None,
+    keep_system_prompt=True,
+):
+    session_id = get_qq_session_id(
+        user_id=str(user_id) if user_id else None,
+        group_id=str(group_id) if group_id else None,
+        group_user_id=str(group_user_id) if group_user_id else None,
+    )
+    if not session_id:
+        return
+    try:
+        from nbot.core.session_store import WebSessionStore
+        from nbot.web.server import WebChatServer
+
+        server = WebChatServer.get_instance()
+        if not server or not hasattr(server, "sessions"):
+            return
+
+        session_store = WebSessionStore(
+            server.sessions,
+            save_callback=lambda: server._save_data("sessions"),
+        )
+        session = session_store.get_session(session_id)
+        if not session:
+            return
+
+        if keep_system_prompt:
+            system_msg = next(
+                (m for m in session.get("messages", []) if m.get("role") == "system"),
+                None,
+            )
+            session_store.replace_messages(session_id, [system_msg] if system_msg else [])
+        else:
+            session_store.replace_messages(session_id, [])
+        session["last_message"] = ""
+        session["updated_at"] = datetime.now().isoformat()
+        session_store.set_session(session_id, session)
+    except Exception:
+        return
+
+
+def _replace_canonical_qq_session_messages(
+    *,
+    user_id=None,
+    group_id=None,
+    group_user_id=None,
+    messages=None,
+    system_prompt=None,
+    character=None,
+):
+    session_id = get_qq_session_id(
+        user_id=str(user_id) if user_id else None,
+        group_id=str(group_id) if group_id else None,
+        group_user_id=str(group_user_id) if group_user_id else None,
+    )
+    if not session_id:
+        return
+    try:
+        from nbot.core.session_store import WebSessionStore
+        from nbot.web.server import WebChatServer
+
+        server = WebChatServer.get_instance()
+        if not server or not hasattr(server, "sessions"):
+            return
+
+        session_store = WebSessionStore(
+            server.sessions,
+            save_callback=lambda: server._save_data("sessions"),
+        )
+        session = session_store.get_session(session_id)
+        if not session:
+            return
+
+        session_messages = [dict(message) for message in (messages or []) if isinstance(message, dict)]
+        if system_prompt and not any(m.get("role") == "system" for m in session_messages):
+            session_messages.insert(0, {"role": "system", "content": system_prompt})
+        session_store.replace_messages(session_id, session_messages)
+        session["system_prompt"] = system_prompt or session.get("system_prompt", "")
+        if character:
+            session["character_id"] = character.get("id") or character.get("name") or ""
+            session["sender_name"] = character.get("name") or session.get("sender_name") or "AI"
+            session["sender_avatar"] = character.get("avatar", "")
+            session["sender_portrait"] = character.get("portrait", "")
+        session["last_message"] = next(
+            (
+                str(m.get("content") or "")[:100]
+                for m in reversed(session_messages)
+                if isinstance(m, dict) and m.get("role") != "system"
+            ),
+            "",
+        )
+        session["updated_at"] = datetime.now().isoformat()
+        session_store.set_session(session_id, session)
+    except Exception:
+        return
+
+
 def register_ai_commands(
     *,
     register_command,
@@ -167,6 +268,17 @@ def register_ai_commands(
             await msg.reply(text=text)
         else:
             await bot.api.post_private_msg(msg.user_id, text=text)
+
+    def resolve_current_session_id(msg, is_group):
+        session_id = str(getattr(msg, "session_id", "") or "").strip()
+        if session_id:
+            return session_id
+        if is_group:
+            return get_qq_session_id(
+                group_id=str(getattr(msg, "group_id", "") or ""),
+                group_user_id=str(getattr(msg, "user_id", "") or ""),
+            )
+        return get_qq_session_id(user_id=str(getattr(msg, "user_id", "") or ""))
 
     def load_character_options():
         characters = []
@@ -340,6 +452,13 @@ def register_ai_commands(
             messages = group_messages if scope == "group" else user_messages
             messages[target_id] = [{"role": "system", "content": prompt}]
             save_qq_histories()
+            _replace_canonical_qq_session_messages(
+                group_id=target_id if scope == "group" else None,
+                user_id=target_id if scope == "user" else None,
+                messages=[{"role": "system", "content": prompt}],
+                system_prompt=prompt,
+                character=character,
+            )
 
             if scope == "group":
                 delete_session_workspace(
@@ -412,6 +531,28 @@ def register_ai_commands(
 
     def copy_chat_messages(messages):
         return [dict(message) for message in messages or [] if isinstance(message, dict)]
+
+    def load_current_qq_session_messages(info):
+        return load_canonical_qq_messages(
+            user_id=info.get("user_id"),
+            group_id=info.get("group_id"),
+            group_user_id=info.get("group_user_id"),
+        )
+
+    def replace_current_qq_session_messages(info, messages, system_prompt=None, character=None):
+        store = info.get("store")
+        history_key = info.get("history_key")
+        if store is not None and history_key:
+            store[history_key] = copy_chat_messages(messages)
+            save_qq_histories()
+        _replace_canonical_qq_session_messages(
+            user_id=info.get("user_id"),
+            group_id=info.get("group_id"),
+            group_user_id=info.get("group_user_id"),
+            messages=messages,
+            system_prompt=system_prompt,
+            character=character,
+        )
 
     def session_system_prompt(session, messages):
         prompt = str((session or {}).get("system_prompt") or "")
@@ -692,6 +833,87 @@ def register_ai_commands(
         switch.save_switches()
 
     @register_command(
+        "/heartbeat",
+        help_text="/heartbeat -> 查看当前会话心跳\n/heartbeat on [分钟] -> 开启当前会话心跳\n/heartbeat off -> 关闭当前会话心跳\n/heartbeat run -> 立即执行一次",
+        category="2",
+    )
+    async def handle_session_heartbeat(msg, is_group=True):
+        from nbot.gateway.heartbeat import get_session_heartbeat_manager
+
+        manager = get_session_heartbeat_manager()
+        if not manager:
+            await reply_current_channel(msg, is_group, "当前未启用统一心跳管理器。")
+            return
+
+        session_id = resolve_current_session_id(msg, is_group)
+        if not session_id:
+            await reply_current_channel(msg, is_group, "当前会话没有可用的 session_id。")
+            return
+
+        raw = (getattr(msg, "raw_message", "") or "")[len("/heartbeat"):].strip()
+        parts = raw.split() if raw else []
+
+        if not parts:
+            config = manager.get_config(session_id)
+            state = "开启" if config.get("enabled") else "关闭"
+            await reply_current_channel(
+                msg,
+                is_group,
+                f"当前会话心跳：{state}\n间隔：{config.get('interval_minutes', 60)} 分钟\n内容文件：{config.get('content_file', 'heartbeat.md')}",
+            )
+            return
+
+        action = parts[0].lower()
+        if action == "run":
+            await manager.execute_session(
+                session_id,
+                force=True,
+                trigger_source="command",
+            )
+            await reply_current_channel(msg, is_group, "已立即执行当前会话的 heartbeat。")
+            return
+
+        current = manager.get_config(session_id)
+        update = {
+            "target_session_id": session_id,
+            "content_file": current.get("content_file", "heartbeat.md"),
+            "interval_minutes": current.get("interval_minutes", 60),
+        }
+
+        if action in ("off", "0", "false"):
+            update["enabled"] = False
+        elif action in ("on", "1", "true"):
+            update["enabled"] = True
+            if len(parts) > 1:
+                update["interval_minutes"] = max(1, int(float(parts[1])))
+        else:
+            update["enabled"] = True
+            update["interval_minutes"] = max(1, int(float(action)))
+
+        manager.set_config(session_id, update)
+        try:
+            from nbot.web.server import WebChatServer
+
+            server = WebChatServer.get_instance()
+            if server:
+                server._refresh_heartbeat_summary_config()
+                if manager.any_enabled():
+                    server._start_heartbeat_job(1)
+                else:
+                    server._stop_heartbeat_job()
+                server._save_data("heartbeat")
+        except Exception:
+            pass
+
+        config = manager.get_config(session_id)
+        state = "开启" if config.get("enabled") else "关闭"
+        await reply_current_channel(
+            msg,
+            is_group,
+            f"已更新当前会话 heartbeat：{state}，间隔 {config.get('interval_minutes', 60)} 分钟。",
+        )
+
+    @register_command(
         "/auto_reply",
         help_text="/auto_reply [on|off|话痨程度0-1] -> 开启/关闭或设置群聊智能自动回复(admin)",
         category="2",
@@ -749,6 +971,12 @@ def register_ai_commands(
         category="2",
     )
     async def handle_active_chat(msg, is_group=True):
+        await reply_current_channel(
+            msg,
+            is_group,
+            "旧的 /主动聊天 已停用。请改用 /heartbeat 管理当前会话的心跳。",
+        )
+        return
         if is_group:
             await msg.reply(text="只能私聊设置喔~")
             return
@@ -815,7 +1043,7 @@ def register_ai_commands(
 
         if is_group and not is_web:
             try:
-                text = str(group_messages[str(msg.group_id)])
+                text = str(load_current_qq_session_messages(current_qq_session_info(msg, True)))
             except KeyError:
                 text = "该群没有聊天记录喔~"
             with open(cache_dir, "w", encoding="utf-8") as f:
@@ -823,7 +1051,7 @@ def register_ai_commands(
             await bot.api.post_group_file(msg.group_id, file=cache_dir)
         else:
             try:
-                text = str(user_messages[str(msg.user_id)])
+                text = str(load_current_qq_session_messages(current_qq_session_info(msg, False)))
             except KeyError:
                 text = "你没有聊天记录喔~"
             with open(cache_dir, "w", encoding="utf-8") as f:
@@ -864,6 +1092,12 @@ def register_ai_commands(
         messages = group_messages if is_group else user_messages
         messages[id_str] = [{"role": "system", "content": prompt_content}]
         save_qq_histories()
+        _replace_canonical_qq_session_messages(
+            group_id=id_str if is_group else None,
+            user_id=id_str if not is_group else None,
+            messages=[{"role": "system", "content": prompt_content}],
+            system_prompt=prompt_content,
+        )
 
         reply_text = "群组提示词已更新，对话记录已清除喔~" if is_group else "个人提示词已更新，对话记录已清除喔~"
         await reply_current_channel(msg, is_group, reply_text)
@@ -898,6 +1132,12 @@ def register_ai_commands(
             prompt = prompt_manager.load_base_prompt(**kwargs)
             messages[id_str] = [{"role": "system", "content": prompt}]
             save_qq_histories()
+            _replace_canonical_qq_session_messages(
+                group_id=id_str if is_group else None,
+                user_id=id_str if not is_group else None,
+                messages=[{"role": "system", "content": prompt}],
+                system_prompt=prompt,
+            )
         except Exception as e:
             log.warning(f"Reload base prompt failed: {e}")
 
@@ -934,9 +1174,17 @@ def register_ai_commands(
             group_id = getattr(msg, "group_id", None)
             chat_id = getattr(msg, "chat_id", None)
             if group_id:
+                info = current_qq_session_info(msg, True)
                 gid = str(group_id)
-                group_messages.pop(gid, None)
+                history_key = str(info.get("history_key") or gid)
+                group_messages.pop(history_key, None)
+                if history_key != gid:
+                    group_messages.pop(gid, None)
                 save_qq_histories()
+                _reset_canonical_qq_session_messages(
+                    group_id=gid,
+                    group_user_id=info.get("group_user_id"),
+                )
                 delete_session_workspace(group_id=gid, group_user_id=str(msg.user_id))
             elif chat_id:
                 session_id = getattr(msg, "session_id", None)
@@ -969,6 +1217,7 @@ def register_ai_commands(
         user_id = str(msg.user_id)
         user_messages.pop(user_id, None)
         save_qq_histories()
+        _reset_canonical_qq_session_messages(user_id=user_id)
         delete_session_workspace(user_id=user_id)
         await bot.api.post_private_msg(msg.user_id, text="已创建新会话喔，之前的对话历史已清空")
 
@@ -1162,8 +1411,12 @@ def register_ai_commands(
         if system_prompt and not any(m.get("role") == "system" for m in messages):
             messages.insert(0, {"role": "system", "content": system_prompt})
 
-        info["store"][info["history_key"]] = messages
-        save_qq_histories()
+        replace_current_qq_session_messages(
+            info,
+            messages,
+            system_prompt=system_prompt,
+            character=active,
+        )
 
         bindings = load_resume_bindings()
         bindings[info["session_id"]] = {
@@ -1224,7 +1477,7 @@ def register_ai_commands(
             )
             return
 
-        current_messages = copy_chat_messages(info["store"].get(info["history_key"], []))
+        current_messages = copy_chat_messages(load_current_qq_session_messages(info))
         if not current_messages:
             await reply_current_channel(msg, is_group, "当前频道没有可上传的会话内容。")
             return

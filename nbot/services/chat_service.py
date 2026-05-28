@@ -176,6 +176,52 @@ def _get_qq_store() -> QQSessionStore:
     )
 
 
+def load_canonical_qq_messages(
+    user_id: str = None,
+    group_id: str = None,
+    group_user_id: str = None,
+) -> List[Dict[str, Any]]:
+    session_id = get_qq_session_id(
+        user_id=str(user_id) if user_id else None,
+        group_id=str(group_id) if group_id else None,
+        group_user_id=str(group_user_id) if group_user_id else None,
+    )
+    if session_id:
+        try:
+            from nbot.web.server import WebChatServer
+
+            server = WebChatServer.get_instance()
+            if server:
+                session = server.session_store.get_session(session_id)
+                if session and isinstance(session.get("messages"), list):
+                    normalized = []
+                    for msg in session.get("messages", []):
+                        role = str(msg.get("role") or "")
+                        if role not in ("system", "user", "assistant"):
+                            continue
+                        normalized.append(
+                            {
+                                "role": role,
+                                "content": msg.get("content", ""),
+                                "timestamp": msg.get("timestamp", ""),
+                            }
+                        )
+                    if normalized:
+                        return normalized
+        except Exception:
+            pass
+
+    qq_store = _get_qq_store()
+    if user_id:
+        return qq_store.ensure_history(user_id=str(user_id))
+    if group_id:
+        return qq_store.ensure_history(
+            group_id=str(group_id),
+            group_user_id=str(group_user_id) if group_user_id else None,
+        )
+    return []
+
+
 # ============================================================================
 # QQ 管道回调
 # ============================================================================
@@ -198,13 +244,11 @@ class QQCallbacks(PipelineCallbacks):
 
     def load_messages(self, ctx: PipelineContext) -> List[Dict[str, Any]]:
         """从 QQSessionStore 加载历史消息。"""
-        if self.user_id:
-            return self.qq_store.ensure_history(user_id=self.user_id)
-        elif self.group_id:
-            return self.qq_store.ensure_history(
-                group_id=self.group_id, group_user_id=self.group_user_id
-            )
-        return []
+        return load_canonical_qq_messages(
+            user_id=self.user_id,
+            group_id=self.group_id,
+            group_user_id=self.group_user_id,
+        )
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:
         return load_prompt(
@@ -662,6 +706,52 @@ def _get_active_model_name() -> str:
 
 def _sync_to_web_session(role, content, user_id=None, group_id=None, group_user_id=None):
     """将消息同步到 Web 会话 - 支持群聊用户独立会话"""
+    import uuid
+
+    from nbot.web.server import WebChatServer
+
+    server = WebChatServer.get_instance()
+    if server:
+        session_id = server.sync_qq_messages(
+            user_id=str(user_id) if user_id else None,
+            group_id=str(group_id) if group_id else None,
+            create_if_not_exists=True,
+        )
+        if not session_id:
+            return
+
+        session = server.session_store.get_session(session_id)
+        if not session:
+            return
+
+        display_content = content
+        if content and content.strip().startswith("{"):
+            try:
+                parsed = json.loads(content)
+                if isinstance(parsed, dict) and "msg" in parsed:
+                    display_content = parsed["msg"]
+            except Exception:
+                pass
+
+        messages = session.setdefault("messages", [])
+        if not any(
+            msg.get("role") == role and msg.get("content") == display_content
+            for msg in messages
+        ):
+            messages.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "role": role,
+                    "content": display_content,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "sender": "User" if role == "user" else "Bot",
+                    "source": "qq",
+                }
+            )
+            session["last_message"] = display_content[:100]
+            server.session_store.set_session(session_id, session)
+        return
+
     import os
     import json
     from datetime import datetime
@@ -824,6 +914,7 @@ def _record_message(role, content, user_id=None, group_id=None, group_user_id=No
             content=record_content,
             user_id=user_id,
         )
+        _sync_to_web_session(role, record_content, user_id=user_id)
     
     elif group_id:
         group_id = str(group_id)
@@ -840,6 +931,12 @@ def _record_message(role, content, user_id=None, group_id=None, group_user_id=No
             group_id,
             role=role,
             content=record_content,
+            group_id=group_id,
+            group_user_id=group_user_id,
+        )
+        _sync_to_web_session(
+            role,
+            record_content,
             group_id=group_id,
             group_user_id=group_user_id,
         )
@@ -931,20 +1028,21 @@ def generate_today_summary(user_id=None, group_id=None) -> str:
             return "今天群里还没有记录到消息喵~"
         return summarize_group_text(text)
     if user_id:
-        key = str(user_id)
-        messages_list = user_messages.get(key, [])
+        messages_list = load_canonical_qq_messages(user_id=str(user_id))
         if not messages_list:
             return "今天还没有和我聊天喵~"
         lines = []
-        has_today = False
+        today_messages = 0
         for m in messages_list:
             content = m.get("content", "")
             role = m.get("role", "")
-            if today_str in content:
-                has_today = True
+            timestamp = str(m.get("timestamp", "") or "")
+            if not timestamp.startswith(today_str):
+                continue
             if role in ("user", "assistant"):
+                today_messages += 1
                 lines.append(f"[{role}] {content}")
-        if not has_today:
+        if not today_messages:
             return "今天还没有和我聊天喵~"
         text = "\n".join(lines)
         client = None

@@ -491,6 +491,19 @@ class WebChatServer:
         }
 
         # Heartbeat 调度器
+        from nbot.gateway.gateway import get_gateway
+        from nbot.gateway.heartbeat import (
+            SessionHeartbeatManager,
+            set_session_heartbeat_manager,
+        )
+
+        self.session_heartbeat_manager = SessionHeartbeatManager(
+            data_dir=self.data_dir,
+            gateway_getter=get_gateway,
+            executor=self._run_session_heartbeat_execution,
+        )
+        set_session_heartbeat_manager(self.session_heartbeat_manager)
+        self._refresh_heartbeat_summary_config()
         self.heartbeat_job = None
         self.proactive_chat_thread: threading.Thread | None = None
         self.scheduled_tasks: list[dict[str, Any]] = []
@@ -581,7 +594,6 @@ class WebChatServer:
                     self._initialize_ai_client()
                 self._init_workflow_scheduler()
                 self._init_custom_task_scheduler()
-                self._start_proactive_chat_loop()
                 self._start_log_cleanup_loop()
                 # 检查并重建知识库索引（如有需要）
                 self._check_knowledge_index()
@@ -713,67 +725,10 @@ class WebChatServer:
         return config
 
     def _start_proactive_chat_loop(self):
-        if self.proactive_chat_thread and self.proactive_chat_thread.is_alive():
-            return
-
-        def run():
-            _log.info("[ProactiveChat] session-level scanner started")
-            self.socketio.sleep(60)
-            while True:
-                try:
-                    self._execute_proactive_chat_tick()
-                except Exception as exc:
-                    _log.error("[ProactiveChat] tick failed: %s", exc, exc_info=True)
-                self.socketio.sleep(60)
-
-        self.proactive_chat_thread = threading.Thread(
-            target=run,
-            name="web-proactive-chat",
-            daemon=True,
-        )
-        self.proactive_chat_thread.start()
+        _log.info("[ProactiveChat] backend disabled; UI config retained")
 
     def _execute_proactive_chat_tick(self):
-        session_ids = self._get_proactive_chat_target_session_ids()
-        if not session_ids:
-            return
-
-        now = datetime.now()
-        for session_id in session_ids:
-            session = self.session_store.get_session(session_id)
-            if not session or session.get("read_only") or session.get("archived"):
-                continue
-            if session.get("type", "web") != "web":
-                continue
-            if session_id in self.stop_events:
-                continue
-            config = self._get_session_proactive_chat_config(session)
-            if not config.get("enabled"):
-                continue
-            if config.get("visible_only", True) and session_id not in set(self.visible_web_sessions.values()):
-                continue
-            if self._proactive_chat_has_unanswered_reply(session):
-                continue
-            if not self._proactive_chat_session_is_due(session, now, config):
-                continue
-
-            session["proactive_chat_last_run"] = now.isoformat()
-            session["proactive_chat_pending_since"] = now.isoformat()
-            self.session_store.set_session(session_id, session)
-            _log.info("[ProactiveChat] triggering session %s", session_id[:8])
-            self._trigger_ai_response(
-                session_id,
-                str(config.get("prompt") or ""),
-                "system",
-                [],
-                None,
-                {
-                    "source": "proactive_chat",
-                    "is_proactive_chat": True,
-                    "proactive_chat_triggered_at": now.isoformat(),
-                },
-                channel_id="proactive",
-            )
+        return
 
     def _get_proactive_chat_target_session_ids(self) -> list[str]:
         return [
@@ -2041,6 +1996,8 @@ class WebChatServer:
         self._save_data("scheduled_tasks")
 
     def get_task_center_items(self):
+        if hasattr(self, "session_heartbeat_manager"):
+            self._refresh_heartbeat_summary_config()
         items = [
             {
                 "id": "heartbeat",
@@ -3216,14 +3173,108 @@ class WebChatServer:
         self.session_store.set_session(session_id, session)
         return session_id
 
+    def _refresh_heartbeat_summary_config(self):
+        configs = self.session_heartbeat_manager.list_enabled_configs()
+        if configs:
+            primary = sorted(
+                configs,
+                key=lambda item: (
+                    item.get("last_run") or "",
+                    item.get("session_id") or "",
+                ),
+                reverse=True,
+            )[0]
+            self.heartbeat_config.update(
+                {
+                    "enabled": True,
+                    "interval_minutes": primary.get("interval_minutes", 60),
+                    "content_file": primary.get("content_file", "heartbeat.md"),
+                    "target_session_id": primary.get(
+                        "target_session_id", primary.get("session_id", "")
+                    ),
+                    "targets": [
+                        f"web:{primary.get('target_session_id', primary.get('session_id', ''))}"
+                    ],
+                    "last_run": primary.get("last_run"),
+                    "next_run": primary.get("next_run"),
+                    "last_trace_id": primary.get("last_trace_id", ""),
+                    "last_gateway_status": primary.get("last_gateway_status", ""),
+                }
+            )
+            return
+        self.heartbeat_config.update(
+            {
+                "enabled": False,
+                "target_session_id": "",
+                "targets": [],
+                "last_trace_id": "",
+                "last_gateway_status": "",
+            }
+        )
+
+    def _run_session_heartbeat_execution(
+        self,
+        session_id: str,
+        config: dict[str, Any],
+        *,
+        force: bool = False,
+    ):
+        content_file = config.get("content_file", "heartbeat.md")
+        content = self._load_heartbeat_content(content_file)
+        if not content:
+            _log.warning("Heartbeat content file '%s' not found or empty", content_file)
+            return {"messages_sent": 0, "target_session_id": session_id}
+
+        session = self.session_store.get_session(session_id)
+        if not session:
+            _log.warning("Heartbeat target session not found: %s", session_id)
+            return {"messages_sent": 0, "target_session_id": session_id}
+
+        heartbeat_adapter = _resolve_web_adapter(self.web_channel_adapter)
+        hb_user_message = _build_heartbeat_user_message(heartbeat_adapter, session_id, content)
+        self.session_store.append_message(session_id, hb_user_message)
+
+        heartbeat_messages = []
+        current_session = self.session_store.get_session(session_id) or session
+        for msg in current_session.get("messages", [])[-12:]:
+            role = msg.get("role")
+            if role in ["system", "user", "assistant"]:
+                heartbeat_messages.append(
+                    {"role": role, "content": msg.get("content", "")}
+                )
+
+        if not heartbeat_messages:
+            heartbeat_messages = [{"role": "user", "content": content}]
+
+        response_text = self._get_ai_response(heartbeat_messages)
+        if not response_text:
+            return {"messages_sent": 0, "target_session_id": session_id}
+
+        hb_assistant_message = _build_heartbeat_assistant_message(
+            heartbeat_adapter, session_id, response_text
+        )
+        self.session_store.append_message(session_id, hb_assistant_message)
+        if self.socketio:
+            self.socketio.emit(
+                "session_updated",
+                {"session_id": session_id, "action": "heartbeat_completed"},
+                room=session_id,
+            )
+        return {
+            "messages_sent": 1,
+            "target_session_id": session_id,
+            "session_id": session_id,
+            "result_summary": "sent 1 message",
+        }
+
     def _init_heartbeat_scheduler(self):
         """初始化 Heartbeat 调度器"""
-        if not self.heartbeat_config.get("enabled"):
+        self._refresh_heartbeat_summary_config()
+        if not self.session_heartbeat_manager.any_enabled():
             _log.info("Heartbeat is disabled")
             return
 
-        interval = self.heartbeat_config.get("interval_minutes", 60)
-        self._start_heartbeat_job(interval)
+        self._start_heartbeat_job(1)
 
     def _start_heartbeat_job(self, interval_minutes: int):
         """启动 Heartbeat 定时任务"""
@@ -3255,7 +3306,7 @@ class WebChatServer:
             job = self.scheduler.add_job(
                 func=run_heartbeat_sync,
                 trigger="interval",
-                minutes=interval_minutes,
+                minutes=max(1, int(interval_minutes or 1)),
                 id="heartbeat",
                 replace_existing=True,
             )
@@ -3283,6 +3334,25 @@ class WebChatServer:
         Args:
             force: 是否强制执行，跳过 enabled 检查
         """
+        if hasattr(self, "session_heartbeat_manager"):
+            self._refresh_heartbeat_summary_config()
+            target_session_id = str(self.heartbeat_config.get("target_session_id") or "").strip()
+            if target_session_id:
+                return await self.session_heartbeat_manager.execute_session(
+                    target_session_id,
+                    force=force,
+                    trigger_source="manual" if force else "scheduler",
+                )
+            if force:
+                enabled = self.session_heartbeat_manager.list_enabled_configs()
+                if not enabled:
+                    return None
+                return await self.session_heartbeat_manager.execute_session(
+                    enabled[0]["session_id"],
+                    force=True,
+                    trigger_source="manual",
+                )
+            return await self.session_heartbeat_manager.execute_due_sessions()
         if not force and not self.heartbeat_config.get("enabled"):
             _log.info("Heartbeat is disabled, skipping execution")
             return
@@ -3653,6 +3723,110 @@ class WebChatServer:
 
             # 保存会话数据
 
+        return session_id
+
+
+    def sync_qq_messages(
+        self, user_id: str, group_id: str = None, create_if_not_exists: bool = True
+    ):
+        """同步 QQ 消息到 canonical Web 投影会话。"""
+        from nbot.services.chat_service import (
+            get_qq_session_id,
+            group_messages,
+            load_prompt,
+            user_messages,
+        )
+
+        target_id = group_id or user_id
+        if not target_id:
+            return None
+
+        session_type = "qq_group" if group_id else "qq_private"
+        session_name = f"群 {target_id}" if group_id else f"私聊 {target_id}"
+        session_id = get_qq_session_id(
+            user_id=str(user_id) if user_id else None,
+            group_id=str(group_id) if group_id else None,
+        )
+
+        legacy_session_id = self.session_store.find_session_id(
+            lambda sid, session: sid != session_id
+            and session.get("type") == session_type
+            and (
+                session.get("qq_id") == target_id
+                or session.get("name") == session_name
+            )
+        )
+        legacy_messages = []
+        if legacy_session_id:
+            legacy_session = self.session_store.delete_session(legacy_session_id) or {}
+            legacy_messages = legacy_session.get("messages", [])
+
+        session = self.session_store.get_session(session_id)
+        if not session and not create_if_not_exists:
+            return None
+
+        prompt = load_prompt(
+            user_id=str(user_id) if user_id else None,
+            group_id=str(group_id) if group_id else None,
+            include_skills=False,
+        )
+        if not session:
+            session = {
+                "id": session_id,
+                "name": session_name,
+                "type": session_type,
+                "qq_id": target_id,
+                "created_at": datetime.now().isoformat(),
+                "messages": [],
+                "system_prompt": prompt or "",
+            }
+        else:
+            session["id"] = session_id
+            session["name"] = session_name
+            session["type"] = session_type
+            session["qq_id"] = target_id
+            if prompt:
+                session["system_prompt"] = prompt
+
+        rebuilt_messages = []
+        if session.get("system_prompt"):
+            rebuilt_messages.append(
+                {"role": "system", "content": session.get("system_prompt", "")}
+            )
+
+        msg_store = group_messages if group_id else user_messages
+        if target_id in msg_store:
+            for msg in msg_store[target_id]:
+                if msg.get("role") == "system":
+                    continue
+                rebuilt_messages.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "role": msg.get("role", "user"),
+                        "content": msg.get("content", ""),
+                        "timestamp": msg.get("timestamp", datetime.now().isoformat()),
+                        "sender": target_id,
+                        "source": "qq",
+                    }
+                )
+
+        if legacy_messages:
+            existing_keys = {
+                (msg.get("role", ""), msg.get("content", ""), msg.get("timestamp", ""))
+                for msg in rebuilt_messages
+            }
+            for msg in legacy_messages:
+                key = (msg.get("role", ""), msg.get("content", ""), msg.get("timestamp", ""))
+                if msg.get("role") == "system" or key in existing_keys:
+                    continue
+                rebuilt_messages.append(msg)
+                existing_keys.add(key)
+
+        session["messages"] = rebuilt_messages
+        session["last_message"] = (
+            rebuilt_messages[-1].get("content", "")[:100] if rebuilt_messages else ""
+        )
+        self.session_store.set_session(session_id, session)
         return session_id
 
 

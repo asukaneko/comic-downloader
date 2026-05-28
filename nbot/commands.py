@@ -1965,12 +1965,41 @@ async def handle_del_message(msg, is_group=True):
 
     if is_group:
         try:
-            del group_messages[str(msg.group_id)]
+            group_key = str(msg.group_id)
+            group_user_key = f"{msg.group_id}_{msg.user_id}"
+            removed = False
+            if group_user_key in group_messages:
+                del group_messages[group_user_key]
+                removed = True
+            if group_key in group_messages:
+                del group_messages[group_key]
+                removed = True
+            if not removed:
+                raise KeyError(group_key)
         except KeyError:
             await msg.reply(text="你没有对话记录喵~")
             return
         with open("saved_message/group_messages.json", "w", encoding="utf-8") as f:
             json.dump(group_messages, f, ensure_ascii=False, indent=4)
+        try:
+            from nbot.core.session_store import WebSessionStore
+            from nbot.web.server import WebChatServer
+
+            server = WebChatServer.get_instance()
+            if server and hasattr(server, "sessions"):
+                session_store = WebSessionStore(
+                    server.sessions,
+                    save_callback=lambda: server._save_data("sessions"),
+                )
+                session_store.delete_session(get_qq_session_id(group_id=str(msg.group_id)))
+                session_store.delete_session(
+                    get_qq_session_id(
+                        group_id=str(msg.group_id),
+                        group_user_id=str(msg.user_id),
+                    )
+                )
+        except Exception:
+            pass
         # 删除对应的工作区
         delete_session_workspace(group_id=str(msg.group_id), group_user_id=str(msg.user_id))
         await msg.reply(text="主人要离我而去了吗？呜呜呜……好吧，那我们以后再见喵~")
@@ -1982,6 +2011,19 @@ async def handle_del_message(msg, is_group=True):
             return
         with open("saved_message/user_messages.json", "w", encoding="utf-8") as f:
             json.dump(user_messages, f, ensure_ascii=False, indent=4)
+        try:
+            from nbot.core.session_store import WebSessionStore
+            from nbot.web.server import WebChatServer
+
+            server = WebChatServer.get_instance()
+            if server and hasattr(server, "sessions"):
+                session_store = WebSessionStore(
+                    server.sessions,
+                    save_callback=lambda: server._save_data("sessions"),
+                )
+                session_store.delete_session(get_qq_session_id(user_id=str(msg.user_id)))
+        except Exception:
+            pass
         # 删除对应的工作区
         delete_session_workspace(user_id=str(msg.user_id))
         await bot.api.post_private_msg(msg.user_id, text="主人要离我而去了吗？呜呜呜……好吧，那我们以后再见喵~")

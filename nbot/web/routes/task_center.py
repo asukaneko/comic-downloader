@@ -26,6 +26,14 @@ def register_task_center_routes(app, server):
     def _payload():
         return request.get_json(silent=True) or {}
 
+    def _start_background_or_run(handler):
+        socketio = getattr(server, "socketio", None)
+        if socketio and hasattr(socketio, "start_background_task"):
+            socketio.start_background_task(handler)
+            return "background"
+        handler()
+        return "sync"
+
     @app.route("/api/task-center")
     def get_task_center():
         return jsonify({"items": server.get_task_center_items()})
@@ -89,11 +97,25 @@ def register_task_center_routes(app, server):
     @app.route("/api/task-center/<task_id>/toggle", methods=["POST"])
     def toggle_task_center_item(task_id):
         if task_id == "heartbeat":
-            server.heartbeat_config["enabled"] = not server.heartbeat_config.get("enabled", False)
-            if server.heartbeat_config["enabled"]:
-                server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
+            manager = getattr(server, "session_heartbeat_manager", None)
+            target_session_id = str(server.heartbeat_config.get("target_session_id") or "").strip()
+            if manager and target_session_id:
+                current = manager.get_config(target_session_id)
+                manager.set_config(
+                    target_session_id,
+                    {"enabled": not bool(current.get("enabled", False))},
+                )
+                server._refresh_heartbeat_summary_config()
+                if manager.any_enabled():
+                    server._start_heartbeat_job(1)
+                else:
+                    server._stop_heartbeat_job()
             else:
-                server._stop_heartbeat_job()
+                server.heartbeat_config["enabled"] = not server.heartbeat_config.get("enabled", False)
+                if server.heartbeat_config["enabled"]:
+                    server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
+                else:
+                    server._stop_heartbeat_job()
             server._save_data("heartbeat")
             return jsonify({"success": True, "item": deepcopy(server.heartbeat_config)})
 
@@ -130,10 +152,55 @@ def register_task_center_routes(app, server):
         if task_id == "heartbeat":
             import asyncio
 
-            server.socketio.start_background_task(
+            manager = getattr(server, "session_heartbeat_manager", None)
+            if manager and hasattr(server, "_refresh_heartbeat_summary_config"):
+                server._refresh_heartbeat_summary_config()
+
+            target_session_id = str(server.heartbeat_config.get("target_session_id") or "").strip()
+            if not target_session_id and manager:
+                enabled = manager.list_enabled_configs()
+                if enabled:
+                    target_session_id = str(
+                        enabled[0].get("target_session_id") or enabled[0].get("session_id") or ""
+                    ).strip()
+
+            if manager and target_session_id:
+                mode = _start_background_or_run(
+                    lambda: asyncio.run(
+                        manager.execute_session(
+                            target_session_id,
+                            force=True,
+                            trigger_source="task-center",
+                        )
+                    )
+                )
+                return jsonify(
+                    {
+                        "success": True,
+                        "message": (
+                            "Heartbeat execution started"
+                            if mode == "background"
+                            else "Heartbeat execution completed"
+                        ),
+                    }
+                )
+
+            if not target_session_id and not server.heartbeat_config.get("enabled", False):
+                return jsonify({"error": "No heartbeat target session configured"}), 400
+
+            mode = _start_background_or_run(
                 lambda: asyncio.run(server._execute_heartbeat(force=True))
             )
-            return jsonify({"success": True, "message": "Heartbeat execution started"})
+            return jsonify(
+                {
+                    "success": True,
+                    "message": (
+                        "Heartbeat execution started"
+                        if mode == "background"
+                        else "Heartbeat execution completed"
+                    ),
+                }
+            )
 
         workflow = next((item for item in server.workflows if item.get("id") == task_id), None)
         if workflow:

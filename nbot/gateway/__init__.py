@@ -6,11 +6,19 @@ NekoBot Gateway - 消息与能力边界层
 """
 
 from nbot.gateway.gateway import ChannelGateway
+from nbot.gateway.heartbeat import (
+    SessionHeartbeatManager,
+    get_session_heartbeat_manager,
+    set_session_heartbeat_manager,
+)
 from nbot.gateway.schemas import DeliveryRequest, GatewayEvent, GatewayResult
 
 __all__ = [
     "ChannelGateway",
+    "SessionHeartbeatManager",
     "DeliveryRequest",
     "GatewayEvent",
     "GatewayResult",
+    "get_session_heartbeat_manager",
+    "set_session_heartbeat_manager",
 ]
