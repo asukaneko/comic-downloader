@@ -44,6 +44,7 @@ class GatewayWorker:
         retry_handler: RetryHandler | None = None,
         trace_factory: TraceFactory | None = None,
         dedupe_store=None,
+        event_store=None,
         concurrency: int = 1,
         idle_timeout: float = 30.0,
     ):
@@ -54,6 +55,7 @@ class GatewayWorker:
         self._retry_handler = retry_handler or RetryHandler()
         self._trace_factory = trace_factory or TraceFactory()
         self._dedupe_store = dedupe_store
+        self._event_store = event_store
 
         # Worker 控制状态
         self._running = False
@@ -329,6 +331,36 @@ class GatewayWorker:
                 error=error_msg,
             )
 
+        # 记录模型信息和故障转移事件
+        resp_metadata = getattr(chat_response, "metadata", None) or {}
+        used_model_id = resp_metadata.get("model_id", "")
+        used_model_name = resp_metadata.get("model_name", "")
+        failover_events = resp_metadata.get("failover_events", [])
+        if used_model_id or used_model_name:
+            self._record_event(
+                trace_id=trace_id, channel_id=channel_id,
+                status="model_selected",
+                conversation_id=chat_request.conversation_id,
+                metadata={
+                    k: v for k, v in {
+                        "model_id": used_model_id,
+                        "model_name": used_model_name,
+                    }.items() if v
+                },
+            )
+        for ev in failover_events:
+            self._record_event(
+                trace_id=trace_id, channel_id=channel_id,
+                status="model_failover",
+                conversation_id=chat_request.conversation_id,
+                metadata={
+                    "failed_model_id": ev.get("model_id", ""),
+                    "failed_model_name": ev.get("model_name", ""),
+                    "status_code": ev.get("status_code", 0),
+                    "category": ev.get("category", ""),
+                },
+            )
+
         # === Step 5: 投递回复 ===
         try:
             delivery_result = await self._delivery.send_response(
@@ -414,6 +446,35 @@ class GatewayWorker:
                 "response_content": chat_response.final_content,
             },
         )
+
+    def _record_event(
+        self,
+        *,
+        trace_id: str,
+        channel_id: str,
+        status: str,
+        conversation_id: str = "",
+        user_id: str = "",
+        message_id: str = "",
+        metadata: dict | None = None,
+        error: str = "",
+    ) -> None:
+        """记录事件到 EventStore（如果可用）"""
+        if not self._event_store:
+            return
+        try:
+            self._event_store.record(
+                trace_id=trace_id,
+                channel_id=channel_id,
+                status=status,
+                conversation_id=conversation_id,
+                user_id=user_id,
+                message_id=message_id,
+                metadata=metadata,
+                error=error,
+            )
+        except Exception as e:
+            _log.debug("[Worker] 事件记录失败 trace=%s status=%s error=%s", trace_id, status, str(e))
 
     def _handle_item_error(
         self,

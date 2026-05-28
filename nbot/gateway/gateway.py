@@ -207,6 +207,7 @@ class ChannelGateway:
                 retry_handler=RetryHandler(),
                 trace_factory=self.trace_factory,
                 dedupe_store=self.dedupe_store,
+                event_store=self.event_store,
             )
         if self._worker:
             await self._worker.start()
@@ -648,6 +649,34 @@ class ChannelGateway:
             trace_id=trace_id, channel_id=channel_id, status="delivering",
             conversation_id=chat_request.conversation_id,
         )
+
+        # 记录模型信息和故障转移事件到 Gateway 日志
+        resp_metadata = getattr(chat_response, "metadata", None) or {}
+        used_model_id = resp_metadata.get("model_id", "")
+        used_model_name = resp_metadata.get("model_name", "")
+        failover_events = resp_metadata.get("failover_events", [])
+        model_info = {}
+        if used_model_id:
+            model_info["model_id"] = used_model_id
+        if used_model_name:
+            model_info["model_name"] = used_model_name
+        if model_info:
+            self._record_event(
+                trace_id=trace_id, channel_id=channel_id, status="model_selected",
+                conversation_id=chat_request.conversation_id,
+                metadata=model_info,
+            )
+        for ev in failover_events:
+            self._record_event(
+                trace_id=trace_id, channel_id=channel_id, status="model_failover",
+                conversation_id=chat_request.conversation_id,
+                metadata={
+                    "failed_model_id": ev.get("model_id", ""),
+                    "failed_model_name": ev.get("model_name", ""),
+                    "status_code": ev.get("status_code", 0),
+                    "category": ev.get("category", ""),
+                },
+            )
 
         # === Step 9: 投递回复 ===
         try:

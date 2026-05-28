@@ -828,6 +828,12 @@ class AIPipeline:
             ctx.final_content = f"AI 调用失败: {e}"
             return
 
+        # 提取模型追踪信息
+        for key in ("_model_id", "_model_name", "_failover_events"):
+            value = response.pop(key, None)
+            if value is not None:
+                ctx.metadata[key.lstrip("_")] = value
+
         ctx.final_content = response.get("content", "")
         ctx.usage = response.get("usage", {})
 
@@ -940,6 +946,14 @@ class AIPipeline:
 
         loop_result = execution_result.loop_result
         ctx.usage = dict(loop_result.usage or {})
+
+        # 提取模型追踪信息
+        if loop_result.model_id:
+            ctx.metadata["model_id"] = loop_result.model_id
+        if loop_result.model_name:
+            ctx.metadata["model_name"] = loop_result.model_name
+        if loop_result.failover_events:
+            ctx.metadata["failover_events"] = list(loop_result.failover_events)
 
         if loop_result.stopped:
             ctx.stopped_prematurely = True
@@ -1095,6 +1109,7 @@ class AIPipeline:
         def failover_model_call(messages, stop_event=None):
             last_error = None
             attempted = set()
+            failover_events = []
 
             for _ in range(len(model_configs)):
                 config = failover.select_model(
@@ -1104,6 +1119,7 @@ class AIPipeline:
                     break
 
                 model_id = config.get("model_id", "")
+                model_name = config.get("model", "")
                 attempted.add(model_id)
 
                 # Apply this config to global AIClient
@@ -1113,6 +1129,11 @@ class AIPipeline:
                     call = _build_call_for_config(config)
                     result = call(messages, stop_event=stop_event)
                     failover.record_success(model_id)
+                    # 注入模型信息和故障转移记录到响应
+                    result["_model_id"] = model_id
+                    result["_model_name"] = model_name
+                    if failover_events:
+                        result["_failover_events"] = failover_events
                     return result
                 except StopIteration:
                     raise
@@ -1128,6 +1149,12 @@ class AIPipeline:
                         raise
                     failover.record_failure(model_id, status)
                     last_error = e
+                    failover_events.append({
+                        "model_id": model_id,
+                        "model_name": model_name,
+                        "status_code": status,
+                        "category": category,
+                    })
                     _log.warning(
                         "[Failover] %s model=%s failed (%s %d), "
                         "trying next model",

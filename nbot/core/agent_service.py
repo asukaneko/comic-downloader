@@ -43,6 +43,9 @@ class ToolLoopResult:
     iterations: int = 0
     consecutive_errors: int = 0
     usage: Dict[str, int] = field(default_factory=dict)
+    model_id: str = ""
+    model_name: str = ""
+    failover_events: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -376,9 +379,15 @@ def run_tool_call_loop(
     final_content = ""
     consecutive_errors = 0
     usage_total: Dict[str, int] = {}
+    current_model_id = ""
+    current_model_name = ""
+    all_failover_events: List[Dict[str, Any]] = []
 
     def _result(**kwargs) -> ToolLoopResult:
         kwargs.setdefault("usage", dict(usage_total))
+        kwargs.setdefault("model_id", current_model_id)
+        kwargs.setdefault("model_name", current_model_name)
+        kwargs.setdefault("failover_events", list(all_failover_events))
         return ToolLoopResult(**kwargs)
 
     for iteration in range(max_iterations):
@@ -409,6 +418,17 @@ def run_tool_call_loop(
                 iterations=iteration + 1,
                 consecutive_errors=consecutive_errors,
             )
+
+        # 提取模型追踪信息
+        resp_model_id = response.pop("_model_id", None)
+        resp_model_name = response.pop("_model_name", None)
+        resp_failover = response.pop("_failover_events", None)
+        if resp_model_id:
+            current_model_id = resp_model_id
+        if resp_model_name:
+            current_model_name = resp_model_name
+        if resp_failover:
+            all_failover_events.extend(resp_failover)
 
         _merge_usage(usage_total, response.get("usage"))
         tool_calls = response.get("tool_calls") or []
