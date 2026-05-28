@@ -317,8 +317,9 @@ class QQCallbacks(PipelineCallbacks):
 
         from nbot.core.token_stats import get_token_stats_manager
 
-        # 优先使用 API 实际返回的模型，回退到配置的模型
-        model = (result.metadata or {}).get("model_id", "") or _get_active_model_name()
+        # 优先使用 API 实际返回的模型名，回退到配置的模型
+        meta = result.metadata or {}
+        model = meta.get("model_name", "") or meta.get("model_id", "") or _get_active_model_name()
         runtime_ai = refresh_runtime_ai_config()
         session_id = str(self.user_id) if self.user_id else str(self.group_id)
         channel_type = "private" if self.user_id else "group"

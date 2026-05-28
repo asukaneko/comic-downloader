@@ -1373,8 +1373,8 @@ def _update_web_token_stats(server, usage: dict, session_id: str, metadata: dict
 
         from nbot.core.token_stats import get_token_stats_manager
 
-        # 优先使用 API 实际返回的模型，回退到配置的模型
-        actual_model = (metadata or {}).get("model_id", "") or getattr(server, "ai_model", "") or ""
+        # 优先使用 API 实际返回的模型名，回退到配置的模型
+        actual_model = (metadata or {}).get("model_name", "") or (metadata or {}).get("model_id", "") or getattr(server, "ai_model", "") or ""
 
         # 从当前活跃模型配置中查找价格
         input_price = None
