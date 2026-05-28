@@ -70,21 +70,25 @@ def register_heartbeat_routes(app, server):
         content = data.get("content", "")
         content_file = data.get("file", "heartbeat.md")
 
-        save_path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "resources", content_file
-        )
+        # 与 _load_heartbeat_content (server.py) 保持一致的路径优先级
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "..", "..", "resources", content_file),
+            os.path.join(os.getcwd(), "resources", content_file),
+        ]
+
+        # 优先写入已存在的文件，否则写入第一个路径
+        save_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                save_path = path
+                break
+        if save_path is None:
+            save_path = possible_paths[0]
 
         try:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w", encoding="utf-8") as f:
                 f.write(content)
             return jsonify({"success": True, "path": save_path})
-        except Exception:
-            try:
-                save_path = os.path.join(os.getcwd(), "resources", content_file)
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write(content)
-                return jsonify({"success": True, "path": save_path})
-            except Exception as e2:
-                return jsonify({"success": False, "error": f"保存 heartbeat 文件失败: {e2}"}), 500
+        except Exception as e:
+            return jsonify({"success": False, "error": f"保存 heartbeat 文件失败: {e}"}), 500
