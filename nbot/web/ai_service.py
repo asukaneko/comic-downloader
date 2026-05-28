@@ -1286,7 +1286,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             )
 
             # 更新 token 统计
-            _update_web_token_stats(server, result.usage, session_id)
+            _update_web_token_stats(server, result.usage, session_id, result.metadata)
 
             # === AI 完成后，记录 Gateway 事件（Web 异步场景）===
             if result and hasattr(result, 'final_content') and result.final_content:
@@ -1362,7 +1362,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
     return ChatResponse(metadata={"scheduled": True, "session_id": session_id})
 
 
-def _update_web_token_stats(server, usage: dict, session_id: str):
+def _update_web_token_stats(server, usage: dict, session_id: str, metadata: dict = None):
     """更新 Web 频道的 token 统计（统一持久化到磁盘）。"""
     try:
         if not usage:
@@ -1372,6 +1372,9 @@ def _update_web_token_stats(server, usage: dict, session_id: str):
             return
 
         from nbot.core.token_stats import get_token_stats_manager
+
+        # 优先使用 API 实际返回的模型，回退到配置的模型
+        actual_model = (metadata or {}).get("model_id", "") or getattr(server, "ai_model", "") or ""
 
         # 从当前活跃模型配置中查找价格
         input_price = None
@@ -1391,7 +1394,7 @@ def _update_web_token_stats(server, usage: dict, session_id: str):
             usage.get("prompt_tokens", 0),
             usage.get("completion_tokens", 0),
             total_tokens=usage.get("total_tokens", 0),
-            model=getattr(server, "ai_model", "") or "",
+            model=actual_model,
             session_id=session_id,
             channel_type="web",
             user_id=session_id,

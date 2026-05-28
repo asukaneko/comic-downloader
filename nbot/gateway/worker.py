@@ -426,12 +426,14 @@ class GatewayWorker:
                         "[Worker] dedupe 标记失败 trace=%s error=%s", trace_id, str(e)
                     )
 
+        model_tag = f" model={used_model_id}" if used_model_id else ""
         _log.info(
-            "[Worker] 处理完成 item=%s trace=%s channel=%s status=%s耗时=%.2fs",
+            "[Worker] 处理完成 item=%s trace=%s channel=%s status=%s%s 耗时=%.2fs",
             item.item_id,
             trace_id,
             channel_id,
             delivery_status,
+            model_tag,
             total_elapsed,
         )
 
