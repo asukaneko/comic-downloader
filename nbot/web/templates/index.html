@@ -5359,6 +5359,14 @@
                                                         <template v-else-if="isGatewayErrorStatus(log.status)">
                                                             <span class="gw-error-text">{{ log.error || '处理异常' }}</span>
                                                         </template>
+                                                        <!-- model_selected 状态：显示模型信息 -->
+                                                        <template v-else-if="log.status === 'model_selected' && parseJson(log.metadata_json)">
+                                                            <span class="gw-model-info"><i class="fas fa-microchip"></i> {{ parseJson(log.metadata_json).model_name || parseJson(log.metadata_json).model_id || '未知模型' }}</span>
+                                                        </template>
+                                                        <!-- model_failover 状态：显示故障转移信息 -->
+                                                        <template v-else-if="log.status === 'model_failover' && parseJson(log.metadata_json)">
+                                                            <span class="gw-error-text"><i class="fas fa-random"></i> {{ parseJson(log.metadata_json).failed_model_name || parseJson(log.metadata_json).failed_model_id }} → 备用模型</span>
+                                                        </template>
                                                         <!-- 其他中间状态：显示状态描述 -->
                                                         <template v-else>
                                                             <span style="color: var(--text-muted); font-size: 12px;">{{ getGatewayStatusDesc(log.status) }}</span>
@@ -5474,6 +5482,40 @@
                                                 <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).content" class="trace-detail-box">
                                                     <div class="trace-detail-label"><i class="fas fa-align-left"></i> 任务内容</div>
                                                     <div class="trace-detail-content msg-content">{{ parseJson(evt.metadata_json).content }}</div>
+                                                </div>
+                                                <div v-if="evt.status === 'model_selected' && parseJson(evt.metadata_json)" class="trace-detail-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-microchip"></i> 模型信息</div>
+                                                    <div class="trace-meta-grid">
+                                                        <div v-if="parseJson(evt.metadata_json).model_id" class="trace-meta-item">
+                                                            <span class="trace-meta-label">模型 ID</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).model_id }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).model_name" class="trace-meta-item">
+                                                            <span class="trace-meta-label">模型名称</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).model_name }}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div v-if="evt.status === 'model_failover' && parseJson(evt.metadata_json)" class="trace-detail-box error-box">
+                                                    <div class="trace-detail-label"><i class="fas fa-random"></i> 模型故障转移</div>
+                                                    <div class="trace-meta-grid">
+                                                        <div v-if="parseJson(evt.metadata_json).failed_model_id" class="trace-meta-item">
+                                                            <span class="trace-meta-label">失败模型 ID</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).failed_model_id }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).failed_model_name" class="trace-meta-item">
+                                                            <span class="trace-meta-label">失败模型名称</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).failed_model_name }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).status_code" class="trace-meta-item">
+                                                            <span class="trace-meta-label">状态码</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).status_code }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json).category" class="trace-meta-item">
+                                                            <span class="trace-meta-label">错误类别</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).category }}</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <div v-if="evt.status === 'received' && parseJson(evt.raw_event_json)" class="trace-detail-box">
                                                     <div class="trace-detail-label"><i class="fas fa-comment-dots"></i> 用户消息</div>

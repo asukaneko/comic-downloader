@@ -20485,6 +20485,18 @@
     overflow: hidden;
 }
 
+.gw-model-info {
+    color: #34d399;
+    font-size: 12px;
+    line-height: 1.5;
+    font-weight: 500;
+}
+
+.gw-model-info i {
+    margin-right: 4px;
+    opacity: 0.7;
+}
+
 /* 会话信息 */
 .gw-session-cell {
     display: flex;

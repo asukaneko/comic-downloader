@@ -305,7 +305,10 @@ class PipelineCallbacks(ABC):
                 model=model,
                 provider_type=provider_type,
             )
-            return normalized.to_dict()
+            result = normalized.to_dict()
+            result["_model_id"] = model
+            result["_model_name"] = model
+            return result
 
         return model_call
 
@@ -981,6 +984,12 @@ class AIPipeline:
                     break
 
                 if isinstance(event, dict):
+                    # 提取模型追踪信息
+                    for key in ("_model_id", "_model_name", "_failover_events"):
+                        value = event.get(key)
+                        if value is not None:
+                            ctx.metadata[key.lstrip("_")] = value
+
                     usage = {}
                     try:
                         from nbot.core.model_adapter import normalize_usage_dict

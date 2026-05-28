@@ -3857,6 +3857,8 @@ def main(params):
                         missing_parser: 'danger',
                         queue_full: 'danger',
                         no_sender: 'warning',
+                        model_selected: 'success',
+                        model_failover: 'warning',
                         // 操作日志类型
                         switch: 'info',
                         update: 'warning',
@@ -3894,6 +3896,8 @@ def main(params):
                         missing_parser: '缺少解析器',
                         queue_full: '队列满',
                         no_sender: '无发送器',
+                        model_selected: 'AI 模型',
+                        model_failover: '模型切换',
                         // 操作日志类型
                         switch: '切换',
                         update: '更新',
@@ -3927,6 +3931,8 @@ def main(params):
                         dispatch_failed: 'AI Core 处理异常或超时',
                         delivery_failed: '回复投递到目标频道失败',
                         rate_limited: '触发频率限制，请求被拒绝',
+                        model_selected: '本轮调度使用的 AI 模型',
+                        model_failover: '主模型不可用，已自动切换到备用模型',
                         unknown_channel: '未注册的频道标识符',
                         missing_parser: '频道适配器缺少解析方法',
                         queue_full: '异步队列已满，事件被丢弃',
@@ -4062,6 +4068,7 @@ def main(params):
 
                 getTraceItemClass(status) {
                     if (this.isGatewayErrorStatus(status)) return 'failed';
+                    if (status === 'model_failover') return 'failed';
                     if (status === 'delivered' || status === 'built') return 'delivered';
                     if (status === 'received') return 'received';
                     return 'processing';
@@ -4084,6 +4091,8 @@ def main(params):
                         dispatch_failed: 'fas fa-bolt',
                         delivery_failed: 'fas fa-unlink',
                         rate_limited: 'fas fa-tachometer-alt',
+                        model_selected: 'fas fa-microchip',
+                        model_failover: 'fas fa-random',
                         // 操作日志图标
                         switch: 'fas fa-exchange-alt',
                         update: 'fas fa-edit',

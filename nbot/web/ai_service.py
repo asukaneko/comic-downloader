@@ -981,6 +981,7 @@ def _stream_to_web(
     configs_to_try = model_configs if model_configs and len(model_configs) > 1 else None
     resp = None
     last_error = None
+    used_model_id = model  # 默认为初始模型
 
     if configs_to_try:
         attempted = set()
@@ -1028,6 +1029,7 @@ def _stream_to_web(
                 failover.record_success(mid)
                 # Update local vars for the rest of the function
                 model = cfg.get("model", "")
+                used_model_id = mid
                 base_url = cfg.get("base_url", "")
                 provider_type = cfg.get("provider_type", "openai_compatible")
                 break
@@ -1135,6 +1137,8 @@ def _stream_to_web(
                         yield {"content": chunk}
             except json.JSONDecodeError:
                 continue
+    # 流结束后注入模型信息
+    yield {"_model_id": used_model_id, "_model_name": model}
 
 
 def _get_tool_display_name(tool_name: str) -> str:
@@ -1284,7 +1288,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             # 更新 token 统计
             _update_web_token_stats(server, result.usage, session_id)
 
-            # === AI 完成后，记录 Gateway delivered 事件（Web 异步场景）===
+            # === AI 完成后，记录 Gateway 事件（Web 异步场景）===
             if result and hasattr(result, 'final_content') and result.final_content:
                 try:
                     from nbot.gateway.gateway import get_gateway as _get_gw
@@ -1299,6 +1303,42 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                             session_name = sess.get("name", "") if sess else ""
                         except Exception:
                             pass
+                        # 记录模型信息事件
+                        result_metadata = getattr(result, 'metadata', None) or {}
+                        used_model_id = result_metadata.get("model_id", "")
+                        used_model_name = result_metadata.get("model_name", "")
+                        if used_model_id or used_model_name:
+                            gw.event_store.record(
+                                trace_id=trace_id,
+                                channel_id="web",
+                                status="model_selected",
+                                conversation_id=session_id,
+                                metadata={
+                                    k: v for k, v in {
+                                        "model_id": used_model_id,
+                                        "model_name": used_model_name,
+                                        "session_name": session_name,
+                                    }.items() if v
+                                },
+                            )
+                        # 记录故障转移事件
+                        failover_events = result_metadata.get("failover_events", [])
+                        for ev in failover_events:
+                            gw.event_store.record(
+                                trace_id=trace_id,
+                                channel_id="web",
+                                status="model_failover",
+                                conversation_id=session_id,
+                                metadata={
+                                    k: v for k, v in {
+                                        "failed_model_id": ev.get("model_id", ""),
+                                        "failed_model_name": ev.get("model_name", ""),
+                                        "status_code": ev.get("status_code", 0),
+                                        "category": ev.get("category", ""),
+                                        "session_name": session_name,
+                                    }.items() if v
+                                },
+                            )
                         # 直接 record 完整的 delivered 事件（非 update）
                         gw.event_store.record(
                             trace_id=trace_id,
@@ -1309,7 +1349,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                             metadata={"reply_length": len(reply_text), "session_name": session_name},
                         )
                 except Exception as exc:
-                    _log.debug("[Gateway] Web 异步 delivered 事件记录失败: %s", str(exc))
+                    _log.debug("[Gateway] Web 异步事件记录失败: %s", str(exc))
 
             return result
         finally:
