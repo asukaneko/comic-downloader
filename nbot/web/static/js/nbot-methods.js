@@ -1132,7 +1132,9 @@ const NbotMethods = {
                 getMobileChatMeta() {
                     if (this.currentSession) {
                         const type = this.currentSession.type === 'cli' ? 'CLI' : 'Web';
-                        return `${type} · ${this.currentMessages.length} 条消息`;
+                        const charName = this.currentSession.sender_name || '';
+                        const base = `${type} · ${this.currentMessages.length} 条消息`;
+                        return charName ? `${base} · <span style="color:#60a5fa">${this.escapeHtml(charName)}</span>` : base;
                     }
                     if (this.currentQqId) return `${this.currentQqMessages.length} 条消息`;
                     return '点按切换会话';
