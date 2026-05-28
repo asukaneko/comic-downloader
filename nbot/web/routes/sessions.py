@@ -1037,22 +1037,32 @@ def register_session_routes(app, server):
         if not session:
             return jsonify({"error": "Session not found"}), 404
 
-        messages = session.get("messages", [])
-        non_system_msgs = [m for m in messages if m.get("role") != "system"]
-        if non_system_msgs:
-            archive = _get_or_create_archive_session(session_id, session)
-            archive_label = f"完整归档于 {datetime.now().strftime('%Y-%m-%d %H:%M')} ({len(non_system_msgs)} 条消息)"
-            _append_to_archive(archive, non_system_msgs, label=archive_label)
+        existing_archive_id = str(session.get("archive_session_id") or "").strip()
+        if existing_archive_id:
+            existing_archive = session_store.get_session(existing_archive_id)
+            if not existing_archive:
+                existing_archive = get_session_from_db(server.data_dir, existing_archive_id)
+            if existing_archive and _merge_bound_archive_into_session_messages(session, existing_archive):
+                session.pop("archive_session_id", None)
+                session["archived"] = True
+                session["archived_at"] = datetime.now().isoformat()
+                session_store.set_session(session_id, session)
+                session_store.delete_session(existing_archive_id)
+                return jsonify({
+                    "success": True,
+                    "session": session,
+                    "archive_session_id": None,
+                })
 
+        # 普通归档：只标记归档状态，不创建归档会话（归档会话仅由压缩创建）
         session["archived"] = True
         session["archived_at"] = datetime.now().isoformat()
         session_store.set_session(session_id, session)
 
-        archive_id = session.get("archive_session_id")
         return jsonify({
             "success": True,
             "session": session,
-            "archive_session_id": archive_id,
+            "archive_session_id": session.get("archive_session_id"),
         })
 
     @app.route("/api/sessions/<session_id>/restore", methods=["POST"])
@@ -1188,6 +1198,30 @@ def register_session_routes(app, server):
         merged = dict(session)
         merged["messages"] = meaningful + main_messages
         return merged
+
+    def _merge_bound_archive_into_session_messages(session, archive):
+        archive_messages = archive.get("messages", []) if isinstance(archive, dict) else []
+        if not archive_messages:
+            return False
+
+        meaningful_archive = [
+            deepcopy(msg)
+            for msg in archive_messages
+            if isinstance(msg, dict)
+            and (
+                msg.get("role") != "system"
+                or str(msg.get("id", "")).startswith("archive_divider_")
+            )
+        ]
+        if not meaningful_archive:
+            return False
+
+        main_messages = [deepcopy(msg) for msg in session.get("messages", []) if isinstance(msg, dict)]
+        if main_messages and main_messages[0].get("role") == "system":
+            session["messages"] = [main_messages[0]] + meaningful_archive + main_messages[1:]
+        else:
+            session["messages"] = meaningful_archive + main_messages
+        return True
 
     def _copy_archive_for_fork(source_session, target_session_id, target_name, now):
         source_archive_id = source_session.get("archive_session_id") if isinstance(source_session, dict) else None
