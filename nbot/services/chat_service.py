@@ -705,152 +705,19 @@ def _get_active_model_name() -> str:
 
 
 def _sync_to_web_session(role, content, user_id=None, group_id=None, group_user_id=None):
-    """将消息同步到 Web 会话 - 支持群聊用户独立会话"""
-    import uuid
-
+    """将消息同步到 Web 会话 - 通过 sync_qq_messages 统一管理"""
     from nbot.web.server import WebChatServer
 
     server = WebChatServer.get_instance()
-    if server:
-        session_id = server.sync_qq_messages(
-            user_id=str(user_id) if user_id else None,
-            group_id=str(group_id) if group_id else None,
-            create_if_not_exists=True,
-        )
-        if not session_id:
-            return
-
-        session = server.session_store.get_session(session_id)
-        if not session:
-            return
-
-        display_content = content
-        if content and content.strip().startswith("{"):
-            try:
-                parsed = json.loads(content)
-                if isinstance(parsed, dict) and "msg" in parsed:
-                    display_content = parsed["msg"]
-            except Exception:
-                pass
-
-        messages = session.setdefault("messages", [])
-        if not any(
-            msg.get("role") == role and msg.get("content") == display_content
-            for msg in messages
-        ):
-            messages.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "role": role,
-                    "content": display_content,
-                    "timestamp": datetime.datetime.now().isoformat(),
-                    "sender": "User" if role == "user" else "Bot",
-                    "source": "qq",
-                }
-            )
-            session["last_message"] = display_content[:100]
-            server.session_store.set_session(session_id, session)
+    if not server:
         return
 
-    import os
-    import json
-    from datetime import datetime
-    
-    if not user_id and not group_id:
-        return
-    
-    # 确定会话标识和类型
-    if user_id:
-        # 私聊
-        qq_id = str(user_id)
-        session_type = 'qq_private'
-        session_name = f"私聊 {qq_id}"
-        prompt_user_id = user_id
-        prompt_group_id = None
-    elif group_id and group_user_id:
-        # 群聊中特定用户 - 创建独立会话
-        qq_id = f"{group_id}_{group_user_id}"
-        session_type = 'qq_group_user'
-        session_name = f"群{group_id}用户{group_user_id}"
-        prompt_user_id = None
-        prompt_group_id = group_id
-    else:
-        # 群聊（兼容旧逻辑，整个群一个会话）
-        qq_id = str(group_id)
-        session_type = 'qq_group'
-        session_name = f"群 {qq_id}"
-        prompt_user_id = None
-        prompt_group_id = group_id
-    
-    # 使用相对路径
-    data_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'web')
-    os.makedirs(data_dir, exist_ok=True)
-    from nbot.web.sessions_db import load_sessions as load_sessions_from_db
-    from nbot.web.sessions_db import save_sessions as save_sessions_to_db
-    
-    # 加载现有会话
-    sessions = load_sessions_from_db(data_dir)
-    
-    # 查找会话：检查 name 是否匹配 session_name
-    session_id = None
-    for sid, session in sessions.items():
-        if session.get('name') == session_name:
-            session_id = sid
-            break
-    
-    # 如果没找到，创建新会话
-    if not session_id:
-        import uuid
-        session_id = str(uuid.uuid4())
-        # 获取提示词
-        prompt = load_prompt(user_id=prompt_user_id, group_id=prompt_group_id, include_skills=False)
-        sessions[session_id] = {
-            'id': session_id,
-            'name': session_name,
-            'type': session_type,
-            'qq_id': qq_id,
-            'created_at': datetime.now().isoformat(),
-            'messages': [{"role": "system", "content": prompt}] if prompt else [],
-            'system_prompt': prompt or ''
-        }
-    
-    # 解析 JSON 内容，提取 msg
-    display_content = content
-    if content and content.strip().startswith('{'):
-        try:
-            # 尝试解析 JSON
-            parsed = json.loads(content)
-            if isinstance(parsed, dict) and 'msg' in parsed:
-                display_content = parsed['msg']
-        except:
-            # 如果解析失败，尝试替换中文引号再解析
-            try:
-                fixed_content = content.replace('"', '"').replace('"', '"')
-                parsed = json.loads(fixed_content)
-                if isinstance(parsed, dict) and 'msg' in parsed:
-                    display_content = parsed['msg']
-            except:
-                pass
-    
-    # 添加消息
-    import uuid
-    message = {
-        'id': str(uuid.uuid4()),
-        'role': role,
-        'content': display_content,
-        'timestamp': datetime.now().isoformat(),
-        'sender': 'User' if role == 'user' else 'Bot',
-        'source': 'qq'
-    }
-    sessions[session_id]['messages'].append(message)
-    sessions[session_id]['last_message'] = display_content[:100]
-    
-    # 保存会话
-    try:
-        save_sessions_to_db(data_dir, sessions)
-        print(f"[DEBUG] 已同步消息到 sessions.json, session_id: {session_id}, qq_id: {qq_id}")
-    except Exception as e:
-        print(f"同步到 Web 会话失败: {e}")
+    server.sync_qq_messages(
+        user_id=str(user_id) if user_id else None,
+        group_id=str(group_id) if group_id else None,
+        group_user_id=str(group_user_id) if group_user_id else None,
+        create_if_not_exists=True,
+    )
 
 
 def _record_message(role, content, user_id=None, group_id=None, group_user_id=None):

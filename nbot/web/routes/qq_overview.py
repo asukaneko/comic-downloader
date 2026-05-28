@@ -31,35 +31,51 @@ def register_qq_overview_routes(app, server):
     def get_qq_users():
         try:
             users = []
+            seen_user_ids = set()
+
+            # 优先从 canonical session store 读取（包含 AI 回复）
+            for session_id, session in server.sessions.items():
+                if session.get("type") != "qq_private":
+                    continue
+                qq_id = session.get("qq_id")
+                if not qq_id:
+                    continue
+                seen_user_ids.add(qq_id)
+                messages = session.get("messages", [])
+                non_system = [m for m in messages if m.get("role") != "system"]
+                last_msg = non_system[-1] if non_system else None
+                users.append({
+                    "user_id": qq_id,
+                    "last_message": last_msg.get("content", "")[:50] if last_msg else "",
+                    "last_time": last_msg.get("timestamp", "") if last_msg else "",
+                    "message_count": len(non_system),
+                })
+
+            # 补充 JSON 文件中有但 session store 中没有的用户
             qq_private_dir = os.path.join(server.base_dir, "data", "qq", "private")
-            _log.info(f"QQ private dir: {qq_private_dir}")
-            _log.info(f"Dir exists: {os.path.exists(qq_private_dir)}")
             if os.path.exists(qq_private_dir):
                 for filename in os.listdir(qq_private_dir):
                     if not filename.endswith(".json"):
                         continue
                     user_id = filename.replace(".json", "")
+                    if user_id in seen_user_ids:
+                        continue
                     file_path = os.path.join(qq_private_dir, filename)
                     try:
                         with open(file_path, "r", encoding="utf-8") as f:
                             messages = json.load(f)
                         last_msg = messages[-1] if messages else None
-                        users.append(
-                            {
-                                "user_id": user_id,
-                                "last_message": last_msg.get("content", "")[:50]
-                                if last_msg
-                                else "",
-                                "last_time": last_msg.get("timestamp", "")
-                                if last_msg
-                                else "",
-                                "message_count": len(messages),
-                            }
-                        )
+                        users.append({
+                            "user_id": user_id,
+                            "last_message": last_msg.get("content", "")[:50] if last_msg else "",
+                            "last_time": last_msg.get("timestamp", "") if last_msg else "",
+                            "message_count": len(messages),
+                        })
                     except Exception as e:
                         _log.error(f"Error reading {file_path}: {e}")
+
             return jsonify(
-                {"users": sorted(users, key=lambda x: x["last_time"], reverse=True)}
+                {"users": sorted(users, key=lambda x: x.get("last_time", ""), reverse=True)}
             )
         except Exception as e:
             _log.error(f"Error in get_qq_users: {e}")
@@ -69,30 +85,46 @@ def register_qq_overview_routes(app, server):
     def get_qq_groups():
         try:
             groups = []
+            seen_group_ids = set()
+
+            # 优先从 canonical session store 读取（包含 AI 回复）
+            for session_id, session in server.sessions.items():
+                if session.get("type") != "qq_group":
+                    continue
+                qq_id = session.get("qq_id")
+                if not qq_id:
+                    continue
+                seen_group_ids.add(qq_id)
+                messages = session.get("messages", [])
+                non_system = [m for m in messages if m.get("role") != "system"]
+                last_msg = non_system[-1] if non_system else None
+                groups.append({
+                    "group_id": qq_id,
+                    "last_message": last_msg.get("content", "")[:50] if last_msg else "",
+                    "last_time": last_msg.get("timestamp", "") if last_msg else "",
+                    "message_count": len(non_system),
+                })
+
+            # 补充 JSON 文件中有但 session store 中没有的群
             qq_group_dir = os.path.join(server.base_dir, "data", "qq", "group")
-            _log.info(f"QQ group dir: {qq_group_dir}")
             if os.path.exists(qq_group_dir):
                 for filename in os.listdir(qq_group_dir):
                     if not filename.endswith(".json"):
                         continue
                     group_id = filename.replace(".json", "")
+                    if group_id in seen_group_ids:
+                        continue
                     file_path = os.path.join(qq_group_dir, filename)
                     try:
                         with open(file_path, "r", encoding="utf-8") as f:
                             messages = json.load(f)
                         last_msg = messages[-1] if messages else None
-                        groups.append(
-                            {
-                                "group_id": group_id,
-                                "last_message": last_msg.get("content", "")[:50]
-                                if last_msg
-                                else "",
-                                "last_time": last_msg.get("timestamp", "")
-                                if last_msg
-                                else "",
-                                "message_count": len(messages),
-                            }
-                        )
+                        groups.append({
+                            "group_id": group_id,
+                            "last_message": last_msg.get("content", "")[:50] if last_msg else "",
+                            "last_time": last_msg.get("timestamp", "") if last_msg else "",
+                            "message_count": len(messages),
+                        })
                     except Exception as e:
                         _log.error(f"Error reading {file_path}: {e}")
             return jsonify(

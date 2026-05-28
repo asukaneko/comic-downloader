@@ -3225,6 +3225,19 @@ class WebChatServer:
             _log.warning("Heartbeat content file '%s' not found or empty", content_file)
             return {"messages_sent": 0, "target_session_id": session_id}
 
+        # QQ 会话：执行前同步最新消息（包括 AI 回复）
+        if session_id.startswith("qq_private_") or session_id.startswith("qq_group_"):
+            try:
+                parts = session_id.split("_")
+                if session_id.startswith("qq_private_"):
+                    self.sync_qq_messages(user_id=parts[2], create_if_not_exists=True)
+                elif len(parts) >= 4:
+                    self.sync_qq_messages(group_id=parts[2], group_user_id=parts[3], create_if_not_exists=True)
+                else:
+                    self.sync_qq_messages(group_id=parts[2], create_if_not_exists=True)
+            except Exception as e:
+                _log.warning("Heartbeat QQ message sync failed for %s: %s", session_id, e)
+
         session = self.session_store.get_session(session_id)
         if not session:
             _log.warning("Heartbeat target session not found: %s", session_id)
@@ -3667,67 +3680,7 @@ class WebChatServer:
             _log.error(f"Failed to send heartbeat to {target}: {e}")
 
     def sync_qq_messages(
-        self, user_id: str, group_id: str = None, create_if_not_exists: bool = True
-    ):
-        """同步 QQ 消息到 Web 会话"""
-        from nbot.services.chat_service import group_messages, user_messages
-
-        target_id = group_id or user_id
-        if not target_id:
-            return None
-
-        # 私聊才需要创建会话
-        session_type = "qq_group" if group_id else "qq_private"
-
-        # 检查是否已存在该 QQ 会话
-        existing_session_id = self.session_store.find_session_id(
-            lambda sid, session: session.get("qq_id") == target_id
-            and session.get("type") == session_type
-        )
-
-        if existing_session_id:
-            session_id = existing_session_id
-        elif create_if_not_exists:
-            # 私聊消息：创建新会话
-            session_id = str(uuid.uuid4())
-            session = {
-                "id": session_id,
-                "name": f"私聊 {target_id}",
-                "type": session_type,
-                "qq_id": target_id,
-                "created_at": datetime.now().isoformat(),
-                "messages": [],
-                "system_prompt": "",
-            }
-            self.session_store.set_session(session_id, session)
-        else:
-            return None
-
-        # 如果消息已存在，同步到会话
-        msg_store = group_messages if group_id else user_messages
-        if target_id in msg_store:
-            messages = msg_store[target_id]
-            for msg in messages:
-                if msg.get("role") == "system":
-                    continue
-
-                web_msg = {
-                    "id": str(uuid.uuid4()),
-                    "role": msg.get("role", "user"),
-                    "content": msg.get("content", ""),
-                    "timestamp": msg.get("timestamp", datetime.now().isoformat()),
-                    "sender": target_id,
-                    "source": "qq",
-                }
-                self.session_store.append_message(session_id, web_msg)
-
-            # 保存会话数据
-
-        return session_id
-
-
-    def sync_qq_messages(
-        self, user_id: str, group_id: str = None, create_if_not_exists: bool = True
+        self, user_id: str = None, group_id: str = None, group_user_id: str = None, create_if_not_exists: bool = True
     ):
         """同步 QQ 消息到 canonical Web 投影会话。"""
         from nbot.services.chat_service import (
@@ -3746,20 +3699,24 @@ class WebChatServer:
         session_id = get_qq_session_id(
             user_id=str(user_id) if user_id else None,
             group_id=str(group_id) if group_id else None,
+            group_user_id=str(group_user_id) if group_user_id else None,
         )
 
-        legacy_session_id = self.session_store.find_session_id(
-            lambda sid, session: sid != session_id
-            and session.get("type") == session_type
-            and (
-                session.get("qq_id") == target_id
-                or session.get("name") == session_name
-            )
-        )
+        # 清理所有遗留的非 canonical 会话（同类型 + 同 qq_id 或同 name）
         legacy_messages = []
-        if legacy_session_id:
-            legacy_session = self.session_store.delete_session(legacy_session_id) or {}
-            legacy_messages = legacy_session.get("messages", [])
+        legacy_ids = [
+            sid for sid, s in self.sessions.items()
+            if sid != session_id
+            and s.get("type") == session_type
+            and (
+                s.get("qq_id") == target_id
+                or s.get("name") == session_name
+            )
+        ]
+        for legacy_id in legacy_ids:
+            legacy_session = self.session_store.delete_session(legacy_id) or {}
+            legacy_messages.extend(legacy_session.get("messages", []))
+            _log.info("Cleaned up legacy QQ session: %s", legacy_id)
 
         session = self.session_store.get_session(session_id)
         if not session and not create_if_not_exists:
@@ -3795,8 +3752,9 @@ class WebChatServer:
             )
 
         msg_store = group_messages if group_id else user_messages
-        if target_id in msg_store:
-            for msg in msg_store[target_id]:
+        history_key = f"{group_id}_{group_user_id}" if group_id and group_user_id else target_id
+        if history_key in msg_store:
+            for msg in msg_store[history_key]:
                 if msg.get("role") == "system":
                     continue
                 rebuilt_messages.append(

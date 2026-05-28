@@ -72,7 +72,7 @@ if not hasattr(BotAPI, '_nbot_patched'):
         content = kwargs.get('text', '')
         if content and isinstance(content, str):
             try:
-                from chat import record_assistant_message
+                from nbot.services.chat_service import record_assistant_message
                 record_assistant_message(content, user_id=user_id)
             except Exception:
                 pass
@@ -82,7 +82,7 @@ if not hasattr(BotAPI, '_nbot_patched'):
         content = kwargs.get('text', '')
         if content and isinstance(content, str):
             try:
-                from chat import record_assistant_message, log_to_group_full_file
+                from nbot.services.chat_service import record_assistant_message, log_to_group_full_file
                 context_key = (str(group_id), content)
                 pending_users = pending_group_reply_context.get(context_key, [])
                 group_user_id = pending_users.pop(0) if pending_users else kwargs.get("group_user_id")

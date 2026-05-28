@@ -526,6 +526,66 @@ def init_default_tools(server):
     server._save_data("tools")
 
 
+def _dedup_qq_sessions(sessions: dict) -> dict:
+    """合并重复的 QQ 会话，保留 canonical session（qq_private_xxx / qq_group_xxx）"""
+    from nbot.core.session_store import build_qq_session_id
+
+    qq_groups = {}  # (type, qq_id) -> [(session_id, session)]
+    for sid, session in sessions.items():
+        s_type = session.get("type")
+        qq_id = session.get("qq_id")
+        if s_type in ("qq_private", "qq_group") and qq_id:
+            key = (s_type, qq_id)
+            qq_groups.setdefault(key, []).append((sid, session))
+
+    to_delete = []
+    for (s_type, qq_id), entries in qq_groups.items():
+        if len(entries) <= 1:
+            continue
+        canonical_id = build_qq_session_id(
+            user_id=qq_id if s_type == "qq_private" else None,
+            group_id=qq_id if s_type == "qq_group" else None,
+        )
+        canonical_entry = None
+        legacy_entries = []
+        for sid, session in entries:
+            if sid == canonical_id:
+                canonical_entry = (sid, session)
+            else:
+                legacy_entries.append((sid, session))
+
+        if not canonical_entry:
+            canonical_entry = entries[0]
+            legacy_entries = entries[1:]
+            canonical_entry[1]["id"] = canonical_id
+
+        all_messages = list(canonical_entry[1].get("messages", []))
+        existing_keys = {
+            (m.get("role", ""), m.get("content", ""), m.get("timestamp", ""))
+            for m in all_messages
+        }
+        for _, legacy_session in legacy_entries:
+            for msg in legacy_session.get("messages", []):
+                key = (msg.get("role", ""), msg.get("content", ""), msg.get("timestamp", ""))
+                if msg.get("role") == "system" or key in existing_keys:
+                    continue
+                all_messages.append(msg)
+                existing_keys.add(key)
+
+        canonical_entry[1]["messages"] = all_messages
+        if all_messages:
+            canonical_entry[1]["last_message"] = all_messages[-1].get("content", "")[:100]
+        sessions[canonical_id] = canonical_entry[1]
+        for sid, _ in legacy_entries:
+            to_delete.append(sid)
+
+    for sid in to_delete:
+        sessions.pop(sid, None)
+        _log.info("Dedup: removed legacy QQ session %s", sid)
+
+    return sessions
+
+
 def load_all_data(server):
     """加载所有持久化数据"""
     try:
@@ -540,6 +600,8 @@ def load_all_data(server):
                 for session_id, session in loaded_sessions.items()
                 if is_web_visible_session(session_id, session)
             }
+            # 启动时清理重复的 QQ 会话
+            normalized_sessions = _dedup_qq_sessions(normalized_sessions)
             server.sessions.clear()
             server.sessions.update(normalized_sessions)
             save_sessions_to_db(server.data_dir, normalized_sessions)

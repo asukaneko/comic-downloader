@@ -752,7 +752,7 @@
                                         <i class="fab fa-qq" style="color: white;"></i>
                                     </div>
                                     <div class="session-info">
-                                        <div class="session-name">{{ user.user_id }}</div>
+                                        <div class="session-name">私聊 {{ user.user_id }}</div>
                                         <div class="session-meta">
                                             {{ user.message_count }} 条消息 · {{ formatTime(user.last_time) }}
                                         </div>
@@ -785,7 +785,7 @@
                                         <i class="fas fa-users" style="color: white;"></i>
                                     </div>
                                     <div class="session-info">
-                                        <div class="session-name">群 {{ group.group_id }}</div>
+                                        <div class="session-name">群聊 {{ group.group_id }}</div>
                                         <div class="session-meta">
                                             {{ group.message_count }} 条消息 · {{ formatTime(group.last_time) }}
                                         </div>

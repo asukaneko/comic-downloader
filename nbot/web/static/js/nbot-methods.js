@@ -1536,7 +1536,7 @@ const NbotMethods = {
                         } else if (this.currentPage === 'chat' && this.currentQqId) {
                             const type = this.chatTab === 'qq_private' ? 'private' : 'group';
                             const res = await api.get(`/api/qq/messages/${type}/${this.currentQqId}`);
-                            this.currentQqMessages = res.data.messages || [];
+                            this.currentQqMessages = (res.data.messages || []).filter(m => m.role !== 'system');
                             this.showToast('会话已刷新', 'success');
                         } else {
                             await this.loadPageData(this.currentPage);
@@ -4253,8 +4253,16 @@ def main(params):
                     if (window.__nbotLive2dSay) {
                         window.__nbotLive2dSay(`\u5df2\u5207\u6362\u5230\u300c${session.name || '\u5f53\u524d\u4f1a\u8bdd'}\u300d\u3002`, 3200, 3);
                     }
-                    this.currentQqId = null;
-                    this.currentQqMessages = [];
+                    // QQ 会话：设置 currentQqId 以显示 QQ 消息视图
+                    if (session.type === 'qq_private' || session.type === 'qq_group') {
+                        this.currentQqId = session.qq_id || session.id;
+                        this.currentQqMessages = (session.messages || [])
+                            .filter(m => m.role !== 'system')
+                            .map(m => ({ ...m, source_type: 'qq', qq_type: session.type === 'qq_private' ? 'private' : 'group', qq_id: session.qq_id }));
+                    } else {
+                        this.currentQqId = null;
+                        this.currentQqMessages = [];
+                    }
                     this.currentMessages = [];
                     
                     // 清除所有加载/生成状态
@@ -4277,21 +4285,43 @@ def main(params):
                     
                     socket.emit('leave_session');
                     socket.emit('join_session', { session_id: session.id });
-                    // 切换会话时强制滚动到底部
-                    await this.loadMessages(true);
+
+                    const isQqSession = session.type === 'qq_private' || session.type === 'qq_group';
+                    if (isQqSession) {
+                        // QQ 会话：通过 API 刷新消息（包含 AI 回复）
+                        const qqType = session.type === 'qq_private' ? 'private' : 'group';
+                        const qqId = session.qq_id || session.id;
+                        try {
+                            const res = await api.get(`/api/qq/messages/${qqType}/${qqId}`);
+                            this.currentQqMessages = (res.data.messages || []).filter(m => m.role !== 'system');
+                        } catch (e) {}
+                        // QQ 消息刷新定时器
+                        this.messageRefreshTimer = setInterval(async () => {
+                            if (this.currentQqId && this.currentPage === 'chat') {
+                                try {
+                                    const res = await api.get(`/api/qq/messages/${qqType}/${qqId}`);
+                                    this.currentQqMessages = (res.data.messages || []).filter(m => m.role !== 'system');
+                                } catch (e) {}
+                            }
+                        }, 2000);
+                    } else {
+                        // Web 会话：加载消息
+                        await this.loadMessages(true);
+                    }
                     await this.loadMessageFavorites();
                     this.updateContextStats();
 
                     // 消息加载完成，淡入
                     this.sessionSwitching = false;
 
-                    // 设置新的消息刷新定时器（每 2 秒）
-                    this.messageRefreshTimer = setInterval(() => {
-                        if (this.currentSession && this.currentPage === 'chat') {
-                            // 定时刷新不强制滚动，避免打扰用户查看历史消息
-                            this.loadMessages(false);
-                        }
-                    }, 2000);
+                    // Web 会话的消息刷新定时器
+                    if (!isQqSession) {
+                        this.messageRefreshTimer = setInterval(() => {
+                            if (this.currentSession && this.currentPage === 'chat') {
+                                this.loadMessages(false);
+                            }
+                        }, 2000);
+                    }
                     
                     // 恢复当前会话的加载状态（如果这个会话正在生成）
                     this.isLoading = (this.loadingSessionId === session.id);
@@ -4344,10 +4374,10 @@ def main(params):
                     this.currentMessages = [];
                     this.currentQqId = id;
                     this.currentQqMessages = [];
-                    
+
                     try {
                         const res = await api.get(`/api/qq/messages/${type}/${id}`);
-                        this.currentQqMessages = res.data.messages || [];
+                        this.currentQqMessages = (res.data.messages || []).filter(m => m.role !== 'system');
                     } catch (e) {
                         console.error('Failed to load QQ messages:', e);
                     }
@@ -4360,7 +4390,7 @@ def main(params):
                         if (this.currentQqId && this.currentPage === 'chat') {
                             try {
                                 const res = await api.get(`/api/qq/messages/${type}/${id}`);
-                                this.currentQqMessages = res.data.messages || [];
+                                this.currentQqMessages = (res.data.messages || []).filter(m => m.role !== 'system');
                             } catch (e) {}
                         }
                     }, 2000);
@@ -5895,6 +5925,10 @@ def main(params):
                         }
                     } else {
                         this.chatTab = session.type || 'web';
+                    }
+                    // QQ 会话：先设置 currentQqId 避免空状态闪烁
+                    if (session.type === 'qq_private' || session.type === 'qq_group') {
+                        this.currentQqId = session.qq_id || session.id;
                     }
                     this.currentPage = 'chat';
                     this.isMobileChatPickerOpen = false;
