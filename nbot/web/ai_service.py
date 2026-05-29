@@ -1258,6 +1258,19 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
         stop_event=stop_event,
         metadata=dict(chat_request.metadata or {}),
     )
+    ctx.metadata.setdefault("channel_type", "web")
+    ctx.metadata.setdefault("source", "web")
+    # 注入价格信息供公共 token 统计使用
+    try:
+        active_model_id = getattr(server, "active_model_id", None)
+        if active_model_id:
+            for m in getattr(server, "ai_models", []) or []:
+                if m.get("id") == active_model_id:
+                    ctx.metadata.setdefault("input_price", m.get("input_price"))
+                    ctx.metadata.setdefault("output_price", m.get("output_price"))
+                    break
+    except Exception:
+        pass
     callbacks = WebCallbacks(
         server=server,
         session_store=session_store,
@@ -1369,6 +1382,8 @@ def _update_web_token_stats(server, usage: dict, session_id: str, metadata: dict
             return
         total = usage.get("total_tokens", 0)
         if not total:
+            return
+        if (metadata or {}).get("token_recorded"):
             return
 
         from nbot.core.token_stats import get_token_stats_manager

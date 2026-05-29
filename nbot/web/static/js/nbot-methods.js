@@ -8231,6 +8231,13 @@ def main(params):
                     return item.trigger || '手动触发';
                 },
 
+                getSessionMessageCount(session) {
+                    if (this.currentSession && this.currentSession.id === session.id) {
+                        return this.currentMessages.length;
+                    }
+                    return session.message_count || 0;
+                },
+
                 getSessionDisplayName(sessionId) {
                     const session = this.sessions.find(s => s.id === sessionId);
                     if (!session) return sessionId;

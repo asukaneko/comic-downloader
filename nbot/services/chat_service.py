@@ -656,6 +656,8 @@ def _run_qq_chat_request(
 
     # === 通过管道处理 AI 响应 ===
     ctx = PipelineContext(chat_request=chat_request, adapter=adapter)
+    ctx.metadata["channel_type"] = "private" if user_id else "group"
+    ctx.metadata["source"] = "qq"
     callbacks = QQCallbacks(qq_store, user_id, group_id, group_user_id)
 
     pipeline = AIPipeline()

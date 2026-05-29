@@ -719,7 +719,7 @@
                                     <div class="session-info">
                                         <div class="session-name">{{ session.name }}</div>
                                         <div class="session-meta">
-                                            {{ session.message_count }} 条消息 · {{ formatTime(session.created_at) }}
+                                            {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
                                             <span v-if="session.sender_name" style="margin-left: 6px; color: var(--accent-primary);">
                                                 <i class="fas fa-user-circle" style="font-size: 10px;"></i> {{ session.sender_name }}
                                             </span>
@@ -820,7 +820,7 @@
                                     <div class="session-info">
                                         <div class="session-name">{{ session.name }}</div>
                                         <div class="session-meta">
-                                            {{ session.message_count || 0 }} 条消息 · {{ formatTime(session.created_at) }}
+                                            {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
                                         </div>
                                     </div>
                                     <div class="session-actions" @click.stop>

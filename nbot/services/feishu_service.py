@@ -294,6 +294,15 @@ def answer_feishu_event(
     )
 
     ctx = PipelineContext(chat_request=chat_request, adapter=adapter)
+    ctx.metadata["channel_type"] = "feishu"
+    ctx.metadata["source"] = "feishu"
+    try:
+        from nbot.services.ai import refresh_runtime_ai_config
+        runtime_ai = refresh_runtime_ai_config()
+        ctx.metadata["input_price"] = runtime_ai.get("input_price")
+        ctx.metadata["output_price"] = runtime_ai.get("output_price")
+    except Exception:
+        pass
     callbacks = FeishuCallbacks(server, token, parsed)
 
     pipeline = AIPipeline()

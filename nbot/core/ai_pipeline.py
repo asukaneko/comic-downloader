@@ -26,6 +26,66 @@ _log = logging.getLogger(__name__)
 
 
 # ============================================================================
+# 公共 Token 统计
+# ============================================================================
+
+
+def _record_channel_token_stats(ctx: "PipelineContext", result: "PipelineResult") -> None:
+    """公共频道 token 用量记录，供所有频道自动调用。
+
+    频道需在 ctx.metadata 中设置:
+      - channel_type: 频道类型标识 (telegram / feishu / web / qq 等)
+      - source: 来源标识
+    可选:
+      - input_price / output_price: 自定义价格（元/百万token）
+    """
+    try:
+        usage = result.usage if result else {}
+        if not usage:
+            return
+        total = usage.get("total_tokens", 0)
+        if not total:
+            return
+
+        meta = result.metadata or {}
+        channel_type = meta.get("channel_type") or ctx.metadata.get("channel_type", "")
+        source = meta.get("source") or ctx.metadata.get("source", "")
+        if not channel_type:
+            return
+
+        from nbot.core.token_stats import get_token_stats_manager
+
+        model = (
+            meta.get("model_name", "")
+            or meta.get("model_id", "")
+            or ctx.metadata.get("model_name", "")
+            or ctx.metadata.get("model_id", "")
+            or ""
+        )
+        session_id = ctx.chat_request.conversation_id or ""
+        user_id = ctx.chat_request.user_id or session_id
+
+        input_price = ctx.metadata.get("input_price")
+        output_price = ctx.metadata.get("output_price")
+
+        get_token_stats_manager().record_usage(
+            usage.get("prompt_tokens", 0),
+            usage.get("completion_tokens", 0),
+            total_tokens=total,
+            model=model,
+            session_id=session_id,
+            channel_type=channel_type,
+            user_id=user_id,
+            source=source,
+            input_price=input_price,
+            output_price=output_price,
+        )
+        ctx.metadata["token_recorded"] = True
+    except Exception as e:
+        _log.debug("Token stats recording failed: %s", e)
+
+
+# ============================================================================
 # 数据类
 # ============================================================================
 
@@ -397,8 +457,8 @@ class PipelineCallbacks(ABC):
     def on_response_complete(
         self, ctx: PipelineContext, result: PipelineResult
     ) -> None:
-        """AI 响应完成后的回调。"""
-        pass
+        """AI 响应完成后的回调。默认自动记录 token 用量。"""
+        _record_channel_token_stats(ctx, result)
 
     # ---- 角色运行时 ----
 
