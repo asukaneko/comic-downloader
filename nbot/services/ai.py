@@ -13,6 +13,7 @@ from nbot.core import (
     resolve_chat_completion_url,
     response_json_utf8,
 )
+from nbot.core.protocols import get_protocol
 from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.web.utils.config_loader import (
     get_vision_model_config,
@@ -243,185 +244,89 @@ class AIClient:
         url_base = (self.base_url or "").rstrip("/")
         if not url_base:
             raise ValueError("base_url 未配置")
-        
-        # 检查是否为Anthropic provider
-        is_anthropic = self.provider_type == "anthropic" or "anthropic" in url_base.lower()
-        
-        if is_anthropic:
-            # 使用Anthropic Messages API格式
-            from nbot.services.anthropic_adapter import (
-                build_anthropic_payload,
-                parse_anthropic_response,
-                get_anthropic_headers,
-            )
-            
-            url = f"{url_base}/v1/messages"
-            headers = get_anthropic_headers(self.api_key)
-            payload = build_anthropic_payload(
-                model=model or self.model,
-                messages=messages,
-                max_tokens=4096,
-                stream=stream,
-            )
-            
-            if stream:
-                # 流式响应模式
-                headers["Accept"] = "text/event-stream"
-                resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=300)
-                resp.raise_for_status()
-                return self._stream_anthropic_response(resp)
-            else:
-                # 非流式响应模式
-                resp = requests.post(url, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = response_json_utf8(resp)
-                
-                parsed = parse_anthropic_response(data)
-                content = repair_mojibake_text(parsed["content"])
-                usage = parsed.get("usage", {})
-                
-                Message = type("Message", (), {})
-                Choice = type("Choice", (), {})
-                Usage = type("Usage", (), {})
-                Resp = type("Resp", (), {})
-                msg_obj = Message()
-                msg_obj.content = content
-                choice_obj = Choice()
-                choice_obj.message = msg_obj
-                usage_obj = Usage()
-                usage_obj.prompt_tokens = usage.get("prompt_tokens", 0)
-                usage_obj.completion_tokens = usage.get("completion_tokens", 0)
-                usage_obj.total_tokens = usage.get("total_tokens", 0)
-                resp_obj = Resp()
-                resp_obj.choices = [choice_obj]
-                resp_obj.usage = usage_obj
-                return resp_obj
+
+        protocol = get_protocol(self.provider_type)
+        model_name = model or self.model
+
+        url = protocol.resolve_url(
+            self.base_url,
+            model=model_name or "",
+            append_base_url_path=self.append_base_url_path,
+        )
+        headers = protocol.build_headers(self.api_key, stream=stream)
+        payload = protocol.build_payload(
+            model_name,
+            messages,
+            stream=stream,
+            base_url=self.base_url,
+            provider_type=self.provider_type,
+        )
+
+        if stream:
+            resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=300)
+            resp.raise_for_status()
+            return self._stream_response_generic(resp, protocol)
         else:
-            # 使用OpenAI兼容格式
-            url = resolve_chat_completion_url(
-                self.base_url,
-                model=model or self.model or "",
+            resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            resp.raise_for_status()
+            data = response_json_utf8(resp)
+
+            normalized = protocol.parse_response(
+                data,
+                model=model_name or "",
+                base_url=self.base_url or "",
                 provider_type=self.provider_type,
-                append_base_url_path=self.append_base_url_path,
             )
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-            if stream:
-                headers["Accept"] = "text/event-stream"
-                headers["Cache-Control"] = "no-cache"
-            payload = build_chat_completion_payload(
-                model or self.model,
-                messages,
-                base_url=self.base_url,
-                provider_type=self.provider_type,
-                stream=stream,
-            )
-            
-            if stream:
-                # 流式响应模式
-                resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=300)
-                resp.raise_for_status()
-                return self._stream_response(resp)
-            else:
-                # 非流式响应模式
-                resp = requests.post(url, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = response_json_utf8(resp)
+            content = normalized.content
 
-                if not data.get("choices"):
-                    print(f"[DEBUG] API响应没有choices: {data}")
+            usage = normalized.usage or {}
+            prompt_tokens = usage.get("prompt_tokens", 0)
+            completion_tokens = usage.get("completion_tokens", 0)
+            total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
 
-                normalized = normalize_chat_completion_data(
-                    data,
-                    base_url=self.base_url or "",
-                    model=model or self.model or "",
-                    provider_type=self.provider_type,
-                )
-                content = normalized.content
+            Message = type("Message", (), {})
+            Choice = type("Choice", (), {})
+            Usage = type("Usage", (), {})
+            Resp = type("Resp", (), {})
+            msg_obj = Message()
+            msg_obj.content = content
+            choice_obj = Choice()
+            choice_obj.message = msg_obj
+            usage_obj = Usage()
+            usage_obj.prompt_tokens = prompt_tokens
+            usage_obj.completion_tokens = completion_tokens
+            usage_obj.total_tokens = total_tokens
+            resp_obj = Resp()
+            resp_obj.choices = [choice_obj]
+            resp_obj.usage = usage_obj
+            return resp_obj
 
-                # 获取 usage 信息
-                usage = normalized.usage or {}
-                prompt_tokens = usage.get("prompt_tokens", 0) if usage else 0
-                completion_tokens = usage.get("completion_tokens", 0) if usage else 0
-                total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens) if usage else prompt_tokens + completion_tokens
+    def _stream_response_generic(self, resp, protocol):
+        """处理流式响应，使用协议适配器解析chunk，返回一个生成器"""
+        import json as _json
 
-                Message = type("Message", (), {})
-                Choice = type("Choice", (), {})
-                Usage = type("Usage", (), {})
-                Resp = type("Resp", (), {})
-                msg_obj = Message()
-                msg_obj.content = content
-                choice_obj = Choice()
-                choice_obj.message = msg_obj
-                usage_obj = Usage()
-                usage_obj.prompt_tokens = prompt_tokens
-                usage_obj.completion_tokens = completion_tokens
-                usage_obj.total_tokens = total_tokens
-                resp_obj = Resp()
-                resp_obj.choices = [choice_obj]
-                resp_obj.usage = usage_obj
-                return resp_obj
-    
-    def _stream_response(self, resp):
-        """处理流式响应，返回一个生成器"""
-        import json
-        
         for line in resp.iter_lines(chunk_size=1):
             if not line:
                 continue
-            
-            line_text = line.decode('utf-8') if isinstance(line, bytes) else line
-            
-            # 跳过 ping/pong 等非数据行
-            if not line_text.startswith('data: '):
-                continue
-            
-            data_str = line_text[6:].strip()
-            if data_str == '[DONE]':
-                break
-            
-            try:
-                data = json.loads(data_str)
-                choices = data.get("choices", [])
-                if choices:
-                    delta = choices[0].get("delta", {})
-                    content = repair_mojibake_text(delta.get("content", ""))
-                    if content:
-                        yield content
-            except json.JSONDecodeError:
-                continue
 
-    def _stream_anthropic_response(self, resp):
-        """处理Anthropic流式响应，返回一个生成器"""
-        import json
-        from nbot.services.anthropic_adapter import parse_anthropic_stream_chunk
-        
-        for line in resp.iter_lines(chunk_size=1):
-            if not line:
-                continue
-            
             line_text = line.decode('utf-8') if isinstance(line, bytes) else line
-            
-            # Anthropic的流式格式是event: xxx\ndata: xxx\n\n
+
             if line_text.startswith('event: '):
                 continue
-            
+
             if not line_text.startswith('data: '):
                 continue
-            
+
             data_str = line_text[6:].strip()
             if data_str == '[DONE]':
                 break
-            
+
             try:
-                data = json.loads(data_str)
-                parsed = parse_anthropic_stream_chunk(data)
-                
+                data = _json.loads(data_str)
+                parsed = protocol.parse_stream_chunk(data)
                 if parsed and parsed.get("type") == "content":
                     yield repair_mojibake_text(parsed.get("content", ""))
-            except json.JSONDecodeError:
+            except _json.JSONDecodeError:
                 continue
 
 

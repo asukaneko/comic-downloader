@@ -1442,6 +1442,7 @@ const NbotMethods = {
                         this.loadKnowledge(),
                         this.loadAIConfig(),
                         this.loadAIModels(),
+                        this.fetchProtocols(),
                         this.loadCommandCatalog(),
                         this.loadTokenStats(),
                         this.loadLogs(),
@@ -10790,9 +10791,29 @@ def main(params):
                     this.showModelManager = false;
                 },
 
+                async fetchProtocols() {
+                    if (this.availableProtocols && this.availableProtocols.length > 0) return;
+                    try {
+                        const resp = await api.get('/api/ai-models/protocols');
+                        if (resp.data && resp.data.protocols) {
+                            this.availableProtocols = resp.data.protocols;
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch protocols:', e);
+                        // 回退到默认列表
+                        this.availableProtocols = [
+                            { key: 'openai_compatible', name: 'OpenAI Chat Completions', url_suffix: '/chat/completions' },
+                            { key: 'anthropic', name: 'Anthropic Messages', url_suffix: '/v1/messages' },
+                            { key: 'openai_responses', name: 'OpenAI Responses API', url_suffix: '/responses' },
+                        ];
+                    }
+                },
+
                 openModelEditModal(model = null) {
                     // 加载API Keys列表
                     this.loadApiKeys();
+                    // 加载协议列表
+                    this.fetchProtocols();
 
                     if (model) {
                         this.editingModel = model;

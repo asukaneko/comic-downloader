@@ -897,28 +897,29 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
     api_key = runtime_ai.get("api_key") or ""
     append_base_url_path = runtime_ai.get("append_base_url_path", True)
 
-    url = resolve_chat_completion_url(
+    from nbot.core.protocols import get_protocol
+    protocol = get_protocol(provider_type)
+    url = protocol.resolve_url(
         base_url,
         model=model,
-        provider_type=provider_type,
         append_base_url_path=append_base_url_path,
     )
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = build_chat_completion_payload(
+    headers = protocol.build_headers(api_key)
+    payload = protocol.build_payload(
         model, messages,
-        base_url=base_url, provider_type=provider_type,
         tools=tools if tools else None,
         tool_choice="auto" if tools else None,
         stream=False,
+        base_url=base_url,
+        provider_type=provider_type,
     )
     resp = requests.post(url, json=payload, headers=headers, timeout=120)
     resp.raise_for_status()
-    normalized = normalize_chat_completion_data(
+    normalized = protocol.parse_response(
         response_json_utf8(resp),
-        base_url=base_url, model=model, provider_type=provider_type,
+        model=model,
+        base_url=base_url,
+        provider_type=provider_type,
     )
     return normalized.to_dict()
 
@@ -953,26 +954,24 @@ def _stream_to_web(
     api_key = runtime_ai.get("api_key") or ""
     append_base_url_path = runtime_ai.get("append_base_url_path", True)
 
-    url = resolve_chat_completion_url(
+    from nbot.core.protocols import get_protocol
+    protocol = get_protocol(provider_type)
+    url = protocol.resolve_url(
         base_url,
         model=model,
-        provider_type=provider_type,
         append_base_url_path=append_base_url_path,
     )
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-        "Accept": "text/event-stream",
-        "Cache-Control": "no-cache",
-    }
+    headers = protocol.build_headers(api_key, stream=True)
+
     def _build_stream_payload(include_usage: bool = True):
         extra_body = {"stream_options": {"include_usage": True}} if include_usage else None
-        return build_chat_completion_payload(
+        return protocol.build_payload(
             model, messages,
-            base_url=base_url, provider_type=provider_type,
             tools=tools if tools else None,
             tool_choice="auto" if tools else None,
             stream=True,
+            base_url=base_url,
+            provider_type=provider_type,
             extra_body=extra_body,
         )
 
@@ -994,26 +993,22 @@ def _stream_to_web(
 
             # Apply this config
             apply_model_config(cfg)
-            cfg_url = resolve_chat_completion_url(
+            cfg_pt = cfg.get("provider_type", "openai_compatible")
+            cfg_protocol = get_protocol(cfg_pt)
+            cfg_url = cfg_protocol.resolve_url(
                 cfg.get("base_url", ""),
                 model=cfg.get("model", ""),
-                provider_type=cfg.get("provider_type", "openai_compatible"),
                 append_base_url_path=cfg.get("append_base_url_path", True),
             )
-            cfg_headers = {
-                "Authorization": f"Bearer {cfg.get('api_key', '')}",
-                "Content-Type": "application/json",
-                "Accept": "text/event-stream",
-                "Cache-Control": "no-cache",
-            }
-            cfg_payload = build_chat_completion_payload(
+            cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=True)
+            cfg_payload = cfg_protocol.build_payload(
                 cfg.get("model", ""),
                 messages,
-                base_url=cfg.get("base_url", ""),
-                provider_type=cfg.get("provider_type", "openai_compatible"),
                 tools=tools if tools else None,
                 tool_choice="auto" if tools else None,
                 stream=True,
+                base_url=cfg.get("base_url", ""),
+                provider_type=cfg_pt,
                 extra_body={"stream_options": {"include_usage": True}},
             )
             try:
@@ -1032,6 +1027,7 @@ def _stream_to_web(
                 used_model_id = mid
                 base_url = cfg.get("base_url", "")
                 provider_type = cfg.get("provider_type", "openai_compatible")
+                protocol = cfg_protocol
                 break
             except StopIteration:
                 raise
@@ -1110,31 +1106,32 @@ def _stream_to_web(
                 break
             try:
                 data = json.loads(data_str)
-                usage = normalize_usage_dict(data.get("usage"))
-                if usage:
-                    yield {"usage": usage}
-                choices = data.get("choices") or []
-                if not choices:
-                    continue
-                delta = choices[0].get("delta") or {}
-                raw_content = delta.get("content", "")
-                if raw_content is None:
-                    raw_content = ""
-                if not isinstance(raw_content, str):
-                    raw_content = str(raw_content)
-                raw = repair_mojibake_text(raw_content)
-                if raw:
-                    chunk = normalize_chunk(raw)
-                    if chunk:
-                        if not first_chunk_logged:
-                            first_chunk_logged = True
-                            _log.info(
-                                "[StreamTiming] session=%s first provider chunk after %.3fs",
-                                session_id,
-                                time.perf_counter() - stream_started_at,
-                            )
-                        content_parts.append(chunk)
-                        yield {"content": chunk}
+                parsed = protocol.parse_stream_chunk(data)
+                if parsed:
+                    ptype = parsed.get("type", "")
+                    if ptype == "content":
+                        raw = repair_mojibake_text(parsed.get("content", ""))
+                        if raw:
+                            chunk = normalize_chunk(raw)
+                            if chunk:
+                                if not first_chunk_logged:
+                                    first_chunk_logged = True
+                                    _log.info(
+                                        "[StreamTiming] session=%s first provider chunk after %.3fs",
+                                        session_id,
+                                        time.perf_counter() - stream_started_at,
+                                    )
+                                content_parts.append(chunk)
+                                yield {"content": chunk}
+                    elif ptype == "usage":
+                        yield {"usage": parsed.get("usage", {})}
+                    elif ptype == "stop":
+                        pass
+                else:
+                    # 兼容：直接从 data 中提取 usage（OpenAI stream_options）
+                    usage = normalize_usage_dict(data.get("usage"))
+                    if usage:
+                        yield {"usage": usage}
             except json.JSONDecodeError:
                 continue
     # 流结束后注入模型信息
@@ -1737,34 +1734,32 @@ def get_ai_response_with_images(
         import requests
 
         # 构建请求URL
+        from nbot.core.protocols import get_protocol as _gp
+        _img_protocol = _gp(provider_type)
         if provider_type == "siliconflow" or "siliconflow" in base_url:
             url = "https://api.siliconflow.cn/v1/chat/completions"
         else:
-            url = resolve_chat_completion_url(
+            url = _img_protocol.resolve_url(
                 base_url,
                 model=model,
-                provider_type=provider_type,
                 append_base_url_path=append_base_url_path,
             )
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "messages": multimodal_messages,
-            "stream": False,
-        }
+        headers = _img_protocol.build_headers(api_key)
+        payload = _img_protocol.build_payload(
+            model, multimodal_messages,
+            stream=False,
+            base_url=base_url,
+            provider_type=provider_type,
+        )
 
         response = requests.post(url, json=payload, headers=headers, timeout=120)
         response.raise_for_status()
         data = response_json_utf8(response)
-
-        if not data.get("choices"):
-            return "图片处理返回结果为空。"
-
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        normalized = _img_protocol.parse_response(
+            data, model=model, base_url=base_url, provider_type=provider_type,
+        )
+        content = normalized.content or ""
         return content.strip() if content else "图片处理完成，但未返回内容。"
 
     except ImportError:
@@ -1905,6 +1900,12 @@ server,
                                 headers=headers,
                                 timeout=api_timeout,
                             )
+                            if not resp.ok:
+                                _log.error(
+                                    "[AI] API error %d: %s",
+                                    resp.status_code,
+                                    resp.text[:500],
+                                )
                             resp.raise_for_status()
                             result_container["data"] = response_json_utf8(resp)
                         except Exception as e:
@@ -1953,17 +1954,16 @@ server,
                 raise last_error or Exception("API 调用失败")
         else:
             # 使用主 API
-            url = resolve_chat_completion_url(
+            from nbot.core.protocols import get_protocol as _get_proto
+            _srv_pt = server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible"))
+            _srv_protocol = _get_proto(_srv_pt)
+            url = _srv_protocol.resolve_url(
                 server.ai_base_url,
                 model=server.ai_model or "",
-                provider_type=server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible")),
                 append_base_url_path=server.ai_config.get("append_base_url_path", True),
             )
 
-            headers = {
-                "Authorization": f"Bearer {server.ai_api_key}",
-                "Content-Type": "application/json",
-            }
+            headers = _srv_protocol.build_headers(server.ai_api_key)
 
             # 检查消息总长度，必要时截断工具结果
             MAX_CONTENT_LENGTH = 12000  # 每个消息内容的最大长度
@@ -2012,13 +2012,14 @@ server,
 
                 processed_messages.append(msg_copy)
 
-            payload = build_chat_completion_payload(
+            payload = _srv_protocol.build_payload(
                 server.ai_model,
                 processed_messages,
-                base_url=server.ai_base_url,
-                provider_type=server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible")),
                 tools=tools,
                 tool_choice="auto",
+                stream=False,
+                base_url=server.ai_base_url,
+                provider_type=_srv_pt,
             )
 
             # 记录 payload 大小
@@ -2056,6 +2057,12 @@ server,
                                 headers=headers,
                                 timeout=api_timeout,
                             )
+                            if not resp.ok:
+                                _log.error(
+                                    "[AI] API error %d: %s",
+                                    resp.status_code,
+                                    resp.text[:500],
+                                )
                             resp.raise_for_status()
                             result_container["data"] = response_json_utf8(resp)
                         except Exception as e:
@@ -2102,11 +2109,14 @@ server,
             else:
                 raise last_error or Exception("API 调用失败")
 
-        normalized = normalize_chat_completion_data(
+        from nbot.core.protocols import get_protocol as _gp2
+        _resp_pt = server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible"))
+        _resp_protocol = _gp2(_resp_pt)
+        normalized = _resp_protocol.parse_response(
             data,
-            base_url=server.ai_base_url or "",
             model=server.ai_model or "",
-            provider_type=server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible")),
+            base_url=server.ai_base_url or "",
+            provider_type=_resp_pt,
             fallback_tool_parser=server._parse_tool_call_from_text,
         )
         message = normalized.raw_message

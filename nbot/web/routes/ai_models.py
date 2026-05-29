@@ -253,7 +253,16 @@ def register_ai_model_routes(app, server):
             "purposes": MODEL_PURPOSES,
             "default_configs": DEFAULT_PURPOSE_CONFIGS
         })
-    
+
+    @app.route("/api/ai-models/protocols")
+    def get_model_protocols():
+        """获取所有已注册的协议类型列表"""
+        from nbot.core.protocols import list_protocols
+        return jsonify({
+            "success": True,
+            "protocols": list_protocols(),
+        })
+
     @app.route("/api/ai-models/by-purpose/<purpose>")
     def get_models_by_purpose(purpose):
         """按用途获取模型配置列表"""
@@ -495,29 +504,23 @@ def register_ai_model_routes(app, server):
                     resp.raise_for_status()
                     return jsonify({"success": True, "message": "Connection successful"})
                 else:
-                    # 其他模型使用chat completion测试
-                    from nbot.core import (
-                        build_chat_completion_payload,
-                        resolve_chat_completion_url,
-                    )
+                    # 其他模型使用协议适配器测试
+                    from nbot.core.protocols import get_protocol
 
-                    url = resolve_chat_completion_url(
+                    protocol = get_protocol(provider_type)
+                    url = protocol.resolve_url(
                         base_url,
                         model=model_name,
-                        provider_type=provider_type,
                         append_base_url_path=append_base_url_path,
                     )
-
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    }
-                    payload = build_chat_completion_payload(
+                    headers = protocol.build_headers(api_key)
+                    payload = protocol.build_payload(
                         model_name,
                         [{"role": "user", "content": "Hello"}],
+                        stream=False,
+                        max_tokens=10,
                         base_url=base_url,
                         provider_type=provider_type,
-                        extra_body={"max_tokens": 10},
                     )
                     resp = requests.post(url, json=payload, headers=headers, timeout=30)
                     resp.raise_for_status()

@@ -200,12 +200,8 @@ def _call_memory_model(turns: List[Dict[str, str]],
         user_name: 用户名称
         language: 记忆输出语言
     """
-    from nbot.core.model_adapter import (
-        build_chat_completion_payload,
-        normalize_chat_completion_data,
-        response_json_utf8,
-        resolve_chat_completion_url,
-    )
+    from nbot.core.model_adapter import response_json_utf8
+    from nbot.core.protocols import get_protocol
     from nbot.services.ai import refresh_runtime_ai_config
 
     runtime_ai = refresh_runtime_ai_config()
@@ -264,29 +260,22 @@ def _call_memory_model(turns: List[Dict[str, str]],
         {"role": "user", "content": user_prompt},
     ]
 
-    url = resolve_chat_completion_url(
-        base_url,
-        model=model,
-        provider_type=provider_type,
-        append_base_url_path=append_base_url_path,
+    protocol = get_protocol(provider_type)
+    url = protocol.resolve_url(
+        base_url, model=model, append_base_url_path=append_base_url_path,
     )
-    payload = build_chat_completion_payload(
-        model,
-        messages,
-        base_url=base_url,
-        provider_type=provider_type,
-        stream=False,
+    payload = protocol.build_payload(
+        model, messages, stream=False,
+        base_url=base_url, provider_type=provider_type,
     )
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    headers = protocol.build_headers(api_key)
 
     response = requests.post(url, json=payload, headers=headers, timeout=60)
     response.raise_for_status()
-    normalized = normalize_chat_completion_data(
+    normalized = protocol.parse_response(
         response_json_utf8(response),
-        base_url=base_url,
         model=model,
+        base_url=base_url,
         provider_type=provider_type,
     )
     return parse_memory_response(normalized.content)

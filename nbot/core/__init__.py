@@ -85,6 +85,15 @@ from nbot.core.model_adapter import (
     resolve_chat_completion_url,
 )
 
+from nbot.core.protocols import (
+    ModelProtocol,
+    get_protocol,
+    register_protocol,
+    OpenAIChatProtocol,
+    OpenAIResponsesProtocol,
+    AnthropicMessagesProtocol,
+)
+
 from nbot.core.failover import (
     FailoverState,
     ModelHealth,
@@ -171,6 +180,15 @@ __all__ = [
     'repair_mojibake_text',
     'response_json_utf8',
     'resolve_chat_completion_url',
+
+    # protocols 模块
+    'ModelProtocol',
+    'get_protocol',
+    'register_protocol',
+    'OpenAIChatProtocol',
+    'OpenAIResponsesProtocol',
+    'AnthropicMessagesProtocol',
+
     'QQSessionStore',
     'WebSessionStore',
     'build_chat_message',

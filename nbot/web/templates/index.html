@@ -4326,8 +4326,7 @@
                                             <div class="form-group">
                                                 <label class="form-label">{{ $t('ai_config.provider_type') }}</label>
                                                 <select v-model="aiConfig.provider_type" class="form-select">
-                                                    <option value="openai_compatible">OpenAI Compatible</option>
-                                                    <option value="anthropic">Anthropic Messages</option>
+                                                    <option v-for="p in availableProtocols" :key="p.key" :value="p.key">{{ p.name }}</option>
                                                 </select>
                                                 <div class="form-hint">{{ $t('ai_config.provider_hint') }}</div>
                                             </div>
@@ -4788,30 +4787,32 @@
                                     </div>
 
                                     <div class="form-group">
+                                        <label class="form-label">Provider 类型</label>
+                                        <select v-model="modelForm.provider_type" class="form-select">
+                                            <option v-for="p in availableProtocols" :key="p.key" :value="p.key">{{ p.name }}</option>
+                                        </select>
+                                        <div class="form-hint" v-if="currentProtocolSuffix">选中协议的接口路径：<code>{{ currentProtocolSuffix }}</code></div>
+                                    </div>
+
+                                    <div class="form-group">
                                         <label class="form-label">API Base URL</label>
-                                        <input v-model="modelForm.base_url" type="text" class="form-input" placeholder="https://api.example.com/v1">
-                                        <div class="form-hint">开启自动补全时，会在基础地址后自动补上对话接口路径。</div>
+                                        <input v-model="modelForm.base_url" type="text" class="form-input" :placeholder="currentProtocolSuffix ? 'https://api.example.com/v1' : 'https://api.example.com/v1' + currentProtocolSuffix">
+                                        <div class="form-hint" v-if="modelForm.append_base_url_path && currentProtocolSuffix">开启自动补全：在基础地址后自动补上 <code>{{ currentProtocolSuffix }}</code></div>
+                                        <div class="form-hint" v-else>关闭自动补全：Base URL 将作为完整请求地址使用，但仍使用选中协议的格式。</div>
                                     </div>
 
                                     <div class="ai-capability-item">
                                         <div class="switch-field">
                                             <div class="switch-copy">
                                                 <span class="switch-label">自动补全 Base URL 后缀</span>
-                                                <span class="switch-hint">关闭后，Base URL 会被当作完整请求地址使用，不再自动补 `/chat/completions`。</span>
+                                                <span class="switch-hint" v-if="currentProtocolSuffix">开启后自动补上 <code>{{ currentProtocolSuffix }}</code>；关闭后 Base URL 作为完整地址，但请求仍使用 {{ currentProtocolName }} 协议格式。</span>
+                                                <span class="switch-hint" v-else>关闭后，Base URL 会被当作完整请求地址使用。</span>
                                             </div>
                                             <label class="switch-control">
                                                 <input v-model="modelForm.append_base_url_path" type="checkbox">
                                                 <span class="switch-slider"></span>
                                             </label>
                                         </div>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label class="form-label">Provider 类型</label>
-                                        <select v-model="modelForm.provider_type" class="form-select">
-                                            <option value="openai_compatible">OpenAI Compatible</option>
-                                            <option value="anthropic">Anthropic Messages</option>
-                                        </select>
                                     </div>
 
                                     <div class="form-group">
@@ -9626,6 +9627,7 @@
                     aiModels: [],
                     aiModelsLoaded: false,
                     activeModelId: null,
+                    availableProtocols: [],
                     showModelManager: false,
                     showModelEditModal: false,
                     editingModel: null,
@@ -10082,6 +10084,18 @@
             },
             
             computed: {
+                currentProtocolSuffix() {
+                    const p = (this.availableProtocols || []).find(
+                        item => item.key === this.modelForm.provider_type
+                    );
+                    return p ? p.url_suffix : '';
+                },
+                currentProtocolName() {
+                    const p = (this.availableProtocols || []).find(
+                        item => item.key === this.modelForm.provider_type
+                    );
+                    return p ? p.name : this.modelForm.provider_type;
+                },
                 pageTitle() {
                     const titles = {
                         dashboard: '仪表盘',

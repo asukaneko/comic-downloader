@@ -313,12 +313,8 @@ class PipelineCallbacks(ABC):
         如果提供了 model_configs 且包含多个配置，自动启用故障转移。
         """
         from nbot.services.ai import ai_client, refresh_runtime_ai_config
-        from nbot.core.model_adapter import (
-            build_chat_completion_payload,
-            normalize_chat_completion_data,
-            response_json_utf8,
-            resolve_chat_completion_url,
-        )
+        from nbot.core.protocols import get_protocol
+        from nbot.core.model_adapter import response_json_utf8
         import requests
 
         # 如果有多个模型配置，启用故障转移
@@ -338,31 +334,28 @@ class PipelineCallbacks(ABC):
             api_key = runtime_ai.get("api_key") or ""
             append_base_url_path = runtime_ai.get("append_base_url_path", True)
 
-            url = resolve_chat_completion_url(
+            protocol = get_protocol(provider_type)
+            url = protocol.resolve_url(
                 base_url,
                 model=model,
-                provider_type=provider_type,
                 append_base_url_path=append_base_url_path,
             )
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = build_chat_completion_payload(
+            headers = protocol.build_headers(api_key)
+            payload = protocol.build_payload(
                 model,
                 messages,
-                base_url=base_url,
-                provider_type=provider_type,
                 tools=tools if tools else None,
                 tool_choice="auto" if tools else None,
                 stream=False,
+                base_url=base_url,
+                provider_type=provider_type,
             )
             resp = requests.post(url, json=payload, headers=headers, timeout=120)
             resp.raise_for_status()
-            normalized = normalize_chat_completion_data(
+            normalized = protocol.parse_response(
                 response_json_utf8(resp),
-                base_url=base_url,
                 model=model,
+                base_url=base_url,
                 provider_type=provider_type,
             )
             result = normalized.to_dict()
@@ -1124,12 +1117,8 @@ class AIPipeline:
             _extract_status_code,
         )
         from nbot.services.ai import apply_model_config
-        from nbot.core.model_adapter import (
-            build_chat_completion_payload,
-            normalize_chat_completion_data,
-            response_json_utf8,
-            resolve_chat_completion_url,
-        )
+        from nbot.core.protocols import get_protocol
+        from nbot.core.model_adapter import response_json_utf8
         import requests
 
         failover = get_failover_state()
@@ -1148,32 +1137,29 @@ class AIPipeline:
                 key = config.get("api_key") or ""
                 append_path = config.get("append_base_url_path", True)
 
-                url = resolve_chat_completion_url(
+                protocol = get_protocol(provider_type)
+                url = protocol.resolve_url(
                     base_url,
                     model=model_name,
-                    provider_type=provider_type,
                     append_base_url_path=append_path,
                 )
-                headers = {
-                    "Authorization": f"Bearer {key}",
-                    "Content-Type": "application/json",
-                }
-                payload = build_chat_completion_payload(
+                headers = protocol.build_headers(key)
+                payload = protocol.build_payload(
                     model_name,
                     messages,
-                    base_url=base_url,
-                    provider_type=provider_type,
                     tools=None,
                     stream=False,
+                    base_url=base_url,
+                    provider_type=provider_type,
                 )
                 resp = requests.post(
                     url, json=payload, headers=headers, timeout=120
                 )
                 resp.raise_for_status()
-                normalized = normalize_chat_completion_data(
+                normalized = protocol.parse_response(
                     response_json_utf8(resp),
-                    base_url=base_url,
                     model=model_name,
+                    base_url=base_url,
                     provider_type=provider_type,
                 )
                 return normalized.to_dict()

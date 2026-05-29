@@ -2277,28 +2277,44 @@ class WebChatServer:
                         tool_calls = response["tool_calls"]
 
                         # 添加 AI 的回复到消息历史
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": response.get("content", ""),
-                                "tool_calls": [
-                                    {
-                                        "id": tc.get("id", str(uuid.uuid4())),
-                                        "type": "function",
-                                        "function": {
-                                            "name": tc["name"],
-                                            "arguments": json.dumps(tc["arguments"]),
-                                        },
-                                    }
-                                    for tc in tool_calls
-                                ],
-                            }
-                        )
+                        # 提取文本内容（兼容列表和字符串格式）
+                        raw_content = response.get("content", "")
+                        if isinstance(raw_content, list):
+                            text_parts = []
+                            for block in raw_content:
+                                if isinstance(block, dict) and block.get("type") == "text":
+                                    text_parts.append(block.get("text", ""))
+                            raw_content = "\n".join(text_parts)
+
+                        # thinking 存到 _thinking_content，由协议层决定是否重建 blocks
+                        thinking = response.get("thinking_content", "")
+                        assistant_msg = {
+                            "role": "assistant",
+                            "content": raw_content,
+                        }
+                        if thinking:
+                            assistant_msg["_thinking_content"] = thinking
+                        if tool_calls:
+                            # 重建为 API 标准格式：{id, type:"function", function:{name, arguments}}
+                            assistant_msg["tool_calls"] = [
+                                {
+                                    "id": tc.get("id", str(uuid.uuid4())),
+                                    "type": "function",
+                                    "function": {
+                                        "name": tc.get("function", {}).get("name") or tc.get("name", ""),
+                                        "arguments": tc.get("function", {}).get("arguments") if isinstance(tc.get("function", {}).get("arguments"), str) else json.dumps(tc.get("arguments", tc.get("function", {}).get("arguments", {})), ensure_ascii=False),
+                                    },
+                                }
+                                for tc in tool_calls
+                            ]
+                        messages.append(assistant_msg)
 
                         # 执行所有工具调用
                         for tool_call in tool_calls:
-                            tool_name = tool_call["name"]
-                            arguments = tool_call["arguments"]
+                            func = tool_call.get("function", {})
+                            tool_name = func.get("name") or tool_call.get("name", "")
+                            raw_args = func.get("arguments") or tool_call.get("arguments", {})
+                            arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
 
                             _log.info(
                                 f"Executing tool: {tool_name} with args: {arguments}"
@@ -2591,9 +2607,55 @@ class WebChatServer:
                 },
             ]
 
-            response = self.ai_client.chat_completion(
-                model=self.ai_model, messages=prompt_messages, stream=False
+            # 使用当前活跃模型的协议发送请求
+            from nbot.core.protocols import get_protocol
+            from nbot.core.model_adapter import response_json_utf8
+            import requests as _requests
+
+            # 获取当前活跃模型的 provider_type
+            active_model = None
+            for m in self.ai_models:
+                if m.get("id") == self.active_model_id and m.get("enabled", True):
+                    active_model = m
+                    break
+            srv_pt = (active_model or {}).get(
+                "provider_type",
+                (active_model or {}).get("provider", "openai_compatible"),
+            ) if active_model else self.ai_config.get("provider_type", "openai_compatible")
+            srv_protocol = get_protocol(srv_pt)
+            srv_url = srv_protocol.resolve_url(
+                self.ai_base_url,
+                model=self.ai_model or "",
+                append_base_url_path=(active_model or {}).get("append_base_url_path", True),
             )
+            srv_headers = srv_protocol.build_headers(self.ai_api_key)
+            srv_payload = srv_protocol.build_payload(
+                self.ai_model, prompt_messages,
+                stream=False,
+                base_url=self.ai_base_url,
+                provider_type=srv_pt,
+            )
+            resp = _requests.post(srv_url, json=srv_payload, headers=srv_headers, timeout=30)
+            resp.raise_for_status()
+            normalized = srv_protocol.parse_response(
+                response_json_utf8(resp),
+                model=self.ai_model or "",
+                base_url=self.ai_base_url,
+                provider_type=srv_pt,
+            )
+
+            class _Msg:
+                pass
+            class _Choice:
+                pass
+            class _Resp:
+                pass
+            _msg = _Msg()
+            _msg.content = normalized.content
+            _choice = _Choice()
+            _choice.message = _msg
+            response = _Resp()
+            response.choices = [_choice]
 
             name = str(response.choices[0].message.content or "").strip()
             # 清理可能的引号和多余字符
