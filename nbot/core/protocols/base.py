@@ -111,6 +111,9 @@ _PROVIDER_ALIASES: Dict[str, str] = {
     "openai_responses": "openai_responses",
     "anthropic": "anthropic_messages",
     "claude": "anthropic_messages",
+    "gemini": "gemini_native",
+    "google": "gemini_native",
+    "gemini_native": "gemini_native",
 }
 
 
@@ -172,7 +175,9 @@ def _ensure_all_registered() -> None:
     from nbot.core.protocols.openai_chat import OpenAIChatProtocol
     from nbot.core.protocols.openai_responses import OpenAIResponsesProtocol
     from nbot.core.protocols.anthropic_messages import AnthropicMessagesProtocol
+    from nbot.core.protocols.gemini_native import GeminiNativeProtocol
 
     register_protocol("openai_chat", OpenAIChatProtocol)
     register_protocol("openai_responses", OpenAIResponsesProtocol)
     register_protocol("anthropic_messages", AnthropicMessagesProtocol)
+    register_protocol("gemini_native", GeminiNativeProtocol)

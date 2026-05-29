@@ -1,0 +1,357 @@
+"""
+Gemini Native Protocol (generateContent)
+
+Handles the Google Gemini native API format, converting between
+OpenAI-style internal representation and Gemini's contents/parts format.
+
+Key differences from OpenAI:
+- assistant role -> "model"
+- content -> parts[]
+- system -> system_instruction (top level)
+- choices -> candidates
+- tool_calls -> functionCall parts
+- tool results -> functionResponse parts (role: "user")
+- Auth via API key in URL query parameter
+"""
+
+import json
+import uuid
+from typing import Any, Callable, Dict, List, Optional
+
+from nbot.core.model_adapter import (
+    NormalizedModelResponse,
+    repair_mojibake_text,
+)
+from nbot.core.protocols.base import ModelProtocol
+
+
+class GeminiNativeProtocol(ModelProtocol):
+    """Gemini native generateContent protocol."""
+
+    @property
+    def name(self) -> str:
+        return "gemini_native"
+
+    @property
+    def display_name(self) -> str:
+        return "Gemini Native (generateContent)"
+
+    @property
+    def url_suffix(self) -> str:
+        return ":generateContent"
+
+    def resolve_url(
+        self,
+        base_url: str,
+        model: str = "",
+        *,
+        append_base_url_path: bool = True,
+        stream: bool = False,
+        **opts: Any,
+    ) -> str:
+        url_base = (base_url or "").rstrip("/")
+        if not url_base:
+            raise ValueError("base_url 未配置")
+
+        if ":generateContent" in url_base or ":streamGenerateContent" in url_base:
+            return url_base
+
+        action = "streamGenerateContent" if stream else "generateContent"
+        if "/models/" in url_base:
+            return f"{url_base}:{action}"
+
+        if not append_base_url_path:
+            return url_base
+
+        return f"{url_base}/models/{model}:{action}"
+
+    def build_headers(self, api_key: str, *, stream: bool = False) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if stream:
+            headers["Accept"] = "text/event-stream"
+        return headers
+
+    def build_payload(
+        self,
+        model: str,
+        messages: List[Dict[str, Any]],
+        *,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+        stream: bool = False,
+        max_tokens: int = 4096,
+        extra_body: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        system_instruction, contents = self._convert_messages(messages)
+
+        payload: Dict[str, Any] = {"contents": contents}
+
+        if system_instruction:
+            payload["systemInstruction"] = system_instruction
+
+        gen_config: Dict[str, Any] = {"maxOutputTokens": max_tokens}
+        if extra_body:
+            for key in ("temperature", "topP", "topK", "candidateCount",
+                        "stopSequences", "responseMimeType", "responseSchema"):
+                if key in extra_body:
+                    gen_config[key] = extra_body[key]
+        payload["generationConfig"] = gen_config
+
+        if tools:
+            payload["tools"] = self._convert_tools(tools)
+
+        return payload
+
+    def parse_response(
+        self,
+        data: Dict[str, Any],
+        *,
+        model: str = "",
+        base_url: str = "",
+        provider_type: str = "",
+        fallback_tool_parser: Optional[Callable] = None,
+    ) -> NormalizedModelResponse:
+        content = ""
+        thinking_content = ""
+        tool_calls = []
+        finish_reason = "stop"
+
+        candidates = data.get("candidates", [])
+        if not candidates:
+            prompt_feedback = data.get("promptFeedback", {})
+            block_reason = prompt_feedback.get("blockReason", "")
+            if block_reason:
+                return NormalizedModelResponse(
+                    content=f"[Gemini 安全拦截: {block_reason}]",
+                    finish_reason="stop",
+                    usage=self._parse_usage(data),
+                    raw_data=data,
+                )
+            return NormalizedModelResponse(
+                content="",
+                finish_reason="stop",
+                usage=self._parse_usage(data),
+                raw_data=data,
+            )
+
+        candidate = candidates[0]
+        gemini_finish = candidate.get("finishReason", "STOP")
+        if gemini_finish == "STOP":
+            finish_reason = "stop"
+        elif gemini_finish == "MAX_TOKENS":
+            finish_reason = "length"
+        else:
+            finish_reason = "stop"
+
+        parts = candidate.get("content", {}).get("parts", [])
+        for part in parts:
+            if "text" in part:
+                content += part["text"]
+            if "thought" in part:
+                thinking_content += part.get("thought", "")
+            if "functionCall" in part:
+                fc = part["functionCall"]
+                tool_calls.append({
+                    "id": f"call_{uuid.uuid4().hex[:12]}",
+                    "type": "function",
+                    "function": {
+                        "name": fc.get("name", ""),
+                        "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False),
+                    },
+                })
+
+        content = repair_mojibake_text(content)
+        thinking_content = repair_mojibake_text(thinking_content)
+
+        if tool_calls:
+            finish_reason = "tool_calls"
+
+        return NormalizedModelResponse(
+            content=content,
+            finish_reason=finish_reason,
+            tool_calls=tool_calls,
+            thinking_content=thinking_content,
+            usage=self._parse_usage(data),
+            raw_data=data,
+        )
+
+    def parse_stream_chunk(
+        self,
+        chunk_data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        candidates = chunk_data.get("candidates", [])
+        if not candidates:
+            return None
+
+        parts = candidates[0].get("content", {}).get("parts", [])
+        for part in parts:
+            if "text" in part:
+                text = repair_mojibake_text(part["text"])
+                if text:
+                    return {"type": "content", "content": text}
+            if "functionCall" in part:
+                fc = part["functionCall"]
+                return {
+                    "type": "tool_call_start",
+                    "tool_call": {
+                        "id": f"call_{uuid.uuid4().hex[:12]}",
+                        "name": fc.get("name", ""),
+                        "arguments": fc.get("args", {}),
+                    },
+                }
+
+        usage = self._parse_usage(chunk_data)
+        if usage:
+            return {"type": "usage", "usage": usage}
+
+        return None
+
+    def supports_tools(self) -> bool:
+        return True
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_usage(data: Dict[str, Any]) -> Dict[str, int]:
+        meta = data.get("usageMetadata", {})
+        if not meta:
+            return {}
+        return {
+            "prompt_tokens": meta.get("promptTokenCount", 0),
+            "completion_tokens": meta.get("candidatesTokenCount", 0),
+            "total_tokens": meta.get("totalTokenCount", 0),
+        }
+
+    @staticmethod
+    def _convert_messages(
+        messages: List[Dict[str, Any]],
+    ) -> tuple:
+        """Convert OpenAI-style messages to Gemini contents/parts format.
+
+        Returns (system_instruction, contents).
+        """
+        system_parts: List[Dict[str, str]] = []
+        contents: List[Dict[str, Any]] = []
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "system":
+                if isinstance(content, str) and content:
+                    system_parts.append({"text": content})
+                continue
+
+            if role == "user":
+                parts = []
+                if isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict):
+                            if item.get("type") == "text":
+                                parts.append({"text": item.get("text", "")})
+                            elif item.get("type") == "image_url":
+                                url = item.get("image_url", {}).get("url", "")
+                                if url.startswith("data:"):
+                                    mime, _, b64 = url.partition(",")
+                                    mime = mime.split(":")[1].split(";")[0]
+                                    parts.append({
+                                        "inlineData": {
+                                            "mimeType": mime,
+                                            "data": b64,
+                                        }
+                                    })
+                        elif isinstance(item, str):
+                            parts.append({"text": item})
+                elif isinstance(content, str):
+                    parts.append({"text": content})
+                if parts:
+                    contents.append({"role": "user", "parts": parts})
+                continue
+
+            if role == "assistant":
+                parts = []
+                thinking = msg.get("_thinking_content", "")
+                if thinking:
+                    parts.append({"thought": thinking})
+                if isinstance(content, str) and content:
+                    parts.append({"text": content})
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "text":
+                                parts.append({"text": block.get("text", "")})
+                            elif block.get("type") == "thinking":
+                                parts.append({"thought": block.get("thinking", "")})
+                tool_calls = msg.get("tool_calls", [])
+                for tc in tool_calls:
+                    func = tc.get("function", {})
+                    name = func.get("name") or tc.get("name", "")
+                    args_raw = func.get("arguments") or tc.get("arguments", "{}")
+                    if isinstance(args_raw, str):
+                        try:
+                            args = json.loads(args_raw)
+                        except Exception:
+                            args = {}
+                    else:
+                        args = args_raw
+                    parts.append({
+                        "functionCall": {
+                            "name": name,
+                            "args": args,
+                        }
+                    })
+                if parts:
+                    contents.append({"role": "model", "parts": parts})
+                continue
+
+            if role == "tool":
+                result_content = content if isinstance(content, str) else str(content)
+                try:
+                    response_data = json.loads(result_content)
+                except Exception:
+                    response_data = {"result": result_content}
+
+                # 从历史中找对应的 functionCall name
+                func_name = msg.get("name", "tool_result")
+                for prev_msg in reversed(contents):
+                    if prev_msg.get("role") == "model":
+                        for p in prev_msg.get("parts", []):
+                            if "functionCall" in p:
+                                func_name = p["functionCall"].get("name", func_name)
+                                break
+
+                contents.append({
+                    "role": "user",
+                    "parts": [{
+                        "functionResponse": {
+                            "name": func_name,
+                            "response": response_data,
+                        }
+                    }]
+                })
+                continue
+
+        system_instruction = None
+        if system_parts:
+            system_instruction = {"parts": system_parts}
+
+        return system_instruction, contents
+
+    @staticmethod
+    def _convert_tools(
+        tools: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Convert OpenAI-style tools to Gemini function_declarations format."""
+        declarations = []
+        for tool in tools:
+            if tool.get("type") == "function":
+                func = tool.get("function", {})
+                declarations.append({
+                    "name": func.get("name", ""),
+                    "description": func.get("description", ""),
+                    "parameters": func.get("parameters", {"type": "object", "properties": {}}),
+                })
+        return [{"functionDeclarations": declarations}]

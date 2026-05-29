@@ -16,12 +16,15 @@ from nbot.core.protocols.base import (
 from nbot.core.protocols.openai_chat import OpenAIChatProtocol
 from nbot.core.protocols.openai_responses import OpenAIResponsesProtocol
 from nbot.core.protocols.anthropic_messages import AnthropicMessagesProtocol
+from nbot.core.protocols.gemini_native import GeminiNativeProtocol
 
 __all__ = [
     "ModelProtocol",
     "get_protocol",
+    "list_protocols",
     "register_protocol",
     "OpenAIChatProtocol",
     "OpenAIResponsesProtocol",
     "AnthropicMessagesProtocol",
+    "GeminiNativeProtocol",
 ]

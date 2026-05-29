@@ -11,6 +11,7 @@
 | OpenAI Chat Completions | `openai_chat.py` | `v1/chat/completions` | OpenAI、DeepSeek、硅基流动等兼容服务 |
 | OpenAI Responses | `openai_responses.py` | `v1/responses` | OpenAI 新一代 API，支持 agent 和内置工具 |
 | Anthropic Messages | `anthropic_messages.py` | `/v1/messages` | Claude 原生 API |
+| Gemini Native | `gemini_native.py` | `models/{model}:generateContent` | Gemini 原生 API，支持多模态、thinking、结构化输出 |
 
 ## 核心接口
 
@@ -66,6 +67,7 @@ protocols = list_protocols()
 | `openai_compatible` / `openai` / `custom` / `deepseek` / `siliconflow` | OpenAI Chat Completions |
 | `openai_responses` | OpenAI Responses |
 | `anthropic` / `claude` | Anthropic Messages |
+| `gemini` / `google` / `gemini_native` | Gemini Native (generateContent) |
 
 未知类型默认回退到 OpenAI Chat Completions。
 
@@ -111,6 +113,7 @@ protocols = list_protocols()
 | OpenAI Chat | `choices[0].message.content` |
 | OpenAI Responses | `output[].content[].type=="output_text"` |
 | Anthropic | `content[].type=="text"` |
+| Gemini Native | `candidates[0].content.parts[0].text` |
 
 ### 工具调用格式
 
@@ -119,6 +122,7 @@ protocols = list_protocols()
 | OpenAI Chat | `tools[].type="function"` | `tool_calls[].function.name` | `role: "tool"` |
 | OpenAI Responses | `tools[].type="function"` | `output[].type="function_call"` | `type: "function_call_output"` |
 | Anthropic | `tools[].name,input_schema` | `content[].type="tool_use"` | `type: "tool_result"` |
+| Gemini Native | `tools[].functionDeclarations[]` | `parts[].functionCall` | `parts[].functionResponse` (role: "user") |
 
 ### 流式事件
 
@@ -127,6 +131,7 @@ protocols = list_protocols()
 | OpenAI Chat | `choices[0].delta.content` |
 | OpenAI Responses | `event.type == "response.output_text.delta"` |
 | Anthropic | `content_block_delta.delta.text` |
+| Gemini Native | `candidates[0].content.parts[0].text` |
 
 ## 使用方式
 
