@@ -1498,6 +1498,9 @@ const NbotMethods = {
                         case 'knowledge':
                             await this.loadKnowledge();
                             break;
+                        case 'world-book':
+                            await this.loadWorldBooks();
+                            break;
                         case 'ai-config':
                             await this.loadAIConfig();
                             await this.loadAIModels();
@@ -3487,7 +3490,228 @@ def main(params):
                         console.error('Failed to load knowledge:', e);
                     }
                 },
-                
+
+                // ---- World Book Methods ----
+
+                getFilteredWorldBooks() {
+                    const q = (this.worldBookSearchQuery || '').toLowerCase();
+                    if (!q) return this.worldBooks;
+                    return this.worldBooks.filter(b =>
+                        (b.name || '').toLowerCase().includes(q) ||
+                        (b.description || '').toLowerCase().includes(q)
+                    );
+                },
+
+                async loadWorldBooks() {
+                    this.worldBookLoading = true;
+                    try {
+                        const [booksRes] = await Promise.all([
+                            api.get('/api/world-books'),
+                            this.loadCharacterList(),
+                        ]);
+                        this.worldBooks = booksRes.data || [];
+                        if (this.currentWorldBook) {
+                            const updated = this.worldBooks.find(b => b.id === this.currentWorldBook.id);
+                            if (updated) this.currentWorldBook = updated;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load world books:', e);
+                    } finally {
+                        this.worldBookLoading = false;
+                    }
+                },
+
+                async loadCharacterList() {
+                    try {
+                        if (!this.customPersonalityPresets || this.customPersonalityPresets.length === 0) {
+                            await this.loadCustomPersonalityPresets();
+                        }
+                        this.characterList = (this.customPersonalityPresets || []).map(c => ({
+                            id: c.id,
+                            name: c.name || c.id,
+                            avatar: c.avatar || '',
+                            portrait: c.portrait || '',
+                            description: c.description || '',
+                        }));
+                    } catch (e) {
+                        this.characterList = [];
+                    }
+                },
+
+                async createWorldBook() {
+                    const name = prompt(this.$t('world_book.enter_name') || '请输入世界书名称:');
+                    if (!name || !name.trim()) return;
+                    try {
+                        const res = await api.post('/api/world-books', { name: name.trim() });
+                        if (res.data.success) {
+                            await this.loadWorldBooks();
+                            this.selectWorldBook(res.data.world_book);
+                            this.showToast(this.$t('world_book.created') || '世界书已创建', 'success');
+                        }
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.create_failed') || '创建失败', 'error');
+                    }
+                },
+
+                async selectWorldBook(book) {
+                    this.currentWorldBook = JSON.parse(JSON.stringify(book));
+                    try {
+                        const res = await api.get(`/api/world-books/${book.id}/entries`);
+                        this.worldBookEntries = res.data || [];
+                    } catch (e) {
+                        this.worldBookEntries = [];
+                    }
+                },
+
+                async saveWorldBookMeta() {
+                    if (!this.currentWorldBook) return;
+                    try {
+                        await api.put(`/api/world-books/${this.currentWorldBook.id}`, {
+                            name: this.currentWorldBook.name,
+                            description: this.currentWorldBook.description,
+                            character_ids: this.currentWorldBook.character_ids,
+                            enabled: this.currentWorldBook.enabled,
+                        });
+                        await this.loadWorldBooks();
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.save_failed') || '保存失败', 'error');
+                    }
+                },
+
+                async deleteCurrentWorldBook() {
+                    if (!this.currentWorldBook) return;
+                    const bookName = this.currentWorldBook.name;
+                    const bookId = this.currentWorldBook.id;
+                    this.showConfirm({
+                        title: this.$t('world_book.confirm_delete') || '删除世界书',
+                        messageBefore: this.$t('world_book.confirm_delete_msg') || '确定要删除这个世界书吗？所有条目将一并删除。',
+                        highlight: bookName,
+                        confirmText: this.$t('common.delete') || '删除',
+                        danger: true,
+                        onConfirm: async () => {
+                            try {
+                                await api.delete(`/api/world-books/${bookId}`);
+                                this.currentWorldBook = null;
+                                this.worldBookEntries = [];
+                                await this.loadWorldBooks();
+                                this.showToast(this.$t('world_book.deleted') || '已删除', 'success');
+                            } catch (e) {
+                                this.showToast(this.$t('world_book.delete_failed') || '删除失败', 'error');
+                            }
+                        }
+                    });
+                },
+
+                openNewEntryModal() {
+                    this.editingWorldBookEntry = {
+                        name: '',
+                        keywords: [],
+                        content: '',
+                        enabled: true,
+                        priority: 0,
+                        case_sensitive: false,
+                        match_mode: 'any',
+                    };
+                    this.newKeywordInput = '';
+                    this.showWorldBookEntryModal = true;
+                },
+
+                editWorldBookEntry(entry) {
+                    this.editingWorldBookEntry = JSON.parse(JSON.stringify(entry));
+                    this.newKeywordInput = '';
+                    this.showWorldBookEntryModal = true;
+                },
+
+                closeEntryModal() {
+                    this.showWorldBookEntryModal = false;
+                    this.editingWorldBookEntry = null;
+                },
+
+                addKeyword() {
+                    const input = (this.newKeywordInput || '').trim();
+                    if (!input) return;
+                    const keywords = input.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+                    for (const kw of keywords) {
+                        if (!this.editingWorldBookEntry.keywords.includes(kw)) {
+                            this.editingWorldBookEntry.keywords.push(kw);
+                        }
+                    }
+                    this.newKeywordInput = '';
+                },
+
+                removeKeyword(idx) {
+                    this.editingWorldBookEntry.keywords.splice(idx, 1);
+                },
+
+                async saveWorldBookEntry() {
+                    if (!this.currentWorldBook || !this.editingWorldBookEntry) return;
+                    const entry = this.editingWorldBookEntry;
+                    try {
+                        if (entry.id) {
+                            await api.put(`/api/world-books/${this.currentWorldBook.id}/entries/${entry.id}`, entry);
+                        } else {
+                            await api.post(`/api/world-books/${this.currentWorldBook.id}/entries`, entry);
+                        }
+                        this.closeEntryModal();
+                        await this.selectWorldBook(this.currentWorldBook);
+                        await this.loadWorldBooks();
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.save_failed') || '保存失败', 'error');
+                    }
+                },
+
+                async deleteWorldBookEntry(entryId) {
+                    if (!this.currentWorldBook) return;
+                    this.showConfirm({
+                        title: this.$t('world_book.confirm_delete_entry') || '删除条目',
+                        message: this.$t('world_book.confirm_delete_entry_msg') || '确定要删除此条目吗？',
+                        confirmText: this.$t('common.delete') || '删除',
+                        danger: true,
+                        onConfirm: async () => {
+                            try {
+                                await api.delete(`/api/world-books/${this.currentWorldBook.id}/entries/${entryId}`);
+                                await this.selectWorldBook(this.currentWorldBook);
+                                await this.loadWorldBooks();
+                            } catch (e) {
+                                this.showToast(this.$t('world_book.delete_failed') || '删除失败', 'error');
+                            }
+                        }
+                    });
+                },
+
+                getCharacterById(id) {
+                    const ch = this.characterList.find(c => c.id === id);
+                    return ch || { id, name: id, avatar: '', portrait: '' };
+                },
+
+                openWorldBookCharacterModal() {
+                    this.worldBookCharacterSelectedIds = [...(this.currentWorldBook?.character_ids || [])];
+                    this.showWorldBookCharacterModal = true;
+                },
+
+                toggleWorldBookCharacter(id) {
+                    const idx = this.worldBookCharacterSelectedIds.indexOf(id);
+                    if (idx >= 0) {
+                        this.worldBookCharacterSelectedIds.splice(idx, 1);
+                    } else {
+                        this.worldBookCharacterSelectedIds.push(id);
+                    }
+                },
+
+                async confirmWorldBookCharacterBinding() {
+                    if (!this.currentWorldBook) return;
+                    this.currentWorldBook.character_ids = [...this.worldBookCharacterSelectedIds];
+                    this.showWorldBookCharacterModal = false;
+                    await this.saveWorldBookMeta();
+                },
+
+                removeCharacterBinding(id) {
+                    if (!this.currentWorldBook) return;
+                    const ids = this.currentWorldBook.character_ids || [];
+                    this.currentWorldBook.character_ids = ids.filter(cid => cid !== id);
+                    this.saveWorldBookMeta();
+                },
+
                 async loadAIConfig() {
                     try {
                         const res = await api.get('/api/ai-config');

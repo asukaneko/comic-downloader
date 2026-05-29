@@ -65,6 +65,7 @@ from nbot.web.routes import (
     register_voice_routes,
     register_web_agent_routes,
     register_workflow_routes,
+    register_world_book_routes,
     register_workspace_misc_routes,
     register_workspace_private_routes,
     register_workspace_shared_routes,
@@ -2732,6 +2733,7 @@ class WebChatServer:
         register_task_center_routes(self.app, self)
         register_tool_routes(self.app, self)
         register_workflow_routes(self.app, self)
+        register_world_book_routes(self.app, self)
         register_web_agent_routes(self.app, self)
         register_workspace_private_routes(self.app, self)
         register_workspace_shared_routes(self.app, self)

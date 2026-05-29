@@ -323,6 +323,91 @@ class ReactionPlan:
 
 
 @dataclass
+class WorldBookEntry:
+    """世界书条目，包含关键词和对应注入内容"""
+
+    id: str = ""
+    name: str = ""
+    keywords: List[str] = field(default_factory=list)
+    content: str = ""
+    enabled: bool = True
+    priority: int = 0
+    case_sensitive: bool = False
+    match_mode: str = "any"  # "any" = 任一命中, "all" = 全部命中
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "keywords": self.keywords,
+            "content": self.content,
+            "enabled": self.enabled,
+            "priority": self.priority,
+            "case_sensitive": self.case_sensitive,
+            "match_mode": self.match_mode,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WorldBookEntry":
+        return cls(
+            id=data.get("id", ""),
+            name=data.get("name", ""),
+            keywords=data.get("keywords", []),
+            content=data.get("content", ""),
+            enabled=data.get("enabled", True),
+            priority=data.get("priority", 0),
+            case_sensitive=data.get("case_sensitive", False),
+            match_mode=data.get("match_mode", "any"),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+        )
+
+
+@dataclass
+class WorldBook:
+    """世界书，世界观设定集合，关联多个角色"""
+
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    character_ids: List[str] = field(default_factory=list)
+    entries: List[WorldBookEntry] = field(default_factory=list)
+    enabled: bool = True
+    created_at: str = ""
+    updated_at: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "character_ids": self.character_ids,
+            "entries": [e.to_dict() for e in self.entries],
+            "enabled": self.enabled,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "WorldBook":
+        entries = [WorldBookEntry.from_dict(e) for e in data.get("entries", [])]
+        return cls(
+            id=data.get("id", ""),
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            character_ids=data.get("character_ids", []),
+            entries=entries,
+            enabled=data.get("enabled", True),
+            created_at=data.get("created_at", ""),
+            updated_at=data.get("updated_at", ""),
+        )
+
+
+@dataclass
 class CharacterIdentity:
     """角色身份标识，用于在 Pipeline 中传递角色上下文"""
 

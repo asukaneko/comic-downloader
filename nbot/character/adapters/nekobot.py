@@ -192,6 +192,8 @@ def get_character_runtime_from_server(server):
                        getattr(server, "personality", {}).get("name", "unknown"))
             return runtime
 
+        from nbot.character.storage.world_book_store import WorldBookStore
+
         runtime = CharacterRuntime(
             profile_repo=profile_repo,
             state_repo=CharacterStateRepository(base_dir),
@@ -200,6 +202,7 @@ def get_character_runtime_from_server(server):
             signal_analyzer=SignalAnalyzer(),
             planner=ReactionPlanner(),
             state_machine=StateMachine(),
+            world_book_store=WorldBookStore(base_dir),
         )
         server.character_runtime = runtime
         _log.info("[CharacterRuntime] initialized lazily from Web adapter")

@@ -37,6 +37,7 @@ class CharacterRuntime:
         planner=None,
         prompt_builder=None,
         state_machine=None,
+        world_book_store=None,
     ):
         self.profile_repo = profile_repo
         self.state_repo = state_repo
@@ -46,6 +47,7 @@ class CharacterRuntime:
         self.planner = planner
         self.prompt_builder = prompt_builder
         self.state_machine = state_machine
+        self._world_book_store = world_book_store
 
     def before_turn(self, chat_request, identity: CharacterIdentity) -> CharacterTurnContext:
         """每轮对话前的角色模拟编排
@@ -93,9 +95,13 @@ class CharacterRuntime:
             profile, state, relationship, memories, signals, chat_request
         )
 
+        # 世界书关键词匹配
+        world_book_entries = self._match_world_books(identity, chat_request)
+
         # 编译提示词
         prompt_text = self._build_prompt(
-            profile, state, relationship, memories, plan
+            profile, state, relationship, memories, plan,
+            world_book_entries=world_book_entries,
         )
 
         return CharacterTurnContext(
@@ -308,7 +314,8 @@ class CharacterRuntime:
         except Exception:
             return ReactionPlan()
 
-    def _build_prompt(self, profile, state, relationship, memories, plan) -> str:
+    def _build_prompt(self, profile, state, relationship, memories, plan,
+                      world_book_entries=None) -> str:
         """编译提示词"""
         from nbot.character.prompt_builder import build_character_injections
         from nbot.character.prompt_stack import PromptStack
@@ -325,5 +332,23 @@ class CharacterRuntime:
             plan=plan,
         )
 
+        # 注入世界书
+        if world_book_entries:
+            from nbot.character.world_book_injector import inject_world_book
+            inject_world_book(stack, world_book_entries)
+
         # 合成最终提示词
         return stack.render()
+
+    def _match_world_books(self, identity, chat_request) -> list:
+        """匹配世界书关键词"""
+        if not self._world_book_store:
+            return []
+        try:
+            from nbot.character.world_book_matcher import match_entries
+            world_books = self._world_book_store.list_all()
+            user_message = getattr(chat_request, "content", "")
+            return match_entries(user_message, world_books, identity.character_id)
+        except Exception as exc:
+            _log.warning("[CharacterRuntime] world book match failed: %s", exc)
+            return []

@@ -24,6 +24,7 @@ _DYNAMIC_SECTION_KEYS = (
     "character.memories",
     "character.memories_legacy",
     "knowledge.rag",
+    "world_book",
 )
 
 
@@ -122,6 +123,7 @@ class PromptStack:
     PRIORITY_KNOWLEDGE_RAG = 70
     PRIORITY_TOOL_INSTRUCTIONS = 80
     PRIORITY_REACTION_PLAN = 55
+    PRIORITY_WORLD_BOOK = 65
 
     def __init__(self):
         self.items: List[PromptInjection] = []

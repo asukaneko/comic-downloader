@@ -3414,6 +3414,224 @@
                         </div>
                     </div>
 
+                    <!-- World Book -->
+                    <div v-if="currentPage === 'world-book'" class="fade-in wb-page">
+                        <div class="wb-layout">
+                            <!-- Left Sidebar -->
+                            <div class="wb-sidebar">
+                                <div class="wb-sidebar-header">
+                                    <span class="wb-sidebar-title"><i class="fas fa-book-open"></i> {{ $t('world_book.title') }}</span>
+                                    <button class="wb-btn wb-btn-primary" @click="createWorldBook" style="padding: 5px 10px; font-size: 11px;">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="wb-search-wrap" style="position: relative;">
+                                    <i class="fas fa-search wb-search-icon"></i>
+                                    <input type="text" v-model="worldBookSearchQuery" :placeholder="$t('world_book.search')" class="wb-search">
+                                </div>
+                                <div class="wb-book-list">
+                                    <div v-if="worldBookLoading" style="text-align: center; padding: 30px;">
+                                        <i class="fas fa-spinner fa-spin" style="color: #6366f1;"></i>
+                                    </div>
+                                    <div v-else-if="getFilteredWorldBooks().length === 0" class="wb-empty" style="padding: 24px 12px;">
+                                        <i class="fas fa-globe" style="font-size: 1.5rem; opacity: 0.25;"></i>
+                                        <div style="font-size: 12px; color: #475569;">{{ $t('world_book.empty') }}</div>
+                                    </div>
+                                    <div v-for="book in getFilteredWorldBooks()" :key="book.id"
+                                        class="wb-book-item"
+                                        :class="{ active: currentWorldBook && currentWorldBook.id === book.id }"
+                                        @click="selectWorldBook(book)">
+                                        <div class="wb-book-name">{{ book.name }}</div>
+                                        <div class="wb-book-meta">
+                                            <span class="wb-book-dot" :class="book.enabled ? 'on' : 'off'"></span>
+                                            {{ book.entry_count || 0 }} {{ $t('world_book.entries_count') }}
+                                            <template v-if="(book.character_ids || []).length"> · {{ book.character_ids.length }} {{ $t('world_book.characters_count') }}</template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Panel -->
+                            <div class="wb-main">
+                                <div v-if="!currentWorldBook" class="wb-empty">
+                                    <div class="wb-empty-icon"><i class="fas fa-book-open"></i></div>
+                                    <div class="wb-empty-title">{{ $t('world_book.select_hint') }}</div>
+                                    <div class="wb-empty-desc">{{ $t('world_book.select_hint_desc') || '从左侧选择一个世界书，或创建新的世界观设定' }}</div>
+                                </div>
+
+                                <template v-else>
+                                    <!-- Header -->
+                                    <div class="wb-main-header">
+                                        <div class="wb-main-title-area">
+                                            <div class="wb-main-icon"><i class="fas fa-globe"></i></div>
+                                            <input type="text" v-model="currentWorldBook.name" @change="saveWorldBookMeta" class="wb-name-input" :placeholder="$t('world_book.entry_name')">
+                                        </div>
+                                        <div class="wb-main-actions">
+                                            <span class="wb-badge" :class="currentWorldBook.enabled ? 'on' : 'off'" @click="currentWorldBook.enabled = !currentWorldBook.enabled; saveWorldBookMeta()">
+                                                <i :class="currentWorldBook.enabled ? 'fas fa-check-circle' : 'fas fa-pause-circle'"></i>
+                                                {{ currentWorldBook.enabled ? $t('world_book.enabled') : $t('world_book.disabled') }}
+                                            </span>
+                                            <button class="wb-btn-icon" @click="deleteCurrentWorldBook" :title="$t('common.delete')"><i class="fas fa-trash"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Content -->
+                                    <div class="wb-content">
+                                        <!-- Description -->
+                                        <div class="wb-section">
+                                            <div class="wb-section-title"><i class="fas fa-align-left"></i> {{ $t('world_book.description_placeholder') }}</div>
+                                            <textarea v-model="currentWorldBook.description" @change="saveWorldBookMeta" class="wb-textarea" :placeholder="$t('world_book.description_placeholder')" rows="2"></textarea>
+                                        </div>
+
+                                        <!-- Characters -->
+                                        <div class="wb-section">
+                                            <div class="wb-section-title"><i class="fas fa-user-friends"></i> {{ $t('world_book.bind_characters') }}</div>
+                                            <div style="font-size: 11px; color: #475569; margin-bottom: 10px;">{{ $t('world_book.bind_hint') }}</div>
+                                            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+                                                <div v-for="chId in (currentWorldBook.character_ids || [])" :key="chId" class="wb-char-chip">
+                                                    <img v-if="getCharacterById(chId).portrait" :src="getCharacterById(chId).portrait" class="wb-char-avatar">
+                                                    <div v-else class="wb-char-avatar-placeholder"><i :class="getCharacterById(chId).avatar || 'fas fa-user'"></i></div>
+                                                    <span>{{ getCharacterById(chId).name || chId }}</span>
+                                                    <span class="wb-chip-remove" @click="removeCharacterBinding(chId)"><i class="fas fa-times"></i></span>
+                                                </div>
+                                                <button class="wb-btn wb-btn-ghost" @click="openWorldBookCharacterModal">
+                                                    <i class="fas fa-user-plus"></i> {{ $t('world_book.add_character') }}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Entries -->
+                                        <div class="wb-section">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+                                                <div class="wb-section-title" style="margin-bottom: 0;"><i class="fas fa-list-alt"></i> {{ $t('world_book.entries') }} ({{ worldBookEntries.length }})</div>
+                                                <button class="wb-btn wb-btn-primary" @click="openNewEntryModal"><i class="fas fa-plus"></i> {{ $t('world_book.add_entry') }}</button>
+                                            </div>
+
+                                            <div v-if="worldBookEntries.length === 0" class="wb-empty-entries">
+                                                <div class="wb-empty-entries-icon"><i class="fas fa-sparkles"></i></div>
+                                                <div class="wb-empty-entries-title">{{ $t('world_book.no_entries') }}</div>
+                                                <div class="wb-empty-entries-desc">{{ $t('world_book.no_entries_desc') || '添加第一条设定，让角色拥有更稳定的记忆与世界观' }}</div>
+                                                <button class="wb-btn wb-btn-primary" @click="openNewEntryModal"><i class="fas fa-plus"></i> {{ $t('world_book.add_entry') }}</button>
+                                            </div>
+
+                                            <div v-for="entry in worldBookEntries" :key="entry.id" class="wb-entry">
+                                                <div class="wb-entry-header">
+                                                    <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+                                                        <span class="wb-entry-name">{{ entry.name || $t('world_book.unnamed_entry') }}</span>
+                                                        <div class="wb-entry-badges">
+                                                            <span v-if="!entry.enabled" class="wb-entry-badge disabled">{{ $t('world_book.disabled') }}</span>
+                                                            <span class="wb-entry-badge mode">{{ entry.match_mode === 'all' ? $t('world_book.match_all') : $t('world_book.match_any') }}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="wb-entry-actions">
+                                                        <button class="wb-btn-icon" @click="editWorldBookEntry(entry)"><i class="fas fa-edit"></i></button>
+                                                        <button class="wb-btn-icon" @click="deleteWorldBookEntry(entry.id)"><i class="fas fa-trash"></i></button>
+                                                    </div>
+                                                </div>
+                                                <div v-if="entry.keywords && entry.keywords.length" class="wb-entry-keywords">
+                                                    <span v-for="kw in entry.keywords" :key="kw" class="wb-kw-tag">{{ kw }}</span>
+                                                </div>
+                                                <div v-if="entry.content" class="wb-entry-preview">{{ entry.content }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Entry Edit Modal -->
+                        <div v-if="showWorldBookEntryModal" class="modal-overlay" @click.self="closeEntryModal">
+                            <div class="modal" style="max-width: 580px;">
+                                <div class="modal-header">
+                                    <span class="modal-title">{{ editingWorldBookEntry && editingWorldBookEntry.id ? $t('world_book.edit_entry') : $t('world_book.new_entry') }}</span>
+                                    <button class="modal-close" @click="closeEntryModal">&times;</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="form-group">
+                                        <label class="form-label">{{ $t('world_book.entry_name') }}</label>
+                                        <input type="text" v-model="editingWorldBookEntry.name" class="form-input">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">{{ $t('world_book.keywords') }}</label>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+                                            <span v-for="(kw, idx) in editingWorldBookEntry.keywords" :key="idx" class="wb-kw-tag" style="padding: 4px 10px; font-size: 12px; gap: 4px; display: inline-flex; align-items: center;">
+                                                {{ kw }}
+                                                <i class="fas fa-times" style="cursor: pointer; font-size: 10px; opacity: 0.6;" @click="removeKeyword(idx)"></i>
+                                            </span>
+                                        </div>
+                                        <div style="display: flex; gap: 8px;">
+                                            <input type="text" v-model="newKeywordInput" @keydown.enter.prevent="addKeyword" @keydown.comma.prevent="addKeyword" class="form-input" :placeholder="$t('world_book.keyword_placeholder')">
+                                            <button class="wb-btn wb-btn-ghost" @click="addKeyword" style="white-space: nowrap;">{{ $t('world_book.add') }}</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">{{ $t('world_book.content') }}</label>
+                                        <textarea v-model="editingWorldBookEntry.content" class="form-textarea" rows="5"></textarea>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('world_book.match_mode') }}</label>
+                                            <select v-model="editingWorldBookEntry.match_mode" class="form-select">
+                                                <option value="any">{{ $t('world_book.match_any') }}</option>
+                                                <option value="all">{{ $t('world_book.match_all') }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 80px;">
+                                            <label class="form-label">{{ $t('world_book.priority') }}</label>
+                                            <input type="number" v-model.number="editingWorldBookEntry.priority" min="0" max="100" class="form-input">
+                                        </div>
+                                        <div class="form-group" style="display: flex; align-items: flex-end; padding-bottom: 4px;">
+                                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: var(--text-secondary);">
+                                                <input type="checkbox" v-model="editingWorldBookEntry.enabled"> {{ $t('world_book.enabled') }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="closeEntryModal">{{ $t('common.cancel') }}</button>
+                                    <button class="btn btn-primary" @click="saveWorldBookEntry">{{ $t('common.save') }}</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Character Selection Modal -->
+                        <div v-if="showWorldBookCharacterModal" class="modal-overlay" @click.self="showWorldBookCharacterModal = false">
+                            <div class="modal" style="max-width: 480px;">
+                                <div class="modal-header">
+                                    <span class="modal-title"><i class="fas fa-user-plus"></i> {{ $t('world_book.bind_characters') }}</span>
+                                    <button class="modal-close" @click="showWorldBookCharacterModal = false"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">{{ $t('world_book.bind_modal_desc') }}</p>
+                                    <div class="bind-character-list">
+                                        <div v-for="ch in characterList" :key="ch.id"
+                                             class="bind-character-item"
+                                             :class="{ active: worldBookCharacterSelectedIds.includes(ch.id) }"
+                                             @click="toggleWorldBookCharacter(ch.id)">
+                                            <div class="bind-character-portrait">
+                                                <img v-if="ch.portrait" :src="ch.portrait">
+                                                <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                            </div>
+                                            <div class="bind-character-info">
+                                                <div class="bind-character-name">{{ ch.name }}</div>
+                                            </div>
+                                            <i v-if="worldBookCharacterSelectedIds.includes(ch.id)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                                        </div>
+                                        <div v-if="characterList.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                                            {{ $t('world_book.no_characters') }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="showWorldBookCharacterModal = false">{{ $t('common.cancel') }}</button>
+                                    <button class="btn btn-primary" @click="confirmWorldBookCharacterBinding">
+                                        <i class="fas fa-link"></i> {{ $t('common.confirm') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Memory -->
                     <div v-if="currentPage === 'memory'" class="fade-in">
                         <!-- 统计概览 -->
@@ -8740,7 +8958,8 @@
                             { id: 'sessions', labelKey: 'nav.sessions', icon: 'fas fa-list' },
                             { id: 'message-style', labelKey: 'nav.message_style', icon: 'fas fa-paint-brush' },
                             { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
-                            { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' }
+                            { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' },
+                            { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' }
                         ],
                         config: [
                             { id: 'task-center', labelKey: 'nav.task_center', icon: 'fas fa-calendar-check' },
@@ -9152,6 +9371,20 @@
                     // Knowledge
                     knowledgeDocs: [],
                     knowledgeSearch: '',
+
+                    // World Book
+                    worldBooks: [],
+                    currentWorldBook: null,
+                    worldBookEntries: [],
+                    worldBookSearchQuery: '',
+                    worldBookLoading: false,
+                    worldBookSaving: false,
+                    showWorldBookEntryModal: false,
+                    editingWorldBookEntry: null,
+                    newKeywordInput: '',
+                    characterList: [],
+                    showWorldBookCharacterModal: false,
+                    worldBookCharacterSelectedIds: [],
                     activeDocDropdown: null,
                     showKnowledgeModal: false,
                     editingKnowledge: null,

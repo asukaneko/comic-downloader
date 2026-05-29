@@ -283,6 +283,8 @@ def register_character_routes(app, server):
 
             base_dir = _get_base_dir(server)
 
+            from nbot.character.storage.world_book_store import WorldBookStore
+
             runtime = CharacterRuntime(
                 profile_repo=ProfileRepository(base_dir),
                 state_repo=CharacterStateRepository(base_dir),
@@ -291,6 +293,7 @@ def register_character_routes(app, server):
                 signal_analyzer=SignalAnalyzer(),
                 planner=ReactionPlanner(),
                 state_machine=StateMachine(),
+                world_book_store=WorldBookStore(base_dir),
             )
 
             server.character_runtime = runtime
