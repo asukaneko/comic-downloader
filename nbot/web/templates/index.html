@@ -687,63 +687,66 @@
                             </div>
                             
                             <div class="chat-sidebar-header" v-if="chatTab === 'web' || chatTab === 'cli' || selectedSenderFilter">
-                                <div v-if="chatTab === 'web' && !selectedSenderFilter" style="display: flex; gap: 6px; width: 100%;">
-                                    <button class="btn btn-primary" style="flex: 1;" @click="createNewSession" :disabled="isLoading">
-                                        <i class="fas fa-user-circle"></i> {{ $t('chat.new_character_session') }}
+                                <div class="session-mode-tabs">
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'character' }" @click="sessionModeTab = 'character'">
+                                        <i class="fas fa-user-circle"></i> 角色会话
                                     </button>
-                                    <button class="btn" style="flex: 1; background: var(--accent-secondary, #6366f1); color: #fff; border: none;" @click="createNewAgentSession" :disabled="isLoading">
-                                        <i class="fas fa-robot"></i> {{ $t('chat.new_agent_session') }}
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'agent' }" @click="sessionModeTab = 'agent'">
+                                        <i class="fas fa-robot"></i> Agent 会话
                                     </button>
+                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent' }"></div>
                                 </div>
-                                <div class="search-box" :style="{ marginTop: (chatTab === 'web' && !selectedSenderFilter) ? '12px' : '0' }">
+                                <button v-if="chatTab === 'web' && !selectedSenderFilter" class="session-add-btn" @click="sessionModeTab === 'agent' ? createNewAgentSession() : createNewSession()" :disabled="isLoading">
+                                    <i class="fas fa-plus"></i> {{ sessionModeTab === 'agent' ? '新增 Agent 对话' : '新增角色对话' }}
+                                </button>
+                                <div class="search-box" style="margin-top: 8px;">
                                     <i class="fas fa-search" style="color: var(--text-muted);"></i>
                                     <input v-model="sessionSearch" type="text" :placeholder="$t('session.search')">
                                 </div>
                             </div>
-                            
-                            <!-- Web 会话列表 -->
+
+                            <!-- 会话列表 -->
                             <div class="session-list" v-if="chatTab === 'web' || chatTab === 'cli' || selectedSenderFilter">
-                                <div
-                                    v-for="session in filteredSessions"
-                                    :key="session.id"
-                                    class="session-item"
-                                    :class="{
-                                        active: currentSession?.id === session.id,
-                                        'session-new': session._isNew
-                                    }"
-                                    @click="openSession(session)"
-                                >
-                                    <div class="session-icon" :class="{ 'has-portrait': getSessionPortrait(session) }">
-                                        <!-- 有立绘时显示立绘 -->
-                                        <img v-if="getSessionPortrait(session)" :src="getSessionPortrait(session)" @error="handleSessionPortraitError(session, $event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
-                                        <!-- 无立绘有头像时显示头像图标 -->
-                                        <i v-else-if="getSessionAvatar(session)" :class="getSessionAvatar(session)"></i>
-                                        <!-- 都没有则显示默认图标 -->
-                                        <i v-else :class="session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'"></i>
-                                    </div>
-                                    <div class="session-info">
-                                        <div class="session-name">
-                                            <span v-if="session.session_mode === 'agent'" style="font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--accent-secondary, #6366f1); color: #fff; margin-right: 4px; vertical-align: middle;">Agent</span>{{ session.name }}
+                                <transition :name="sessionModeTab === 'agent' ? 'slide-left' : 'slide-right'" mode="out-in">
+                                    <div :key="sessionModeTab" class="session-list-inner">
+                                        <div
+                                            v-for="session in currentModeSessions"
+                                            :key="session.id"
+                                            class="session-item"
+                                            :class="{
+                                                active: currentSession?.id === session.id,
+                                                'session-new': session._isNew
+                                            }"
+                                            @click="openSession(session)"
+                                        >
+                                            <div class="session-icon" :class="{ 'has-portrait': getSessionPortrait(session) }">
+                                                <img v-if="getSessionPortrait(session)" :src="getSessionPortrait(session)" @error="handleSessionPortraitError(session, $event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
+                                                <i v-else-if="getSessionAvatar(session)" :class="getSessionAvatar(session)"></i>
+                                                <i v-else :class="sessionModeTab === 'agent' ? 'fas fa-robot' : (session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment')"></i>
+                                            </div>
+                                            <div class="session-info">
+                                                <div class="session-name">{{ session.name }}</div>
+                                                <div class="session-meta">
+                                                    {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
+                                                    <span v-if="session.sender_name && sessionModeTab !== 'agent'" style="margin-left: 6px; color: var(--accent-primary);">
+                                                        <i class="fas fa-user-circle" style="font-size: 10px;"></i> {{ session.sender_name }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="session-actions" @click.stop>
+                                                <button class="btn-icon-small" @click="viewWebSessionDetails(session)" title="查看详情">
+                                                    <i class="fas fa-info-circle"></i>
+                                                </button>
+                                                <button class="btn-icon-small" @click="deleteWebSession(session)" title="删除" style="color: var(--danger);">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div class="session-meta">
-                                            {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
-                                            <span v-if="session.sender_name && session.session_mode !== 'agent'" style="margin-left: 6px; color: var(--accent-primary);">
-                                                <i class="fas fa-user-circle" style="font-size: 10px;"></i> {{ session.sender_name }}
-                                            </span>
+                                        <div v-if="currentModeSessions.length === 0" class="empty-hint" style="padding: 8px 0;">
+                                            {{ sessionModeTab === 'agent' ? '暂无 Agent 会话' : '暂无角色会话' }}
                                         </div>
                                     </div>
-                                    <div class="session-actions" @click.stop>
-                                        <button class="btn-icon-small" @click="viewWebSessionDetails(session)" title="查看详情">
-                                            <i class="fas fa-info-circle"></i>
-                                        </button>
-                                        <button class="btn-icon-small" @click="deleteWebSession(session)" title="删除" style="color: var(--danger);">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div v-if="filteredSessions.length === 0" class="empty-hint">
-                                    暂无会话，点击上方按钮创建
-                                </div>
+                                </transition>
                             </div>
                             
                             <!-- QQ 私聊列表 -->
@@ -9253,6 +9256,7 @@
                     chatHorizontalMargin: Math.min(300, Math.max(0, parseInt(localStorage.getItem('nbot_chat_horizontal_margin') || '0', 10) || 0)),
                     sessionSwitching: false,
                     sessionSearch: '',
+                    sessionModeTab: 'character',
                     sessionFilter: 'all',
                     sessionSortKey: 'created_at',
                     sessionSortDir: 'desc',
@@ -10398,36 +10402,62 @@
                 },
                 
                 filteredSessions() {
+                    return [...this.filteredCharacterSessions, ...this.filteredAgentSessions];
+                },
+
+                currentModeSessions() {
+                    return this.sessionModeTab === 'agent' ? this.filteredAgentSessions : this.filteredCharacterSessions;
+                },
+
+                filteredCharacterSessions() {
                     let sessionPool;
-                    
+
                     // 如果按角色筛选，显示所有该角色的会话（不受频道限制）
                     if (this.selectedSenderFilter) {
                         if (this.selectedSenderFilter === '*') {
-                            // 全部角色：显示所有有角色的会话
                             sessionPool = this.sessions.filter(s => {
-                                return s.type === 'web' && s.sender_name;
+                                return s.type === 'web' && s.sender_name && s.session_mode !== 'agent';
                             }).filter(s => !s.archived);
                         } else {
-                            // 特定角色
                             sessionPool = this.sessions.filter(s => {
-                                return s.type === 'web' && s.sender_name === this.selectedSenderFilter;
+                                return s.type === 'web' && s.sender_name === this.selectedSenderFilter && s.session_mode !== 'agent';
                             }).filter(s => !s.archived);
                         }
                     } else {
-                        // 正常按频道筛选
                         sessionPool = this.sessions.filter(s => {
-                            if (this.chatTab === 'cli') return s.type === 'cli';
-                            if (this.chatTab === 'web') return s.type === 'web';
+                            if (this.chatTab === 'cli') return s.type === 'cli' && s.session_mode !== 'agent';
+                            if (this.chatTab === 'web') return s.type === 'web' && s.session_mode !== 'agent';
                             return false;
                         }).filter(s => !s.archived);
                     }
-                    
-                    // 按搜索词筛选
+
                     if (this.sessionSearch) {
                         const search = this.sessionSearch.toLowerCase();
                         sessionPool = sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
                     }
-                    
+
+                    return sessionPool;
+                },
+
+                filteredAgentSessions() {
+                    let sessionPool;
+
+                    if (this.selectedSenderFilter) {
+                        // Agent 会话不参与角色筛选
+                        return [];
+                    }
+
+                    sessionPool = this.sessions.filter(s => {
+                        if (this.chatTab === 'cli') return s.type === 'cli' && s.session_mode === 'agent';
+                        if (this.chatTab === 'web') return s.type === 'web' && s.session_mode === 'agent';
+                        return false;
+                    }).filter(s => !s.archived);
+
+                    if (this.sessionSearch) {
+                        const search = this.sessionSearch.toLowerCase();
+                        sessionPool = sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
+                    }
+
                     return sessionPool;
                 },
                 

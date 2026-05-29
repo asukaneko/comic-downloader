@@ -4554,6 +4554,118 @@
             padding: 8px;
         }
 
+        /* 会话模式切换 Tab */
+        .session-mode-tabs {
+            display: flex;
+            position: relative;
+            background: var(--bg-tertiary, rgba(128,128,128,0.1));
+            border-radius: 8px;
+            padding: 3px;
+        }
+
+        .session-mode-tab {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            padding: 7px 0;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 12.5px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: color 0.25s;
+            position: relative;
+            z-index: 1;
+        }
+
+        .session-mode-tab.active {
+            color: var(--text-primary);
+        }
+
+        .session-mode-tab-indicator {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: calc(50% - 3px);
+            height: calc(100% - 6px);
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 0;
+        }
+
+        .session-mode-tab-indicator.slide-right {
+            transform: translateX(100%);
+        }
+
+        /* 滑动切换动画 */
+        .slide-left-enter-active,
+        .slide-left-leave-active,
+        .slide-right-enter-active,
+        .slide-right-leave-active {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .slide-left-enter-from {
+            opacity: 0;
+            transform: translateX(30px);
+        }
+
+        .slide-left-leave-to {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+
+        .slide-right-enter-from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+
+        .slide-right-leave-to {
+            opacity: 0;
+            transform: translateX(30px);
+        }
+
+        .session-list-inner {
+            min-height: 0;
+        }
+
+        .session-add-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            width: 100%;
+            padding: 10px 12px;
+            margin-top: 8px;
+            border: none;
+            border-radius: 8px;
+            background: var(--accent-primary);
+            color: #fff;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+        }
+
+        .session-add-btn:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 3px 10px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+            transform: translateY(-1px);
+        }
+
+        .session-add-btn:active {
+            transform: translateY(0);
+            filter: brightness(0.95);
+        }
+
+
         .session-item {
             display: flex;
             align-items: center;
