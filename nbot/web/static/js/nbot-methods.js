@@ -3538,11 +3538,27 @@ def main(params):
                 openCreateWorldBookModal() {
                     this.newWorldBookName = '';
                     this.newWorldBookDesc = '';
+                    this.newWorldBookCharIds = [];
+                    this.newWorldBookAITopic = '';
                     this.showCreateWorldBookModal = true;
+                    this.loadCharacterList();
                     this.$nextTick(() => {
                         const el = document.getElementById('wb-create-name-input');
                         if (el) el.focus();
                     });
+                },
+
+                toggleNewWorldBookChar(id) {
+                    const idx = this.newWorldBookCharIds.indexOf(id);
+                    if (idx >= 0) {
+                        this.newWorldBookCharIds.splice(idx, 1);
+                    } else {
+                        this.newWorldBookCharIds.push(id);
+                    }
+                },
+
+                openNewWorldBookCharModal() {
+                    this.showNewWorldBookCharModal = true;
                 },
 
                 async confirmCreateWorldBook() {
@@ -3550,9 +3566,15 @@ def main(params):
                     if (!name) return;
                     this.showCreateWorldBookModal = false;
                     try {
+                        // 将选中的角色 ID 转为名称
+                        const characterIds = this.newWorldBookCharIds.map(id => {
+                            const ch = this.characterList.find(c => c.id === id);
+                            return ch ? ch.name : id;
+                        });
                         const res = await api.post('/api/world-books', {
                             name,
                             description: (this.newWorldBookDesc || '').trim(),
+                            character_ids: characterIds,
                         });
                         if (res.data.success) {
                             await this.loadWorldBooks();
@@ -3561,6 +3583,54 @@ def main(params):
                         }
                     } catch (e) {
                         this.showToast(this.$t('world_book.create_failed') || '创建失败', 'error');
+                    }
+                },
+
+                async confirmCreateWorldBookWithAI() {
+                    const name = (this.newWorldBookName || '').trim();
+                    if (!name || this.worldBookAiGenerating) return;
+                    this.worldBookAiGenerating = true;
+                    try {
+                        // 先创建世界书（带角色绑定）
+                        const characterIds = this.newWorldBookCharIds.map(id => {
+                            const ch = this.characterList.find(c => c.id === id);
+                            return ch ? ch.name : id;
+                        });
+                        const createRes = await api.post('/api/world-books', {
+                            name,
+                            description: (this.newWorldBookDesc || '').trim(),
+                            character_ids: characterIds,
+                        });
+                        if (!createRes.data.success) {
+                            this.showToast(createRes.data.error || this.$t('world_book.create_failed') || '创建失败', 'error');
+                            return;
+                        }
+                        const newBook = createRes.data.world_book;
+
+                        // 再调用 AI 生成条目
+                        const aiRes = await api.post(`/api/world-books/${newBook.id}/ai-generate`, {
+                            topic: this.newWorldBookAITopic,
+                        });
+
+                        this.showCreateWorldBookModal = false;
+                        await this.loadWorldBooks();
+                        this.selectWorldBook(this.worldBooks.find(b => b.id === newBook.id) || newBook);
+
+                        if (aiRes.data.success) {
+                            const entriesRes = await api.get(`/api/world-books/${newBook.id}/entries`);
+                            this.worldBookEntries = entriesRes.data || [];
+                            const msg = `${this.$t('world_book.created') || '已创建'}，${this.$t('world_book.ai_generate_success') || 'AI 生成成功'}: ${aiRes.data.count} ${this.$t('world_book.entries_count') || '个条目'}`;
+                            this.showToast(msg, 'success');
+                        } else {
+                            this.showToast(this.$t('world_book.created') || '世界书已创建（AI 生成失败）', 'warning');
+                        }
+                    } catch (e) {
+                        this.showCreateWorldBookModal = false;
+                        const errMsg = e.response?.data?.error || this.$t('world_book.ai_generate_failed') || 'AI 生成失败';
+                        this.showToast(errMsg, 'error');
+                        await this.loadWorldBooks();
+                    } finally {
+                        this.worldBookAiGenerating = false;
                     }
                 },
 
@@ -3819,6 +3889,39 @@ def main(params):
                         }
                     } catch (e) {
                         this.showToast(this.$t('world_book.import_failed') || '导入失败', 'error');
+                    }
+                },
+
+                // ---- AI Generate World Book ----
+
+                openAIGenerateModal() {
+                    this.aiGenerateTopic = '';
+                    this.showAIGenerateWorldBookModal = true;
+                },
+
+                async aiGenerateWorldBookEntries() {
+                    if (!this.currentWorldBook || this.worldBookAiGenerating) return;
+                    this.worldBookAiGenerating = true;
+                    try {
+                        const res = await api.post(`/api/world-books/${this.currentWorldBook.id}/ai-generate`, {
+                            topic: this.aiGenerateTopic,
+                        });
+                        if (res.data.success) {
+                            this.showAIGenerateWorldBookModal = false;
+                            // 追加新条目到已有列表末尾
+                            const newEntries = res.data.entries || [];
+                            this.worldBookEntries = [...this.worldBookEntries, ...newEntries];
+                            await this.loadWorldBooks();
+                            const msg = `${this.$t('world_book.ai_generate_success') || 'AI 生成成功'}: ${res.data.count} ${this.$t('world_book.entries_count') || '个条目'}`;
+                            this.showToast(msg, 'success');
+                        } else {
+                            this.showToast(res.data.error || this.$t('world_book.ai_generate_failed') || 'AI 生成失败', 'error');
+                        }
+                    } catch (e) {
+                        const errMsg = e.response?.data?.error || this.$t('world_book.ai_generate_failed') || 'AI 生成失败';
+                        this.showToast(errMsg, 'error');
+                    } finally {
+                        this.worldBookAiGenerating = false;
                     }
                 },
 

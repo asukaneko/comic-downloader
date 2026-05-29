@@ -1246,6 +1246,15 @@ const i18nMessages = {
     'world_book.export_failed': '导出失败',
     'world_book.import_success': '导入成功',
     'world_book.import_failed': '导入失败',
+    'world_book.ai_generate': 'AI 生成',
+    'world_book.ai_generate_desc': 'AI 将根据已绑定的角色信息和你提供的主题，自动生成世界观条目。',
+    'world_book.ai_generate_bound': '已绑定角色',
+    'world_book.ai_generate_topic': '主题/方向（可选）',
+    'world_book.ai_generate_topic_placeholder': '描述你想要的世界观方向，如：日常生活场景、战斗系统、魔法体系、社交互动...',
+    'world_book.ai_generate_confirm': '开始生成',
+    'world_book.ai_generating': '生成中...',
+    'world_book.ai_generate_success': 'AI 生成成功',
+    'world_book.ai_generate_failed': 'AI 生成失败',
   },
   en: {
     // General
@@ -2531,6 +2540,15 @@ const i18nMessages = {
     'world_book.export_failed': 'Export failed',
     'world_book.import_success': 'Import successful',
     'world_book.import_failed': 'Import failed',
+    'world_book.ai_generate': 'AI Generate',
+    'world_book.ai_generate_desc': 'AI will automatically generate world book entries based on bound character info and your topic.',
+    'world_book.ai_generate_bound': 'Bound characters',
+    'world_book.ai_generate_topic': 'Topic / Direction (optional)',
+    'world_book.ai_generate_topic_placeholder': 'Describe the world setting direction you want, e.g.: daily life, combat system, magic system, social interactions...',
+    'world_book.ai_generate_confirm': 'Start Generating',
+    'world_book.ai_generating': 'Generating...',
+    'world_book.ai_generate_success': 'AI generation successful',
+    'world_book.ai_generate_failed': 'AI generation failed',
   }
 };
 

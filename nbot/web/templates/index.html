@@ -3509,14 +3509,22 @@
                                         <div class="wb-section">
                                             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
                                                 <div class="wb-section-title" style="margin-bottom: 0;"><i class="fas fa-list-alt"></i> {{ $t('world_book.entries') }} ({{ worldBookEntries.length }})</div>
-                                                <button class="wb-btn wb-btn-primary" @click="openNewEntryModal"><i class="fas fa-plus"></i> {{ $t('world_book.add_entry') }}</button>
+                                                <div style="display: flex; gap: 8px;">
+                                                    <button class="wb-btn wb-btn-ghost" @click="openAIGenerateModal" :disabled="worldBookAiGenerating">
+                                                        <i :class="worldBookAiGenerating ? 'fas fa-spinner fa-spin' : 'fas fa-wand-magic-sparkles'"></i> {{ $t('world_book.ai_generate') }}
+                                                    </button>
+                                                    <button class="wb-btn wb-btn-primary" @click="openNewEntryModal"><i class="fas fa-plus"></i> {{ $t('world_book.add_entry') }}</button>
+                                                </div>
                                             </div>
 
                                             <div v-if="worldBookEntries.length === 0" class="wb-empty-entries">
                                                 <div class="wb-empty-entries-icon"><i class="fas fa-sparkles"></i></div>
                                                 <div class="wb-empty-entries-title">{{ $t('world_book.no_entries') }}</div>
                                                 <div class="wb-empty-entries-desc">{{ $t('world_book.no_entries_desc') || '添加第一条设定，让角色拥有更稳定的记忆与世界观' }}</div>
-                                                <button class="wb-btn wb-btn-primary" @click="openNewEntryModal"><i class="fas fa-plus"></i> {{ $t('world_book.add_entry') }}</button>
+                                                <div style="display: flex; gap: 10px; justify-content: center;">
+                                                    <button class="wb-btn wb-btn-ghost" @click="openAIGenerateModal"><i class="fas fa-wand-magic-sparkles"></i> {{ $t('world_book.ai_generate') }}</button>
+                                                    <button class="wb-btn wb-btn-primary" @click="openNewEntryModal"><i class="fas fa-plus"></i> {{ $t('world_book.add_entry') }}</button>
+                                                </div>
                                             </div>
 
                                             <div v-for="entry in worldBookEntries" :key="entry.id" class="wb-entry">
@@ -3601,7 +3609,7 @@
 
                         <!-- Create World Book Modal -->
                         <div v-if="showCreateWorldBookModal" class="modal-overlay" @click.self="showCreateWorldBookModal = false">
-                            <div class="modal" style="max-width: 440px;">
+                            <div class="modal" style="max-width: 500px;">
                                 <div class="modal-header">
                                     <span class="modal-title"><i class="fas fa-book-open" style="color: #8b5cf6; margin-right: 6px;"></i> {{ $t('world_book.create') }}</span>
                                     <button class="modal-close" @click="showCreateWorldBookModal = false">&times;</button>
@@ -3613,12 +3621,36 @@
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">{{ $t('world_book.description_placeholder') }}</label>
-                                        <textarea v-model="newWorldBookDesc" class="form-textarea" rows="3" :placeholder="$t('world_book.description_placeholder')"></textarea>
+                                        <textarea v-model="newWorldBookDesc" class="form-textarea" rows="2" :placeholder="$t('world_book.description_placeholder')"></textarea>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label"><i class="fas fa-user-friends" style="margin-right: 4px; color: #8b5cf6;"></i> {{ $t('world_book.bind_characters') }}</label>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px;">
+                                            <div v-for="chId in newWorldBookCharIds" :key="chId" class="wb-char-chip">
+                                                <img v-if="getCharacterById(chId).portrait" :src="getCharacterById(chId).portrait" class="wb-char-avatar">
+                                                <div v-else class="wb-char-avatar-placeholder"><i :class="getCharacterById(chId).avatar || 'fas fa-user'"></i></div>
+                                                <span>{{ getCharacterById(chId).name || chId }}</span>
+                                                <span class="wb-chip-remove" @click="toggleNewWorldBookChar(chId)"><i class="fas fa-times"></i></span>
+                                            </div>
+                                            <button class="wb-btn wb-btn-ghost" style="padding: 4px 10px; font-size: 12px;" @click="openNewWorldBookCharModal">
+                                                <i class="fas fa-user-plus"></i> {{ $t('world_book.add_character') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label class="form-label"><i class="fas fa-wand-magic-sparkles" style="margin-right: 4px; color: #8b5cf6;"></i> {{ $t('world_book.ai_generate_topic') }}</label>
+                                        <textarea v-model="newWorldBookAITopic" class="form-textarea" rows="2" :placeholder="$t('world_book.ai_generate_topic_placeholder')"></textarea>
                                     </div>
                                 </div>
-                                <div class="modal-footer">
+                                <div class="modal-footer" style="display: flex; justify-content: space-between;">
                                     <button class="btn btn-secondary" @click="showCreateWorldBookModal = false">{{ $t('common.cancel') }}</button>
-                                    <button class="btn btn-primary" @click="confirmCreateWorldBook" :disabled="!newWorldBookName.trim()">{{ $t('common.confirm') }}</button>
+                                    <div style="display: flex; gap: 8px;">
+                                        <button class="btn btn-secondary" @click="confirmCreateWorldBook" :disabled="!newWorldBookName.trim()">{{ $t('common.confirm') }}</button>
+                                        <button class="btn btn-primary" @click="confirmCreateWorldBookWithAI" :disabled="!newWorldBookName.trim() || worldBookAiGenerating">
+                                            <i :class="worldBookAiGenerating ? 'fas fa-spinner fa-spin' : 'fas fa-wand-magic-sparkles'"></i>
+                                            {{ worldBookAiGenerating ? $t('world_book.ai_generating') : $t('world_book.ai_generate') }}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -3655,6 +3687,71 @@
                                     <button class="btn btn-secondary" @click="showWorldBookCharacterModal = false">{{ $t('common.cancel') }}</button>
                                     <button class="btn btn-primary" @click="confirmWorldBookCharacterBinding">
                                         <i class="fas fa-link"></i> {{ $t('common.confirm') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create World Book - Character Selection Modal -->
+                        <div v-if="showNewWorldBookCharModal" class="modal-overlay" @click.self="showNewWorldBookCharModal = false">
+                            <div class="modal" style="max-width: 440px;">
+                                <div class="modal-header">
+                                    <span class="modal-title"><i class="fas fa-user-plus"></i> {{ $t('world_book.bind_characters') }}</span>
+                                    <button class="modal-close" @click="showNewWorldBookCharModal = false"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">{{ $t('world_book.bind_modal_desc') }}</p>
+                                    <div class="bind-character-list">
+                                        <div v-for="ch in characterList" :key="ch.id"
+                                             class="bind-character-item"
+                                             :class="{ active: newWorldBookCharIds.includes(ch.id) }"
+                                             @click="toggleNewWorldBookChar(ch.id)">
+                                            <div class="bind-character-portrait">
+                                                <img v-if="ch.portrait" :src="ch.portrait">
+                                                <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                            </div>
+                                            <div class="bind-character-info">
+                                                <div class="bind-character-name">{{ ch.name }}</div>
+                                            </div>
+                                            <i v-if="newWorldBookCharIds.includes(ch.id)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                                        </div>
+                                        <div v-if="characterList.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                                            {{ $t('world_book.no_characters') }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-primary" @click="showNewWorldBookCharModal = false">{{ $t('common.confirm') }}</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- AI Generate Entries Modal (for existing world book) -->
+                        <div v-if="showAIGenerateWorldBookModal" class="modal-overlay" @click.self="showAIGenerateWorldBookModal = false">
+                            <div class="modal" style="max-width: 500px;">
+                                <div class="modal-header">
+                                    <span class="modal-title"><i class="fas fa-wand-magic-sparkles"></i> {{ $t('world_book.ai_generate') }}</span>
+                                    <button class="modal-close" @click="showAIGenerateWorldBookModal = false"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">{{ $t('world_book.ai_generate_desc') }}</p>
+                                    <div v-if="currentWorldBook && (currentWorldBook.character_ids || []).length" style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.15); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #a5b4fc;">
+                                        <i class="fas fa-user-friends" style="margin-right: 6px;"></i>
+                                        {{ $t('world_book.ai_generate_bound') }}：
+                                        <span v-for="(cid, idx) in currentWorldBook.character_ids" :key="cid">
+                                            {{ getCharacterById(cid).name || cid }}<span v-if="idx < currentWorldBook.character_ids.length - 1">、</span>
+                                        </span>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label class="form-label">{{ $t('world_book.ai_generate_topic') }}</label>
+                                        <textarea v-model="aiGenerateTopic" class="form-textarea" rows="3" :placeholder="$t('world_book.ai_generate_topic_placeholder')"></textarea>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="showAIGenerateWorldBookModal = false">{{ $t('common.cancel') }}</button>
+                                    <button class="btn btn-primary" @click="aiGenerateWorldBookEntries" :disabled="worldBookAiGenerating">
+                                        <i :class="worldBookAiGenerating ? 'fas fa-spinner fa-spin' : 'fas fa-wand-magic-sparkles'"></i>
+                                        {{ worldBookAiGenerating ? $t('world_book.ai_generating') : $t('world_book.ai_generate_confirm') }}
                                     </button>
                                 </div>
                             </div>
@@ -9417,6 +9514,12 @@
                     showCreateWorldBookModal: false,
                     newWorldBookName: '',
                     newWorldBookDesc: '',
+                    newWorldBookCharIds: [],
+                    newWorldBookAITopic: '',
+                    showNewWorldBookCharModal: false,
+                    showAIGenerateWorldBookModal: false,
+                    aiGenerateTopic: '',
+                    worldBookAiGenerating: false,
                     activeDocDropdown: null,
                     showKnowledgeModal: false,
                     editingKnowledge: null,
@@ -9964,6 +10067,7 @@
                         workflows: '工作流',
                         personality: '角色设置',
                         'personality-journey': '状态历程',
+                        'world-book': '世界书',
                         memory: '记忆管理',
                         knowledge: '知识库',
                         'ai-config': 'AI 配置',

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from datetime import datetime
 
 from flask import jsonify, request, send_file
@@ -385,6 +386,149 @@ def register_world_book_routes(app, server):
             return jsonify({"success": False, "error": "Invalid JSON file"}), 400
         except Exception as e:
             _log.error("[WorldBook] import-all failed: %s", e)
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    # ---- AI 生成 ----
+
+    @app.route("/api/world-books/<book_id>/ai-generate", methods=["POST"])
+    def ai_generate_world_book_entries(book_id):
+        """根据绑定的角色信息，AI 生成世界书条目"""
+        try:
+            data = request.json or {}
+            topic = (data.get("topic") or "").strip()
+
+            if not server.ai_client:
+                return jsonify({"success": False, "error": "AI 客户端未初始化"}), 503
+
+            store = _get_store(server)
+            book = store.get(book_id)
+            if not book:
+                return jsonify({"success": False, "error": "World book not found"}), 404
+
+            # 收集绑定角色的信息
+            character_infos = []
+            if book.character_ids:
+                from nbot.character.repository import ProfileRepository
+                base_dir = getattr(server, "base_dir", ".")
+                profile_repo = ProfileRepository(base_dir)
+
+                # 同时查找预设 UUID 对应的角色名
+                presets = getattr(server, "custom_personality_presets", []) or []
+                uuid_to_name = {p.get("id", ""): p.get("name", "") for p in presets if isinstance(p, dict)}
+
+                for cid in book.character_ids:
+                    # 尝试直接按名称查找
+                    profile = profile_repo.get(cid)
+                    if not profile:
+                        # 尝试 UUID → 名称
+                        resolved = uuid_to_name.get(cid, "")
+                        if resolved:
+                            profile = profile_repo.get(resolved)
+                    if profile:
+                        character_infos.append(
+                            f"【{profile.name}】\n"
+                            f"描述: {profile.description}\n"
+                            f"基本信息: {profile.basic_info}\n"
+                            f"性格: {profile.personality}\n"
+                            f"背景设定: {profile.scenario}\n"
+                            f"行为规则: {', '.join(profile.rules) if profile.rules else '无'}"
+                        )
+
+            # 构建 prompt
+            char_section = ""
+            if character_infos:
+                char_section = "\n\n以下是已绑定的角色信息，请根据这些角色的世界观和设定来生成内容：\n\n" + "\n\n".join(character_infos)
+
+            topic_section = ""
+            if topic:
+                topic_section = f"\n\n用户指定的主题/方向：{topic}"
+
+            system_prompt = f"""你是一个世界观设定专家。请为一个世界书生成条目。
+
+每个条目包含：
+- name: 条目名称（简短有辨识度）
+- keywords: 关键词列表（3-5个，用于在用户消息中匹配触发此条目）
+- content: 注入内容（当关键词命中时，这段内容会被注入到 AI 的提示词中，帮助 AI 理解世界观）
+- match_mode: "any"（任一关键词命中即触发）或 "all"（全部命中才触发）
+- priority: 优先级数字（0-100，越高越优先注入）
+
+请生成 5-10 个条目，覆盖该世界观的核心设定。
+{char_section}{topic_section}
+
+你必须严格按照以下JSON格式返回（不要包含任何额外的文字说明，只返回JSON）：
+
+{{
+    "entries": [
+        {{
+            "name": "条目名称",
+            "keywords": ["关键词1", "关键词2", "关键词3"],
+            "content": "当用户消息命中关键词时注入的内容...",
+            "match_mode": "any",
+            "priority": 50
+        }}
+    ]
+}}
+
+要求：
+1. keywords 应该是用户聊天中可能出现的词语，不要太生僻
+2. content 要具体、有信息量，帮助 AI 角色扮演时理解世界观
+3. 优先级根据条目重要程度分配（核心设定 > 细节设定）
+4. 如果有绑定角色，生成的设定要与角色背景契合
+"""
+
+            user_msg = f"请为世界书「{book.name}」生成世界观条目。"
+            if book.description:
+                user_msg += f"\n世界书描述：{book.description}"
+            if topic:
+                user_msg += f"\n主题方向：{topic}"
+            if not character_infos and not topic:
+                user_msg += "\n（未绑定角色也未指定主题，请根据世界书名称自由发挥）"
+
+            response = server.ai_client.chat_completion(
+                model=server.ai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_msg},
+                ],
+                stream=False,
+            )
+
+            content = response.choices[0].message.content.strip()
+
+            # 解析 JSON（处理 markdown 代码块）
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+            if json_match:
+                content = json_match.group(1).strip()
+
+            result = json.loads(content)
+            entries_data = result.get("entries", [])
+
+            if not isinstance(entries_data, list) or not entries_data:
+                return jsonify({"success": False, "error": "AI 未生成有效条目"}), 500
+
+            # 批量创建条目
+            created = store.batch_add_entries(book_id, entries_data)
+
+            try:
+                server.record_operation(
+                    module="world_book",
+                    action="ai_generate",
+                    description=f"AI 生成世界书条目 -> {book.name}",
+                    metadata={"book_id": book_id, "entry_count": len(created)},
+                )
+            except Exception:
+                pass
+
+            return jsonify({
+                "success": True,
+                "count": len(created),
+                "entries": [e.to_dict() for e in created],
+            })
+        except json.JSONDecodeError:
+            _log.error("[WorldBook] AI generate: invalid JSON response")
+            return jsonify({"success": False, "error": "AI 返回了无效的 JSON 格式"}), 500
+        except Exception as e:
+            _log.error("[WorldBook] AI generate failed: %s", e, exc_info=True)
             return jsonify({"success": False, "error": str(e)}), 500
 
     # ---- 测试匹配 ----
