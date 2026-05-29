@@ -3691,12 +3691,23 @@ def main(params):
                 },
 
                 getCharacterById(id) {
-                    const ch = this.characterList.find(c => c.id === id);
-                    return ch || { id, name: id, avatar: '', portrait: '' };
+                    // 按 UUID 查找
+                    const byId = this.characterList.find(c => c.id === id);
+                    if (byId) return byId;
+                    // 按名称查找（character_ids 可能存名称）
+                    const byName = this.characterList.find(c => c.name === id);
+                    return byName || { id, name: id, avatar: '', portrait: '' };
                 },
 
                 openWorldBookCharacterModal() {
-                    this.worldBookCharacterSelectedIds = [...(this.currentWorldBook?.character_ids || [])];
+                    const ids = this.currentWorldBook?.character_ids || [];
+                    // character_ids 可能是名称或 UUID，统一转为 UUID 供选择 UI 使用
+                    this.worldBookCharacterSelectedIds = ids.map(id => {
+                        const byId = this.characterList.find(c => c.id === id);
+                        if (byId) return id;
+                        const byName = this.characterList.find(c => c.name === id);
+                        return byName ? byName.id : id;
+                    });
                     this.showWorldBookCharacterModal = true;
                 },
 
@@ -3711,7 +3722,11 @@ def main(params):
 
                 async confirmWorldBookCharacterBinding() {
                     if (!this.currentWorldBook) return;
-                    this.currentWorldBook.character_ids = [...this.worldBookCharacterSelectedIds];
+                    // 将预设 UUID 转为角色名称，后端运行时 character_id 使用名称
+                    this.currentWorldBook.character_ids = this.worldBookCharacterSelectedIds.map(id => {
+                        const ch = this.characterList.find(c => c.id === id);
+                        return ch ? ch.name : id;
+                    });
                     this.showWorldBookCharacterModal = false;
                     await this.saveWorldBookMeta();
                 },
