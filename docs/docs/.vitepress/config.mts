@@ -121,6 +121,7 @@ export default defineConfig({
                 { text: 'agent_service - AI服务', link: '/guide/nbot/core/agent_service.md' },
                 { text: 'session_store - 会话存储', link: '/guide/nbot/core/session_store.md' },
                 { text: 'model_adapter - 模型适配', link: '/guide/nbot/core/model_adapter.md' },
+                { text: 'protocols - 多协议适配', link: '/guide/nbot/core/protocols.md' },
                 { text: 'workspace - 工作区', link: '/guide/nbot/core/workspace.md' },
                 { text: 'workflow - 工作流', link: '/guide/nbot/core/workflow.md' },
                 { text: 'token_stats - Token用量统计', link: '/guide/nbot/core/token_stats.md' },

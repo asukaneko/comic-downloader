@@ -2,14 +2,14 @@
 
 ## 概述
 
-`ai.py` 提供 AI 模型的统一客户端，支持多种提供商（OpenAI、Anthropic、Google 等），处理聊天完成、图片识别、视频分析等功能。
+`ai.py` 提供 AI 模型的统一客户端，内部通过 [protocols 协议层](../core/protocols.md) 自动适配不同 API 格式（OpenAI Chat、OpenAI Responses、Anthropic Messages）。
 
 ## AIClient 类
 
 ```python
 from nbot.services.ai import ai_client, AIClient
 
-# 使用全局客户端
+# 使用全局客户端（自动根据 provider_type 选择协议）
 response = ai_client.chat_completion(messages)
 
 # 创建新客户端
@@ -17,7 +17,7 @@ client = AIClient(
     api_key="your-api-key",
     base_url="https://api.openai.com",
     model="gpt-4",
-    provider_type="openai"
+    provider_type="openai_compatible"
 )
 ```
 
@@ -126,13 +126,15 @@ embedding_config = get_embedding_model_config()
 
 ## 提供商支持
 
-| 提供商 | 标识 | 特点 |
-|--------|------|------|
-| OpenAI | `openai` | 原生支持，功能完整 |
-| Anthropic | `anthropic` | Claude 系列，推理能力强 |
-| Google | `google` | Gemini 系列，多模态 |
-| MiniMax | `minimax` | 中文优化 |
-| SiliconFlow | `siliconflow` | 国内服务 |
+底层通过 [protocols 协议层](../core/protocols.md) 适配，`provider_type` 决定使用哪个协议：
+
+| provider_type | 协议 | 适用提供商 |
+|---------------|------|-----------|
+| `openai_compatible` | OpenAI Chat Completions | OpenAI、DeepSeek、MiniMax、SiliconFlow 等 |
+| `anthropic` | Anthropic Messages | Claude 系列 |
+| `openai_responses` | OpenAI Responses | OpenAI 新一代 API |
+
+详见 [protocols 多协议适配层](../core/protocols.md)。
 
 ## 环境变量
 

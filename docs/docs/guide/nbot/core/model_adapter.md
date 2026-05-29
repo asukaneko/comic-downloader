@@ -2,100 +2,106 @@
 
 ## 概述
 
-`model_adapter.py` 提供对不同 AI 模型提供商的统一适配，支持 OpenAI、Anthropic、Google 等多种 API 格式。
+`model_adapter.py` 提供模型适配的**共享基础设施**，包括统一响应格式 `NormalizedModelResponse`、提供商推断 `ProviderProfile`、消息清洗工具等。
 
-## 支持的提供商
+实际的协议适配（URL 构建、请求格式、响应解析）已迁移到 [protocols 多协议适配层](./protocols.md)。
 
-| 提供商 | 标识 | 说明 |
-|--------|------|------|
-| OpenAI | `openai` | 原生 OpenAI API |
-| Anthropic | `anthropic` | Claude API |
-| Google | `google` / `gemini` | Gemini API |
-| MiniMax | `minimax` | MiniMax API |
-| SiliconFlow | `siliconflow` | 硅基流动 API |
-| 自定义 | `openai_compatible` | 兼容 OpenAI 格式的自定义端点 |
+## 架构
 
-## 核心函数
-
-### build_chat_completion_payload()
-
-构建聊天完成的请求体。
-
-```python
-from nbot.core.model_adapter import build_chat_completion_payload
-
-payload = build_chat_completion_payload(
-    model="gpt-4",
-    messages=[
-        {"role": "system", "content": "你是助手"},
-        {"role": "user", "content": "你好"}
-    ],
-    base_url="https://api.openai.com",
-    provider_type="openai",
-    stream=True
-)
+```
+model_adapter.py          -- 共享工具（NormalizedModelResponse、消息清洗、推理提取）
+    |
+protocols/
+    base.py               -- ModelProtocol 抽象基类 + 注册表
+    openai_chat.py        -- v1/chat/completions 协议
+    openai_responses.py   -- v1/responses 协议
+    anthropic_messages.py -- /v1/messages 协议
 ```
 
-### normalize_chat_completion_data()
+## 核心数据结构
 
-标准化不同提供商的响应格式。
+### NormalizedModelResponse
+
+所有协议解析后的统一响应格式：
 
 ```python
-from nbot.core.model_adapter import normalize_chat_completion_data
+from nbot.core.model_adapter import NormalizedModelResponse
 
-# 无论原始响应是什么格式，都转换为统一格式
-normalized = normalize_chat_completion_data(
-    raw_response,
-    base_url="https://api.openai.com",
-    model="gpt-4",
-    provider_type="openai"
-)
-
-print(normalized.content)      # 提取的内容
-print(normalized.usage)        # Token 使用情况
+@dataclass
+class NormalizedModelResponse:
+    content: str                    # 提取的文本内容
+    finish_reason: str              # "stop" / "tool_calls"
+    tool_calls: List[Dict]          # 工具调用列表（OpenAI 标准格式）
+    thinking_content: str           # 推理/思考内容
+    usage: Dict[str, int]           # token 用量
+    raw_message: Dict               # 原始 API 响应
+    raw_data: Dict                  # 完整原始数据
 ```
 
-### resolve_chat_completion_url()
+### ProviderProfile
 
-解析正确的 API 端点 URL。
+提供商能力描述：
 
 ```python
-from nbot.core.model_adapter import resolve_chat_completion_url
+from nbot.core.model_adapter import ProviderProfile
 
-url = resolve_chat_completion_url(
-    base_url="https://api.openai.com",
-    model="gpt-4",
-    provider_type="openai"
-)
-# 返回: https://api.openai.com/v1/chat/completions
+@dataclass
+class ProviderProfile:
+    name: str
+    endpoint_mode: str           # "openai_chat_completions" / "raw"
+    supports_tools: bool
+    supports_reasoning: bool
+    supports_stream: bool
 ```
 
-## 提供商特定适配
+## 共享工具函数
 
-### Anthropic 适配
+### normalize_usage_dict()
+
+标准化不同提供商的 token 用量字段：
 
 ```python
-from nbot.services.anthropic_adapter import (
-    build_anthropic_payload,
-    parse_anthropic_response,
-    get_anthropic_headers,
-)
+from nbot.core.model_adapter import normalize_usage_dict
 
-# Anthropic 使用不同的消息格式和端点
-headers = get_anthropic_headers(api_key)
-payload = build_anthropic_payload(
-    model="claude-3-opus",
-    messages=messages,
-    max_tokens=4096
-)
+# OpenAI: prompt_tokens / completion_tokens
+# Anthropic: input_tokens / output_tokens
+# 统一输出: {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+usage = normalize_usage_dict(raw_usage)
 ```
 
-### Google Gemini 适配
+### extract_reasoning_content()
+
+从响应中提取推理/思考内容：
 
 ```python
-# Gemini 使用不同的认证和端点格式
-url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
-headers = {"x-goog-api-key": api_key}
+from nbot.core.model_adapter import extract_reasoning_content
+
+thinking = extract_reasoning_content(response_data)
+```
+
+### repair_mojibake_text()
+
+修复乱码文本：
+
+```python
+from nbot.core.model_adapter import repair_mojibake_text
+
+fixed = repair_mojibake_text("ä½ å¥½")  # -> "你好"
+```
+
+## 推荐用法
+
+新代码应直接使用 [protocols 协议层](./protocols.md)：
+
+```python
+from nbot.core.protocols import get_protocol
+
+protocol = get_protocol(provider_type)
+url = protocol.resolve_url(base_url, model=model)
+headers = protocol.build_headers(api_key)
+payload = protocol.build_payload(model, messages, stream=False)
+normalized = protocol.parse_response(response_data, model=model)
+print(normalized.content)
 ```
 
 ## 能力声明
@@ -105,31 +111,27 @@ headers = {"x-goog-api-key": api_key}
 ```python
 model_config = {
     "model": "gpt-4",
-    "provider_type": "openai",
-    "supports_tools": True,       # 支持工具调用
-    "supports_reasoning": True,   # 支持推理过程
-    "supports_stream": True       # 支持流式输出
+    "provider_type": "openai_compatible",
+    "supports_tools": True,
+    "supports_reasoning": True,
+    "supports_stream": True
 }
 ```
 
 ## 运行时配置切换
 
-支持在运行时动态切换模型配置：
-
 ```python
 from nbot.services.ai import refresh_runtime_ai_config
 
-# 从 Web 配置加载并应用新的模型设置
 config = refresh_runtime_ai_config()
 print(f"当前模型: {config['model']}")
+print(f"协议: {config['provider_type']}")
 ```
 
 ## 多模型配置
 
-支持配置多个模型并在运行时切换：
-
-```python
-# data/web/ai_models.json
+```json
+// data/web/ai_models.json
 {
     "active_model_id": "model_1",
     "models": [
@@ -137,15 +139,22 @@ print(f"当前模型: {config['model']}")
             "id": "model_1",
             "name": "GPT-4",
             "model": "gpt-4",
-            "provider_type": "openai",
-            "enabled": True
+            "provider_type": "openai_compatible",
+            "enabled": true
         },
         {
             "id": "model_2",
             "name": "Claude 3",
             "model": "claude-3-opus",
             "provider_type": "anthropic",
-            "enabled": True
+            "enabled": true
+        },
+        {
+            "id": "model_3",
+            "name": "GPT-4.1 Responses",
+            "model": "gpt-4.1",
+            "provider_type": "openai_responses",
+            "enabled": true
         }
     ]
 }
