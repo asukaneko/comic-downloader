@@ -6731,6 +6731,7 @@
 
             .chat-actions .context-indicator .percentage {
                 font-size: 10px;
+                letter-spacing: -0.2px;
             }
 
             /* 移动端上下文详情面板：点击展开时从按钮上方弹出 */
@@ -8152,9 +8153,21 @@
         .file-menu-context-ring span {
             position: relative;
             z-index: 1;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: 700;
+            letter-spacing: -0.3px;
             color: var(--text-primary);
+            text-shadow: 0 0 4px var(--bg-primary), 0 0 8px var(--bg-primary);
+        }
+
+        .file-menu-context-ring span.warning {
+            color: var(--color-warning);
+            text-shadow: 0 0 6px color-mix(in srgb, var(--bg-primary) 80%, transparent), 0 0 10px color-mix(in srgb, var(--bg-primary) 60%, transparent);
+        }
+
+        .file-menu-context-ring span.danger {
+            color: var(--color-danger);
+            text-shadow: 0 0 6px color-mix(in srgb, var(--bg-primary) 80%, transparent), 0 0 10px color-mix(in srgb, var(--bg-primary) 60%, transparent);
         }
 
         .file-menu-context-title {
@@ -8633,6 +8646,7 @@
             width: 40px;
             height: 40px;
             transform: rotate(-90deg);
+            isolation: isolate;
         }
 
         .context-indicator .progress-ring-circle {
@@ -8644,25 +8658,30 @@
 
         .context-indicator .progress-ring-bg {
             stroke: var(--border-color);
+            opacity: 0.4;
         }
 
         .context-indicator .progress-ring-fill {
-            stroke: var(--accent-primary);
-        }
-
-        .context-indicator .progress-ring-fill.warning {
-            stroke: var(--color-warning);
-        }
-
-        .context-indicator .progress-ring-fill.danger {
-            stroke: var(--color-danger);
+            stroke-width: 4;
         }
 
         .context-indicator .percentage {
             position: absolute;
-            font-size: 10px;
-            font-weight: 600;
-            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            color: var(--text-primary);
+            line-height: 1;
+            text-shadow: 0 0 4px var(--bg-primary), 0 0 8px var(--bg-primary);
+            z-index: 1;
+        }
+        .context-indicator .percentage.warning {
+            color: var(--color-warning);
+            text-shadow: 0 0 6px color-mix(in srgb, var(--bg-primary) 80%, transparent), 0 0 10px color-mix(in srgb, var(--bg-primary) 60%, transparent);
+        }
+        .context-indicator .percentage.danger {
+            color: var(--color-danger);
+            text-shadow: 0 0 6px color-mix(in srgb, var(--bg-primary) 80%, transparent), 0 0 10px color-mix(in srgb, var(--bg-primary) 60%, transparent);
         }
 
         .context-indicator:hover {
@@ -16094,6 +16113,7 @@
             font-size: 14px;
             min-width: 240px;
             max-width: 420px;
+            cursor: pointer;
         }
 
         .toast i {

@@ -1809,6 +1809,9 @@ const NbotMethods = {
                     // 更新图表颜色
                     this.updateChartColors();
 
+                    // 更新上下文进度环渐变颜色
+                    this.updateContextGradientColors();
+
                     // 动态更新 theme-color meta 标签
                     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
                     if (themeColorMeta) {
@@ -1841,6 +1844,28 @@ const NbotMethods = {
                         (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
                         (B < 255 ? B < 1 ? 0 : B : 255))
                         .toString(16).slice(1);
+                },
+
+                updateContextGradientColors() {
+                    const style = getComputedStyle(document.documentElement);
+                    const primary = style.getPropertyValue('--accent-primary').trim();
+                    const secondary = style.getPropertyValue('--accent-secondary').trim();
+                    const warning = style.getPropertyValue('--color-warning').trim() || '#f59e0b';
+                    const danger = style.getPropertyValue('--color-danger').trim() || '#ef4444';
+                    const ids = [
+                        ['ctxGrad', primary, secondary],
+                        ['ctxGradWarn', warning, danger],
+                        ['ctxGrad2', primary, secondary],
+                        ['ctxGradWarn2', warning, danger]
+                    ];
+                    ids.forEach(([id, c1, c2]) => {
+                        const grad = document.getElementById(id);
+                        if (!grad) return;
+                        const stops = grad.querySelectorAll('stop');
+                        if (stops[0]) stops[0].style.stopColor = c1;
+                        if (stops[1]) stops[1].style.stopColor = c2;
+                        if (stops[2]) stops[2].style.stopColor = c1;
+                    });
                 },
 
                 setThemeMode(mode) {

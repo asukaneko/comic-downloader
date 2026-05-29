@@ -1703,14 +1703,26 @@
                                                  tabindex="0" @click="toggleContextTooltip"
                                                  v-click-outside="() => showContextTooltip = false">
                                                 <svg>
+                                                    <defs>
+                                                        <linearGradient id="ctxGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+                                                            <stop offset="0%" style="stop-color: var(--accent-primary)"/>
+                                                            <stop offset="50%" style="stop-color: var(--accent-secondary)"/>
+                                                            <stop offset="100%" style="stop-color: var(--accent-primary)"/>
+                                                        </linearGradient>
+                                                        <linearGradient id="ctxGradWarn" x1="0%" y1="100%" x2="100%" y2="0%">
+                                                            <stop offset="0%" style="stop-color: var(--color-warning)"/>
+                                                            <stop offset="50%" style="stop-color: var(--color-danger)"/>
+                                                            <stop offset="100%" style="stop-color: var(--color-warning)"/>
+                                                        </linearGradient>
+                                                    </defs>
                                                     <circle class="progress-ring-circle progress-ring-bg" :cx="20" :cy="20" :r="16"></circle>
                                                     <circle class="progress-ring-circle progress-ring-fill"
-                                                            :class="{ warning: contextUsage > 70, danger: contextUsage > 90 }"
+                                                            :stroke="contextUsage <= 70 ? 'url(#ctxGrad)' : 'url(#ctxGradWarn)'"
                                                             :cx="20" :cy="20" :r="16"
                                                             :stroke-dasharray="circumference"
                                                             :stroke-dashoffset="circumference - (contextUsage / 100 * circumference)"></circle>
                                                 </svg>
-                                                <span class="percentage">{{ Math.round(contextUsage) }}%</span>
+                                                <span class="percentage" :class="{ warning: contextUsage > 70, danger: contextUsage > 90 }">{{ Math.round(contextUsage) }}%</span>
 
                                                 <!-- 详情面板（hover 或点击展开） -->
                                                 <div class="context-tooltip">
@@ -1755,14 +1767,26 @@
                                                         <div class="file-menu-context-head">
                                                             <div class="file-menu-context-ring">
                                                                 <svg>
+                                                                    <defs>
+                                                                        <linearGradient id="ctxGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
+                                                                            <stop offset="0%" style="stop-color: var(--accent-primary)"/>
+                                                                            <stop offset="50%" style="stop-color: var(--accent-secondary)"/>
+                                                                            <stop offset="100%" style="stop-color: var(--accent-primary)"/>
+                                                                        </linearGradient>
+                                                                        <linearGradient id="ctxGradWarn2" x1="0%" y1="100%" x2="100%" y2="0%">
+                                                                            <stop offset="0%" style="stop-color: var(--color-warning)"/>
+                                                                            <stop offset="50%" style="stop-color: var(--color-danger)"/>
+                                                                            <stop offset="100%" style="stop-color: var(--color-warning)"/>
+                                                                        </linearGradient>
+                                                                    </defs>
                                                                     <circle class="progress-ring-circle progress-ring-bg" :cx="20" :cy="20" :r="16"></circle>
                                                                     <circle class="progress-ring-circle progress-ring-fill"
-                                                                            :class="{ warning: contextUsage > 70, danger: contextUsage > 90 }"
+                                                                            :stroke="contextUsage <= 70 ? 'url(#ctxGrad2)' : 'url(#ctxGradWarn2)'"
                                                                             :cx="20" :cy="20" :r="16"
                                                                             :stroke-dasharray="circumference"
                                                                             :stroke-dashoffset="circumference - (contextUsage / 100 * circumference)"></circle>
                                                                 </svg>
-                                                                <span>{{ Math.round(contextUsage) }}%</span>
+                                                                <span :class="{ warning: contextUsage > 70, danger: contextUsage > 90 }">{{ Math.round(contextUsage) }}%</span>
                                                             </div>
                                                             <div class="file-menu-context-title">
                                                                 <strong>上下文</strong>
@@ -7592,7 +7616,7 @@
 
         <!-- Toast Container -->
         <div class="toast-container">
-            <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type">
+            <div v-for="toast in toasts" :key="toast.id" class="toast" :class="toast.type" @click="toasts = toasts.filter(t => t.id !== toast.id)">
                 <i :class="toast.icon"></i>
                 <span>{{ toast.message }}</span>
             </div>
