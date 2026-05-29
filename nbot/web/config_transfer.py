@@ -39,6 +39,7 @@ CONFIG_KEYS = (
     "memories",
     "personality",
     "custom_personality_presets",
+    "world_books",
 )
 SAVE_TYPES = (
     "settings",
@@ -115,6 +116,25 @@ def _write_personality(server, personality: Dict[str, Any]) -> None:
     server.personality = personality or {}
 
 
+def _read_world_books(server) -> Dict[str, Any]:
+    path = os.path.join(server.base_dir, "data", "world_books.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+
+def _write_world_books(server, world_books: Dict[str, Any]) -> None:
+    path = os.path.join(server.base_dir, "data", "world_books.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(world_books if isinstance(world_books, dict) else {}, f, ensure_ascii=False, indent=2)
+
+
 def build_plain_bundle(server) -> Dict[str, Any]:
     ai_models = getattr(server, "ai_models", []) or []
     return {
@@ -146,6 +166,7 @@ def build_plain_bundle(server) -> Dict[str, Any]:
             "custom_personality_presets": deepcopy(
                 getattr(server, "custom_personality_presets", []) or []
             ),
+            "world_books": _read_world_books(server),
         },
     }
 
@@ -276,6 +297,14 @@ def apply_bundle(server, bundle: Dict[str, Any], *, overwrite: bool = True) -> D
             imported.append("api_keys")
         else:
             skipped.append("api_keys")
+
+    if "world_books" in configs:
+        world_books = configs.get("world_books")
+        if overwrite or not _read_world_books(server):
+            _write_world_books(server, _clean_json(world_books if isinstance(world_books, dict) else {}))
+            imported.append("world_books")
+        else:
+            skipped.append("world_books")
 
     _save_imported_configs(server, touched)
 

@@ -21,6 +21,7 @@ CharacterRuntime.before_turn()
   ├── 检索相关记忆
   ├── 分析用户输入信号
   ├── 生成 ReactionPlan
+  ├── 世界书关键词匹配
   └── 注册 PromptStack 注入项
   ↓
 模型调用 / 工具调用
@@ -91,6 +92,10 @@ CharacterRuntime 是角色模拟的编排中心，协调各个模块完成角色
 
 通过 repository 接口访问存储层，业务逻辑不直接读写 JSON。
 
+### 9. 世界书 ([world_book.md](./world_book.md))
+
+关键词匹配的世界观设定注入系统。为角色绑定世界观设定，当用户消息命中关键词时自动注入到提示词栈中。
+
 ## 目录结构
 
 ```
@@ -108,9 +113,12 @@ nbot/character/
 ├── memory.py            # 角色记忆服务
 ├── repository.py        # 数据仓库接口
 ├── events.py            # 事件系统与调试快照
+├── world_book_matcher.py  # 世界书关键词匹配器
+├── world_book_injector.py # 世界书 PromptStack 注入器
 ├── storage/             # 存储实现
 │   ├── __init__.py
-│   └── json_store.py    # JSON 文件存储
+│   ├── json_store.py    # JSON 文件存储
+│   └── world_book_store.py # 世界书存储层
 └── adapters/            # 适配器
     ├── __init__.py
     └── nekobot.py       # NekoBot 桥接适配器
@@ -128,6 +136,9 @@ data/character/
 ├── memories.json        # 角色记忆
 ├── events.json          # 事件记录
 └── debug_snapshots.json # 调试快照
+
+data/
+└── world_books.json     # 世界书数据
 ```
 
 ## 使用示例

@@ -16,7 +16,19 @@ nbot/web/routes/
 ├── channels.py       # 频道管理
 ├── workflows.py      # 工作流
 ├── skills.py         # 技能管理
-└── tools.py          # 工具配置
+├── tools.py          # 工具配置
+├── world_book.py     # 世界书管理
+├── characters.py     # 角色管理
+├── knowledge.py      # 知识库
+├── memory.py         # 记忆管理
+├── ai_models.py      # AI 模型管理
+├── personality.py    # 人格预设
+├── gateway.py        # 网关管理
+├── heartbeat.py      # 心跳管理
+├── task_center.py    # 任务中心
+├── live2d.py         # Live2D
+├── voice.py          # 语音
+└── ...               # 其他路由
 ```
 
 ## 聊天路由 (chat.py)
@@ -179,6 +191,50 @@ def execute_workflow(workflow_id):
     context = request.json.get('context', {})
     result = workflow_engine.execute(workflow_id, context)
     return jsonify(result)
+```
+
+## 世界书路由 (world_book.py)
+
+管理世界书及其条目的 CRUD，以及关键词匹配测试。
+
+```python
+# 世界书 CRUD
+GET    /api/world-books                          # 列出所有世界书
+POST   /api/world-books                          # 创建世界书
+GET    /api/world-books/<book_id>                # 获取单个世界书
+PUT    /api/world-books/<book_id>                # 更新世界书
+DELETE /api/world-books/<book_id>                # 删除世界书
+
+# 条目 CRUD
+GET    /api/world-books/<book_id>/entries        # 列出条目
+POST   /api/world-books/<book_id>/entries        # 添加条目
+PUT    /api/world-books/<book_id>/entries/<entry_id>  # 更新条目
+DELETE /api/world-books/<book_id>/entries/<entry_id>  # 删除条目
+POST   /api/world-books/<book_id>/entries/batch  # 批量添加条目
+
+# 匹配测试
+POST   /api/world-books/test-match               # 测试关键词匹配
+```
+
+### 创建世界书
+
+```json
+// POST /api/world-books
+{
+  "name": "东方幻想乡",
+  "description": "东方 Project 世界观设定",
+  "character_ids": ["角色名称"]
+}
+```
+
+### 测试匹配
+
+```json
+// POST /api/world-books/test-match
+{
+  "message": "灵梦在神社等你",
+  "character_id": "某角色"
+}
 ```
 
 ## 统一响应格式

@@ -45,6 +45,7 @@ class PromptStack:
     PRIORITY_CHARACTER_STATE = 40
     PRIORITY_CHARACTER_RELATIONSHIP = 50
     PRIORITY_CHARACTER_MEMORIES = 60
+    PRIORITY_WORLD_BOOK = 65
     PRIORITY_KNOWLEDGE_RAG = 70
     PRIORITY_TOOL_INSTRUCTIONS = 80
     PRIORITY_REACTION_PLAN = 90
@@ -66,6 +67,7 @@ class PromptStack:
 40  character.runtime_state # 角色运行时状态
 50  character.relationship  # 关系状态
 60  character.memories      # 角色记忆
+65  world_book              # 世界书
 70  knowledge.rag           # 知识库
 80  tool.instructions       # 工具说明
 90  character.reaction_plan # 反应计划

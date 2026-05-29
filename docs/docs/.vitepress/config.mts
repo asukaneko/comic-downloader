@@ -139,6 +139,7 @@ export default defineConfig({
                 { text: 'policies - 信号分析器', link: '/guide/nbot/character/policies.md' },
                 { text: 'memory - 角色记忆服务', link: '/guide/nbot/character/memory.md' },
                 { text: 'repository - 数据仓库', link: '/guide/nbot/character/repository.md' },
+                { text: 'world_book - 世界书', link: '/guide/nbot/character/world_book.md' },
               ]
             },
             {

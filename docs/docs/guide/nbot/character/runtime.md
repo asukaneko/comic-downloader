@@ -18,6 +18,7 @@ class CharacterRuntime:
         planner,             # 反应计划生成器
         prompt_builder,      # 提示词构建器
         state_machine,       # 状态机
+        world_book_store,    # 世界书存储（可选）
     )
 ```
 
@@ -47,7 +48,8 @@ before_turn
 ├── 检索相关记忆 (memory_service.search)
 ├── 分析用户输入信号 (signal_analyzer.analyze)
 ├── 生成反应计划 (planner.plan)
-└── 编译提示词 (prompt_builder.build)
+├── 世界书关键词匹配 (_match_world_books)
+└── 编译提示词 (_build_prompt，含世界书注入)
 ```
 
 ### 代码示例
@@ -73,6 +75,7 @@ print(turn_context.state.mood)             # 当前心情
 print(turn_context.relationship.affection) # 好感度
 print(turn_context.plan.visible_emotion)   # 计划表现的情绪
 print(turn_context.prompt_text)            # 编译后的提示词
+print(turn_context.world_book_entries)     # 命中的世界书条目
 ```
 
 ## after_turn
@@ -153,6 +156,7 @@ from nbot.character.planner import ReactionPlanner
 from nbot.character.state_machine import StateMachine
 from nbot.character.memory import PromptManagerMemoryAdapter
 from nbot.character.models import CharacterIdentity
+from nbot.character.storage.world_book_store import WorldBookStore
 
 # 初始化运行时
 runtime = CharacterRuntime(
@@ -164,6 +168,7 @@ runtime = CharacterRuntime(
     planner=ReactionPlanner(),
     prompt_builder=None,  # 使用默认
     state_machine=StateMachine(),
+    world_book_store=WorldBookStore(base_dir),
 )
 
 # 创建身份标识

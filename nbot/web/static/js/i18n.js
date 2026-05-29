@@ -1238,6 +1238,14 @@ const i18nMessages = {
     'world_book.no_characters': '暂无可用角色',
     'world_book.add_character': '绑定角色',
     'world_book.bind_modal_desc': '选择要关联的角色，世界书内容将仅在与这些角色对话时生效。',
+    'world_book.export': '导出世界书',
+    'world_book.export_all': '导出全部世界书',
+    'world_book.import': '导入世界书',
+    'world_book.import_all': '批量导入世界书',
+    'world_book.export_success': '导出成功',
+    'world_book.export_failed': '导出失败',
+    'world_book.import_success': '导入成功',
+    'world_book.import_failed': '导入失败',
   },
   en: {
     // General
@@ -2515,6 +2523,14 @@ const i18nMessages = {
     'world_book.no_characters': 'No characters available',
     'world_book.add_character': 'Bind Character',
     'world_book.bind_modal_desc': 'Select characters to associate. World book content will only apply when chatting with these characters.',
+    'world_book.export': 'Export World Book',
+    'world_book.export_all': 'Export All World Books',
+    'world_book.import': 'Import World Book',
+    'world_book.import_all': 'Batch Import World Books',
+    'world_book.export_success': 'Export successful',
+    'world_book.export_failed': 'Export failed',
+    'world_book.import_success': 'Import successful',
+    'world_book.import_failed': 'Import failed',
   }
 };
 

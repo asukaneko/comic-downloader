@@ -209,7 +209,48 @@ class CharacterTurnContext:
     signals: Any                        # 信号分析结果
     plan: ReactionPlan                  # 反应计划
     prompt_text: str                    # 编译后的提示词
+    world_book_entries: List[WorldBookEntry] = []  # 命中的世界书条目
 ```
+
+## WorldBookEntry - 世界书条目
+
+```python
+@dataclass
+class WorldBookEntry:
+    id: str = ""                      # 条目唯一标识
+    name: str = ""                    # 条目名称
+    keywords: List[str] = []          # 关键词列表
+    content: str = ""                 # 命中时注入的内容
+    enabled: bool = True              # 是否启用
+    priority: int = 0                 # 优先级（越高越优先注入）
+    case_sensitive: bool = False      # 是否区分大小写
+    match_mode: str = "any"           # "any" = 任一命中, "all" = 全部命中
+    created_at: str = ""
+    updated_at: str = ""
+```
+
+## WorldBook - 世界书
+
+```python
+@dataclass
+class WorldBook:
+    id: str = ""                      # 世界书唯一标识
+    name: str = ""                    # 世界书名称
+    description: str = ""             # 描述
+    character_ids: List[str] = []     # 关联角色 ID 列表（空 = 全局生效）
+    entries: List[WorldBookEntry] = [] # 条目列表
+    enabled: bool = True              # 是否启用
+    created_at: str = ""
+    updated_at: str = ""
+```
+
+### 角色关联
+
+`character_ids` 支持两种格式：
+- 角色名称（如 `"噶呜·古拉"`）
+- 预设 UUID（如 `"3ebbe5e6-4ac7-4cec-84dc-3f8a4b22edb8"`）
+
+匹配器会自动解析 UUID 到角色名称。空列表表示全局生效。
 
 ## 使用示例
 

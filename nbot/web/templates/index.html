@@ -3421,9 +3421,16 @@
                             <div class="wb-sidebar">
                                 <div class="wb-sidebar-header">
                                     <span class="wb-sidebar-title"><i class="fas fa-book-open"></i> {{ $t('world_book.title') }}</span>
-                                    <button class="wb-btn wb-btn-primary" @click="openCreateWorldBookModal" style="padding: 5px 10px; font-size: 11px;">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
+                                    <div style="display: flex; gap: 4px;">
+                                        <button class="wb-btn-icon" @click="triggerImportWorldBook" :title="$t('world_book.import')"><i class="fas fa-file-import"></i></button>
+                                        <button class="wb-btn-icon" @click="exportAllWorldBooks" :title="$t('world_book.export_all')"><i class="fas fa-file-export"></i></button>
+                                        <button class="wb-btn-icon" @click="triggerImportAllWorldBooks" :title="$t('world_book.import_all')"><i class="fas fa-layer-group"></i></button>
+                                        <button class="wb-btn wb-btn-primary" @click="openCreateWorldBookModal" style="padding: 5px 10px; font-size: 11px;">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                    <input type="file" ref="importWorldBookFile" accept=".json" style="display:none" @change="importWorldBook($event)">
+                                    <input type="file" ref="importAllWorldBooksFile" accept=".json" style="display:none" @change="importAllWorldBooks($event)">
                                 </div>
                                 <div class="wb-search-wrap" style="position: relative;">
                                     <i class="fas fa-search wb-search-icon"></i>
@@ -3468,6 +3475,7 @@
                                                 <i :class="currentWorldBook.enabled ? 'fas fa-check-circle' : 'fas fa-pause-circle'"></i>
                                                 {{ currentWorldBook.enabled ? $t('world_book.enabled') : $t('world_book.disabled') }}
                                             </span>
+                                            <button class="wb-btn-icon" @click="exportCurrentWorldBook" :title="$t('world_book.export')"><i class="fas fa-file-export"></i></button>
                                             <button class="wb-btn-icon" @click="deleteCurrentWorldBook" :title="$t('common.delete')"><i class="fas fa-trash"></i></button>
                                         </div>
                                     </div>

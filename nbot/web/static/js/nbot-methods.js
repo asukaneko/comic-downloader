@@ -3738,6 +3738,90 @@ def main(params):
                     this.saveWorldBookMeta();
                 },
 
+                // ---- World Book Import/Export ----
+
+                async exportCurrentWorldBook() {
+                    if (!this.currentWorldBook) return;
+                    try {
+                        const res = await api.get(`/api/world-books/export/${this.currentWorldBook.id}`, { responseType: 'blob' });
+                        const url = URL.createObjectURL(res.data);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${this.currentWorldBook.name}_世界书.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        this.showToast(this.$t('world_book.export_success') || '导出成功', 'success');
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.export_failed') || '导出失败', 'error');
+                    }
+                },
+
+                async exportAllWorldBooks() {
+                    try {
+                        const res = await api.get('/api/world-books/export-all', { responseType: 'blob' });
+                        const url = URL.createObjectURL(res.data);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `全部世界书.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        this.showToast(this.$t('world_book.export_success') || '导出成功', 'success');
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.export_failed') || '导出失败', 'error');
+                    }
+                },
+
+                triggerImportWorldBook() {
+                    this.$refs.importWorldBookFile?.click();
+                },
+
+                async importWorldBook(event) {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    event.target.value = '';
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const res = await api.post('/api/world-books/import', formData);
+                        if (res.data.success) {
+                            await this.loadWorldBooks();
+                            const imported = res.data.world_book;
+                            if (imported) {
+                                this.currentWorldBook = this.worldBooks.find(b => b.id === imported.id) || imported;
+                            }
+                            this.showToast(this.$t('world_book.import_success') || '导入成功', 'success');
+                        } else {
+                            this.showToast(res.data.error || this.$t('world_book.import_failed') || '导入失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.import_failed') || '导入失败', 'error');
+                    }
+                },
+
+                triggerImportAllWorldBooks() {
+                    this.$refs.importAllWorldBooksFile?.click();
+                },
+
+                async importAllWorldBooks(event) {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    event.target.value = '';
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const res = await api.post('/api/world-books/import-all', formData);
+                        if (res.data.success) {
+                            await this.loadWorldBooks();
+                            const msg = `${this.$t('world_book.import_success') || '导入成功'}: ${res.data.imported_count}`;
+                            this.showToast(msg, 'success');
+                        } else {
+                            this.showToast(res.data.error || this.$t('world_book.import_failed') || '导入失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast(this.$t('world_book.import_failed') || '导入失败', 'error');
+                    }
+                },
+
                 async loadAIConfig() {
                     try {
                         const res = await api.get('/api/ai-config');
