@@ -188,6 +188,9 @@ def get_character_runtime_from_server(server):
             # 同时刷新 relationship_repo 和 state_repo，避免缓存旧数据
             runtime.relationship_repo = RelationshipRepository(base_dir)
             runtime.state_repo = CharacterStateRepository(base_dir)
+            if not getattr(runtime, '_world_book_store', None):
+                from nbot.character.storage.world_book_store import WorldBookStore
+                runtime._world_book_store = WorldBookStore(base_dir)
             _log.debug("[CharacterRuntime] refreshed repos for character=%s",
                        getattr(server, "personality", {}).get("name", "unknown"))
             return runtime

@@ -711,6 +711,11 @@ class AIPipeline:
                 plan=turn.plan,
             )
 
+            # 注入世界书
+            if turn.world_book_entries:
+                from nbot.character.world_book_injector import inject_world_book
+                inject_world_book(ctx.prompt_stack, turn.world_book_entries)
+
             _log.debug(
                 "[CharacterRuntime] before_turn executed: character=%s target=%s "
                 "rel(affection=%s trust=%s familiarity=%s dependency=%s security=%s)",

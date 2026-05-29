@@ -112,6 +112,7 @@ class CharacterRuntime:
             signals=signals,
             plan=plan,
             prompt_text=prompt_text,
+            world_book_entries=world_book_entries,
         )
 
     def after_turn(self, chat_request, result, turn_context: CharacterTurnContext) -> None:
@@ -333,6 +334,7 @@ class CharacterRuntime:
         )
 
         # 注入世界书
+        _log.debug("[WorldBook] _build_prompt: entries=%d", len(world_book_entries) if world_book_entries else 0)
         if world_book_entries:
             from nbot.character.world_book_injector import inject_world_book
             inject_world_book(stack, world_book_entries)
@@ -343,12 +345,29 @@ class CharacterRuntime:
     def _match_world_books(self, identity, chat_request) -> list:
         """匹配世界书关键词"""
         if not self._world_book_store:
+            _log.debug("[WorldBook] store is None, skipping")
             return []
         try:
             from nbot.character.world_book_matcher import match_entries
             world_books = self._world_book_store.list_all()
             user_message = getattr(chat_request, "content", "")
-            return match_entries(user_message, world_books, identity.character_id)
+            _log.debug(
+                "[WorldBook] matching: books=%d char_id=%s msg=%r",
+                len(world_books), identity.character_id, user_message[:60] if user_message else "",
+            )
+            for wb in world_books:
+                _log.debug(
+                    "[WorldBook] book=%s enabled=%s char_ids=%s entries=%d",
+                    wb.name, wb.enabled, wb.character_ids, len(wb.entries),
+                )
+                for e in wb.entries:
+                    _log.debug(
+                        "[WorldBook]   entry=%s enabled=%s keywords=%s",
+                        e.name, e.enabled, e.keywords,
+                    )
+            result = match_entries(user_message, world_books, identity.character_id)
+            _log.debug("[WorldBook] matched %d entries", len(result))
+            return result
         except Exception as exc:
-            _log.warning("[CharacterRuntime] world book match failed: %s", exc)
+            _log.warning("[CharacterRuntime] world book match failed: %s", exc, exc_info=True)
             return []

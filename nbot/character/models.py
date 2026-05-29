@@ -428,3 +428,4 @@ class CharacterTurnContext:
     signals: Any = None
     plan: ReactionPlan = field(default_factory=ReactionPlan)
     prompt_text: str = ""
+    world_book_entries: list = field(default_factory=list)

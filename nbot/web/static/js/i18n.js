@@ -1223,7 +1223,7 @@ const i18nMessages = {
     'world_book.characters_count': '个角色',
     'world_book.total_books': '世界书总数',
     'world_book.total_entries': '条目总数',
-    'world_book.enter_name': '请输入世界书名称:',
+    'world_book.enter_name': '请输入世界书名称',
     'world_book.created': '世界书已创建',
     'world_book.create_failed': '创建失败',
     'world_book.save_failed': '保存失败',

@@ -3503,7 +3503,6 @@ def main(params):
                 },
 
                 async loadWorldBooks() {
-                    this.worldBookLoading = true;
                     try {
                         const [booksRes] = await Promise.all([
                             api.get('/api/world-books'),
@@ -3516,8 +3515,6 @@ def main(params):
                         }
                     } catch (e) {
                         console.error('Failed to load world books:', e);
-                    } finally {
-                        this.worldBookLoading = false;
                     }
                 },
 
@@ -3538,11 +3535,25 @@ def main(params):
                     }
                 },
 
-                async createWorldBook() {
-                    const name = prompt(this.$t('world_book.enter_name') || '请输入世界书名称:');
-                    if (!name || !name.trim()) return;
+                openCreateWorldBookModal() {
+                    this.newWorldBookName = '';
+                    this.newWorldBookDesc = '';
+                    this.showCreateWorldBookModal = true;
+                    this.$nextTick(() => {
+                        const el = document.getElementById('wb-create-name-input');
+                        if (el) el.focus();
+                    });
+                },
+
+                async confirmCreateWorldBook() {
+                    const name = (this.newWorldBookName || '').trim();
+                    if (!name) return;
+                    this.showCreateWorldBookModal = false;
                     try {
-                        const res = await api.post('/api/world-books', { name: name.trim() });
+                        const res = await api.post('/api/world-books', {
+                            name,
+                            description: (this.newWorldBookDesc || '').trim(),
+                        });
                         if (res.data.success) {
                             await this.loadWorldBooks();
                             this.selectWorldBook(res.data.world_book);

@@ -3421,7 +3421,7 @@
                             <div class="wb-sidebar">
                                 <div class="wb-sidebar-header">
                                     <span class="wb-sidebar-title"><i class="fas fa-book-open"></i> {{ $t('world_book.title') }}</span>
-                                    <button class="wb-btn wb-btn-primary" @click="createWorldBook" style="padding: 5px 10px; font-size: 11px;">
+                                    <button class="wb-btn wb-btn-primary" @click="openCreateWorldBookModal" style="padding: 5px 10px; font-size: 11px;">
                                         <i class="fas fa-plus"></i>
                                     </button>
                                 </div>
@@ -3430,10 +3430,7 @@
                                     <input type="text" v-model="worldBookSearchQuery" :placeholder="$t('world_book.search')" class="wb-search">
                                 </div>
                                 <div class="wb-book-list">
-                                    <div v-if="worldBookLoading" style="text-align: center; padding: 30px;">
-                                        <i class="fas fa-spinner fa-spin" style="color: #6366f1;"></i>
-                                    </div>
-                                    <div v-else-if="getFilteredWorldBooks().length === 0" class="wb-empty" style="padding: 24px 12px;">
+                                    <div v-if="getFilteredWorldBooks().length === 0" class="wb-empty" style="padding: 24px 12px;">
                                         <i class="fas fa-globe" style="font-size: 1.5rem; opacity: 0.25;"></i>
                                         <div style="font-size: 12px; color: #475569;">{{ $t('world_book.empty') }}</div>
                                     </div>
@@ -3590,6 +3587,30 @@
                                 <div class="modal-footer">
                                     <button class="btn btn-secondary" @click="closeEntryModal">{{ $t('common.cancel') }}</button>
                                     <button class="btn btn-primary" @click="saveWorldBookEntry">{{ $t('common.save') }}</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create World Book Modal -->
+                        <div v-if="showCreateWorldBookModal" class="modal-overlay" @click.self="showCreateWorldBookModal = false">
+                            <div class="modal" style="max-width: 440px;">
+                                <div class="modal-header">
+                                    <span class="modal-title"><i class="fas fa-book-open" style="color: #8b5cf6; margin-right: 6px;"></i> {{ $t('world_book.create') }}</span>
+                                    <button class="modal-close" @click="showCreateWorldBookModal = false">&times;</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="form-group">
+                                        <label class="form-label">{{ $t('world_book.entry_name') }}</label>
+                                        <input id="wb-create-name-input" type="text" v-model="newWorldBookName" class="form-input" :placeholder="$t('world_book.enter_name')" @keydown.enter.prevent="confirmCreateWorldBook">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">{{ $t('world_book.description_placeholder') }}</label>
+                                        <textarea v-model="newWorldBookDesc" class="form-textarea" rows="3" :placeholder="$t('world_book.description_placeholder')"></textarea>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="showCreateWorldBookModal = false">{{ $t('common.cancel') }}</button>
+                                    <button class="btn btn-primary" @click="confirmCreateWorldBook" :disabled="!newWorldBookName.trim()">{{ $t('common.confirm') }}</button>
                                 </div>
                             </div>
                         </div>
@@ -9385,6 +9406,9 @@
                     characterList: [],
                     showWorldBookCharacterModal: false,
                     worldBookCharacterSelectedIds: [],
+                    showCreateWorldBookModal: false,
+                    newWorldBookName: '',
+                    newWorldBookDesc: '',
                     activeDocDropdown: null,
                     showKnowledgeModal: false,
                     editingKnowledge: null,
