@@ -3289,7 +3289,7 @@ class WebChatServer:
             _log.info("Heartbeat is disabled")
             return
 
-        self._start_heartbeat_job(1)
+        self._start_heartbeat_job(self.heartbeat_config.get("interval_minutes", 60))
 
     def _start_heartbeat_job(self, interval_minutes: int):
         """启动 Heartbeat 定时任务"""

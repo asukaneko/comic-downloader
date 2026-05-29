@@ -99,17 +99,34 @@ def register_task_center_routes(app, server):
         if task_id == "heartbeat":
             manager = getattr(server, "session_heartbeat_manager", None)
             target_session_id = str(server.heartbeat_config.get("target_session_id") or "").strip()
-            if manager and target_session_id:
-                current = manager.get_config(target_session_id)
-                manager.set_config(
-                    target_session_id,
-                    {"enabled": not bool(current.get("enabled", False))},
-                )
-                server._refresh_heartbeat_summary_config()
-                if manager.any_enabled():
-                    server._start_heartbeat_job(1)
+            if manager:
+                # 优先切换指定目标，否则查找已有的配置
+                sid = target_session_id
+                if not sid:
+                    enabled = manager.list_enabled_configs()
+                    sid = enabled[0]["session_id"] if enabled else ""
+                if not sid:
+                    # 没有任何配置，从现有会话中取第一个 web 会话
+                    for session_id, s in getattr(server, "sessions", {}).items():
+                        if s.get("type") == "web":
+                            sid = session_id
+                            break
+                if sid:
+                    current = manager.get_config(sid)
+                    new_enabled = not bool(current.get("enabled", False))
+                    manager.set_config(sid, {"enabled": new_enabled})
+                    server._refresh_heartbeat_summary_config()
+                    if manager.any_enabled():
+                        server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
+                    else:
+                        server._stop_heartbeat_job()
                 else:
-                    server._stop_heartbeat_job()
+                    # 无可用会话，回退到旧路径
+                    server.heartbeat_config["enabled"] = not server.heartbeat_config.get("enabled", False)
+                    if server.heartbeat_config["enabled"]:
+                        server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
+                    else:
+                        server._stop_heartbeat_job()
             else:
                 server.heartbeat_config["enabled"] = not server.heartbeat_config.get("enabled", False)
                 if server.heartbeat_config["enabled"]:
@@ -152,6 +169,17 @@ def register_task_center_routes(app, server):
         if task_id == "heartbeat":
             import asyncio
 
+            def _safe_run_async(coro_fn):
+                """安全执行异步函数，兼容已有事件循环的情况"""
+                try:
+                    asyncio.get_running_loop()
+                    # 已有事件循环，在新线程中运行
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                        return pool.submit(asyncio.run, coro_fn()).result(timeout=300)
+                except RuntimeError:
+                    return asyncio.run(coro_fn())
+
             manager = getattr(server, "session_heartbeat_manager", None)
             if manager and hasattr(server, "_refresh_heartbeat_summary_config"):
                 server._refresh_heartbeat_summary_config()
@@ -165,42 +193,21 @@ def register_task_center_routes(app, server):
                     ).strip()
 
             if manager and target_session_id:
-                mode = _start_background_or_run(
-                    lambda: asyncio.run(
-                        manager.execute_session(
+                _start_background_or_run(
+                    lambda: _safe_run_async(
+                        lambda: manager.execute_session(
                             target_session_id,
                             force=True,
                             trigger_source="task-center",
                         )
                     )
                 )
-                return jsonify(
-                    {
-                        "success": True,
-                        "message": (
-                            "Heartbeat execution started"
-                            if mode == "background"
-                            else "Heartbeat execution completed"
-                        ),
-                    }
-                )
+                return jsonify({"success": True, "message": "Heartbeat 执行已触发"})
 
-            if not target_session_id and not server.heartbeat_config.get("enabled", False):
-                return jsonify({"error": "No heartbeat target session configured"}), 400
-
-            mode = _start_background_or_run(
-                lambda: asyncio.run(server._execute_heartbeat(force=True))
+            _start_background_or_run(
+                lambda: _safe_run_async(lambda: server._execute_heartbeat(force=True))
             )
-            return jsonify(
-                {
-                    "success": True,
-                    "message": (
-                        "Heartbeat execution started"
-                        if mode == "background"
-                        else "Heartbeat execution completed"
-                    ),
-                }
-            )
+            return jsonify({"success": True, "message": "Heartbeat 执行已触发"})
 
         workflow = next((item for item in server.workflows if item.get("id") == task_id), None)
         if workflow:

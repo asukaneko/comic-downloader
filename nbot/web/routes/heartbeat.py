@@ -43,7 +43,7 @@ def register_heartbeat_routes(app, server):
             )
             server._refresh_heartbeat_summary_config()
             if manager.any_enabled():
-                server._start_heartbeat_job(1)
+                server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
             else:
                 server._stop_heartbeat_job()
             server._save_data("heartbeat")

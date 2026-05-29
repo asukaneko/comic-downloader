@@ -1078,14 +1078,11 @@ def register_session_routes(app, server):
 
     @app.route("/api/sessions/<session_id>", methods=["DELETE"])
     def delete_session(session_id):
-        _log.info(f"[DeleteSession] 尝试删除会话: {session_id}")
-        _log.info(f"[DeleteSession] 删除前会话列表: {list(server.sessions.keys())}")
         if not _get_web_session(session_id):
-            _log.warning(f"[DeleteSession] 会话不存在或不可见: {session_id}")
+            _log.warning(f"[DeleteSession] 会话不存在: {session_id[:8]}")
             return jsonify({"error": "Session not found"}), 404
         if session_store.delete_session(session_id):
-            _log.info(f"[DeleteSession] 会话已删除: {session_id}")
-            _log.info(f"[DeleteSession] 删除后会话列表: {list(server.sessions.keys())}")
+            _log.info(f"[DeleteSession] 已删除: {session_id[:8]}")
             if server.WORKSPACE_AVAILABLE and server.workspace_manager:
                 server.workspace_manager.delete_workspace(session_id)
             server.log_message("info", f"删除了会话 {session_id[:8]}...", important=True)
