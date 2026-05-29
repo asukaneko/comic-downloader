@@ -642,6 +642,7 @@ def register_session_routes(app, server):
                     "pinned": bool(session.get("pinned")),
                     "is_public": is_public,
                     "proactive_chat": _normalize_proactive_chat_config(session.get("proactive_chat")),
+                    "session_mode": session.get("session_mode", "character"),
                     "character_runtime_snapshot": session.get("character_runtime_snapshot"),
                     "character_runtime_timeline": timeline,
                 }
@@ -656,58 +657,68 @@ def register_session_routes(app, server):
     def create_session():
         data = request.json
         session_id = str(uuid.uuid4())
-    
-        # 使用人格提示词作为默认系统提示词
-        system_prompt = data.get(
-            "system_prompt", server.personality.get("systemPrompt", "")
-        )
+        session_mode = data.get("session_mode", "character")
 
-        # 替换模板变量 {{user}} -> 当前用户名, {{char}} -> 角色名称
-        user_id = data.get("user_id", "")
-        # 优先使用请求中传入的角色名称（从角色卡创建时），否则使用当前角色的名称
-        char_name = data.get("sender_name") or server.personality.get("name", "")
-        if user_id:
-            system_prompt = system_prompt.replace('{{user}}', user_id)
-        if char_name:
-            system_prompt = system_prompt.replace('{{char}}', char_name)
-    
-        # 获取角色信息
-        sender_name = data.get("sender_name") or server.personality.get("name", "AI")
-        character_id = data.get("character_id") or sender_name
+        if session_mode == "agent":
+            # Agent 模式：不继承任何角色卡配置
+            system_prompt = data.get("system_prompt", "")
+            user_id = data.get("user_id", "")
+            char_name = ""
+            sender_name = data.get("sender_name") or "Agent"
+            sender_avatar = data.get("sender_avatar") or ""
+            sender_portrait = data.get("sender_portrait") or ""
+            character_id = data.get("character_id") or ""
+        else:
+            # 角色模式：使用人格提示词作为默认系统提示词
+            system_prompt = data.get(
+                "system_prompt", server.personality.get("systemPrompt", "")
+            )
 
-        if any(key in data for key in ("state", "initial_state", "initialState", "relationship", "initialRelationship")):
-            try:
-                from nbot.character.models import CharacterProfile
-                from nbot.character.repository import ProfileRepository
+            # 替换模板变量 {{user}} -> 当前用户名, {{char}} -> 角色名称
+            user_id = data.get("user_id", "")
+            char_name = data.get("sender_name") or server.personality.get("name", "")
+            if user_id:
+                system_prompt = system_prompt.replace('{{user}}', user_id)
+            if char_name:
+                system_prompt = system_prompt.replace('{{char}}', char_name)
 
-                profile_data = dict(getattr(server, "personality", {}) or {})
-                profile_data.update(data)
-                profile = CharacterProfile.from_personality_dict(profile_data)
-                profile.id = str(character_id)
-                if not profile.name:
-                    profile.name = sender_name
-                ProfileRepository(_get_base_dir(server)).save(profile)
-            except Exception as exc:
-                _log.warning(
-                    "[CharacterRuntime] failed to sync session character profile %s: %s",
-                    character_id,
-                    exc,
-                    exc_info=True,
-                )
+            # 获取角色信息
+            sender_name = data.get("sender_name") or server.personality.get("name", "AI")
+            character_id = data.get("character_id") or sender_name
+
+            if any(key in data for key in ("state", "initial_state", "initialState", "relationship", "initialRelationship")):
+                try:
+                    from nbot.character.models import CharacterProfile
+                    from nbot.character.repository import ProfileRepository
+
+                    profile_data = dict(getattr(server, "personality", {}) or {})
+                    profile_data.update(data)
+                    profile = CharacterProfile.from_personality_dict(profile_data)
+                    profile.id = str(character_id)
+                    if not profile.name:
+                        profile.name = sender_name
+                    ProfileRepository(_get_base_dir(server)).save(profile)
+                except Exception as exc:
+                    _log.warning(
+                        "[CharacterRuntime] failed to sync session character profile %s: %s",
+                        character_id,
+                        exc,
+                        exc_info=True,
+                    )
+
+            # 获取角色其他信息
+            sender_avatar = data.get("sender_avatar") or server.personality.get("avatar", "")
+            sender_portrait = data.get("sender_portrait") or server.personality.get("portrait", "")
 
         # 记忆由 ai_pipeline.py 中的 PromptStack 动态注入，不在此处重复添加
 
-        # 添加 Skills 到系统提示词
+        # 添加 Skills 到系统提示词（两种模式都添加）
         if _skills_prompt_injection_enabled(server.settings):
             enabled_skills = [s for s in server.skills_config if s.get("enabled", True)]
             system_prompt += format_skills_prompt(server.skills_config)
             _log.info(f"已添加 {len(enabled_skills)} 个技能到会话 {session_id[:8]}")
         else:
             _log.info(f"Skills prompt injection disabled for session {session_id[:8]}")
-
-        # 获取角色其他信息（sender_name 已在前面定义）
-        sender_avatar = data.get("sender_avatar") or server.personality.get("avatar", "")
-        sender_portrait = data.get("sender_portrait") or server.personality.get("portrait", "")
 
         session = {
             "id": session_id,
@@ -730,11 +741,14 @@ def register_session_routes(app, server):
             "is_public": bool(data.get("is_public")),
             "proactive_chat": _normalize_proactive_chat_config(data.get("proactive_chat")),
             "character_runtime_timeline": [],
+            "session_mode": data.get("session_mode", "character"),
         }
 
-        # 如果有开场白，添加为第一条 assistant 消息
-        # 优先使用请求中指定的 first_message，否则使用当前角色的开场白
-        first_message = data.get("first_message") or server.personality.get("firstMessage", "")
+        # 如果有开场白，添加为第一条 assistant 消息（agent 模式跳过）
+        if session_mode == "agent":
+            first_message = data.get("first_message", "")
+        else:
+            first_message = data.get("first_message") or server.personality.get("firstMessage", "")
         if first_message:
             if user_id:
                 first_message = first_message.replace('{{user}}', user_id)

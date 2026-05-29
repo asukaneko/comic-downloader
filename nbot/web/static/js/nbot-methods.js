@@ -4927,7 +4927,7 @@ def main(params):
                     if (this.isLoading) return;
                     this.isLoading = true;
                     try {
-                        const defaultName = '新会话';
+                        const defaultName = this.personality.name ? this.personality.name + '的对话' : '新会话';
                         const res = await api.post('/api/sessions', {
                             name: defaultName,
                             type: 'web',
@@ -4936,7 +4936,8 @@ def main(params):
                             first_message: this.personality.firstMessage || '',
                             sender_name: this.personality.name || 'NekoBot',
                             sender_avatar: this.personality.avatar || '',
-                            sender_portrait: this.personality.portrait || ''
+                            sender_portrait: this.personality.portrait || '',
+                            session_mode: 'character'
                         });
                         const newSession = { ...res.data.session, _isNew: true };
                         this.sessions = [
@@ -4959,6 +4960,42 @@ def main(params):
                         this.isLoading = false;
                     }
 
+                },
+
+                async createNewAgentSession() {
+                    if (this.isLoading) return;
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post('/api/sessions', {
+                            name: 'Agent 对话',
+                            type: 'web',
+                            user_id: this.username,
+                            system_prompt: '',
+                            first_message: '',
+                            sender_name: 'Agent',
+                            sender_avatar: '',
+                            sender_portrait: '',
+                            session_mode: 'agent',
+                            character_id: ''
+                        });
+                        const newSession = { ...res.data.session, _isNew: true };
+                        this.sessions = [
+                            ...this.sessions.filter(session => session.id !== newSession.id),
+                            newSession
+                        ];
+                        this.chatTab = 'web';
+                        await this.selectSession(newSession);
+                        setTimeout(() => {
+                            const session = this.sessions.find(s => s.id === newSession.id);
+                            if (session) session._isNew = false;
+                        }, 1500);
+                        this.showToast('已创建 Agent 对话', 'success');
+                    } catch (e) {
+                        console.error('Failed to create agent session:', e);
+                        this.showToast('创建 Agent 对话失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
                 },
 
                 downloadJson(data, filename) {

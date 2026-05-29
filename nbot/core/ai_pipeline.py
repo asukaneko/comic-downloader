@@ -1101,6 +1101,7 @@ class AIPipeline:
         self,
         model_configs: list,
         purpose: str = "chat",
+        tools: Optional[List[Dict[str, Any]]] = None,
     ) -> Callable:
         """Wrap model call with automatic failover across model queue.
 
@@ -1147,7 +1148,8 @@ class AIPipeline:
                 payload = protocol.build_payload(
                     model_name,
                     messages,
-                    tools=None,
+                    tools=tools if tools else None,
+                    tool_choice="auto" if tools else None,
                     stream=False,
                     base_url=base_url,
                     provider_type=provider_type,

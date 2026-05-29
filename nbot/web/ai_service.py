@@ -307,6 +307,7 @@ class WebProgressReporter:
                 StepType.TOOL_DONE,
                 _get_tool_display_name(tool_name),
                 result_preview,
+                step_full_result=result,
                 thinking_content=thinking,
             )
         if self.todo_card:
@@ -400,6 +401,9 @@ class WebCallbacks(PipelineCallbacks):
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:
         session = self.session_store.get_session(self.session_id)
+        # agent 模式不继承角色卡提示词
+        if (session or {}).get("session_mode") == "agent":
+            return str(session.get("system_prompt") or "").strip()
         if session and session.get("system_prompt"):
             return str(session.get("system_prompt") or "").strip()
         return str(
@@ -440,7 +444,7 @@ class WebCallbacks(PipelineCallbacks):
             # Multiple models: use failover wrapper
             from nbot.core.ai_pipeline import AIPipeline
             pipeline = AIPipeline()
-            return pipeline._wrap_with_failover(model_configs, purpose)
+            return pipeline._wrap_with_failover(model_configs, purpose, tools=tools)
 
         # Single model: direct call
         return lambda messages, stop_event=None: _call_web_ai(
@@ -586,14 +590,20 @@ class WebCallbacks(PipelineCallbacks):
     # ---- 角色运行时 ----
 
     def get_character_context(self, ctx):
-        """返回当前会话的角色身份标识"""
+        """返回当前会话的角色身份标识（agent 模式跳过）"""
+        session = self.session_store.get_session(self.session_id) if self.session_store else {}
+        if (session or {}).get("session_mode") == "agent":
+            return None
         from nbot.character.adapters.nekobot import get_web_character_context
         return get_web_character_context(
             self.server, self.session_store, self.session_id
         )
 
     def get_character_runtime(self, ctx):
-        """返回 CharacterRuntime 实例"""
+        """返回 CharacterRuntime 实例（agent 模式跳过）"""
+        session = self.session_store.get_session(self.session_id) if self.session_store else {}
+        if (session or {}).get("session_mode") == "agent":
+            return None
         from nbot.character.adapters.nekobot import get_character_runtime_from_server
         return get_character_runtime_from_server(self.server)
 
@@ -1237,9 +1247,15 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
 
     # 确定是否启用工具
     tools = None
+    # Agent 模式始终启用工具；角色模式按消息内容判断
+    _session_data = session_store.get_session(session_id) if session_store else {}
+    _is_agent_session = (_session_data or {}).get("session_mode") == "agent"
     has_tools = (
-        _looks_like_tool_request(user_content)
-        and getattr(server, "ai_config", {}).get("supports_tools", True)
+        _is_agent_session
+        or (
+            _looks_like_tool_request(user_content)
+            and getattr(server, "ai_config", {}).get("supports_tools", True)
+        )
     )
     if has_tools:
         try:

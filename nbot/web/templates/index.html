@@ -687,9 +687,14 @@
                             </div>
                             
                             <div class="chat-sidebar-header" v-if="chatTab === 'web' || chatTab === 'cli' || selectedSenderFilter">
-                                <button v-if="chatTab === 'web' && !selectedSenderFilter" class="btn btn-primary" style="width: 100%;" @click="createNewSession" :disabled="isLoading">
-                                    <i class="fas fa-plus"></i> {{ $t('chat.new_session') }}
-                                </button>
+                                <div v-if="chatTab === 'web' && !selectedSenderFilter" style="display: flex; gap: 6px; width: 100%;">
+                                    <button class="btn btn-primary" style="flex: 1;" @click="createNewSession" :disabled="isLoading">
+                                        <i class="fas fa-user-circle"></i> {{ $t('chat.new_character_session') }}
+                                    </button>
+                                    <button class="btn" style="flex: 1; background: var(--accent-secondary, #6366f1); color: #fff; border: none;" @click="createNewAgentSession" :disabled="isLoading">
+                                        <i class="fas fa-robot"></i> {{ $t('chat.new_agent_session') }}
+                                    </button>
+                                </div>
                                 <div class="search-box" :style="{ marginTop: (chatTab === 'web' && !selectedSenderFilter) ? '12px' : '0' }">
                                     <i class="fas fa-search" style="color: var(--text-muted);"></i>
                                     <input v-model="sessionSearch" type="text" :placeholder="$t('session.search')">
@@ -717,10 +722,12 @@
                                         <i v-else :class="session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'"></i>
                                     </div>
                                     <div class="session-info">
-                                        <div class="session-name">{{ session.name }}</div>
+                                        <div class="session-name">
+                                            <span v-if="session.session_mode === 'agent'" style="font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--accent-secondary, #6366f1); color: #fff; margin-right: 4px; vertical-align: middle;">Agent</span>{{ session.name }}
+                                        </div>
                                         <div class="session-meta">
                                             {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
-                                            <span v-if="session.sender_name" style="margin-left: 6px; color: var(--accent-primary);">
+                                            <span v-if="session.sender_name && session.session_mode !== 'agent'" style="margin-left: 6px; color: var(--accent-primary);">
                                                 <i class="fas fa-user-circle" style="font-size: 10px;"></i> {{ session.sender_name }}
                                             </span>
                                         </div>
@@ -1272,7 +1279,7 @@
                                             <code>{{ inj.key }}</code>
                                         </div>
                                     </div>
-                                    <details v-if="currentSession.system_prompt" class="runtime-system-prompt">
+                                    <details v-if="currentSession.system_prompt && currentSession.session_mode !== 'agent'" class="runtime-system-prompt">
                                         <summary>查看本轮系统提示词</summary>
                                         <pre>{{ currentSession.system_prompt }}</pre>
                                     </details>
@@ -1280,7 +1287,7 @@
 
                                 <div class="messages-container" ref="messagesContainer" :class="{ 'session-switching': sessionSwitching }" @scroll="handleMessagesScroll">
                                     <!-- 背景设定卡片 -->
-                                    <div v-if="currentSession?.scenario" class="scenario-card">
+                                    <div v-if="currentSession?.scenario && currentSession.session_mode !== 'agent'" class="scenario-card">
                                         <div class="scenario-badge">
                                             <i class="fas fa-book-open"></i>
                                             <span>背景设定</span>
