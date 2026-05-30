@@ -4601,14 +4601,20 @@
             flex: 1;
             overflow-y: auto;
             padding: 8px;
+            background:
+                radial-gradient(ellipse at 20% 0%, rgba(99, 102, 241, 0.04), transparent 50%),
+                radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.03), transparent 50%);
         }
 
         /* 会话模式切换 Tab */
         .session-mode-tabs {
             display: flex;
             position: relative;
-            background: var(--bg-tertiary, rgba(128,128,128,0.1));
-            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 10px;
             padding: 3px;
         }
 
@@ -4641,9 +4647,12 @@
             left: 3px;
             width: calc(50% - 3px);
             height: calc(100% - 6px);
-            background: var(--bg-secondary);
-            border-radius: 6px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 7px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.04);
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 0;
         }
@@ -4692,19 +4701,22 @@
             width: 100%;
             padding: 10px 12px;
             margin-top: 8px;
-            border: none;
-            border-radius: 8px;
-            background: var(--accent-primary);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            background: color-mix(in srgb, var(--accent-primary) 85%, transparent);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
             color: #fff;
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.2s;
-            box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-primary) 30%, transparent);
+            transition: all 0.25s;
+            box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-primary) 25%, transparent);
         }
 
         .session-add-btn:hover {
             filter: brightness(1.1);
+            box-shadow: 0 4px 16px color-mix(in srgb, var(--accent-primary) 35%, transparent);
             box-shadow: 0 3px 10px color-mix(in srgb, var(--accent-primary) 40%, transparent);
             transform: translateY(-1px);
         }
@@ -4720,19 +4732,30 @@
             align-items: center;
             gap: 12px;
             padding: 12px;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
-            transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+            transition: background 0.25s, transform 0.2s, box-shadow 0.25s, border-color 0.25s;
             margin-bottom: 4px;
             height: 64px;
             box-sizing: border-box;
-            background: var(--bg-secondary);
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(148, 163, 184, 0.06);
             position: relative;
             overflow: hidden;
         }
 
-        .session-item:hover { background: var(--bg-tertiary); }
-        .session-item.active { background: color-mix(in srgb, var(--accent-primary) 14%, transparent); }
+        .session-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(148, 163, 184, 0.12);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+        .session-item.active {
+            background: color-mix(in srgb, var(--accent-primary) 12%, rgba(255, 255, 255, 0.04));
+            border-color: color-mix(in srgb, var(--accent-primary) 25%, transparent);
+            box-shadow: 0 2px 16px color-mix(in srgb, var(--accent-primary) 12%, transparent);
+        }
 
         /* 新会话加入动画 */
         .session-item.session-new {
@@ -7816,17 +7839,35 @@
                 rgba(8, 13, 21, 0.72);
         }
 
+        body.has-bg-image .session-mode-tabs {
+            background: rgba(15, 23, 42, 0.5);
+            border-color: rgba(148, 163, 184, 0.18);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        body.has-bg-image .session-mode-tab-indicator {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+
         body.has-bg-image .session-item {
-            background: rgba(15, 23, 42, 0.72);
-            border: none;
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         body.has-bg-image .session-item:hover {
-            background: rgba(20, 31, 48, 0.86);
+            background: rgba(20, 31, 48, 0.72);
+            border-color: rgba(148, 163, 184, 0.18);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
         }
 
         body.has-bg-image .session-item.active {
-            background: color-mix(in srgb, var(--accent-primary) 20%, rgba(15, 23, 42, 0.82));
+            background: color-mix(in srgb, var(--accent-primary) 18%, rgba(15, 23, 42, 0.6));
+            border-color: color-mix(in srgb, var(--accent-primary) 30%, rgba(148, 163, 184, 0.15));
+            box-shadow: 0 4px 20px color-mix(in srgb, var(--accent-primary) 15%, transparent);
         }
 
         body.has-bg-image .message.assistant .message-content {
@@ -7872,17 +7913,32 @@
             background: rgba(241, 245, 249, 0.78);
         }
 
+        [data-theme="light"] body.has-bg-image .session-mode-tabs {
+            background: rgba(255, 255, 255, 0.5);
+            border-color: rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] body.has-bg-image .session-mode-tab-indicator {
+            background: rgba(255, 255, 255, 0.7);
+            border-color: rgba(0, 0, 0, 0.04);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
         [data-theme="light"] body.has-bg-image .session-item {
-            background: rgba(255, 255, 255, 0.82);
-            border: none;
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         [data-theme="light"] body.has-bg-image .session-item:hover {
-            background: rgba(255, 255, 255, 0.82);
+            background: rgba(255, 255, 255, 0.78);
+            border-color: rgba(0, 0, 0, 0.08);
         }
 
         [data-theme="light"] body.has-bg-image .session-item.active {
-            background: color-mix(in srgb, var(--accent-primary) 16%, rgba(255, 255, 255, 0.72));
+            background: color-mix(in srgb, var(--accent-primary) 12%, rgba(255, 255, 255, 0.7));
+            border-color: color-mix(in srgb, var(--accent-primary) 20%, rgba(0, 0, 0, 0.04));
         }
 
         [data-theme="light"] body.has-bg-image .message-content {
@@ -17644,16 +17700,20 @@
         }
 
         [data-theme="light"] body.has-bg-image .session-item {
-            background: rgba(255, 255, 255, 0.68);
-            border: none;
+            background: rgba(255, 255, 255, 0.6);
+            border: 1px solid rgba(0, 0, 0, 0.04);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         [data-theme="light"] body.has-bg-image .session-item:hover {
-            background: rgba(255, 255, 255, 0.86);
+            background: rgba(255, 255, 255, 0.78);
+            border-color: rgba(0, 0, 0, 0.08);
         }
 
         [data-theme="light"] body.has-bg-image .session-item.active {
-            background: color-mix(in srgb, var(--accent-primary) 14%, rgba(255, 255, 255, 0.78));
+            background: color-mix(in srgb, var(--accent-primary) 12%, rgba(255, 255, 255, 0.7));
+            border-color: color-mix(in srgb, var(--accent-primary) 20%, rgba(0, 0, 0, 0.04));
         }
 
         [data-theme="light"] body.has-bg-image .message.assistant .message-content,
