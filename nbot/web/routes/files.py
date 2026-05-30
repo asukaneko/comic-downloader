@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 import time
 
@@ -266,4 +268,103 @@ def register_file_routes(app, server, workspace_available, workspace_manager):
             )
         except Exception as e:
             server.log_message("error", f"文件上传失败: {e}", important=True)
+            return jsonify({"error": str(e)}), 500
+
+    # ── 自定义字体管理 ──────────────────────────────────────────────
+    fonts_dir = os.path.join(server.static_folder, "fonts")
+    os.makedirs(fonts_dir, exist_ok=True)
+    fonts_meta_path = os.path.join(fonts_dir, "_meta.json")
+    max_font_size = 15 * 1024 * 1024  # 15MB
+
+    def _load_fonts_meta():
+        try:
+            if os.path.exists(fonts_meta_path):
+                with open(fonts_meta_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {}
+
+    def _save_fonts_meta(meta):
+        with open(fonts_meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
+
+    @app.route("/api/fonts/upload", methods=["POST"])
+    def upload_font():
+        try:
+            if "file" not in request.files:
+                return jsonify({"error": "No file provided"}), 400
+            file = request.files["file"]
+            if file.filename == "":
+                return jsonify({"error": "No file selected"}), 400
+
+            ext = os.path.splitext(file.filename)[1].lower()
+            allowed = [".ttf", ".otf", ".woff", ".woff2"]
+            if ext not in allowed:
+                return jsonify({"error": "仅支持 TTF、OTF、WOFF、WOFF2 格式"}), 400
+
+            file.seek(0, 2)
+            file_size = file.tell()
+            file.seek(0)
+            if file_size > max_font_size:
+                return jsonify({"error": "字体文件大小不能超过15MB"}), 400
+
+            font_name = os.path.splitext(file.filename)[0]
+            safe_name = hashlib.md5(f"{font_name}{time.time()}".encode()).hexdigest()[:12]
+            saved_name = f"{safe_name}{ext}"
+            file_path = os.path.join(fonts_dir, saved_name)
+            file.save(file_path)
+
+            # 保存元数据：服务器文件名 → 原始字体名
+            meta = _load_fonts_meta()
+            meta[saved_name] = font_name
+            _save_fonts_meta(meta)
+
+            return jsonify({
+                "success": True,
+                "name": font_name,
+                "filename": saved_name,
+                "url": f"/static/fonts/{saved_name}",
+                "size": file_size,
+            })
+        except Exception as e:
+            server.log_message("error", f"字体上传失败: {e}", important=True)
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fonts", methods=["GET"])
+    def list_fonts():
+        try:
+            meta = _load_fonts_meta()
+            fonts = []
+            if os.path.exists(fonts_dir):
+                for f in os.listdir(fonts_dir):
+                    if f.startswith("_"):
+                        continue
+                    fp = os.path.join(fonts_dir, f)
+                    if os.path.isfile(fp):
+                        ext = os.path.splitext(f)[1].lower()
+                        if ext in [".ttf", ".otf", ".woff", ".woff2"]:
+                            fonts.append({
+                                "name": meta.get(f, os.path.splitext(f)[0]),
+                                "filename": f,
+                                "url": f"/static/fonts/{f}",
+                                "size": os.path.getsize(fp),
+                            })
+            return jsonify({"success": True, "fonts": fonts})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/fonts/<filename>", methods=["DELETE"])
+    def delete_font(filename):
+        try:
+            file_path = os.path.join(fonts_dir, filename)
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            # 清理元数据
+            meta = _load_fonts_meta()
+            if filename in meta:
+                del meta[filename]
+                _save_fonts_meta(meta)
+            return jsonify({"success": True})
+        except Exception as e:
             return jsonify({"error": str(e)}), 500

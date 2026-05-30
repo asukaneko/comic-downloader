@@ -2501,7 +2501,27 @@
                                                     <option value="'SimHei', 'Heiti SC', sans-serif">黑体</option>
                                                     <option value="'KaiTi', 'Kaiti SC', serif">楷体</option>
                                                     <option value="'Courier New', monospace">等宽字体</option>
+                                                    <option v-for="font in customFonts" :key="font.name" :value="'\'' + font.name + '\''">{{ font.name }}</option>
                                                 </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">上传自定义字体</label>
+                                                <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--border-color, #30363d); border-radius: 8px; background: var(--bg-secondary, #161b22);">
+                                                    <input type="file" id="fontFileInput" accept=".ttf,.otf,.woff,.woff2" @change="handleFontUpload" style="display: none;">
+                                                    <label for="fontFileInput" class="btn btn-sm" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; width: fit-content;">
+                                                        <i class="fas fa-upload"></i> 选择字体文件
+                                                    </label>
+                                                    <p style="font-size: 11px; color: var(--text-secondary, #8b949e); margin: 0;">支持 TTF、OTF、WOFF、WOFF2 格式，最大 15MB</p>
+                                                    <div v-if="customFonts.length > 0" style="margin-top: 4px;">
+                                                        <label class="form-label" style="margin-bottom: 4px;">已上传字体</label>
+                                                        <div v-for="font in customFonts" :key="font.name" style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-tertiary, #21262d); border: 1px solid var(--border-color, #30363d); border-radius: 6px; margin-bottom: 4px;">
+                                                            <span style="font-size: 12px;">{{ font.name }}</span>
+                                                            <button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px;" @click="removeCustomFont(font.name)">
+                                                                <i class="fas fa-times"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                             <div class="form-group">
                                                 <label class="form-label">字号: {{ messageStyle.fontSize }}px</label>
@@ -9509,6 +9529,7 @@
                         assistantBubbleColor: localStorage.getItem('assistantBubbleColor') || '',
                         userAvatar: localStorage.getItem('userAvatar') || ''  // 用户自定义头像
                     },
+                    customFonts: [],  // 自定义上传的字体列表 [{name, data}]
                     showMessageStyleModal: false,
 
                     // 聊天背景设置
@@ -11159,7 +11180,8 @@
                 // 初始化主题
                 this.initTheme();
 
-                // 应用已保存的消息样式
+                // 加载自定义字体后再应用消息样式
+                this.loadCustomFonts();
                 this.applyMessageStyles();
 
                 // 应用已保存的聊天背景

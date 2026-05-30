@@ -167,6 +167,108 @@ const NbotMethods = {
                     event.target.value = '';
                 },
 
+                // 加载自定义字体列表（从服务器）
+                async loadCustomFonts() {
+                    try {
+                        const resp = await api.get('/api/fonts');
+                        if (resp.data && resp.data.success) {
+                            this.customFonts = resp.data.fonts.map(f => ({
+                                name: f.name,
+                                filename: f.filename,
+                                url: f.url,
+                            }));
+                            // 注入已保存的字体到页面
+                            this.customFonts.forEach(font => this.injectFontFace(font.name, font.url));
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load custom fonts:', e);
+                        this.customFonts = [];
+                    }
+                },
+
+                // 注入 @font-face 样式到页面
+                injectFontFace(fontName, fontUrl) {
+                    const styleId = 'custom-font-' + fontName.replace(/\s+/g, '-').toLowerCase();
+                    if (document.getElementById(styleId)) return; // 已注入
+                    const ext = fontUrl.split('.').pop().toLowerCase();
+                    const formats = { ttf: 'truetype', otf: 'opentype', woff: 'woff', woff2: 'woff2' };
+                    const format = formats[ext] || 'truetype';
+                    const style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = `@font-face { font-family: '${fontName}'; src: url('${fontUrl}') format('${format}'); font-display: swap; }`;
+                    document.head.appendChild(style);
+                },
+
+                // 处理字体文件上传（上传到服务器）
+                async handleFontUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const allowedTypes = ['.ttf', '.otf', '.woff', '.woff2'];
+                    const ext = '.' + file.name.split('.').pop().toLowerCase();
+                    if (!allowedTypes.includes(ext)) {
+                        this.showToast('仅支持 TTF、OTF、WOFF、WOFF2 格式', 'error');
+                        event.target.value = '';
+                        return;
+                    }
+
+                    if (file.size > 15 * 1024 * 1024) {
+                        this.showToast('字体文件大小不能超过15MB', 'error');
+                        event.target.value = '';
+                        return;
+                    }
+
+                    const fontName = file.name.replace(/\.[^.]+$/, '');
+                    if (this.customFonts.some(f => f.name === fontName)) {
+                        this.showToast('已存在同名字体，请先删除旧的', 'error');
+                        event.target.value = '';
+                        return;
+                    }
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        const resp = await api.post('/api/fonts/upload', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        if (resp.data && resp.data.success) {
+                            const font = { name: fontName, filename: resp.data.filename, url: resp.data.url };
+                            this.customFonts.push(font);
+                            this.injectFontFace(fontName, resp.data.url);
+                            this.messageStyle.fontFamily = `'${fontName}'`;
+                            this.updateStylePreview();
+                            this.showToast(`字体 "${fontName}" 已上传`, 'success');
+                        } else {
+                            this.showToast(resp.data?.error || '上传失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('字体上传失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                    event.target.value = '';
+                },
+
+                // 删除自定义字体（从服务器删除）
+                async removeCustomFont(fontName) {
+                    const font = this.customFonts.find(f => f.name === fontName);
+                    if (!font) return;
+                    try {
+                        await api.delete(`/api/fonts/${font.filename}`);
+                    } catch (e) {
+                        console.warn('Failed to delete font file:', e);
+                    }
+                    this.customFonts = this.customFonts.filter(f => f.name !== fontName);
+                    // 移除注入的 @font-face
+                    const styleId = 'custom-font-' + fontName.replace(/\s+/g, '-').toLowerCase();
+                    const styleEl = document.getElementById(styleId);
+                    if (styleEl) styleEl.remove();
+                    // 如果当前选中的是被删除的字体，回退到默认
+                    if (this.messageStyle.fontFamily === `'${fontName}'`) {
+                        this.messageStyle.fontFamily = 'system-ui, -apple-system, sans-serif';
+                        this.updateStylePreview();
+                    }
+                    this.showToast(`字体 "${fontName}" 已移除`, 'info');
+                },
+
                 applyMessageStyles() {
                     let styleEl = document.getElementById('message-custom-styles');
                     if (!styleEl) {
