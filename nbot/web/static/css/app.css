@@ -13724,6 +13724,24 @@
             color: white;
         }
 
+        .preset-btn-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            line-height: 1.3;
+        }
+
+        .preset-btn-name {
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .preset-btn-model {
+            font-size: 11px;
+            opacity: 0.65;
+            font-family: monospace;
+        }
+
         .config-actions {
             display: flex;
             gap: 12px;
@@ -14561,6 +14579,20 @@
         .ai-hero-glyph {
             font-size: 22px;
             line-height: 1;
+        }
+
+        .ai-saved-logo-img {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+        }
+
+        .preset-btn-logo {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+            flex-shrink: 0;
         }
 
         .ai-saved-watermark {

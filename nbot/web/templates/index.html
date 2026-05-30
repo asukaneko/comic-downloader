@@ -4266,7 +4266,7 @@
                                             <div class="ai-saved-top">
                                                 <div class="ai-saved-brand">
                                                     <div class="ai-saved-icon" :style="{ background: 'linear-gradient(135deg, ' + (modelPurposes.chat?.color || '#3b82f6') + ', ' + (modelPurposes.vision?.color || '#8b5cf6') + ')' }">
-                                                        <span class="ai-saved-icon-glyph">{{ getProviderGlyph(model.provider) }}</span>
+                                                        <img :src="getProviderLogoSvg(model.provider)" :alt="getProviderLabel(model.provider)" class="ai-saved-logo-img">
                                                     </div>
                                                     <div style="min-width: 0;">
                                                         <div class="ai-saved-title">{{ model.name }}</div>
@@ -4327,9 +4327,14 @@
                                                     <option value="openai">OpenAI</option>
                                                     <option value="anthropic">Anthropic (Claude)</option>
                                                     <option value="google">Google (Gemini)</option>
+                                                    <option value="deepseek">DeepSeek</option>
+                                                    <option value="zhipu">智谱 (GLM)</option>
+                                                    <option value="minimax">MiniMax</option>
+                                                    <option value="grok">Grok (xAI)</option>
+                                                    <option value="qwen">通义千问 (Qwen)</option>
+                                                    <option value="xiaomi">小米 (Mimo)</option>
                                                     <option value="azure">Azure OpenAI</option>
                                                     <option value="siliconflow">SiliconFlow</option>
-                                                    <option value="deepseek">DeepSeek</option>
                                                     <option value="custom">{{ $t('ai_config.custom') }}</option>
                                                 </select>
                                             </div>
@@ -4727,9 +4732,10 @@
                         <div v-if="showModelEditModal" class="modal-overlay" style="z-index: 1200;" @click.self="closeModelEditModal">
                             <div class="modal" style="max-width: 600px; max-height: 90vh;">
                                 <div class="modal-header">
-                                    <h3 class="modal-title">
-                                        <i class="fas" :class="editingModel ? 'fa-edit' : 'fa-plus'"></i>
-                                        {{ editingModel ? '编辑模型配置' : '新建模型配置' }}
+                                    <h3 class="modal-title" style="display: flex; align-items: center; gap: 10px;">
+                                        <img v-if="modelForm.provider" :src="getProviderLogoSvg(modelForm.provider)" :alt="getProviderLabel(modelForm.provider)" style="width: 28px; height: 28px; object-fit: contain;">
+                                        <span>{{ editingModel ? '编辑模型配置' : '新建模型配置' }}</span>
+                                        <span v-if="modelForm.provider" style="font-size: 13px; font-weight: 400; opacity: 0.6;">{{ getProviderLabel(modelForm.provider) }} · {{ modelForm.model }}</span>
                                     </h3>
                                     <button class="modal-close" @click="closeModelEditModal">
                                         <i class="fas fa-times"></i>
@@ -4745,11 +4751,14 @@
                                                 class="preset-btn"
                                                 @click="applyModelPresetToForm(preset)"
                                             >
-                                                <i :class="preset.icon"></i>
-                                                {{ preset.name }}
+                                                <img :src="getProviderLogoSvg(preset.provider)" :alt="preset.name" class="preset-btn-logo">
+                                                <div class="preset-btn-info">
+                                                    <span class="preset-btn-name">{{ preset.name }}</span>
+                                                    <span class="preset-btn-model">{{ preset.model }}</span>
+                                                </div>
                                             </button>
                                         </div>
-                                        <div class="form-hint">用于快速填充新增模型的 Provider、模型和基础地址。</div>
+                                        <div class="form-hint">一键填充提供商、模型、地址、上下文长度和价格配置。</div>
                                     </div>
 
                                     <div class="form-group">
@@ -4777,9 +4786,14 @@
                                             <option value="openai">OpenAI</option>
                                             <option value="anthropic">Anthropic (Claude)</option>
                                             <option value="google">Google (Gemini)</option>
+                                            <option value="deepseek">DeepSeek</option>
+                                            <option value="zhipu">智谱 (GLM)</option>
+                                            <option value="minimax">MiniMax</option>
+                                            <option value="grok">Grok (xAI)</option>
+                                            <option value="qwen">通义千问 (Qwen)</option>
+                                            <option value="xiaomi">小米 (Mimo)</option>
                                             <option value="azure">Azure OpenAI</option>
                                             <option value="siliconflow">SiliconFlow</option>
-                                            <option value="deepseek">DeepSeek</option>
                                             <option value="custom">自定义</option>
                                         </select>
                                     </div>
@@ -4836,15 +4850,15 @@
                                             <input v-model.number="modelForm.temperature" type="number" min="0" max="2" step="0.1" class="form-input">
                                         </div>
                                         <div class="form-group">
-                                            <label class="form-label">最大 Token</label>
-                                            <input v-model.number="modelForm.max_tokens" type="number" min="100" max="32000" step="100" class="form-input">
+                                            <label class="form-label">最大输出 Token</label>
+                                            <input v-model.number="modelForm.max_tokens" type="number" min="100" max="524288" step="100" class="form-input">
                                         </div>
                                     </div>
 
                                     <div class="form-group">
                                         <label class="form-label">最大上下文长度 (token)</label>
                                         <input v-model.number="modelForm.max_context_length" type="number" min="8000" max="2000000" step="1000" class="form-input">
-                                        <div class="form-hint">模型支持的最大上下文窗口大小，例如 GPT-4o 为 128000，Claude 为 200000</div>
+                                        <div class="form-hint">模型支持的最大上下文窗口大小，例如 GPT-5.5 为 1,050,000，Claude Opus 4.8 为 1,000,000，DeepSeek V4 Flash 为 1,000,000</div>
                                     </div>
 
                                     <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
@@ -9590,7 +9604,7 @@
                         supports_reasoning: true,
                         supports_stream: true,
                         temperature: 0.7,
-                        max_tokens: 2000,
+                        max_tokens: 8192,
                         top_p: 0.9,
                         frequency_penalty: 0,
                         presence_penalty: 0,
@@ -9627,11 +9641,15 @@
                     currentPreset: '',
                     aiStatus: { text: '未配置', class: 'badge-warning' },
                     aiPresets: [
-                        { name: 'OpenAI', icon: 'fas fa-robot', provider: 'openai', model: 'gpt-4', base_url: '' },
-                        { name: 'Claude', icon: 'fas fa-cloud', provider: 'anthropic', model: 'claude-3-opus-20240229', base_url: '' },
-                        { name: 'Gemini', icon: 'fas fa-gem', provider: 'google', model: 'gemini-pro', base_url: '' },
-                        { name: 'DeepSeek', icon: 'fas fa-water', provider: 'deepseek', model: 'deepseek-chat', base_url: 'https://api.deepseek.com' },
-                        { name: 'SiliconFlow', icon: 'fas fa-microchip', provider: 'siliconflow', model: 'Qwen/Qwen2.5-72B-Instruct', base_url: 'https://api.siliconflow.cn' }
+                        { name: 'OpenAI', icon: 'fas fa-robot', provider: 'openai', model: 'gpt-5.5', base_url: '', max_context_length: 1050000, max_tokens: 128000, input_price: 33.90, output_price: 203.40 },
+                        { name: 'Claude', icon: 'fas fa-cloud', provider: 'anthropic', model: 'claude-opus-4-8', base_url: '', max_context_length: 1000000, max_tokens: 128000, input_price: 33.90, output_price: 169.50 },
+                        { name: 'Gemini', icon: 'fas fa-gem', provider: 'google', model: 'gemini-3.5-flash', base_url: '', max_context_length: 1048576, max_tokens: 65536, input_price: 10.17, output_price: 61.02 },
+                        { name: 'DeepSeek', icon: 'fas fa-water', provider: 'deepseek', model: 'deepseek-v4-flash', base_url: 'https://api.deepseek.com', max_context_length: 1000000, max_tokens: 131072, input_price: 0.95, output_price: 1.90 },
+                        { name: 'GLM', icon: 'fas fa-brain', provider: 'zhipu', model: 'glm-5.1', base_url: 'https://open.bigmodel.cn/api/paas/v4', max_context_length: 200000, max_tokens: 128000, input_price: 6.64, output_price: 20.88 },
+                        { name: 'MiniMax', icon: 'fas fa-infinity', provider: 'minimax', model: 'minimax-m2.7', base_url: 'https://api.minimax.chat/v1', max_context_length: 204800, max_tokens: 131072, input_price: 1.89, output_price: 8.14 },
+                        { name: 'Grok', icon: 'fas fa-bolt', provider: 'grok', model: 'grok-4.20', base_url: 'https://api.x.ai/v1', max_context_length: 1000000, max_tokens: 131072, input_price: 8.47, output_price: 16.95 },
+                        { name: 'Qwen', icon: 'fas fa-wind', provider: 'qwen', model: 'qwen3.7-max', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', max_context_length: 1000000, max_tokens: 65536, input_price: 8.47, output_price: 25.43 },
+                        { name: 'Mimo', icon: 'fas fa-microphone', provider: 'xiaomi', model: 'mimo-v2.5', base_url: 'https://api.xiaomimimo.com/v1', max_context_length: 1048576, max_tokens: 131072, input_price: 2.95, output_price: 5.90 }
                     ],
 
                     // 多模型配置管理
@@ -9657,7 +9675,7 @@
                         supports_reasoning: true,
                         supports_stream: true,
                         temperature: 0.7,
-                        max_tokens: 2000,
+                        max_tokens: 8192,
                         top_p: 0.9,
                         frequency_penalty: 0,
                         presence_penalty: 0,
@@ -9669,7 +9687,7 @@
                         image_model: '',
                         search_api_key: '',
                         embedding_model: '',
-                        max_context_length: 100000,
+                        max_context_length: 128000,
                         // 模型价格（人民币 元/百万token，null 表示使用兜底定价）
                         input_price: null,
                         output_price: null,

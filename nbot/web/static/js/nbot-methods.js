@@ -10440,16 +10440,20 @@ def main(params):
                 },
 
                 onModelProviderChange() {
-                    const defaultModels = {
-                        openai: 'gpt-4',
-                        anthropic: 'claude-3-sonnet-20240229',
-                        google: 'gemini-pro',
-                        azure: 'gpt-4',
-                        siliconflow: 'Qwen/Qwen2.5-72B-Instruct',
-                        deepseek: 'deepseek-chat',
-                        custom: 'custom'
-                    };
-                    this.modelForm.model = defaultModels[this.modelForm.provider] || 'custom';
+                    const preset = this.aiPresets.find(p => p.provider === this.modelForm.provider);
+                    if (preset) {
+                        this.modelForm.model = preset.model;
+                        this.modelForm.base_url = preset.base_url;
+                        this.modelForm.max_tokens = preset.max_tokens;
+                        this.modelForm.max_context_length = preset.max_context_length;
+                        this.modelForm.input_price = preset.input_price ?? null;
+                        this.modelForm.output_price = preset.output_price ?? null;
+                        if (!this.modelForm.name || this.modelForm.name === '新配置' || Object.values(this.aiPresets).some(p => this.modelForm.name === `${p.name} 配置`)) {
+                            this.modelForm.name = `${preset.name} 配置`;
+                        }
+                    } else {
+                        this.modelForm.model = 'custom';
+                    }
                     this.modelForm.provider_type = this.getProviderTypeByProvider(this.modelForm.provider);
                     this.applyProviderCapabilities(this.modelForm, true);
                 },
@@ -10689,6 +10693,15 @@ def main(params):
                         deepseek: 'openai_compatible',
                         custom: 'openai_compatible',
                         siliconflow: 'siliconflow',
+                        zhipu: 'openai_compatible',
+                        glm: 'openai_compatible',
+                        minimax: 'openai_compatible',
+                        grok: 'openai_compatible',
+                        xai: 'openai_compatible',
+                        qwen: 'openai_compatible',
+                        dashscope: 'openai_compatible',
+                        xiaomi: 'openai_compatible',
+                        mimo: 'openai_compatible',
                         anthropic: 'anthropic',
                         google: 'google'
                     };
@@ -10751,6 +10764,10 @@ def main(params):
                     this.modelForm.base_url = preset.base_url;
                     this.modelForm.provider_type = this.getProviderTypeByProvider(preset.provider);
                     this.applyProviderCapabilities(this.modelForm, true);
+                    if (preset.max_context_length) this.modelForm.max_context_length = preset.max_context_length;
+                    if (preset.max_tokens) this.modelForm.max_tokens = preset.max_tokens;
+                    if (preset.input_price != null) this.modelForm.input_price = preset.input_price;
+                    if (preset.output_price != null) this.modelForm.output_price = preset.output_price;
                     if (!this.modelForm.name || this.modelForm.name === '新配置') {
                         this.modelForm.name = `${preset.name} 配置`;
                     }
@@ -10854,22 +10871,26 @@ def main(params):
 
                     if (model) {
                         this.editingModel = model;
+                        // 按 provider 匹配预设，覆盖推荐值
+                        const matchedPreset = this.aiPresets.find(p => p.provider === model.provider);
                         this.modelForm = {
                             ...model,
-                            // 确保purpose字段存在
                             purpose: model.purpose || 'chat',
                             priority: model.priority ?? 0,
                             append_base_url_path: typeof model.append_base_url_path === 'boolean' ? model.append_base_url_path : true,
-                            // 确保特有配置字段存在
+                            max_tokens: matchedPreset ? matchedPreset.max_tokens : (model.max_tokens || 8192),
+                            max_context_length: matchedPreset ? matchedPreset.max_context_length : (model.max_context_length || 128000),
+                            input_price: matchedPreset ? (matchedPreset.input_price ?? null) : (model.input_price ?? null),
+                            output_price: matchedPreset ? (matchedPreset.output_price ?? null) : (model.output_price ?? null),
+                            temperature: model.temperature ?? 0.7,
+                            top_p: model.top_p ?? 0.9,
                             voice: model.voice || 'default',
                             speed: model.speed || 1.0,
                             pitch: model.pitch || 1.0,
                             volume: model.volume || 1.0,
                             language: model.language || 'zh',
                             dimensions: model.dimensions || 1536,
-                            // 图片生成特有配置
                             prompt_template: model.prompt_template || '',
-                            // API Key选择
                             selectedApiKeyId: ''
                         };
                         this.modelForm.provider_type = this.modelForm.provider_type || this.getProviderTypeByProvider(this.modelForm.provider);
@@ -10908,7 +10929,7 @@ def main(params):
                             supports_reasoning: true,
                             supports_stream: true,
                             temperature: 0.7,
-                            max_tokens: 2000,
+                            max_tokens: 8192,
                             top_p: 0.9,
                             frequency_penalty: 0,
                             presence_penalty: 0,
@@ -10920,7 +10941,7 @@ def main(params):
                             image_model: '',
                             search_api_key: '',
                             embedding_model: '',
-                            max_context_length: 100000,
+                            max_context_length: 128000,
                             // 模型价格（人民币 元/百万token，null 表示使用兜底定价）
                             input_price: null,
                             output_price: null,
@@ -11059,6 +11080,15 @@ def main(params):
                         azure: 'fas fa-windows',
                         siliconflow: 'fas fa-microchip',
                         deepseek: 'fas fa-water',
+                        zhipu: 'fas fa-brain',
+                        glm: 'fas fa-brain',
+                        minimax: 'fas fa-infinity',
+                        grok: 'fas fa-bolt',
+                        xai: 'fas fa-bolt',
+                        qwen: 'fas fa-wind',
+                        dashscope: 'fas fa-wind',
+                        xiaomi: 'fas fa-microphone',
+                        mimo: 'fas fa-microphone',
                         custom: 'fas fa-cog'
                     };
                     return icons[provider] || 'fas fa-robot';
@@ -11072,6 +11102,15 @@ def main(params):
                         azure: '⬢',
                         siliconflow: '◉',
                         deepseek: '≈',
+                        zhipu: '◆',
+                        glm: '◆',
+                        minimax: '∞',
+                        grok: '✕',
+                        xai: '✕',
+                        qwen: '❖',
+                        dashscope: '❖',
+                        xiaomi: '◈',
+                        mimo: '◈',
                         custom: '◌'
                     };
                     return glyphs[provider] || '◌';
@@ -11085,9 +11124,42 @@ def main(params):
                         azure: 'Azure',
                         siliconflow: 'SiliconFlow',
                         deepseek: 'DeepSeek',
+                        zhipu: '智谱 GLM',
+                        glm: '智谱 GLM',
+                        minimax: 'MiniMax',
+                        grok: 'Grok',
+                        xai: 'Grok',
+                        qwen: '通义千问',
+                        dashscope: '通义千问',
+                        xiaomi: '小米 Mimo',
+                        mimo: '小米 Mimo',
                         custom: '自定义'
                     };
                     return labels[provider] || provider;
+                },
+
+                getProviderLogoSvg(provider) {
+                    const logos = {
+                        openai: '/static/svg/openai.svg',
+                        anthropic: '/static/svg/claude.svg',
+                        claude: '/static/svg/claude.svg',
+                        google: '/static/svg/googlegemini.svg',
+                        gemini: '/static/svg/googlegemini.svg',
+                        deepseek: '/static/svg/deepseek.svg',
+                        zhipu: '/static/svg/Z.ai.svg',
+                        glm: '/static/svg/Z.ai.svg',
+                        minimax: '/static/svg/minimax.svg',
+                        grok: '/static/svg/XAI.svg',
+                        xai: '/static/svg/XAI.svg',
+                        qwen: '/static/svg/qwen.svg',
+                        dashscope: '/static/svg/qwen.svg',
+                        xiaomi: '/static/svg/xiaomi.svg',
+                        mimo: '/static/svg/xiaomi.svg',
+                        siliconflow: '/static/svg/openai.svg',
+                        azure: '/static/svg/openai.svg',
+                        custom: '/static/svg/custom.svg'
+                    };
+                    return logos[provider] || logos.custom;
                 },
 
                 // Token Functions
