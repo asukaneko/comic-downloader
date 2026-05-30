@@ -1985,14 +1985,24 @@ const NbotMethods = {
                     if (this._isDeletingSession) {
                         return;
                     }
-                    
+
                     try {
                         const res = await api.get('/api/sessions');
-                        const serverSessions = res.data;
-                        
+                        let serverSessions = res.data;
+
+                        // 用缓存的消息数覆盖服务器的旧数据（与聊天顶部横栏一致）
+                        const counts = this.sessionMessageCounts;
+                        if (Object.keys(counts).length > 0) {
+                            serverSessions = serverSessions.map(s =>
+                                counts[s.id] !== undefined
+                                    ? { ...s, message_count: counts[s.id] }
+                                    : s
+                            );
+                        }
+
                         // 保留本地临时会话
                         const localTempSessions = this.sessions.filter(s => s._isTemp);
-                        
+
                         // 合并：临时会话 + 服务器会话
                         this.sessions = [...localTempSessions, ...serverSessions];
                         this.refreshPersonalityTimelineSessions();
@@ -4700,6 +4710,9 @@ def main(params):
                 async selectSession(session) {
                     const previousSessionId = this.currentSession?.id;
 
+                    // 切换前同步当前会话的消息数到列表
+                    this.syncCurrentSessionMessageCount();
+
                     // 切换会话时触发消息区淡出
                     this.sessionSwitching = true;
 
@@ -4912,6 +4925,8 @@ def main(params):
                             }
                         });
                         this.currentMessages = normalizedMessages;
+                        // 同步消息数到会话列表，确保切换后显示正确的消息数
+                        this.syncCurrentSessionMessageCount();
                         this.updateContextStats();
                         if (this.showCharacterRuntimePanel) {
                             this.refreshCurrentSessionRuntime();
@@ -5663,6 +5678,17 @@ def main(params):
                             // 移除卡住的进度消息
                             this.currentMessages.pop();
                         }
+                    }
+                },
+
+                // ========== 发送/语音 统一按钮 ==========
+                handleActionButton() {
+                    if (this.isLoading) {
+                        this.stopGeneration();
+                    } else if (this.hasInputContent) {
+                        this.sendMessage();
+                    } else {
+                        this.toggleRecording();
                     }
                 },
 
@@ -8273,7 +8299,15 @@ def main(params):
                     if (this.currentSession && this.currentSession.id === session.id) {
                         return this.currentMessages.length;
                     }
+                    if (session.id && this.sessionMessageCounts[session.id] !== undefined) {
+                        return this.sessionMessageCounts[session.id];
+                    }
                     return session.message_count || 0;
+                },
+
+                syncCurrentSessionMessageCount() {
+                    if (!this.currentSession) return;
+                    this.sessionMessageCounts[this.currentSession.id] = this.currentMessages.length;
                 },
 
                 getSessionDisplayName(sessionId) {

@@ -645,6 +645,55 @@
             color: var(--text-primary);
         }
 
+        .btn-send {
+            order: 4;
+            background: #fff;
+            color: #1a1a2e;
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-send:hover {
+            background: #f1f5f9;
+        }
+
+        .btn-send:disabled {
+            opacity: 0.55;
+            background: #e2e8f0;
+        }
+
+        .btn-voice {
+            order: 4;
+            background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+            color: #fff;
+            border: none;
+            box-shadow: 0 9px 24px rgba(124, 58, 237, 0.34);
+        }
+
+        .btn-voice:hover {
+            background: linear-gradient(135deg, #c084fc 0%, #a855f7 100%);
+            color: #fff;
+        }
+
+        .btn-voice:disabled {
+            opacity: 0.55;
+            background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%);
+            box-shadow: none;
+        }
+
+        .btn.recording-active {
+            order: 4;
+            background: linear-gradient(135deg, #fb7185 0%, #e11d48 100%);
+            color: #fff;
+            border: none;
+            box-shadow: 0 9px 24px rgba(225, 29, 72, 0.3);
+            animation: recording-pulse 1.2s ease-in-out infinite;
+        }
+
+        @keyframes recording-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
         .btn-icon-small {
             width: 28px;
             height: 28px;
