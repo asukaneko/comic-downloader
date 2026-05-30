@@ -283,6 +283,9 @@
 
                 <div class="sidebar-footer">
                     <div class="sidebar-actions">
+                        <button class="sidebar-action-btn" @click="showManualModal = true" title="使用说明书">
+                            <i class="fas fa-question-circle"></i>
+                        </button>
                         <button class="sidebar-action-btn" @click="showThemePanel = true" :title="$t('nav.theme')">
                             <i class="fas fa-palette"></i>
                         </button>
@@ -6736,6 +6739,76 @@
             </div>
         </div>
 
+        <!-- 使用说明书弹窗 -->
+        <div v-if="showManualModal" class="modal-overlay" @click.self="showManualModal = false">
+            <div class="modal" style="max-width: 700px; max-height: 90vh;">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-question-circle" style="color: #8b5cf6; margin-right: 6px;"></i> 使用说明书</span>
+                    <button class="modal-close" @click="showManualModal = false">&times;</button>
+                </div>
+                <div class="modal-body" style="max-height: 80vh; overflow-y: auto; line-height: 1.8; font-size: 14px; color: var(--text-secondary);">
+                    <h3 style="color: var(--text-primary); margin-top: 0;">快速开始</h3>
+                    <ol>
+                        <li><b>配置 AI 模型</b>：进入「AI 配置」页面，添加至少一个模型（支持 OpenAI / Claude / DeepSeek 等），设置为聊天用途。</li>
+                        <li><b>设置角色</b>：进入「角色设置」页面，编辑角色名称、性格、背景等信息。可使用 AI 自动生成。</li>
+                        <li><b>开始聊天</b>：进入「聊天」页面，选择一个会话即可开始对话。</li>
+                    </ol>
+
+                    <h3 style="color: var(--text-primary);">核心功能</h3>
+                    <ul>
+                        <li><b>会话管理</b>：支持多会话、会话归档/恢复、消息编辑/删除、上下文压缩。</li>
+                        <li><b>角色系统</b>：角色卡定义人格，运行时状态自动追踪情绪/关系/场景，记忆自动抽取。</li>
+                        <li><b>世界书</b>：绑定世界观设定，支持多源上下文召回（用户消息 + 助手回复 + 历史 + 场景状态自动触发）。</li>
+                        <li><b>知识库</b>：上传文档建立向量索引，AI 对话时自动检索相关知识。</li>
+                        <li><b>技能/工具</b>：扩展 AI 能力，支持自定义技能脚本和工具调用。</li>
+                        <li><b>工作流</b>：自动化任务流程，支持关键词触发和手动执行。</li>
+                    </ul>
+
+                    <h3 style="color: var(--text-primary);">频道接入</h3>
+                    <ul>
+                        <li><b>QQ</b>：通过 NapCat/Lagrange 等协议端接入，支持私聊和群聊。</li>
+                        <li><b>Telegram</b>：通过 Bot Token + Webhook 接入。</li>
+                        <li><b>飞书</b>：支持 Webhook 和 WebSocket 两种模式。</li>
+                        <li><b>Web</b>：内置 Web 聊天界面，支持 PWA 推送通知。</li>
+                    </ul>
+
+                    <h3 style="color: var(--text-primary);">AI 模型</h3>
+                    <ul>
+                        <li>支持多模型配置，每个模型可设置不同用途（聊天/记忆/规划/摘要）。</li>
+                        <li>支持故障转移：主模型不可用时自动切换备用模型。</li>
+                        <li>支持 OpenAI 兼容、Claude、Gemini、DeepSeek、硅基流动等多种协议。</li>
+                    </ul>
+
+                    <h3 style="color: var(--text-primary);">角色运行时</h3>
+                    <ul>
+                        <li><b>情绪系统</b>：自动追踪角色情绪状态和强度。</li>
+                        <li><b>关系系统</b>：自动维护角色与用户的好感/信任/熟悉度等关系指标。</li>
+                        <li><b>场景状态</b>：自动识别当前地点、剧情弧、氛围等，用于世界书触发。</li>
+                        <li><b>记忆系统</b>：自动从对话中抽取长期记忆，跨会话保持。</li>
+                    </ul>
+
+                    <h3 style="color: var(--text-primary);">调试台</h3>
+                    <ul>
+                        <li>「API 文档」按钮查看所有可用接口。</li>
+                        <li>「系统日志」查看运行日志和错误信息。</li>
+                        <li>「Token 用量」监控 AI 模型调用消耗。</li>
+                    </ul>
+
+                    <h3 style="color: var(--text-primary);">常见问题</h3>
+                    <ul>
+                        <li><b>AI 不回复</b>：检查 AI 模型配置是否正确，API Key 是否有效。</li>
+                        <li><b>世界书不触发</b>：检查条目是否启用、关键词是否匹配、角色是否绑定。</li>
+                        <li><b>QQ 消息收不到</b>：检查协议端（NapCat）是否正常运行，Webhook 地址是否正确。</li>
+                        <li><b>角色记忆丢失</b>：检查记忆服务是否正常，可手动在角色管理页面查看和添加记忆。</li>
+                    </ul>
+
+                    <div style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px;">
+                        <b>提示：</b>更多详细文档请访问项目文档站点，或在调试台点击「API 文档」查看完整接口说明。
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 自定义确认对话框 -->
         <div v-if="showConfirmDialog" class="modal-overlay confirm-modal-overlay" @click.self="cancelDialogConfirm">
             <div class="modal" style="max-width: 400px;">
@@ -10135,6 +10208,7 @@
                         data: null
                     },
                     showThemePanel: false,
+                    showManualModal: false,
                     showQqScrollButton: false,
                     pendingMessageQueues: {},
                     isProcessingQueuedMessage: false,
@@ -10193,9 +10267,16 @@
                     currentApiCategory: 'sessions',
                     apiDocCategories: [
                         { id: 'sessions', name: '会话管理', icon: 'fas fa-comments' },
+                        { id: 'characters', name: '角色管理', icon: 'fas fa-user-ninja' },
+                        { id: 'world_book', name: '世界书', icon: 'fas fa-book-open' },
+                        { id: 'personality', name: '人格预设', icon: 'fas fa-id-card' },
                         { id: 'memory', name: '记忆管理', icon: 'fas fa-brain' },
                         { id: 'knowledge', name: '知识库', icon: 'fas fa-book' },
-                        { id: 'workflow', name: '工作流', icon: 'fas fa-project-diagram' },
+                        { id: 'ai_models', name: 'AI 模型', icon: 'fas fa-robot' },
+                        { id: 'channels', name: '频道管理', icon: 'fas fa-broadcast-tower' },
+                        { id: 'skills', name: '技能/工具', icon: 'fas fa-tools' },
+                        { id: 'workflows', name: '工作流', icon: 'fas fa-project-diagram' },
+                        { id: 'workspace', name: '工作区', icon: 'fas fa-folder-open' },
                         { id: 'stats', name: '统计信息', icon: 'fas fa-chart-bar' },
                         { id: 'settings', name: '系统设置', icon: 'fas fa-cog' }
                     ],
@@ -10204,53 +10285,209 @@
                             { method: 'GET', path: '/api/sessions', description: '获取所有会话列表', params: [
                                 { name: 'type', type: 'string', desc: '筛选类型: web/qq/all' }
                             ], response: '{"sessions": [...], "web": [...], "qq_private": [...], "qq_group": [...]}' },
-                            { method: 'GET', path: '/api/session/:id', description: '获取指定会话详情', params: [
+                            { method: 'POST', path: '/api/sessions', description: '创建新会话', body: '{"name": "会话名称"}', response: '{"success": true, "session": {...}}' },
+                            { method: 'GET', path: '/api/sessions/:id', description: '获取指定会话详情', params: [
                                 { name: 'id', type: 'string', desc: '会话ID' }
                             ]},
-                            { method: 'POST', path: '/api/session', description: '创建新会话', body: '{"name": "会话名称", "type": "web"}', response: '{"id": "xxx", "name": "会话名称"}' },
-                            { method: 'PUT', path: '/api/session/:id', description: '更新会话设置', params: [
-                                { name: 'id', type: 'string', desc: '会话ID' }
-                            ], body: '{"name": "新名称", "ai_config": {...}}' },
-                            { method: 'DELETE', path: '/api/session/:id', description: '删除会话', params: [
-                                { name: 'id', type: 'string', desc: '会话ID' }
-                            ]}
+                            { method: 'PUT', path: '/api/sessions/:id', description: '更新会话设置', body: '{"name": "新名称"}' },
+                            { method: 'DELETE', path: '/api/sessions/:id', description: '删除会话' },
+                            { method: 'POST', path: '/api/sessions/:id/archive', description: '归档会话' },
+                            { method: 'POST', path: '/api/sessions/:id/restore', description: '恢复归档会话' },
+                            { method: 'POST', path: '/api/sessions/:id/fork', description: '复制会话' },
+                            { method: 'PUT', path: '/api/sessions/:id/bind-character', description: '绑定角色到会话', body: '{"character_id": "角色ID"}' },
+                            { method: 'GET', path: '/api/sessions/:id/messages', description: '获取会话消息', params: [
+                                { name: 'limit', type: 'number', desc: '返回条数' }
+                            ]},
+                            { method: 'POST', path: '/api/sessions/:id/messages', description: '添加消息', body: '{"role": "user", "content": "消息内容"}' },
+                            { method: 'DELETE', path: '/api/sessions/:id/messages', description: '清空所有消息' },
+                            { method: 'POST', path: '/api/sessions/:id/chat', description: '发送消息给 AI', body: '{"content": "你好", "attachments": []}', response: '{"success": true, "content": "AI回复内容"}' },
+                            { method: 'POST', path: '/api/sessions/:id/regenerate', description: '重新生成最后一条 AI 回复' },
+                            { method: 'POST', path: '/api/stop', description: '停止 AI 生成' },
+                            { method: 'POST', path: '/api/sessions/:id/compress', description: '压缩上下文（摘要总结）' },
+                            { method: 'POST', path: '/api/sessions/:id/ai-summary', description: 'AI 生成会话摘要' },
+                            { method: 'GET', path: '/api/sessions/:id/runtime-timeline', description: '获取运行时时间线' },
+                            { method: 'GET', path: '/api/sessions/:id/export', description: '导出单个会话' },
+                            { method: 'POST', path: '/api/sessions/import', description: '导入会话', body: '{"sessions": [...]}' }
+                        ],
+                        characters: [
+                            { method: 'GET', path: '/api/characters', description: '列出所有角色卡' },
+                            { method: 'GET', path: '/api/characters/:id', description: '获取角色卡详情' },
+                            { method: 'POST', path: '/api/characters', description: '创建角色卡', body: '{"name": "角色名", "description": "描述", "personality": "性格"}' },
+                            { method: 'PUT', path: '/api/characters/:id', description: '更新角色卡' },
+                            { method: 'DELETE', path: '/api/characters/:id', description: '删除角色卡' },
+                            { method: 'GET', path: '/api/characters/:id/state', description: '获取角色运行时状态', response: '{"mood": "平静", "energy": 70, "scene": {"location": "白塔"}}' },
+                            { method: 'PUT', path: '/api/characters/:id/state', description: '手动更新运行时状态', body: '{"mood": "开心", "energy": 90, "scene": {"location": "神社"}}' },
+                            { method: 'GET', path: '/api/characters/:id/relationships', description: '获取角色与用户关系', response: '{"affection": 50, "trust": 50, "familiarity": 30}' },
+                            { method: 'PUT', path: '/api/characters/:id/relationships', description: '手动更新关系状态', body: '{"affection": 80, "trust": 70}' },
+                            { method: 'GET', path: '/api/characters/:id/memories', description: '列出角色记忆' },
+                            { method: 'POST', path: '/api/characters/:id/memories', description: '手动添加记忆', body: '{"title": "记忆标题", "content": "记忆内容", "type": "long"}' },
+                            { method: 'DELETE', path: '/api/characters/:id/memories/:memory_id', description: '删除记忆' },
+                            { method: 'GET', path: '/api/characters/:id/debug/latest-turn', description: '调试：最新一轮快照' },
+                            { method: 'GET', path: '/api/characters/runtime/status', description: '获取角色运行时引擎状态' },
+                            { method: 'POST', path: '/api/characters/runtime/initialize', description: '初始化角色运行时引擎' }
+                        ],
+                        world_book: [
+                            { method: 'GET', path: '/api/world-books', description: '列出所有世界书' },
+                            { method: 'POST', path: '/api/world-books', description: '创建世界书', body: '{"name": "世界书名称", "description": "描述", "character_ids": ["角色ID"]}' },
+                            { method: 'GET', path: '/api/world-books/:id', description: '获取单个世界书' },
+                            { method: 'PUT', path: '/api/world-books/:id', description: '更新世界书', body: '{"name": "新名称", "description": "新描述"}' },
+                            { method: 'DELETE', path: '/api/world-books/:id', description: '删除世界书' },
+                            { method: 'GET', path: '/api/world-books/:id/entries', description: '列出条目' },
+                            { method: 'POST', path: '/api/world-books/:id/entries', description: '添加条目', body: '{"name": "条目名", "keywords": ["关键词"], "content": "注入内容", "entry_type": "lore", "trigger_sources": ["user"], "priority": 50}' },
+                            { method: 'PUT', path: '/api/world-books/:id/entries/:entry_id', description: '更新条目', body: '{"name": "新名称", "priority": 80, "entry_type": "event", "trigger_sources": ["user", "assistant_recent"]}' },
+                            { method: 'DELETE', path: '/api/world-books/:id/entries/:entry_id', description: '删除条目' },
+                            { method: 'POST', path: '/api/world-books/:id/entries/batch', description: '批量添加条目', body: '{"entries": [{...}, {...}]}' },
+                            { method: 'POST', path: '/api/world-books/:id/ai-generate', description: 'AI 生成条目', body: '{"topic": "主题方向(可选)"}', response: '{"success": true, "count": 5, "entries": [...]}' },
+                            { method: 'POST', path: '/api/world-books/test-match', description: '测试关键词匹配（支持多源召回）', body: '{"message": "进去看看", "character_id": "风堇", "recent_messages": [{"role": "assistant", "content": "你们抵达白塔门前"}], "scene": {"location": "白塔"}}', response: '{"success": true, "matches": [{"entry_name": "白塔旧誓", "trigger_sources": ["assistant_recent", "scene_state"], "score": 155}]}' },
+                            { method: 'GET', path: '/api/world-books/export/:id', description: '导出单个世界书' },
+                            { method: 'POST', path: '/api/world-books/import', description: '导入世界书' },
+                            { method: 'GET', path: '/api/world-books/export-all', description: '导出全部世界书' },
+                            { method: 'POST', path: '/api/world-books/import-all', description: '批量导入世界书' }
+                        ],
+                        personality: [
+                            { method: 'GET', path: '/api/personality', description: '获取当前人格配置', response: '{"name": "角色名", "description": "描述", "personality": "性格", "scenario": "背景"}' },
+                            { method: 'PUT', path: '/api/personality', description: '更新人格配置', body: '{"name": "新名称", "description": "新描述", "personality": "新性格"}' },
+                            { method: 'GET', path: '/api/personality/presets', description: '获取内置人格预设列表' },
+                            { method: 'GET', path: '/api/personality/custom-presets', description: '获取自定义预设列表' },
+                            { method: 'POST', path: '/api/personality/custom-presets', description: '添加自定义预设' },
+                            { method: 'PUT', path: '/api/personality/custom-presets/:id', description: '更新自定义预设' },
+                            { method: 'DELETE', path: '/api/personality/custom-presets/:id', description: '删除自定义预设' },
+                            { method: 'POST', path: '/api/personality/ai-generate', description: 'AI 生成角色卡', body: '{"description": "一个温柔的猫娘"}', response: '{"success": true, "personality": {...}}' },
+                            { method: 'POST', path: '/api/personality/ai-generate-state', description: 'AI 生成初始状态值' },
+                            { method: 'POST', path: '/api/personality/ai-generate-first-message', description: 'AI 生成开场白' },
+                            { method: 'POST', path: '/api/personality/portrait', description: '上传角色头像' },
+                            { method: 'DELETE', path: '/api/personality/portrait', description: '删除角色头像' },
+                            { method: 'POST', path: '/api/personality/generate-portrait', description: 'AI 生成角色头像' },
+                            { method: 'POST', path: '/api/personality/export', description: '导出角色卡为 ZIP' },
+                            { method: 'POST', path: '/api/personality/import', description: '导入角色卡（ZIP/JSON）' },
+                            { method: 'GET', path: '/api/personality/export-all', description: '导出全部自定义角色卡' },
+                            { method: 'POST', path: '/api/personality/import-all', description: '批量导入角色卡' }
                         ],
                         memory: [
                             { method: 'GET', path: '/api/memory', description: '获取记忆列表', params: [
                                 { name: 'type', type: 'string', desc: '记忆类型: long/short/all' },
                                 { name: 'target_id', type: 'string', desc: '关联目标ID' }
                             ], response: '{"memories": [...], "long_term": [...], "short_term": [...]}' },
-                            { method: 'POST', path: '/api/memory', description: '添加新记忆', body: '{"title": "标题", "content": "内容", "summary": "摘要(可选)", "type": "long", "target_id": "用户ID"}', response: '{"success": true}' },
+                            { method: 'POST', path: '/api/memory', description: '添加新记忆', body: '{"title": "标题", "content": "内容", "summary": "摘要(可选)", "type": "long", "target_id": "用户ID"}' },
                             { method: 'PUT', path: '/api/memory/:id', description: '更新记忆', body: '{"title": "新标题", "content": "新内容", "summary": "新摘要"}' },
                             { method: 'DELETE', path: '/api/memory/:id', description: '删除记忆' },
                             { method: 'DELETE', path: '/api/memory', description: '清空所有记忆', params: [
                                 { name: 'target_id', type: 'string', desc: '可选，指定目标ID' }
-                            ]}
+                            ]},
+                            { method: 'GET', path: '/api/memory/export', description: '导出全部记忆' },
+                            { method: 'POST', path: '/api/memory/import', description: '导入记忆' },
+                            { method: 'POST', path: '/api/memory/batch-delete', description: '批量删除记忆', body: '{"ids": ["id1", "id2"]}' }
                         ],
                         knowledge: [
                             { method: 'GET', path: '/api/knowledge', description: '获取知识库文档列表' },
                             { method: 'POST', path: '/api/knowledge', description: '添加知识文档', body: '{"title": "标题", "content": "内容", "category": "分类"}' },
+                            { method: 'GET', path: '/api/knowledge/:id', description: '获取单个文档' },
+                            { method: 'PUT', path: '/api/knowledge/:id', description: '更新文档内容' },
                             { method: 'DELETE', path: '/api/knowledge/:id', description: '删除知识文档' },
-                            { method: 'POST', path: '/api/knowledge/search', description: '搜索知识库', body: '{"query": "搜索关键词"}' }
+                            { method: 'POST', path: '/api/knowledge/:id/index', description: '重建单文档向量索引' },
+                            { method: 'POST', path: '/api/knowledge/search', description: '搜索知识库', body: '{"query": "搜索关键词", "top_k": 5}', response: '{"results": [{"title": "...", "content": "...", "score": 0.85}]}' },
+                            { method: 'POST', path: '/api/knowledge/batch', description: '批量导入文档', body: '{"documents": [...]}' },
+                            { method: 'POST', path: '/api/knowledge/batch-delete', description: '批量删除文档', body: '{"ids": ["id1", "id2"]}' },
+                            { method: 'POST', path: '/api/knowledge/rebuild', description: '重建知识库向量索引' },
+                            { method: 'GET', path: '/api/knowledge/stats', description: '获取知识库统计' },
+                            { method: 'GET', path: '/api/knowledge/export', description: '导出全部文档' }
                         ],
-                        workflow: [
+                        ai_models: [
+                            { method: 'GET', path: '/api/ai-models', description: '列出所有 AI 模型配置' },
+                            { method: 'POST', path: '/api/ai-models', description: '创建模型配置', body: '{"name": "模型名称", "provider_type": "openai", "api_key": "sk-xxx", "model_name": "gpt-4o"}' },
+                            { method: 'PUT', path: '/api/ai-models/:id', description: '更新模型配置' },
+                            { method: 'DELETE', path: '/api/ai-models/:id', description: '删除模型配置' },
+                            { method: 'POST', path: '/api/ai-models/:id/apply', description: '应用/激活模型' },
+                            { method: 'POST', path: '/api/ai-models/:id/toggle', description: '切换启用状态' },
+                            { method: 'POST', path: '/api/ai-models/:id/clone', description: '克隆模型配置' },
+                            { method: 'POST', path: '/api/ai-models/:id/test', description: '测试模型配置' },
+                            { method: 'POST', path: '/api/ai-models/:id/set-purpose', description: '设置模型用途', body: '{"purpose": "chat"}' },
+                            { method: 'GET', path: '/api/ai-models/purposes', description: '获取所有用途类型', response: '{"purposes": ["chat", "memory", "planner", "summary"]}' },
+                            { method: 'GET', path: '/api/ai-models/by-purpose/:purpose', description: '按用途筛选模型' },
+                            { method: 'GET', path: '/api/ai-models/active-by-purpose', description: '获取每个用途的活跃模型' },
+                            { method: 'GET', path: '/api/ai-config', description: '获取 AI 配置' },
+                            { method: 'PUT', path: '/api/ai-config', description: '更新 AI 配置' },
+                            { method: 'POST', path: '/api/ai-config/test', description: '测试 AI 配置连通性' },
+                            { method: 'GET', path: '/api/ai-models/failover-status', description: '获取故障转移队列状态' },
+                            { method: 'POST', path: '/api/ai-models/failover-reset', description: '重置故障转移状态' }
+                        ],
+                        channels: [
+                            { method: 'GET', path: '/api/channels', description: '列出所有频道' },
+                            { method: 'POST', path: '/api/channels', description: '创建频道', body: '{"name": "频道名", "type": "qq", "config": {...}}' },
+                            { method: 'PUT', path: '/api/channels/:id', description: '更新频道' },
+                            { method: 'DELETE', path: '/api/channels/:id', description: '删除频道' },
+                            { method: 'POST', path: '/api/channels/:id/toggle', description: '切换启用状态' },
+                            { method: 'GET', path: '/api/channels/presets', description: '获取频道预设列表' },
+                            { method: 'POST', path: '/api/channels/presets/:preset_id', description: '从预设创建频道' }
+                        ],
+                        skills: [
+                            { method: 'GET', path: '/api/skills', description: '列出所有技能' },
+                            { method: 'POST', path: '/api/skills', description: '创建技能', body: '{"name": "技能名", "description": "描述", "enabled": true}' },
+                            { method: 'PUT', path: '/api/skills/:id', description: '更新技能' },
+                            { method: 'DELETE', path: '/api/skills/:id', description: '删除技能' },
+                            { method: 'POST', path: '/api/skills/:id/toggle', description: '切换启用状态' },
+                            { method: 'GET', path: '/api/tools', description: '列出所有工具' },
+                            { method: 'POST', path: '/api/tools', description: '创建工具' },
+                            { method: 'PUT', path: '/api/tools/:id', description: '更新工具' },
+                            { method: 'DELETE', path: '/api/tools/:id', description: '删除工具' },
+                            { method: 'POST', path: '/api/tools/:id/toggle', description: '切换工具启用状态' },
+                            { method: 'GET', path: '/api/task-center', description: '列出所有定时任务' },
+                            { method: 'POST', path: '/api/task-center', description: '创建定时任务' },
+                            { method: 'PUT', path: '/api/task-center/:id', description: '更新定时任务' },
+                            { method: 'DELETE', path: '/api/task-center/:id', description: '删除定时任务' },
+                            { method: 'POST', path: '/api/task-center/:id/run', description: '手动执行任务' }
+                        ],
+                        workflows: [
                             { method: 'GET', path: '/api/workflows', description: '获取工作流列表' },
-                            { method: 'POST', path: '/api/workflow', description: '创建工作流', body: '{"name": "工作流名称", "trigger": "关键词触发", "steps": [...]}' },
-                            { method: 'PUT', path: '/api/workflow/:id', description: '更新工作流' },
-                            { method: 'DELETE', path: '/api/workflow/:id', description: '删除工作流' },
-                            { method: 'POST', path: '/api/workflow/:id/execute', description: '手动执行工作流', body: '{"session_id": "xxx", "params": {...}}' }
+                            { method: 'POST', path: '/api/workflows', description: '创建工作流', body: '{"name": "工作流名称", "trigger": "关键词触发", "steps": [...]}' },
+                            { method: 'PUT', path: '/api/workflows/:id', description: '更新工作流' },
+                            { method: 'DELETE', path: '/api/workflows/:id', description: '删除工作流' },
+                            { method: 'POST', path: '/api/workflows/:id/toggle', description: '切换启用状态' },
+                            { method: 'POST', path: '/api/workflows/:id/execute', description: '手动执行工作流', body: '{"context": {...}}' }
+                        ],
+                        workspace: [
+                            { method: 'GET', path: '/api/sessions/:id/workspace/files', description: '列出工作区文件' },
+                            { method: 'POST', path: '/api/sessions/:id/workspace/upload', description: '上传文件到工作区' },
+                            { method: 'GET', path: '/api/sessions/:id/workspace/files/:filename', description: '下载工作区文件' },
+                            { method: 'DELETE', path: '/api/sessions/:id/workspace/files/:filename', description: '删除工作区文件' },
+                            { method: 'POST', path: '/api/sessions/:id/workspace/folders', description: '创建文件夹', body: '{"name": "文件夹名"}' },
+                            { method: 'POST', path: '/api/sessions/:id/workspace/files/:filename/move', description: '移动文件' },
+                            { method: 'GET', path: '/api/workspace/shared/files', description: '列出共享工作区文件' },
+                            { method: 'POST', path: '/api/upload', description: '上传文件', body: 'FormData with file' }
                         ],
                         stats: [
                             { method: 'GET', path: '/api/stats', description: '获取系统统计信息', response: '{"today_messages": 10, "total_messages": 100, "active_sessions": 5, "token_usage": 50000}' },
+                            { method: 'GET', path: '/api/stats/messages', description: '获取消息统计（按时间段）', params: [
+                                { name: 'period', type: 'string', desc: '时间段: day/week/month' }
+                            ]},
                             { method: 'GET', path: '/api/stats/platforms', description: '获取各平台消息统计' },
-                            { method: 'GET', path: '/api/stats/tokens', description: '获取 Token 使用统计' }
+                            { method: 'GET', path: '/api/tokens', description: '获取 Token 使用统计' },
+                            { method: 'GET', path: '/api/tokens/rankings', description: '获取 Token 使用排行' },
+                            { method: 'GET', path: '/api/tokens/export', description: '导出 Token 记录' },
+                            { method: 'GET', path: '/api/startup-status', description: '获取启动状态' },
+                            { method: 'GET', path: '/api/commands', description: '获取命令目录' }
                         ],
                         settings: [
-                            { method: 'GET', path: '/api/config', description: '获取系统配置' },
-                            { method: 'PUT', path: '/api/config', description: '更新系统配置', body: '{"key": "配置键", "value": "配置值"}' },
-                            { method: 'GET', path: '/api/personality', description: '获取人格配置' },
-                            { method: 'PUT', path: '/api/personality', description: '更新人格配置', body: '{"name": "角色名", "description": "角色描述"}' },
-                            { method: 'GET', path: '/api/system/reload', description: '重载系统配置' }
+                            { method: 'GET', path: '/api/settings', description: '获取系统设置' },
+                            { method: 'PUT', path: '/api/settings', description: '更新系统设置', body: '{"key": "值"}' },
+                            { method: 'GET', path: '/api/config', description: '获取系统配置（旧版）' },
+                            { method: 'POST', path: '/api/config', description: '保存系统配置（旧版）' },
+                            { method: 'GET', path: '/api/logs', description: '获取系统日志', params: [
+                                { name: 'limit', type: 'number', desc: '返回条数' },
+                                { name: 'level', type: 'string', desc: '日志级别: info/warn/error' }
+                            ]},
+                            { method: 'DELETE', path: '/api/logs', description: '清空系统日志' },
+                            { method: 'POST', path: '/api/logs/cleanup', description: '清理日志文件' },
+                            { method: 'POST', path: '/api/system/reload-core', description: '重载核心模块' },
+                            { method: 'POST', path: '/api/system/reload-config', description: '重载系统配置' },
+                            { method: 'GET', path: '/api/heartbeat', description: '获取心跳配置' },
+                            { method: 'PUT', path: '/api/heartbeat', description: '更新心跳配置' },
+                            { method: 'POST', path: '/api/heartbeat/run', description: '手动触发心跳' },
+                            { method: 'GET', path: '/api/api-keys', description: '列出 API 密钥' },
+                            { method: 'POST', path: '/api/api-keys', description: '创建 API 密钥' },
+                            { method: 'DELETE', path: '/api/api-keys/:id', description: '删除 API 密钥' },
+                            { method: 'POST', path: '/api/config-transfer/export', description: '导出配置包' },
+                            { method: 'POST', path: '/api/config-transfer/import', description: '导入配置包' }
                         ]
                     },
                     

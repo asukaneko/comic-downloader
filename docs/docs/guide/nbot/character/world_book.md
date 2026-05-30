@@ -6,20 +6,24 @@
 
 世界书系统由三个模块组成：
 
-- **world_book_matcher.py** — 关键词匹配器，扫描用户消息并返回命中的世界书条目
+- **world_book_matcher.py** — 多源上下文召回匹配器，支持用户消息 / 助手回复 / 历史上下文 / 场景状态多种触发源
 - **world_book_injector.py** — PromptStack 注入器，将命中条目格式化后注册到提示词栈
 - **storage/world_book_store.py** — JSON 持久化层，管理世界书及条目的 CRUD
 
 ```
-用户消息
+当前用户消息
++ 最近助手回复
++ 最近对话历史
++ 角色场景状态
++ 已激活条目
   ↓
-WorldBookStore.list_all()          # 加载所有世界书
+WorldBookStore.list_all()              # 加载所有世界书
   ↓
-match_entries(message, books, id)  # 关键词匹配
+match_entries_v2(context, books, id)   # 多源召回匹配
   ↓
-inject_world_book(stack, entries)  # 注入 PromptStack (priority=65)
+inject_world_book(stack, entries)      # 注入 PromptStack (priority=65)
   ↓
-stack.render() → system prompt     # 合成最终提示词
+stack.render() → system prompt         # 合成最终提示词
 ```
 
 ## 数据模型
@@ -37,9 +41,44 @@ class WorldBookEntry:
     priority: int = 0                 # 优先级（越高越优先注入）
     case_sensitive: bool = False      # 是否区分大小写
     match_mode: str = "any"           # "any" = 任一命中, "all" = 全部命中
+
+    # 多源召回扩展字段
+    trigger_sources: List[str] = ["user"]  # 允许的触发源
+    always_on: bool = False           # 是否常驻注入（不需要关键词触发）
+    state_triggers: Dict = {}         # 场景状态触发条件
+    cooldown_turns: int = 0           # 命中后冷却轮数（0=无冷却）
+    max_injections_per_session: int = 0  # 单会话最多注入次数（0=不限）
+    tags: List[str] = []              # 标签，用于分类与调试
+    entry_type: str = "lore"          # 条目类型
+    weight: int = 0                   # 额外权重
+
     created_at: str = ""
     updated_at: str = ""
 ```
+
+### trigger_sources 可选值
+
+| 值 | 说明 | 基础分 |
+|---|---|---|
+| `user` | 当前用户消息触发 | 50 |
+| `assistant_recent` | 最近助手回复触发 | 30 |
+| `history` | 最近对话历史触发 | 20 |
+| `scene_state` | 角色场景状态触发 | 45 |
+| — | `always_on=True` 常驻注入 | 100 |
+
+### entry_type 可选值
+
+| 值 | 说明 | 排序优先级 |
+|---|---|---|
+| `relationship` | 角色与用户关系 | 90 |
+| `rule` | 世界规则 | 80 |
+| `location` | 地点 | 70 |
+| `event` | 剧情事件 | 60 |
+| `npc` | NPC 角色 | 50 |
+| `faction` | 阵营/组织 | 45 |
+| `lore` | 世界观设定（默认） | 40 |
+| `style` | 叙事风格 | 35 |
+| `secret` | 隐藏真相 | 30 |
 
 ### WorldBook — 世界书
 
@@ -56,38 +95,113 @@ class WorldBook:
     updated_at: str = ""
 ```
 
-## 关键词匹配
+## 多源上下文召回
 
-匹配逻辑位于 `world_book_matcher.py`：
+### 召回上下文 — WorldBookRecallContext
+
+描述本轮世界书匹配可使用的所有信息：
 
 ```python
-def match_entries(
-    user_message: str,
-    world_books: List[WorldBook],
-    character_id: Optional[str] = None,
-    max_total_chars: int = 3000,
-) -> List[WorldBookEntry]:
+@dataclass
+class WorldBookRecallContext:
+    latest_user_message: str = ""     # 当前用户消息
+    recent_messages: List[Dict] = []  # 最近若干轮聊天
+    assistant_recent_text: str = ""   # 最近助手回复拼接文本
+    history_text: str = ""            # 最近上下文拼接文本
+    scene: Dict[str, Any] = {}        # 当前角色场景状态
+    active_entry_ids: List[str] = []  # 最近几轮已激活的条目
+    character_id: str = ""            # 当前角色 ID
+    target_id: str = ""               # 当前用户 ID
+    scope_id: str = ""                # 当前会话 ID
 ```
 
-### 匹配规则
+### 召回配置 — WorldBookRecallConfig
 
-1. 跳过已禁用的世界书 (`enabled=False`)
-2. 角色过滤：`character_ids` 为空表示全局生效；否则检查 `character_id` 是否在列表中
-   - 支持 UUID 和角色名称混合匹配（自动解析 `custom_personality_presets.json` 中的 UUID）
-3. 跳过已禁用的条目或没有关键词的条目
-4. 对每个关键词执行子串匹配 (`keyword in message`)
-5. 根据 `match_mode` 判断：
-   - `"any"`：任一关键词命中即匹配
-   - `"all"`：所有关键词都命中才匹配
-6. 命中条目按 `priority` 降序排列，总内容不超过 `max_total_chars`（默认 3000 字符）
+```python
+@dataclass
+class WorldBookRecallConfig:
+    recent_message_limit: int = 6     # 检索最近消息条数
+    max_history_chars: int = 2000     # 历史文本最大字符数
+    max_total_chars: int = 3000       # 注入总字符上限
+    max_entries: int = 8              # 最大注入条目数
+    max_always_chars: int = 800       # 常驻条目字符上限
+    max_scene_chars: int = 1000       # 场景条目字符上限
+    max_keyword_chars: int = 1200     # 关键词条目字符上限
+    max_assistant_triggered_entries: int = 3  # 助手回复每轮最多触发条数
+    min_assistant_priority: int = 20  # 助手回复触发的最低优先级
+    enable_assistant_trigger: bool = True
+    enable_history_trigger: bool = True
+    enable_scene_trigger: bool = True
+    enable_cooldown: bool = True
+```
 
-### UUID / 角色名称解析
+### 匹配流程 — match_entries_v2
 
-前端绑定角色时可能使用预设 UUID 或角色名称。匹配器内置双向解析：
+```python
+def match_entries_v2(
+    context: WorldBookRecallContext,
+    world_books: List[WorldBook],
+    character_id: Optional[str] = None,
+    config: Optional[WorldBookRecallConfig] = None,
+) -> List[WorldBookMatchResult]:
+```
 
-- 读取 `data/web/custom_personality_presets.json` 建立 UUID → 名称映射
-- 读取 `data/character/profiles.json` 获取所有角色名称
-- 结果带 mtime 缓存，文件未修改时不重复读取
+流程：
+
+1. 跳过已禁用的世界书
+2. 角色过滤（支持 UUID / 名称双向解析）
+3. 遍历每个条目：
+   - 常驻条目（`always_on=True`）直接加入，得分 100 + priority + weight
+   - 分别检测 user / assistant_recent / history / scene_state 四个触发源
+   - 每个命中源累加对应基础分
+   - 最终得分 = 各源基础分 + priority + weight
+4. 排序：score 降序 → priority 降序 → entry_type 优先级降序 → 内容长度升序
+5. 裁剪至 `max_entries`
+
+### 匹配结果 — WorldBookMatchResult
+
+```python
+@dataclass
+class WorldBookMatchResult:
+    entry: WorldBookEntry             # 命中的条目
+    trigger_sources: List[str] = []   # 本次命中的触发源
+    matched_keywords: List[str] = []  # 命中的关键词
+    score: int = 0                    # 总得分
+```
+
+### 防止世界书爆炸
+
+- `assistant_recent` 只能触发 `priority >= 20` 的条目
+- `assistant_recent` 每轮最多新增 3 个条目
+- `assistant_recent` 不触发 `entry_type = secret` 的条目
+- 冷却机制：命中后需间隔 `cooldown_turns` 轮才能再次触发
+
+### 场景状态触发
+
+当条目的 `trigger_sources` 包含 `"scene_state"` 时，系统用 `state_triggers` 匹配 `CharacterState.scene`：
+
+```json
+{
+  "trigger_sources": ["user", "scene_state"],
+  "state_triggers": {
+    "location": ["白塔", "观星塔"],
+    "arc": ["命运循环", "火种仪式"]
+  }
+}
+```
+
+匹配逻辑：如果 `scene.location` 的值在 `["白塔", "观星塔"]` 中，则命中。
+
+## 向后兼容
+
+旧的 `match_entries()` 接口保留，内部包装为 `match_entries_v2()`：
+
+```python
+def match_entries(user_message, world_books, character_id=None, max_total_chars=3000):
+    context = WorldBookRecallContext(latest_user_message=user_message)
+    config = WorldBookRecallConfig(max_total_chars=max_total_chars)
+    return [m.entry for m in match_entries_v2(context, world_books, character_id, config)]
+```
 
 ## PromptStack 注入
 
@@ -122,7 +236,7 @@ def inject_world_book(
 50  character.relationship  # 关系状态
 55  character.reaction_plan # 反应计划
 60  character.memories      # 角色记忆
-65  world_book              # 世界书 ← 新增
+65  world_book              # 世界书
 70  knowledge.rag           # 知识库
 80  tool.instructions       # 工具说明
 ```
@@ -162,13 +276,22 @@ class WorldBookStore:
       "entries": {
         "<entry_id>": {
           "id": "...",
-          "name": "...",
-          "keywords": ["关键词1", "关键词2"],
-          "content": "命中的世界设定文本...",
+          "name": "白塔旧誓",
+          "keywords": ["白塔", "旧日誓约"],
+          "content": "白塔是上一轮命运循环中...",
           "enabled": true,
-          "priority": 0,
+          "priority": 80,
           "case_sensitive": false,
-          "match_mode": "any"
+          "match_mode": "any",
+          "trigger_sources": ["user", "assistant_recent", "scene_state"],
+          "always_on": false,
+          "state_triggers": {
+            "location": ["白塔", "观星塔"]
+          },
+          "cooldown_turns": 2,
+          "entry_type": "event",
+          "weight": 0,
+          "tags": ["风堇", "翁法罗斯"]
         }
       },
       "enabled": true
@@ -183,10 +306,12 @@ class WorldBookStore:
 
 ```python
 # runtime.py
-def before_turn(self, chat_request, identity):
+def before_turn(self, chat_request, identity, recent_messages=None):
     ...
-    # 世界书关键词匹配
-    world_book_entries = self._match_world_books(identity, chat_request)
+    # 世界书多源上下文召回
+    world_book_entries = self._match_world_books(
+        identity, chat_request, state=state, recent_messages=recent_messages
+    )
 
     # 编译提示词（包含世界书注入）
     prompt_text = self._build_prompt(
@@ -199,6 +324,10 @@ def before_turn(self, chat_request, identity):
 
 ```python
 # ai_pipeline.py
+# 加载最近消息用于世界书多源召回
+recent_messages = callbacks.load_messages(ctx) or []
+turn = runtime.before_turn(ctx.chat_request, identity, recent_messages=recent_messages)
+
 if turn.world_book_entries:
     from nbot.character.world_book_injector import inject_world_book
     inject_world_book(ctx.prompt_stack, turn.world_book_entries)
@@ -218,9 +347,14 @@ if turn.world_book_entries:
 | PUT | `/api/world-books/<book_id>/entries/<entry_id>` | 更新条目 |
 | DELETE | `/api/world-books/<book_id>/entries/<entry_id>` | 删除条目 |
 | POST | `/api/world-books/<book_id>/entries/batch` | 批量添加条目 |
+| POST | `/api/world-books/<book_id>/ai-generate` | AI 生成条目 |
 | POST | `/api/world-books/test-match` | 测试关键词匹配 |
 
 ### 测试匹配接口
+
+支持两种模式：简单模式（仅用户消息）和多源模式（含最近消息和场景状态）。
+
+**简单模式**（向后兼容）：
 
 ```bash
 curl -X POST /api/world-books/test-match \
@@ -228,25 +362,63 @@ curl -X POST /api/world-books/test-match \
   -d '{"message": "你好世界", "character_id": "角色名"}'
 ```
 
-返回：
+**多源模式**：
+
+```bash
+curl -X POST /api/world-books/test-match \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "进去看看",
+    "character_id": "风堇",
+    "recent_messages": [
+      {"role": "assistant", "content": "你们抵达了白塔门前，风堇望着塔顶的火种纹章沉默。"}
+    ],
+    "scene": {
+      "location": "白塔",
+      "arc": "火种仪式前夕"
+    }
+  }'
+```
+
+返回（多源模式）：
 
 ```json
 {
   "success": true,
   "matches": [
     {
-      "world_book_name": "...",
-      "entry_name": "...",
-      "matched_keywords": ["关键词1"],
-      "content_preview": "..."
+      "world_book_name": "翁法罗斯",
+      "entry_name": "白塔旧誓",
+      "entry_id": "white_tower_oath",
+      "matched_keywords": ["白塔"],
+      "trigger_sources": ["assistant_recent", "scene_state"],
+      "score": 155,
+      "content_preview": "白塔是上一轮命运循环中..."
     }
   ]
 }
 ```
 
+### 条目更新接口
+
+支持所有新字段：
+
+```bash
+curl -X PUT /api/world-books/<book_id>/entries/<entry_id> \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "白塔旧誓",
+    "entry_type": "event",
+    "trigger_sources": ["user", "assistant_recent", "scene_state"],
+    "state_triggers": {"location": ["白塔"]},
+    "cooldown_turns": 2,
+    "weight": 10
+  }'
+```
+
 ## 使用示例
 
-### 创建世界书并绑定角色
+### 创建世界书并添加多源召回条目
 
 ```python
 from nbot.character.storage.world_book_store import WorldBookStore
@@ -255,34 +427,60 @@ store = WorldBookStore(base_dir)
 
 # 创建世界书
 book = store.create(
-    name="东方幻想乡",
-    description="东方 Project 世界观设定",
-    character_ids=["某角色名称"],
+    name="翁法罗斯",
+    description="崩坏：星穹铁道世界观设定",
+    character_ids=["风堇"],
 )
 
-# 添加条目
+# 添加地点条目（支持助手回复和场景状态触发）
 store.add_entry(book.id, {
-    "name": "博丽神社",
-    "keywords": ["神社", "博丽", "灵梦"],
-    "content": "博丽神社是幻想乡中的一座神社，位于博丽大结界边界附近...",
+    "name": "白塔旧誓",
+    "keywords": ["白塔", "旧日誓约", "观星塔"],
+    "content": "白塔是上一轮命运循环中风堇与用户分别的地方...",
     "match_mode": "any",
-    "priority": 10,
+    "priority": 80,
+    "entry_type": "event",
+    "trigger_sources": ["user", "assistant_recent", "history", "scene_state"],
+    "state_triggers": {"location": ["白塔", "观星塔"]},
+    "cooldown_turns": 2,
+})
+
+# 添加常驻规则条目
+store.add_entry(book.id, {
+    "name": "世界基础规则",
+    "keywords": [],
+    "content": "这是一个命运循环的世界，每次循环会重置大部分记忆...",
+    "always_on": True,
+    "entry_type": "rule",
+    "priority": 90,
 })
 ```
 
-### 手动匹配与注入
+### 手动匹配与注入（V2）
 
 ```python
-from nbot.character.world_book_matcher import match_entries
+from nbot.character.world_book_matcher import WorldBookRecallContext, match_entries_v2
 from nbot.character.world_book_injector import inject_world_book
 from nbot.character.prompt_stack import PromptStack
 
-# 匹配
+# 构建召回上下文
+context = WorldBookRecallContext(
+    latest_user_message="进去看看",
+    recent_messages=[
+        {"role": "assistant", "content": "你们抵达了白塔门前。"}
+    ],
+    scene={"location": "白塔", "arc": "火种仪式前夕"},
+)
+
+# 多源召回匹配
 world_books = store.list_all()
-entries = match_entries("灵梦今天在神社", world_books, character_id="某角色名称")
+results = match_entries_v2(context, world_books, character_id="风堇")
+
+for r in results:
+    print(f"{r.entry.name}: score={r.score}, sources={r.trigger_sources}")
 
 # 注入
 stack = PromptStack()
-inject_world_book(stack, entries)
+inject_world_book(stack, [r.entry for r in results])
 prompt = stack.render(base_prompt)
 ```
