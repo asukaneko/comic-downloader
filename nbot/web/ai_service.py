@@ -1333,21 +1333,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         result_metadata = getattr(result, 'metadata', None) or {}
                         used_model_id = result_metadata.get("model_id", "")
                         used_model_name = result_metadata.get("model_name", "")
-                        if used_model_id or used_model_name:
-                            gw.event_store.record(
-                                trace_id=trace_id,
-                                channel_id="web",
-                                status="model_selected",
-                                conversation_id=session_id,
-                                metadata={
-                                    k: v for k, v in {
-                                        "model_id": used_model_id,
-                                        "model_name": used_model_name,
-                                        "session_name": session_name,
-                                    }.items() if v
-                                },
-                            )
-                        # 记录故障转移事件
+                        # 先记录故障转移事件（发生在模型选择之前）
                         failover_events = result_metadata.get("failover_events", [])
                         for ev in failover_events:
                             gw.event_store.record(
@@ -1361,6 +1347,21 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                                         "failed_model_name": ev.get("model_name", ""),
                                         "status_code": ev.get("status_code", 0),
                                         "category": ev.get("category", ""),
+                                        "session_name": session_name,
+                                    }.items() if v
+                                },
+                            )
+                        # 再记录最终使用的模型
+                        if used_model_id or used_model_name:
+                            gw.event_store.record(
+                                trace_id=trace_id,
+                                channel_id="web",
+                                status="model_selected",
+                                conversation_id=session_id,
+                                metadata={
+                                    k: v for k, v in {
+                                        "model_id": used_model_id,
+                                        "model_name": used_model_name,
                                         "session_name": session_name,
                                     }.items() if v
                                 },
