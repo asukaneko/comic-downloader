@@ -13944,17 +13944,56 @@ def main(params):
                         error: 'fas fa-times-circle',
                         info: 'fas fa-info-circle'
                     };
-                    
+
                     const toast = {
                         id: Date.now(),
                         message,
                         type,
                         icon: icons[type]
                     };
-                    
+
                     this.toasts.push(toast);
                     setTimeout(() => {
                         this.toasts = this.toasts.filter(t => t.id !== toast.id);
+                        // Toast 消失后移入通知收纳箱
+                        const now = new Date();
+                        const hh = String(now.getHours()).padStart(2, '0');
+                        const mm = String(now.getMinutes()).padStart(2, '0');
+                        const ss = String(now.getSeconds()).padStart(2, '0');
+                        this.notificationInbox.unshift({
+                            id: toast.id,
+                            message: toast.message,
+                            type: toast.type,
+                            icon: toast.icon,
+                            timeLabel: `${hh}:${mm}:${ss}`
+                        });
+                        // 最多保留 100 条
+                        if (this.notificationInbox.length > 100) {
+                            this.notificationInbox.length = 100;
+                        }
                     }, 3000);
+                },
+
+                toggleNotificationInbox(event) {
+                    if (this.showNotificationInbox) {
+                        this.showNotificationInbox = false;
+                        return;
+                    }
+                    const btn = event.currentTarget;
+                    const rect = btn.getBoundingClientRect();
+                    this.inboxDropdownStyle = {
+                        position: 'fixed',
+                        top: (rect.bottom + 8) + 'px',
+                        right: (window.innerWidth - rect.right) + 'px'
+                    };
+                    this.showNotificationInbox = true;
+                },
+
+                closeNotificationInbox() {
+                    this.showNotificationInbox = false;
+                },
+
+                clearNotificationInbox() {
+                    this.notificationInbox = [];
                 }
 };

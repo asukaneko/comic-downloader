@@ -309,6 +309,9 @@
                 <header v-if="!isChatOnlyMode" class="top-bar">
                     <h1 class="page-title mobile-clickable" @click="toggleMobileMenu">{{ pageTitle }}</h1>
                     <div class="top-actions">
+                        <button class="btn-icon notification-inbox-btn" @click="toggleNotificationInbox($event)" title="消息通知" ref="inboxBtn">
+                            <i class="fas fa-bell"></i>
+                        </button>
                         <button class="btn-icon" @click="refreshData" :title="$t('app.refresh')" :disabled="isLoading">
                             <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
                         </button>
@@ -7878,6 +7881,32 @@
             </div>
         </div>
 
+        <!-- Notification Inbox Dropdown (top-level to avoid stacking context issues) -->
+        <div v-if="showNotificationInbox" class="notification-inbox-overlay" @click="closeNotificationInbox"></div>
+        <div v-if="showNotificationInbox" class="notification-inbox-dropdown" :style="inboxDropdownStyle">
+            <div class="notification-inbox-header">
+                <span class="notification-inbox-title"><i class="fas fa-bell"></i> 消息通知</span>
+                <button v-if="notificationInbox.length > 0" class="notification-inbox-clear" @click="clearNotificationInbox">
+                    <i class="fas fa-trash-alt"></i> 清空
+                </button>
+            </div>
+            <div class="notification-inbox-body">
+                <div v-if="notificationInbox.length === 0" class="notification-inbox-empty">
+                    <i class="fas fa-bell-slash"></i>
+                    <span>暂无通知</span>
+                </div>
+                <div v-else class="notification-inbox-list">
+                    <div v-for="item in notificationInbox" :key="item.id" class="notification-inbox-item" :class="item.type">
+                        <i :class="item.icon"></i>
+                        <div class="notification-inbox-item-content">
+                            <span class="notification-inbox-msg">{{ item.message }}</span>
+                            <span class="notification-inbox-time">{{ item.timeLabel }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Session Details Modal -->
         <div v-if="showSessionDetailsModal" class="modal-overlay" @click.self="showSessionDetailsModal = false">
             <div class="modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
@@ -10151,6 +10180,9 @@
                     
                     // UI State
                     toasts: [],
+                    notificationInbox: [],
+                    showNotificationInbox: false,
+                    inboxDropdownStyle: {},
                     sessionManagerView: localStorage.getItem('nbot_session_manager_view') || 'list',
                     showEditSessionModal: false,
                     editingSession: {},
