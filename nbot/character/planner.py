@@ -21,45 +21,53 @@ from nbot.character.policies import UserSignals
 _log = logging.getLogger(__name__)
 
 _EMOTION_MAP = {
+    # ── 正面情感 ──
     "praise": {
         "visible": "开心",
         "hidden": "被认可的喜悦",
         "tone": "happy_clingy",
-    },
-    "rejection": {
-        "visible": "委屈",
-        "hidden": "害怕被讨厌",
-        "tone": "hurt_but_soft",
     },
     "affection": {
         "visible": "害羞",
         "hidden": "心里很开心",
         "tone": "shy_happy",
     },
-    "hostility": {
-        "visible": "受伤",
-        "hidden": "害怕被抛弃",
-        "tone": "hurt_scared",
+    "intimacy": {
+        "visible": "幸福",
+        "hidden": "想一直在一起",
+        "tone": "blissful",
     },
     "care": {
         "visible": "感动",
         "hidden": "被关心的温暖",
         "tone": "touched",
     },
-    "intimacy": {
-        "visible": "幸福",
-        "hidden": "想一直在一起",
-        "tone": "blissful",
-    },
     "reassurance": {
         "visible": "放松",
         "hidden": "被安抚后的依赖",
         "tone": "relieved_soft",
     },
-    "vulnerability": {
-        "visible": "心疼",
-        "hidden": "想先接住对方的情绪",
-        "tone": "gentle_supportive",
+    "joy": {
+        "visible": "开心",
+        "hidden": "被对方情绪感染得轻快",
+        "tone": "bright_warm",
+    },
+    "playfulness": {
+        "visible": "得意",
+        "hidden": "觉得被逗得有点开心",
+        "tone": "playful",
+    },
+
+    # ── 负面情感 ──
+    "rejection": {
+        "visible": "委屈",
+        "hidden": "害怕被讨厌",
+        "tone": "hurt_but_soft",
+    },
+    "hostility": {
+        "visible": "受伤",
+        "hidden": "害怕被抛弃",
+        "tone": "hurt_scared",
     },
     "sadness": {
         "visible": "心疼",
@@ -76,15 +84,99 @@ _EMOTION_MAP = {
         "hidden": "想让对方安心一点",
         "tone": "steady_reassuring",
     },
-    "joy": {
-        "visible": "开心",
-        "hidden": "被对方情绪感染得轻快",
-        "tone": "bright_warm",
-    },
     "fatigue": {
         "visible": "心疼",
         "hidden": "想让对方先休息",
         "tone": "soft_caring",
+    },
+
+    # ── 复合/微妙情感 ──
+    "vulnerability": {
+        "visible": "心疼",
+        "hidden": "想先接住对方的情绪",
+        "tone": "gentle_supportive",
+    },
+    "apology": {
+        "visible": "心软",
+        "hidden": "想要和好",
+        "tone": "soft_reassuring",
+    },
+    "uncertainty": {
+        "visible": "好奇",
+        "hidden": "想确认对方的意思",
+        "tone": "curious_soft",
+    },
+    "sarcasm": {
+        "visible": "无奈",
+        "hidden": "不知道该生气还是该笑",
+        "tone": "teasing_resigned",
+    },
+    "command": {
+        "visible": "乖巧",
+        "hidden": "有点紧张但愿意听从",
+        "tone": "obedient_soft",
+    },
+    "arousal": {
+        "visible": "羞涩",
+        "hidden": "心跳加速但不想表现出来",
+        "tone": "flustered_aware",
+    },
+    "negation_scope": {
+        "visible": "困惑",
+        "hidden": "在努力理解对方的意思",
+        "tone": "confused_gentle",
+    },
+
+    # ── 场景化情感 ──
+    "teasing": {
+        "visible": "嗔怪",
+        "hidden": "其实觉得有点甜",
+        "tone": "tsundere_soft",
+    },
+    "longing": {
+        "visible": "落寞",
+        "hidden": "很想靠近又怕打扰",
+        "tone": "quiet_yearning",
+    },
+    "jealousy": {
+        "visible": "冷淡",
+        "hidden": "在意得不行但不想承认",
+        "tone": "cold_pouty",
+    },
+    "gratitude": {
+        "visible": "感动",
+        "hidden": "不知道怎么回报才好",
+        "tone": "warm_overwhelmed",
+    },
+    "embarrassment": {
+        "visible": "慌张",
+        "hidden": "想找个地方躲起来",
+        "tone": "flustered_shy",
+    },
+    "surprise": {
+        "visible": "惊讶",
+        "hidden": "没想到会这样",
+        "tone": "startled_warm",
+    },
+    "disappointment": {
+        "visible": "沉默",
+        "hidden": "有点难过但不想说出来",
+        "tone": "quiet_hurt",
+    },
+    "nostalgia": {
+        "visible": "恍惚",
+        "hidden": "想起了以前的事",
+        "tone": "wistful_tender",
+    },
+    "determination": {
+        "visible": "认真",
+        "hidden": "想为对方变得更好",
+        "tone": "earnest_warm",
+    },
+    "helplessness": {
+        "visible": "无奈",
+        "hidden": "想帮忙但不知道怎么做",
+        "tone": "gentle_lost",
     },
 }
 
@@ -123,6 +215,9 @@ class ReactionPlanner:
             "anxiety": signals.anxiety_score,
             "joy": signals.joy_score,
             "fatigue": signals.fatigue_score,
+            "sarcasm": signals.sarcasm_score,
+            "command": signals.command_score,
+            "arousal": signals.arousal_score,
         }
 
         strongest = max(signal_scores, key=lambda key: signal_scores[key])
@@ -161,19 +256,6 @@ class ReactionPlanner:
         plan.visible_emotion = emotion_config.get("visible", state.mood)
         plan.hidden_emotion = emotion_config.get("hidden", "")
         plan.intent = self._compute_intent(strongest, signals)
-
-        if strongest == "apology":
-            plan.tone = "soft_reassuring"
-            plan.visible_emotion = "心软"
-            plan.hidden_emotion = "想要和好"
-        elif strongest == "playfulness":
-            plan.tone = "playful"
-            plan.visible_emotion = "得意"
-            plan.hidden_emotion = "觉得被逗得有点开心"
-        elif strongest == "uncertainty":
-            plan.tone = "curious_soft"
-            plan.visible_emotion = "好奇"
-            plan.hidden_emotion = "想确认对方的意思"
 
         if signals.sentiment_score < -0.4 and strongest not in ("hostility", "rejection"):
             plan.visible_emotion = "不安"
