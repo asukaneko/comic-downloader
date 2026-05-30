@@ -167,14 +167,19 @@ def register_voice_routes(app, server):
     _configure_model_root(server.data_dir)
     _preload_stt_model()
 
+    _VALID_VOICES = frozenset({
+        "alloy", "echo", "fable", "onyx", "nova", "shimmer",
+        "coral", "verse", "ballad", "ash", "sage", "marin", "cedar",
+    })
+
     @app.route("/api/tts/synthesize", methods=["POST"])
     def tts_synthesize():
         """Convert text to speech."""
         try:
             data = request.json
             text = data.get("text", "")
-            voice = data.get("voice", "zh-CN-XiaoxiaoNeural")
-            speed = data.get("speed", 1.0)
+            request_voice = data.get("voice", "alloy")
+            request_speed = data.get("speed", 1.0)
 
             if not text:
                 return jsonify({"error": "Text is required"}), 400
@@ -183,14 +188,21 @@ def register_voice_routes(app, server):
 
             tts_config = _get_tts_config()
             api_key = tts_config.get("api_key")
-            base_url = tts_config.get("base_url", "https://api.siliconflow.cn/v1")
-            model = tts_config.get("model", "fnlp/MOSS-TTSD-v0.5")
-            config_voice = tts_config.get("voice", "default")
+            base_url = tts_config.get("base_url")
+            model = tts_config.get("model") or "gpt-4o-mini-tts"
+            config_voice = (tts_config.get("voice") or "").strip()
+            config_speed = tts_config.get("speed")
 
             if not api_key:
                 return jsonify({"error": "TTS API Key not configured"}), 400
 
-            voice_to_use = config_voice if config_voice != "default" else voice
+            voice_raw = config_voice if config_voice and config_voice not in ("default",) else request_voice
+            voice_to_use = voice_raw.strip().lower() if voice_raw else "alloy"
+            if voice_to_use not in _VALID_VOICES:
+                _log.warning("Invalid TTS voice '%s', falling back to 'alloy'", voice_to_use)
+                voice_to_use = "alloy"
+
+            speed_to_use = config_speed if config_speed else request_speed
 
             temp_dir = os.path.join(server.data_dir, "tts_cache")
             os.makedirs(temp_dir, exist_ok=True)
@@ -200,12 +212,15 @@ def register_voice_routes(app, server):
 
             client = OpenAI(api_key=api_key, base_url=base_url)
 
-            with client.audio.speech.with_streaming_response.create(
-                model=model,
-                voice=voice_to_use,
-                input=text,
-                response_format="mp3",
-            ) as response:
+            create_params = {
+                "model": model,
+                "voice": voice_to_use,
+                "input": text,
+                "response_format": "mp3",
+                "speed": speed_to_use,
+            }
+
+            with client.audio.speech.with_streaming_response.create(**create_params) as response:
                 response.stream_to_file(output_file)
 
             audio_url = f"/api/tts/audio/{os.path.basename(output_file)}"
@@ -213,7 +228,7 @@ def register_voice_routes(app, server):
                 "success": True,
                 "audio_url": audio_url,
                 "text": text,
-                "speed": speed,
+                "speed": speed_to_use,
             })
 
         except Exception as e:

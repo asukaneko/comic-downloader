@@ -14,12 +14,15 @@ def _get_tts_config():
     """获取TTS配置，优先使用新架构的配置"""
     tts_config = get_tts_model_config()
     if tts_config and tts_config.get("api_key"):
+        voice = (tts_config.get("voice") or "").strip()
+        if not voice or voice == "default":
+            voice = "alloy"
         return {
             "api_key": tts_config.get("api_key"),
-            "base_url": tts_config.get("base_url", "https://api.siliconflow.cn/v1"),
-            "model": tts_config.get("model", "fnlp/MOSS-TTSD-v0.5"),
-            "voice": tts_config.get("voice", "default"),
-            "speed": tts_config.get("speed", 1.0),
+            "base_url": tts_config.get("base_url") or "https://api.siliconflow.cn/v1",
+            "model": tts_config.get("model") or "gpt-4o-mini-tts",
+            "voice": voice,
+            "speed": tts_config.get("speed") or 1.0,
         }
     # 回退到传统配置
     return {

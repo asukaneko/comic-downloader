@@ -5774,7 +5774,7 @@ def main(params):
                     try {
                         const res = await api.post('/api/tts/synthesize', {
                             text: text,
-                            voice: 'zh-CN-XiaoxiaoNeural',
+                            voice: 'alloy',
                             speed: 1.0
                         });
 
