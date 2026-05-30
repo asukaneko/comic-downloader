@@ -13,6 +13,7 @@ const i18nMessages = {
     'common.save': '保存',
     'common.confirm': '确定',
     'common.delete': '删除',
+    'common.close': '关闭',
     'app.save_success': '保存成功',
     'app.save_failed': '保存失败',
     'app.confirm_delete': '确定要删除吗？',
@@ -1257,6 +1258,9 @@ const i18nMessages = {
     'world_book.ai_generating': '生成中...',
     'world_book.ai_generate_success': 'AI 生成成功',
     'world_book.ai_generate_failed': 'AI 生成失败',
+    'world_book.entry_detail': '条目详情',
+    'world_book.detail_no_keywords': '未设置关键词',
+    'world_book.detail_no_content': '无注入内容',
   },
   en: {
     // General
@@ -1267,6 +1271,7 @@ const i18nMessages = {
     'common.save': 'Save',
     'common.confirm': 'Confirm',
     'common.delete': 'Delete',
+    'common.close': 'Close',
     'app.save_success': 'Save successful',
     'app.save_failed': 'Save failed',
     'app.confirm_delete': 'Are you sure you want to delete?',
@@ -2553,6 +2558,9 @@ const i18nMessages = {
     'world_book.ai_generating': 'Generating...',
     'world_book.ai_generate_success': 'AI generation successful',
     'world_book.ai_generate_failed': 'AI generation failed',
+    'world_book.entry_detail': 'Entry Detail',
+    'world_book.detail_no_keywords': 'No keywords set',
+    'world_book.detail_no_content': 'No injection content',
   }
 };
 

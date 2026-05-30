@@ -3744,6 +3744,24 @@ def main(params):
                     this.editingWorldBookEntry = null;
                 },
 
+                viewWorldBookEntry(entry) {
+                    this.viewingWorldBookEntry = JSON.parse(JSON.stringify(entry));
+                    this.showWorldBookEntryDetailModal = true;
+                },
+
+                closeEntryDetailModal() {
+                    this.showWorldBookEntryDetailModal = false;
+                    this.viewingWorldBookEntry = null;
+                },
+
+                editFromDetail() {
+                    const entry = this.viewingWorldBookEntry;
+                    this.closeEntryDetailModal();
+                    if (entry) {
+                        this.editWorldBookEntry(entry);
+                    }
+                },
+
                 addKeyword() {
                     const input = (this.newKeywordInput || '').trim();
                     if (!input) return;

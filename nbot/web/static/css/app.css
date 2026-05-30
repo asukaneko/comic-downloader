@@ -21977,6 +21977,104 @@
     -webkit-box-orient: vertical;
 }
 
+/* Entry Detail Modal */
+.wb-detail-modal {
+    max-width: 600px;
+}
+
+.wb-detail-section {
+    margin-bottom: 18px;
+}
+
+.wb-detail-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.wb-detail-name {
+    font-size: 17px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.wb-detail-value {
+    font-size: 14px;
+    color: #cbd5e1;
+    line-height: 1.6;
+}
+
+.wb-detail-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.wb-detail-content {
+    font-size: 14px;
+    color: #cbd5e1;
+    line-height: 1.7;
+    background: rgba(2, 6, 23, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 10px;
+    padding: 14px 16px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.wb-detail-empty {
+    font-size: 13px;
+    color: #64748b;
+    font-style: italic;
+}
+
+.wb-detail-meta-row {
+    display: flex;
+    gap: 20px;
+    padding: 14px 16px;
+    background: rgba(2, 6, 23, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.08);
+    border-radius: 10px;
+    margin-top: 4px;
+}
+
+.wb-detail-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.wb-detail-meta-label {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.wb-detail-meta-value {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e2e8f0;
+}
+
+[data-theme="light"] .wb-detail-name { color: #1e293b; }
+[data-theme="light"] .wb-detail-value { color: #334155; }
+[data-theme="light"] .wb-detail-content {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #334155;
+}
+[data-theme="light"] .wb-detail-empty { color: #94a3b8; }
+[data-theme="light"] .wb-detail-meta-row {
+    background: #f1f5f9;
+    border-color: #e2e8f0;
+}
+[data-theme="light"] .wb-detail-meta-label { color: #64748b; }
+[data-theme="light"] .wb-detail-meta-value { color: #1e293b; }
+
 /* Empty Entries */
 .wb-empty-entries {
     text-align: center;

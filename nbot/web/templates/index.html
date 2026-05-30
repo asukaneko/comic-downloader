@@ -3570,7 +3570,7 @@
                                                 </div>
                                             </div>
 
-                                            <div v-for="entry in worldBookEntries" :key="entry.id" class="wb-entry">
+                                            <div v-for="entry in worldBookEntries" :key="entry.id" class="wb-entry" @click="viewWorldBookEntry(entry)" style="cursor: pointer;">
                                                 <div class="wb-entry-header">
                                                     <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
                                                         <span class="wb-entry-name">{{ entry.name || $t('world_book.unnamed_entry') }}</span>
@@ -3579,7 +3579,7 @@
                                                             <span class="wb-entry-badge mode">{{ entry.match_mode === 'all' ? $t('world_book.match_all') : $t('world_book.match_any') }}</span>
                                                         </div>
                                                     </div>
-                                                    <div class="wb-entry-actions">
+                                                    <div class="wb-entry-actions" @click.stop>
                                                         <button class="wb-btn-icon" @click="editWorldBookEntry(entry)"><i class="fas fa-edit"></i></button>
                                                         <button class="wb-btn-icon" @click="deleteWorldBookEntry(entry.id)"><i class="fas fa-trash"></i></button>
                                                     </div>
@@ -3646,6 +3646,55 @@
                                 <div class="modal-footer">
                                     <button class="btn btn-secondary" @click="closeEntryModal">{{ $t('common.cancel') }}</button>
                                     <button class="btn btn-primary" @click="saveWorldBookEntry">{{ $t('common.save') }}</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Entry Detail Modal -->
+                        <div v-if="showWorldBookEntryDetailModal" class="modal-overlay" @click.self="closeEntryDetailModal">
+                            <div class="modal wb-detail-modal">
+                                <div class="modal-header">
+                                    <span class="modal-title"><i class="fas fa-book-open" style="color: #8b5cf6; margin-right: 6px;"></i> {{ $t('world_book.entry_detail') }}</span>
+                                    <button class="modal-close" @click="closeEntryDetailModal">&times;</button>
+                                </div>
+                                <div class="modal-body" v-if="viewingWorldBookEntry">
+                                    <div class="wb-detail-section">
+                                        <div class="wb-detail-label">{{ $t('world_book.entry_name') }}</div>
+                                        <div class="wb-detail-value wb-detail-name">{{ viewingWorldBookEntry.name || $t('world_book.unnamed_entry') }}</div>
+                                    </div>
+                                    <div class="wb-detail-section">
+                                        <div class="wb-detail-label">{{ $t('world_book.keywords') }}</div>
+                                        <div class="wb-detail-keywords" v-if="viewingWorldBookEntry.keywords && viewingWorldBookEntry.keywords.length">
+                                            <span v-for="kw in viewingWorldBookEntry.keywords" :key="kw" class="wb-kw-tag">{{ kw }}</span>
+                                        </div>
+                                        <div v-else class="wb-detail-empty">{{ $t('world_book.detail_no_keywords') }}</div>
+                                    </div>
+                                    <div class="wb-detail-section">
+                                        <div class="wb-detail-label">{{ $t('world_book.content') }}</div>
+                                        <div class="wb-detail-content" v-if="viewingWorldBookEntry.content">{{ viewingWorldBookEntry.content }}</div>
+                                        <div v-else class="wb-detail-empty">{{ $t('world_book.detail_no_content') }}</div>
+                                    </div>
+                                    <div class="wb-detail-meta-row">
+                                        <div class="wb-detail-meta-item">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.match_mode') }}</span>
+                                            <span class="wb-entry-badge mode" style="font-size: 12px;">{{ viewingWorldBookEntry.match_mode === 'all' ? $t('world_book.match_all') : $t('world_book.match_any') }}</span>
+                                        </div>
+                                        <div class="wb-detail-meta-item">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.priority') }}</span>
+                                            <span class="wb-detail-meta-value">{{ viewingWorldBookEntry.priority }}</span>
+                                        </div>
+                                        <div class="wb-detail-meta-item">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.enabled') }}</span>
+                                            <span class="wb-detail-meta-value">
+                                                <i v-if="viewingWorldBookEntry.enabled" class="fas fa-check-circle" style="color: #10b981;"></i>
+                                                <i v-else class="fas fa-times-circle" style="color: #ef4444;"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="closeEntryDetailModal">{{ $t('common.close') }}</button>
+                                    <button class="btn btn-primary" @click="editFromDetail"><i class="fas fa-edit" style="margin-right: 4px;"></i> {{ $t('world_book.edit_entry') }}</button>
                                 </div>
                             </div>
                         </div>
@@ -9572,6 +9621,8 @@
                     worldBookLoading: false,
                     worldBookSaving: false,
                     showWorldBookEntryModal: false,
+                    showWorldBookEntryDetailModal: false,
+                    viewingWorldBookEntry: null,
                     editingWorldBookEntry: null,
                     newKeywordInput: '',
                     characterList: [],
