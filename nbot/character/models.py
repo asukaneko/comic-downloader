@@ -334,6 +334,17 @@ class WorldBookEntry:
     priority: int = 0
     case_sensitive: bool = False
     match_mode: str = "any"  # "any" = 任一命中, "all" = 全部命中
+
+    # 多源召回扩展字段
+    trigger_sources: List[str] = field(default_factory=lambda: ["user"])
+    always_on: bool = False
+    state_triggers: Dict[str, List[str]] = field(default_factory=dict)
+    cooldown_turns: int = 0
+    max_injections_per_session: int = 0
+    tags: List[str] = field(default_factory=list)
+    entry_type: str = "lore"
+    weight: int = 0
+
     created_at: str = ""
     updated_at: str = ""
 
@@ -347,6 +358,14 @@ class WorldBookEntry:
             "priority": self.priority,
             "case_sensitive": self.case_sensitive,
             "match_mode": self.match_mode,
+            "trigger_sources": self.trigger_sources,
+            "always_on": self.always_on,
+            "state_triggers": self.state_triggers,
+            "cooldown_turns": self.cooldown_turns,
+            "max_injections_per_session": self.max_injections_per_session,
+            "tags": self.tags,
+            "entry_type": self.entry_type,
+            "weight": self.weight,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -362,6 +381,14 @@ class WorldBookEntry:
             priority=data.get("priority", 0),
             case_sensitive=data.get("case_sensitive", False),
             match_mode=data.get("match_mode", "any"),
+            trigger_sources=data.get("trigger_sources", ["user"]),
+            always_on=data.get("always_on", False),
+            state_triggers=data.get("state_triggers", {}),
+            cooldown_turns=data.get("cooldown_turns", 0),
+            max_injections_per_session=data.get("max_injections_per_session", 0),
+            tags=data.get("tags", []),
+            entry_type=data.get("entry_type", "lore"),
+            weight=data.get("weight", 0),
             created_at=data.get("created_at", ""),
             updated_at=data.get("updated_at", ""),
         )

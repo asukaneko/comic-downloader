@@ -143,6 +143,14 @@ class WorldBookStore:
             priority=entry_data.get("priority", 0),
             case_sensitive=entry_data.get("case_sensitive", False),
             match_mode=entry_data.get("match_mode", "any"),
+            trigger_sources=entry_data.get("trigger_sources", ["user"]),
+            always_on=entry_data.get("always_on", False),
+            state_triggers=entry_data.get("state_triggers", {}),
+            cooldown_turns=entry_data.get("cooldown_turns", 0),
+            max_injections_per_session=entry_data.get("max_injections_per_session", 0),
+            tags=entry_data.get("tags", []),
+            entry_type=entry_data.get("entry_type", "lore"),
+            weight=entry_data.get("weight", 0),
             created_at=now,
             updated_at=now,
         )
@@ -171,7 +179,9 @@ class WorldBookStore:
         if not entry_data:
             return None
 
-        for key in ("name", "keywords", "content", "enabled", "priority", "case_sensitive", "match_mode"):
+        for key in ("name", "keywords", "content", "enabled", "priority", "case_sensitive", "match_mode",
+                    "trigger_sources", "always_on", "state_triggers", "cooldown_turns",
+                    "max_injections_per_session", "tags", "entry_type", "weight"):
             if key in kwargs:
                 entry_data[key] = kwargs[key]
         entry_data["updated_at"] = datetime.now().isoformat()

@@ -49,7 +49,7 @@ class CharacterRuntime:
         self.state_machine = state_machine
         self._world_book_store = world_book_store
 
-    def before_turn(self, chat_request, identity: CharacterIdentity) -> CharacterTurnContext:
+    def before_turn(self, chat_request, identity: CharacterIdentity, recent_messages: list = None) -> CharacterTurnContext:
         """每轮对话前的角色模拟编排
 
         Args:
@@ -95,8 +95,8 @@ class CharacterRuntime:
             profile, state, relationship, memories, signals, chat_request
         )
 
-        # 世界书关键词匹配
-        world_book_entries = self._match_world_books(identity, chat_request)
+        # 世界书关键词匹配（多源上下文召回）
+        world_book_entries = self._match_world_books(identity, chat_request, state=state, recent_messages=recent_messages)
 
         # 编译提示词
         prompt_text = self._build_prompt(
@@ -342,32 +342,47 @@ class CharacterRuntime:
         # 合成最终提示词
         return stack.render()
 
-    def _match_world_books(self, identity, chat_request) -> list:
-        """匹配世界书关键词"""
+    def _match_world_books(self, identity, chat_request, state=None, recent_messages: list = None) -> list:
+        """匹配世界书关键词（多源上下文召回）"""
         if not self._world_book_store:
             _log.debug("[WorldBook] store is None, skipping")
             return []
         try:
-            from nbot.character.world_book_matcher import match_entries
+            from nbot.character.world_book_matcher import (
+                WorldBookRecallContext,
+                match_entries_v2,
+            )
             world_books = self._world_book_store.list_all()
             user_message = getattr(chat_request, "content", "")
+
             _log.debug(
-                "[WorldBook] matching: books=%d char_id=%s msg=%r",
-                len(world_books), identity.character_id, user_message[:60] if user_message else "",
+                "[WorldBook] matching: books=%d char_id=%s msg=%r recent_msgs=%d scene=%s",
+                len(world_books), identity.character_id,
+                user_message[:60] if user_message else "",
+                len(recent_messages) if recent_messages else 0,
+                bool(state.scene) if state else False,
             )
-            for wb in world_books:
-                _log.debug(
-                    "[WorldBook] book=%s enabled=%s char_ids=%s entries=%d",
-                    wb.name, wb.enabled, wb.character_ids, len(wb.entries),
-                )
-                for e in wb.entries:
-                    _log.debug(
-                        "[WorldBook]   entry=%s enabled=%s keywords=%s",
-                        e.name, e.enabled, e.keywords,
-                    )
-            result = match_entries(user_message, world_books, identity.character_id)
-            _log.debug("[WorldBook] matched %d entries", len(result))
-            return result
+
+            # 构建召回上下文
+            scene = {}
+            if state and hasattr(state, "scene"):
+                scene = state.scene or {}
+
+            recall_context = WorldBookRecallContext(
+                latest_user_message=user_message,
+                recent_messages=recent_messages or [],
+                scene=scene,
+                character_id=identity.character_id,
+                target_id=getattr(identity, "target_id", ""),
+                scope_id=getattr(identity, "scope_id", ""),
+            )
+
+            # V2 多源召回
+            results = match_entries_v2(recall_context, world_books, identity.character_id)
+            entries = [r.entry for r in results]
+
+            _log.debug("[WorldBook] matched %d entries", len(entries))
+            return entries
         except Exception as exc:
             _log.warning("[CharacterRuntime] world book match failed: %s", exc, exc_info=True)
             return []

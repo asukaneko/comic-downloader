@@ -3728,13 +3728,33 @@ def main(params):
                         priority: 0,
                         case_sensitive: false,
                         match_mode: 'any',
+                        // 多源召回扩展字段
+                        trigger_sources: ['user'],
+                        entry_type: 'lore',
+                        always_on: false,
+                        weight: 0,
+                        cooldown_turns: 0,
+                        state_triggers: {},
+                        tags: [],
+                        // UI checkbox helpers
+                        _trigger_user: true,
+                        _trigger_assistant: false,
+                        _trigger_history: false,
+                        _trigger_scene: false,
                     };
                     this.newKeywordInput = '';
                     this.showWorldBookEntryModal = true;
                 },
 
                 editWorldBookEntry(entry) {
-                    this.editingWorldBookEntry = JSON.parse(JSON.stringify(entry));
+                    const e = JSON.parse(JSON.stringify(entry));
+                    // 将 trigger_sources 转换为 checkbox 布尔值
+                    const sources = e.trigger_sources || ['user'];
+                    e._trigger_user = sources.includes('user');
+                    e._trigger_assistant = sources.includes('assistant_recent');
+                    e._trigger_history = sources.includes('history');
+                    e._trigger_scene = sources.includes('scene_state');
+                    this.editingWorldBookEntry = e;
                     this.newKeywordInput = '';
                     this.showWorldBookEntryModal = true;
                 },
@@ -3781,11 +3801,35 @@ def main(params):
                 async saveWorldBookEntry() {
                     if (!this.currentWorldBook || !this.editingWorldBookEntry) return;
                     const entry = this.editingWorldBookEntry;
+                    // 将 checkbox 布尔值转换回 trigger_sources 数组
+                    const sources = [];
+                    if (entry._trigger_user) sources.push('user');
+                    if (entry._trigger_assistant) sources.push('assistant_recent');
+                    if (entry._trigger_history) sources.push('history');
+                    if (entry._trigger_scene) sources.push('scene_state');
+                    // 构建干净的 payload，不修改响应式对象
+                    const payload = {
+                        name: entry.name,
+                        keywords: entry.keywords,
+                        content: entry.content,
+                        enabled: entry.enabled,
+                        priority: entry.priority,
+                        case_sensitive: entry.case_sensitive,
+                        match_mode: entry.match_mode,
+                        entry_type: entry.entry_type || 'lore',
+                        trigger_sources: sources.length ? sources : ['user'],
+                        always_on: entry.always_on || false,
+                        weight: entry.weight || 0,
+                        cooldown_turns: entry.cooldown_turns || 0,
+                        state_triggers: entry.state_triggers || {},
+                        tags: entry.tags || [],
+                        max_injections_per_session: entry.max_injections_per_session || 0,
+                    };
                     try {
                         if (entry.id) {
-                            await api.put(`/api/world-books/${this.currentWorldBook.id}/entries/${entry.id}`, entry);
+                            await api.put(`/api/world-books/${this.currentWorldBook.id}/entries/${entry.id}`, payload);
                         } else {
-                            await api.post(`/api/world-books/${this.currentWorldBook.id}/entries`, entry);
+                            await api.post(`/api/world-books/${this.currentWorldBook.id}/entries`, payload);
                         }
                         this.closeEntryModal();
                         await this.selectWorldBook(this.currentWorldBook);

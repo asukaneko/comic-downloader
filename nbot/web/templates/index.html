@@ -3577,6 +3577,7 @@
                                                         <div class="wb-entry-badges">
                                                             <span v-if="!entry.enabled" class="wb-entry-badge disabled">{{ $t('world_book.disabled') }}</span>
                                                             <span class="wb-entry-badge mode">{{ entry.match_mode === 'all' ? $t('world_book.match_all') : $t('world_book.match_any') }}</span>
+                                                            <span v-if="entry.entry_type" class="wb-entry-badge" style="background: rgba(139,131,181,0.15); color: #a89ec8;">{{ $t('world_book.type_' + entry.entry_type) || entry.entry_type }}</span>
                                                         </div>
                                                     </div>
                                                     <div class="wb-entry-actions" @click.stop>
@@ -3625,7 +3626,7 @@
                                         <textarea v-model="editingWorldBookEntry.content" class="form-textarea" rows="5"></textarea>
                                     </div>
                                     <div class="form-row">
-                                        <div class="form-group">
+                                        <div class="form-group" style="flex: 1;">
                                             <label class="form-label">{{ $t('world_book.match_mode') }}</label>
                                             <select v-model="editingWorldBookEntry.match_mode" class="form-select">
                                                 <option value="any">{{ $t('world_book.match_any') }}</option>
@@ -3636,11 +3637,66 @@
                                             <label class="form-label">{{ $t('world_book.priority') }}</label>
                                             <input type="number" v-model.number="editingWorldBookEntry.priority" min="0" max="100" class="form-input">
                                         </div>
-                                        <div class="form-group" style="display: flex; align-items: flex-end; padding-bottom: 4px;">
-                                            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: var(--text-secondary);">
-                                                <input type="checkbox" v-model="editingWorldBookEntry.enabled"> {{ $t('world_book.enabled') }}
+                                    </div>
+                                    <!-- 多源召回扩展字段 -->
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">{{ $t('world_book.entry_type') }}</label>
+                                            <select v-model="editingWorldBookEntry.entry_type" class="form-select">
+                                                <option value="lore">{{ $t('world_book.type_lore') }}</option>
+                                                <option value="location">{{ $t('world_book.type_location') }}</option>
+                                                <option value="npc">{{ $t('world_book.type_npc') }}</option>
+                                                <option value="faction">{{ $t('world_book.type_faction') }}</option>
+                                                <option value="relationship">{{ $t('world_book.type_relationship') }}</option>
+                                                <option value="rule">{{ $t('world_book.type_rule') }}</option>
+                                                <option value="style">{{ $t('world_book.type_style') }}</option>
+                                                <option value="event">{{ $t('world_book.type_event') }}</option>
+                                                <option value="secret">{{ $t('world_book.type_secret') }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 80px;">
+                                            <label class="form-label">{{ $t('world_book.weight') }}</label>
+                                            <input type="number" v-model.number="editingWorldBookEntry.weight" min="0" max="100" class="form-input">
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 100px;">
+                                            <label class="form-label">{{ $t('world_book.cooldown_turns') }}</label>
+                                            <input type="number" v-model.number="editingWorldBookEntry.cooldown_turns" min="0" max="50" class="form-input" :title="$t('world_book.cooldown_hint')">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">{{ $t('world_book.trigger_sources') }}</label>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 13px;">
+                                            <label v-for="src in [
+                                                { key: '_trigger_user', label: $t('world_book.trigger_user') },
+                                                { key: '_trigger_assistant', label: $t('world_book.trigger_assistant') },
+                                                { key: '_trigger_history', label: $t('world_book.trigger_history') },
+                                                { key: '_trigger_scene', label: $t('world_book.trigger_scene') }
+                                            ]" :key="src.key"
+                                                style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-secondary);"
+                                                @click="editingWorldBookEntry[src.key] = !editingWorldBookEntry[src.key]">
+                                                <span>{{ src.label }}</span>
+                                                <span class="wb-toggle wb-toggle-sm" :class="{ active: editingWorldBookEntry[src.key] }">
+                                                    <span class="wb-toggle-knob"></span>
+                                                </span>
                                             </label>
                                         </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-secondary);" @click="editingWorldBookEntry.always_on = !editingWorldBookEntry.always_on">
+                                            <span>{{ $t('world_book.always_on') }}</span>
+                                            <span class="wb-toggle" :class="{ active: editingWorldBookEntry.always_on }">
+                                                <span class="wb-toggle-knob"></span>
+                                            </span>
+                                        </label>
+                                        <div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">{{ $t('world_book.always_on_hint') }}</div>
+                                    </div>
+                                    <div class="form-group" style="display: flex; align-items: center; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border-color, #e2e8f0); margin-top: 4px;">
+                                        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-secondary);" @click="editingWorldBookEntry.enabled = !editingWorldBookEntry.enabled">
+                                            <span>{{ $t('world_book.enabled') }}</span>
+                                            <span class="wb-toggle" :class="{ active: editingWorldBookEntry.enabled }">
+                                                <span class="wb-toggle-knob"></span>
+                                            </span>
+                                        </label>
                                     </div>
                                 </div>
                                 <div class="modal-footer">
@@ -3689,6 +3745,30 @@
                                                 <i v-if="viewingWorldBookEntry.enabled" class="fas fa-check-circle" style="color: #10b981;"></i>
                                                 <i v-else class="fas fa-times-circle" style="color: #ef4444;"></i>
                                             </span>
+                                        </div>
+                                    </div>
+                                    <div class="wb-detail-meta-row" v-if="viewingWorldBookEntry.entry_type || viewingWorldBookEntry.always_on || viewingWorldBookEntry.weight || viewingWorldBookEntry.cooldown_turns || (viewingWorldBookEntry.trigger_sources && viewingWorldBookEntry.trigger_sources.length)">
+                                        <div class="wb-detail-meta-item" v-if="viewingWorldBookEntry.entry_type">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.entry_type') }}</span>
+                                            <span class="wb-entry-badge" style="font-size: 12px; background: #ede9fe; color: #7c3aed;">{{ $t('world_book.type_' + viewingWorldBookEntry.entry_type) || viewingWorldBookEntry.entry_type }}</span>
+                                        </div>
+                                        <div class="wb-detail-meta-item" v-if="viewingWorldBookEntry.always_on">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.always_on') }}</span>
+                                            <span class="wb-detail-meta-value"><i class="fas fa-check-circle" style="color: #10b981;"></i></span>
+                                        </div>
+                                        <div class="wb-detail-meta-item" v-if="viewingWorldBookEntry.weight">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.weight') }}</span>
+                                            <span class="wb-detail-meta-value">{{ viewingWorldBookEntry.weight }}</span>
+                                        </div>
+                                        <div class="wb-detail-meta-item" v-if="viewingWorldBookEntry.cooldown_turns">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.cooldown_turns') }}</span>
+                                            <span class="wb-detail-meta-value">{{ viewingWorldBookEntry.cooldown_turns }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="wb-detail-section" v-if="viewingWorldBookEntry.trigger_sources && viewingWorldBookEntry.trigger_sources.length">
+                                        <div class="wb-detail-label">{{ $t('world_book.trigger_sources') }}</div>
+                                        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                                            <span v-for="src in viewingWorldBookEntry.trigger_sources" :key="src" class="wb-kw-tag" style="background: #dbeafe; color: #1d4ed8;">{{ $t('world_book.trigger_' + (src === 'assistant_recent' ? 'assistant' : src === 'scene_state' ? 'scene' : src)) || src }}</span>
                                         </div>
                                     </div>
                                 </div>

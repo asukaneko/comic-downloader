@@ -13557,6 +13557,48 @@
             transform: translateX(22px);
         }
 
+        /* 世界书编辑弹窗滑动按钮 */
+        .wb-toggle {
+            position: relative;
+            display: inline-block;
+            width: 42px;
+            height: 22px;
+            background: var(--bg-tertiary, #cbd5e1);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: background 0.25s ease;
+            flex-shrink: 0;
+        }
+        .wb-toggle.active {
+            background: var(--success, #10b981);
+        }
+        .wb-toggle .wb-toggle-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            transition: transform 0.25s ease;
+        }
+        .wb-toggle.active .wb-toggle-knob {
+            transform: translateX(20px);
+        }
+        .wb-toggle-sm {
+            width: 36px;
+            height: 20px;
+            border-radius: 10px;
+        }
+        .wb-toggle-sm .wb-toggle-knob {
+            width: 16px;
+            height: 16px;
+        }
+        .wb-toggle-sm.active .wb-toggle-knob {
+            transform: translateX(16px);
+        }
+
         /* 工具卡片样式 */
         .tool-card {
             background: var(--bg-secondary);

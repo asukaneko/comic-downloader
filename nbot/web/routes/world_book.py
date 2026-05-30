@@ -158,7 +158,9 @@ def register_world_book_routes(app, server):
             store = _get_store(server)
 
             kwargs = {}
-            for key in ("name", "keywords", "content", "enabled", "priority", "case_sensitive", "match_mode"):
+            for key in ("name", "keywords", "content", "enabled", "priority", "case_sensitive", "match_mode",
+                        "trigger_sources", "always_on", "state_triggers", "cooldown_turns",
+                        "max_injections_per_session", "tags", "entry_type", "weight"):
                 if key in data:
                     kwargs[key] = data[key]
 
@@ -445,12 +447,31 @@ def register_world_book_routes(app, server):
 
             system_prompt = f"""你是一个世界观设定专家。请为一个世界书生成条目。
 
-每个条目包含：
+每个条目包含以下字段：
 - name: 条目名称（简短有辨识度）
 - keywords: 关键词列表（3-5个，用于在用户消息中匹配触发此条目）
 - content: 注入内容（当关键词命中时，这段内容会被注入到 AI 的提示词中，帮助 AI 理解世界观）
 - match_mode: "any"（任一关键词命中即触发）或 "all"（全部命中才触发）
 - priority: 优先级数字（0-100，越高越优先注入）
+- entry_type: 条目类型，可选值：
+  - "lore" 世界观设定
+  - "location" 地点
+  - "npc" NPC角色
+  - "faction" 阵营/组织
+  - "relationship" 角色与用户关系
+  - "rule" 世界规则
+  - "style" 叙事风格
+  - "event" 剧情事件
+  - "secret" 隐藏真相（不会被助手回复自动触发）
+- trigger_sources: 触发源列表，可选值：
+  - "user" 用户消息触发（默认）
+  - "assistant_recent" 助手最近回复触发（用于维持场景连续性）
+  - "history" 历史上下文触发
+  - "scene_state" 场景状态触发
+  一般条目用 ["user"]，地点/NPC/事件类建议加上 "assistant_recent" 和 "scene_state"
+- weight: 额外权重（0-50，用于微调优先级）
+- always_on: 是否常驻注入（true/false，只有核心规则才设为true）
+- cooldown_turns: 冷却轮数（命中后需间隔多少轮才能再次触发，0=无冷却）
 
 请生成 5-10 个条目，覆盖该世界观的核心设定。
 {char_section}{topic_section}
@@ -464,7 +485,12 @@ def register_world_book_routes(app, server):
             "keywords": ["关键词1", "关键词2", "关键词3"],
             "content": "当用户消息命中关键词时注入的内容...",
             "match_mode": "any",
-            "priority": 50
+            "priority": 50,
+            "entry_type": "lore",
+            "trigger_sources": ["user"],
+            "weight": 0,
+            "always_on": false,
+            "cooldown_turns": 0
         }}
     ]
 }}
@@ -474,6 +500,9 @@ def register_world_book_routes(app, server):
 2. content 要具体、有信息量，帮助 AI 角色扮演时理解世界观
 3. 优先级根据条目重要程度分配（核心设定 > 细节设定）
 4. 如果有绑定角色，生成的设定要与角色背景契合
+5. entry_type 和 trigger_sources 要根据条目内容合理选择
+6. 地点、NPC、事件类条目的 trigger_sources 建议包含 "assistant_recent"
+7. secret 类型不要设置 "assistant_recent" 触发源，防止提前暴露
 """
 
             user_msg = f"请为世界书「{book.name}」生成世界观条目。"
@@ -544,10 +573,27 @@ def register_world_book_routes(app, server):
                 return jsonify({"success": False, "error": "message is required"}), 400
 
             store = _get_store(server)
-            from nbot.character.world_book_matcher import test_match as _test_match
-
             world_books = store.list_all()
-            matches = _test_match(message, world_books, character_id or None)
+
+            # 多源召回：支持 recent_messages 和 scene 参数
+            recent_messages = data.get("recent_messages", [])
+            scene = data.get("scene", {})
+
+            if recent_messages or scene:
+                from nbot.character.world_book_matcher import (
+                    WorldBookRecallContext,
+                    test_match_v2,
+                )
+                recall_context = WorldBookRecallContext(
+                    latest_user_message=message,
+                    recent_messages=recent_messages,
+                    scene=scene,
+                    character_id=character_id or "",
+                )
+                matches = test_match_v2(recall_context, world_books, character_id or None)
+            else:
+                from nbot.character.world_book_matcher import test_match as _test_match
+                matches = _test_match(message, world_books, character_id or None)
 
             return jsonify({"success": True, "matches": matches})
         except Exception as e:

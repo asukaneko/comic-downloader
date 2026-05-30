@@ -750,7 +750,14 @@ class AIPipeline:
             return
 
         try:
-            turn = runtime.before_turn(ctx.chat_request, identity)
+            # 加载最近消息用于世界书多源召回
+            recent_messages = []
+            try:
+                recent_messages = callbacks.load_messages(ctx) or []
+            except Exception:
+                pass
+
+            turn = runtime.before_turn(ctx.chat_request, identity, recent_messages=recent_messages)
             ctx.character_turn = turn
 
             from nbot.character.prompt_builder import build_character_injections
