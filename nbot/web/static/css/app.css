@@ -175,21 +175,12 @@
         }
 
         .sidebar.collapsed .nav-section-title {
-            justify-content: center;
-            padding: 8px 4px;
-        }
-
-        .sidebar.collapsed .nav-section-title span {
-            display: none;
-        }
-
-        .sidebar.collapsed .nav-section-arrow {
             display: none;
         }
 
         .sidebar.collapsed .nav-section-content {
-            max-height: 0 !important;
-            opacity: 0 !important;
+            max-height: 500px !important;
+            opacity: 1 !important;
         }
 
         /* Sidebar Toggle Button */
@@ -5998,6 +5989,10 @@
                 rgba(255, 255, 255, 0.25) 80%,
                 transparent 100%
             );
+        }
+
+        .message.assistant .message-content::after {
+            display: none;
         }
 
         /* Markdown 样式 */
