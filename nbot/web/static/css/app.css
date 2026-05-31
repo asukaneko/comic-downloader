@@ -22614,7 +22614,8 @@
     }
 
     .fo-queue-item {
-        gap: 10px;
+        flex-wrap: wrap;
+        gap: 6px 10px;
         padding: 10px 12px;
     }
 
@@ -22625,6 +22626,12 @@
         width: 24px;
         height: 24px;
         font-size: 12px;
+    }
+
+    /* 第一行: 排名 + 信息，info 占满剩余宽度 */
+    .fo-queue-info {
+        flex: 1 1 0;
+        min-width: 0;
     }
 
     .fo-queue-name {
@@ -22644,16 +22651,32 @@
         flex-wrap: wrap;
     }
 
+    .fo-token-bar-wrap {
+        flex-basis: 100%;
+        order: 2;
+    }
     .fo-token-bar-value {
         min-width: auto;
         font-size: 10px;
     }
 
+    /* 第二行: 健康状态 + 操作按钮 */
+    .fo-queue-health {
+        order: 3;
+        flex: 0 1 auto;
+        min-width: 0;
+    }
     .fo-health-badge {
         padding: 3px 8px;
         font-size: 11px;
+        white-space: nowrap;
     }
 
+    .fo-queue-actions {
+        order: 3;
+        flex-shrink: 0;
+        margin-left: auto;
+    }
     .fo-arrow-btn,
     .fo-reset-btn {
         width: 26px;
@@ -22742,26 +22765,9 @@
         font-size: 10px;
     }
 
-    /* 健康状态和操作按钮放同一行 */
-    .fo-queue-health {
-        order: 3;
-        flex: 0 1 auto;
-        min-width: 0;
-        overflow: hidden;
-    }
     .fo-health-badge {
         padding: 2px 6px;
         font-size: 10px;
-        white-space: nowrap;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .fo-queue-actions {
-        order: 3;
-        flex-shrink: 0;
-        margin-left: auto;
     }
     .fo-arrow-btn,
     .fo-reset-btn {
