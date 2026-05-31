@@ -10,8 +10,11 @@ import {
   PagePropertiesMarkdownSection,
 } from '@nolebase/vitepress-plugin-page-properties/vite'
 
+const base = '/nekobot/'
+
 export default defineConfig({
-  vite: { 
+  base,
+  vite: {
     optimizeDeps: {
       exclude: [ 
         '@nolebase/vitepress-plugin-enhanced-readabilities/client', 
@@ -62,7 +65,7 @@ export default defineConfig({
   title: "NekoBot",
   description: "多频道 AI 机器人 - QQ / Web / Telegram",
   lang: 'zh-CN',
-  head: [['link', { rel: 'icon', href: '/neko.png' }]],
+  head: [['link', { rel: 'icon', href: `${base}neko.png` }]],
   themeConfig: {
     docFooter: { 
       prev: '上一页', 
@@ -79,7 +82,7 @@ export default defineConfig({
         timeStyle: 'medium' // 可选值full、long、medium、short
       },
     },
-    logo:'/neko.png',
+    logo: `${base}neko.png`,
     nav: [
       { text: '主页', link: '/' },
       { text: '快速开始', link: '/guide/quick-start.md' },
