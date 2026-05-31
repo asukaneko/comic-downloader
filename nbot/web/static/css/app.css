@@ -22745,15 +22745,22 @@
     /* 健康状态和操作按钮放同一行 */
     .fo-queue-health {
         order: 3;
-        flex-basis: auto;
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
     }
     .fo-health-badge {
         padding: 2px 6px;
         font-size: 10px;
+        white-space: nowrap;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .fo-queue-actions {
-        order: 4;
+        order: 3;
+        flex-shrink: 0;
         margin-left: auto;
     }
     .fo-arrow-btn,
