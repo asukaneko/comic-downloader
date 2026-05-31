@@ -1,11 +1,11 @@
 # 快速开始
 
-> 一个面向 QQ 与 Web 双频道的 AI 机器人，集成聊天、工作区、工具调用、知识库、记忆、工作流与可视化管理后台
+> 多频道 AI 机器人，支持 QQ / Web / Telegram / 飞书，集成聊天、角色情感系统、世界书、工作区、工具调用、知识库、记忆与可视化管理后台
 
 ## 环境要求
 
 ::: warning
-- Python 3.11+
+- Python 3.10+
 - Windows / Linux / macOS
 - 建议使用小号登录 QQ
 :::
@@ -57,15 +57,22 @@ WS_URI=ws://localhost:3001
 TOKEN=napcat_token
 WEBUI_URI=http://localhost:6099
 
-# AI 模型配置（可在 Web 端配置）
-# 支持多模型配置，在 Web 后台的 AI 配置中心添加
+# Telegram 配置（可选）
+TELEGRAM_BOT_TOKEN=你的Telegram_Bot_Token
+TELEGRAM_WEBHOOK_SECRET=你的Webhook_Secret
+
+# 飞书配置（可选）
+FEISHU_APP_ID=你的飞书_App_ID
+FEISHU_APP_SECRET=你的飞书_App_Secret
 ```
 
 ::: tip
-和 AI 相关的配置都可以在 Web 端进行配置，包括：
-- 多模型配置管理
+AI 相关的配置都可以在 Web 端进行配置，包括：
+- 多模型配置管理（支持 OpenAI / Anthropic / Gemini 等协议）
 - API 密钥设置
 - 模型能力声明（supports_tools, supports_reasoning, supports_stream）
+- 自定义价格（人民币计价）
+- 故障转移队列
 :::
 
 ## 启动
@@ -106,49 +113,40 @@ python bot.py --web-host 0.0.0.0 --web-port 5000
 
 Web 后台功能：
 - **仪表盘** - 监控机器人状态、消息趋势和系统健康
-- **聊天** - Web 端 AI 对话
-- **会话管理** - 管理 Web 和 QQ 会话
-- **AI 配置** - 模型配置、API 密钥管理
-- **记忆管理** - 用户个性化记忆
-- **知识库** - RAG 知识库管理
+- **聊天** - Web 端 AI 对话（支持流式输出）
+- **会话管理** - 管理 Web 和 QQ 会话（标签页切换、归档、收藏）
+- **AI 配置** - 多模型配置、API 密钥、故障转移队列
+- **角色管理** - 角色卡编辑、立绘管理、情感系统配置
+- **世界书** - 世界观设定管理，支持关键词匹配注入
+- **记忆管理** - 跨会话记忆与角色记忆
+- **知识库** - RAG 知识库管理（ChromaDB 向量检索）
 - **Skills 配置** - 技能插件管理
 - **Tools 配置** - 工具配置
 - **工作流** - 可视化工作流编排
 - **定时任务** - 任务调度
-- **Token 用量** - 用量统计
-- **系统日志** - 日志查看
+- **Token 用量** - 用量统计（自定义日期范围、CSV 导出）
+- **频道管理** - 多频道接入配置（QQ / Telegram / 飞书）
+- **系统日志** - 日志查看与自动清理
 - **调试台** - 调试工具
 
 ## 项目结构
 
 ```
-Ncatbot-comic-QQbot/
+nekobot/
 ├── bot.py                 # 入口文件
 ├── nbot/                  # 核心模块包
-│   ├── channels/          # 频道适配层（QQ / Web / Telegram）
-│   │   ├── base.py        # 频道适配器基类
-│   │   ├── qq.py          # QQ 频道适配器
-│   │   ├── web.py         # Web 频道适配器
-│   │   ├── telegram.py    # Telegram 频道适配器
-│   │   └── registry.py    # 频道注册器
+│   ├── channels/          # 频道适配层（QQ / Web / Telegram / 飞书）
 │   ├── core/              # 统一 AI 核心
-│   │   ├── agent_service.py   # AI 处理入口
-│   │   ├── chat_models.py     # ChatRequest / ChatResponse
-│   │   ├── session_store.py   # 会话读写
-│   │   ├── model_adapter.py   # 模型适配层
-│   │   ├── workflow.py        # 工作流引擎
-│   │   └── message.py         # 消息模型
+│   │   ├── protocols/     # 多协议适配（OpenAI / Anthropic / Gemini）
+│   │   ├── knowledge/     # 知识库系统
+│   │   └── memory/        # 记忆系统
+│   ├── character/         # 角色情感系统
+│   ├── gateway/           # 统一消息网关
+│   │   ├── bus/           # 事件总线
+│   │   └── nodes/         # 节点控制面
 │   ├── plugins/           # 插件系统
-│   │   ├── skills/        # 技能模块
-│   │   ├── dispatcher.py  # 技能调度器
-│   │   └── manager.py     # 插件管理器
 │   ├── services/          # AI、工具、聊天服务
-│   │   ├── ai.py          # AI 客户端
-│   │   ├── chat_service.py # 聊天服务
-│   │   ├── tools.py       # 工具注册
-│   │   └── react.py       # ReAct 模式
 │   └── web/               # Web 后台与前端
-│       ├── server.py      # Flask 服务
 │       ├── routes/        # API 路由
 │       ├── static/        # 静态资源
 │       └── templates/     # 前端模板
@@ -183,6 +181,7 @@ AI 可以通过工具调用来读写工作区文件，支持文件变更预览�
 
 ## 下一步
 
-- [命令手册](./commands.md) - 了解所有 QQ 命令
+- [命令手册](./commands.md) - 了解所有命令
 - [开发指南](./guide.md) - 开发自己的功能
 - [频道管理](./channels.md) - 配置多频道接入
+- [更新日志](./changelog.md) - 查看版本更新记录
