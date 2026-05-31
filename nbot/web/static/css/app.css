@@ -22571,3 +22571,231 @@
         font-size: 14px;
     }
 }
+
+/* ========== 故障转移队列 - 移动端适配 ========== */
+
+/* <=768px: 紧凑化 */
+@media (max-width: 768px) {
+    .failover-modal {
+        max-width: 100% !important;
+        margin: 8px !important;
+        max-height: 92vh !important;
+        border-radius: 14px !important;
+    }
+
+    .failover-modal .modal-body {
+        padding: 12px 14px;
+    }
+
+    .fo-description {
+        font-size: 12px;
+        padding: 10px 12px;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .fo-purpose-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 5px;
+        padding-bottom: 10px;
+        margin-bottom: 12px;
+    }
+    .fo-purpose-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .fo-purpose-tab {
+        flex-shrink: 0;
+        padding: 5px 10px;
+        font-size: 11px;
+    }
+
+    .fo-queue-item {
+        gap: 10px;
+        padding: 10px 12px;
+    }
+
+    .fo-queue-rank {
+        width: 28px;
+    }
+    .fo-rank-number {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+    }
+
+    .fo-queue-name {
+        font-size: 13px;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .fo-badge-primary,
+    .fo-badge-active {
+        font-size: 10px;
+        padding: 1px 6px;
+    }
+
+    .fo-queue-meta {
+        gap: 6px;
+        font-size: 11px;
+        flex-wrap: wrap;
+    }
+
+    .fo-token-bar-value {
+        min-width: auto;
+        font-size: 10px;
+    }
+
+    .fo-health-badge {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+
+    .fo-arrow-btn,
+    .fo-reset-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 10px;
+    }
+
+    /* 详情弹窗 */
+    .fo-detail-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    .fo-detail-value {
+        font-size: 13px;
+    }
+}
+
+/* <=480px: 队列项纵向堆叠 */
+@media (max-width: 480px) {
+    .failover-modal {
+        margin: 4px !important;
+        max-height: 95vh !important;
+        border-radius: 12px !important;
+    }
+
+    .failover-modal .modal-header {
+        padding: 12px 14px;
+    }
+    .failover-modal .modal-title {
+        font-size: 15px;
+    }
+    .fo-purpose-badge {
+        display: none;
+    }
+
+    .failover-modal .modal-body {
+        padding: 10px;
+    }
+
+    .fo-description {
+        font-size: 11px;
+        padding: 8px 10px;
+        margin-bottom: 10px;
+    }
+
+    .fo-purpose-tabs {
+        gap: 4px;
+        margin-bottom: 10px;
+    }
+    .fo-purpose-tab {
+        padding: 4px 8px;
+        font-size: 10px;
+        gap: 3px;
+    }
+    .fo-purpose-tab svg {
+        width: 11px;
+        height: 11px;
+    }
+
+    .fo-queue-item {
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 10px;
+    }
+
+    /* 第一行: 排名 + 名称信息 */
+    .fo-queue-rank {
+        width: 24px;
+    }
+    .fo-rank-number {
+        width: 22px;
+        height: 22px;
+        font-size: 11px;
+    }
+
+    .fo-queue-info {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+    .fo-queue-name {
+        font-size: 12px;
+    }
+
+    .fo-queue-meta {
+        gap: 5px;
+        font-size: 10px;
+    }
+
+    /* 健康状态和操作按钮放同一行 */
+    .fo-queue-health {
+        order: 3;
+        flex-basis: auto;
+    }
+    .fo-health-badge {
+        padding: 2px 6px;
+        font-size: 10px;
+    }
+
+    .fo-queue-actions {
+        order: 4;
+        margin-left: auto;
+    }
+    .fo-arrow-btn,
+    .fo-reset-btn {
+        width: 24px;
+        height: 24px;
+    }
+
+    /* Token 条简化 */
+    .fo-token-bar-wrap {
+        flex-basis: 100%;
+        order: 5;
+        margin-top: 4px;
+    }
+    .fo-token-bar {
+        gap: 4px;
+    }
+    .fo-token-bar-label {
+        min-width: 20px;
+        font-size: 9px;
+    }
+    .fo-token-bar-value {
+        font-size: 9px;
+    }
+
+    /* 详情弹窗也适配 */
+    .fo-detail-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    .fo-detail-value {
+        font-size: 12px;
+    }
+
+    .failover-modal .modal-footer {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .failover-modal .modal-footer .btn {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+}
