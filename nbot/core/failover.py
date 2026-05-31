@@ -9,10 +9,13 @@ This module is in nbot/core/ and must NOT import from nbot/web/ or
 nbot/channels/. Model configs are received as plain dicts from callers.
 """
 
+import json
 import logging
+import os
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 _log = logging.getLogger(__name__)
@@ -107,23 +110,30 @@ class ModelHealth:
     """Tracks health status of a single model."""
 
     model_id: str
-    consecutive_failures: int = 0
+    consecutive_failures: int = 0      # 内部用：连续失败（用于 cooldown 计算）
     last_failure_at: float = 0.0
     last_failure_code: int = 0
     cooldown_until: float = 0.0
+    daily_failures: int = 0            # 当日累计失败次数
+    daily_failures_date: str = ""      # 记录日期 (YYYY-MM-DD)
 
 
 class FailoverState:
     """Thread-safe, per-purpose failover queue manager.
 
-    All state is in-memory and resets on process restart.
-    Cooldown periods are short (60-300s) so restarting means
-    providers may have recovered.
+    Health state is persisted to disk (failover_health.json) and
+    restored on process restart. Daily failure counts auto-reset
+    when the date changes.
     """
 
-    def __init__(self):
+    def __init__(self, data_dir: Optional[str] = None):
         self._lock = threading.Lock()
         self._health: Dict[str, ModelHealth] = {}
+        self._data_dir = data_dir
+        self._save_path: Optional[str] = None
+        if data_dir:
+            self._save_path = os.path.join(data_dir, "failover_health.json")
+            self._load()
 
     def select_model(
         self,
@@ -177,12 +187,13 @@ class FailoverState:
         return False
 
     def record_success(self, model_id: str) -> None:
-        """Reset failure counter on success."""
+        """Reset consecutive failure counter on success (daily_failures preserved)."""
         with self._lock:
             health = self._health.get(model_id)
             if health:
                 health.consecutive_failures = 0
                 health.cooldown_until = 0.0
+        self._save()
 
     def record_failure(
         self,
@@ -194,6 +205,7 @@ class FailoverState:
         Returns the cooldown seconds for logging.
         """
         now = time.monotonic()
+        today_str = date.today().isoformat()
 
         with self._lock:
             health = self._health.get(model_id)
@@ -205,16 +217,25 @@ class FailoverState:
             health.last_failure_at = now
             health.last_failure_code = status_code
 
+            # 累计当日失败（跨天自动重置）
+            if health.daily_failures_date != today_str:
+                health.daily_failures = 0
+                health.daily_failures_date = today_str
+            health.daily_failures += 1
+
             cooldown = _compute_cooldown(
                 health.consecutive_failures, status_code
             )
             health.cooldown_until = now + cooldown if cooldown > 0 else 0.0
 
+        self._save()
+
         _log.warning(
-            "[Failover] model=%s status=%d failures=%d cooldown=%.0fs",
+            "[Failover] model=%s status=%d consecutive=%d daily=%d cooldown=%.0fs",
             model_id,
             status_code,
             health.consecutive_failures,
+            health.daily_failures,
             cooldown,
         )
         return cooldown
@@ -231,12 +252,17 @@ class FailoverState:
     def get_all_health_summary(self) -> Dict[str, Any]:
         """Return a snapshot of all model health states."""
         now = time.monotonic()
+        today_str = date.today().isoformat()
         summary = {}
         with self._lock:
             for model_id, health in self._health.items():
+                # 跨天自动重置当日失败数
+                daily = health.daily_failures
+                if health.daily_failures_date != today_str:
+                    daily = 0
                 remaining = max(0.0, health.cooldown_until - now)
                 summary[model_id] = {
-                    "consecutive_failures": health.consecutive_failures,
+                    "daily_failures": daily,
                     "last_failure_code": health.last_failure_code,
                     "cooldown_remaining": round(remaining, 1),
                     "available": now >= health.cooldown_until,
@@ -250,6 +276,69 @@ class FailoverState:
                 self._health.pop(model_id, None)
             else:
                 self._health.clear()
+        self._save()
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _save(self) -> None:
+        """Persist health state to disk (best-effort)."""
+        if not self._save_path:
+            return
+        try:
+            now_wall = time.time()
+            now_mono = time.monotonic()
+            data = {}
+            with self._lock:
+                for mid, h in self._health.items():
+                    # 将 monotonic 时间转为 wall-clock 时间以便持久化
+                    wall_last = now_wall - (now_mono - h.last_failure_at) if h.last_failure_at else 0.0
+                    wall_cooldown = now_wall - (now_mono - h.cooldown_until) if h.cooldown_until > now_mono else 0.0
+                    data[mid] = {
+                        "daily_failures": h.daily_failures,
+                        "daily_failures_date": h.daily_failures_date,
+                        "consecutive_failures": h.consecutive_failures,
+                        "last_failure_code": h.last_failure_code,
+                        "last_failure_at": wall_last,
+                        "cooldown_until": wall_cooldown,
+                    }
+            tmp = self._save_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, self._save_path)
+        except Exception as e:
+            _log.warning("[Failover] Failed to save health state: %s", e)
+
+    def _load(self) -> None:
+        """Load health state from disk."""
+        if not self._save_path or not os.path.exists(self._save_path):
+            return
+        try:
+            with open(self._save_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            now_wall = time.time()
+            now_mono = time.monotonic()
+            with self._lock:
+                for mid, d in data.items():
+                    h = ModelHealth(model_id=mid)
+                    h.daily_failures = d.get("daily_failures", 0)
+                    h.daily_failures_date = d.get("daily_failures_date", "")
+                    h.consecutive_failures = d.get("consecutive_failures", 0)
+                    h.last_failure_code = d.get("last_failure_code", 0)
+                    # wall-clock 转回 monotonic
+                    wall_last = d.get("last_failure_at", 0.0)
+                    wall_cooldown = d.get("cooldown_until", 0.0)
+                    if wall_last:
+                        h.last_failure_at = now_mono - (now_wall - wall_last)
+                    if wall_cooldown and wall_cooldown > now_wall:
+                        h.cooldown_until = now_mono + (wall_cooldown - now_wall)
+                    else:
+                        h.cooldown_until = 0.0
+                    self._health[mid] = h
+            _log.info("[Failover] Loaded health state for %d models", len(data))
+        except Exception as e:
+            _log.warning("[Failover] Failed to load health state: %s", e)
 
 
 # ============================================================================
@@ -261,4 +350,11 @@ _failover_state = FailoverState()
 
 def get_failover_state() -> FailoverState:
     """Get the module-level FailoverState singleton."""
+    return _failover_state
+
+
+def init_failover_state(data_dir: str) -> FailoverState:
+    """Initialize (or reinitialize) the singleton with persistence support."""
+    global _failover_state
+    _failover_state = FailoverState(data_dir=data_dir)
     return _failover_state

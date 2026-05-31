@@ -458,6 +458,10 @@ class WebChatServer:
         self.token_stats_manager = init_token_stats_manager(self.data_dir)
         self.token_stats: dict = self.token_stats_manager.data  # 兼容旧引用
 
+        # 故障转移健康状态（持久化）
+        from nbot.core.failover import init_failover_state
+        init_failover_state(self.data_dir)
+
         # 内存数据存储
         self.workflows: list[dict] = []
         self.memories: list[dict] = []
