@@ -1282,6 +1282,10 @@ const i18nMessages = {
     'world_book.weight': '权重',
     'world_book.cooldown_turns': '冷却轮数',
     'world_book.cooldown_hint': '命中后需间隔多少轮才能再次触发（0=无冷却）',
+    'world_book.case_sensitive': '关键词大小写敏感',
+    'world_book.case_sensitive_hint': '开启后匹配关键词时区分大小写',
+    'world_book.max_injections_per_session': '单次会话最大注入次数',
+    'world_book.max_injections_hint': '限制该条目在一次会话中最多被注入几次（0=不限制）',
   },
   en: {
     // General
@@ -2603,6 +2607,10 @@ const i18nMessages = {
     'world_book.weight': 'Weight',
     'world_book.cooldown_turns': 'Cooldown Turns',
     'world_book.cooldown_hint': 'Turns to wait before re-triggering (0 = no cooldown)',
+    'world_book.case_sensitive': 'Case Sensitive',
+    'world_book.case_sensitive_hint': 'Match keywords with case sensitivity when enabled',
+    'world_book.max_injections_per_session': 'Max Injections Per Session',
+    'world_book.max_injections_hint': 'Limit how many times this entry can be injected per session (0 = unlimited)',
   }
 };
 

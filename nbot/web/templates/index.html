@@ -3663,6 +3663,14 @@
                                             <label class="form-label">{{ $t('world_book.priority') }}</label>
                                             <input type="number" v-model.number="editingWorldBookEntry.priority" min="0" max="100" class="form-input">
                                         </div>
+                                        <div class="form-group" style="flex: 0 0 auto; display: flex; align-items: flex-end; padding-bottom: 2px;">
+                                            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-secondary);" @click="editingWorldBookEntry.case_sensitive = !editingWorldBookEntry.case_sensitive" :title="$t('world_book.case_sensitive_hint')">
+                                                <span>{{ $t('world_book.case_sensitive') }}</span>
+                                                <span class="wb-toggle wb-toggle-sm" :class="{ active: editingWorldBookEntry.case_sensitive }">
+                                                    <span class="wb-toggle-knob"></span>
+                                                </span>
+                                            </label>
+                                        </div>
                                     </div>
                                     <!-- 多源召回扩展字段 -->
                                     <div class="form-row">
@@ -3687,6 +3695,10 @@
                                         <div class="form-group" style="flex: 0 0 100px;">
                                             <label class="form-label">{{ $t('world_book.cooldown_turns') }}</label>
                                             <input type="number" v-model.number="editingWorldBookEntry.cooldown_turns" min="0" max="50" class="form-input" :title="$t('world_book.cooldown_hint')">
+                                        </div>
+                                        <div class="form-group" style="flex: 0 0 120px;">
+                                            <label class="form-label">{{ $t('world_book.max_injections_per_session') }}</label>
+                                            <input type="number" v-model.number="editingWorldBookEntry.max_injections_per_session" min="0" max="999" class="form-input" :title="$t('world_book.max_injections_hint')">
                                         </div>
                                     </div>
                                     <div class="form-group">
@@ -3766,6 +3778,13 @@
                                             <span class="wb-detail-meta-value">{{ viewingWorldBookEntry.priority }}</span>
                                         </div>
                                         <div class="wb-detail-meta-item">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.case_sensitive') }}</span>
+                                            <span class="wb-detail-meta-value">
+                                                <i v-if="viewingWorldBookEntry.case_sensitive" class="fas fa-check-circle" style="color: #10b981;"></i>
+                                                <i v-else class="fas fa-times-circle" style="color: #94a3b8;"></i>
+                                            </span>
+                                        </div>
+                                        <div class="wb-detail-meta-item">
                                             <span class="wb-detail-meta-label">{{ $t('world_book.enabled') }}</span>
                                             <span class="wb-detail-meta-value">
                                                 <i v-if="viewingWorldBookEntry.enabled" class="fas fa-check-circle" style="color: #10b981;"></i>
@@ -3789,6 +3808,10 @@
                                         <div class="wb-detail-meta-item" v-if="viewingWorldBookEntry.cooldown_turns">
                                             <span class="wb-detail-meta-label">{{ $t('world_book.cooldown_turns') }}</span>
                                             <span class="wb-detail-meta-value">{{ viewingWorldBookEntry.cooldown_turns }}</span>
+                                        </div>
+                                        <div class="wb-detail-meta-item" v-if="viewingWorldBookEntry.max_injections_per_session">
+                                            <span class="wb-detail-meta-label">{{ $t('world_book.max_injections_per_session') }}</span>
+                                            <span class="wb-detail-meta-value">{{ viewingWorldBookEntry.max_injections_per_session }}</span>
                                         </div>
                                     </div>
                                     <div class="wb-detail-section" v-if="viewingWorldBookEntry.trigger_sources && viewingWorldBookEntry.trigger_sources.length">

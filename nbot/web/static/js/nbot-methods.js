@@ -3836,6 +3836,7 @@ def main(params):
                         always_on: false,
                         weight: 0,
                         cooldown_turns: 0,
+                        max_injections_per_session: 0,
                         state_triggers: {},
                         tags: [],
                         // UI checkbox helpers
