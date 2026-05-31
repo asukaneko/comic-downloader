@@ -11461,21 +11461,21 @@ def main(params):
 
                 getProviderIcon(provider) {
                     const icons = {
-                        openai: 'fas fa-robot',
-                        anthropic: 'fas fa-cloud',
-                        google: 'fas fa-gem',
-                        azure: 'fas fa-windows',
+                        openai: 'fas fa-sun',
+                        anthropic: 'fas fa-asterisk',
+                        google: 'fas fa-star',
+                        azure: 'fas fa-cloud',
                         siliconflow: 'fas fa-microchip',
-                        deepseek: 'fas fa-water',
-                        zhipu: 'fas fa-brain',
-                        glm: 'fas fa-brain',
+                        deepseek: 'fas fa-fish',
+                        zhipu: 'fas fa-circle-notch',
+                        glm: 'fas fa-circle-notch',
                         minimax: 'fas fa-infinity',
-                        grok: 'fas fa-bolt',
-                        xai: 'fas fa-bolt',
+                        grok: 'fas fa-xmark',
+                        xai: 'fas fa-xmark',
                         qwen: 'fas fa-wind',
                         dashscope: 'fas fa-wind',
-                        xiaomi: 'fas fa-microphone',
-                        mimo: 'fas fa-microphone',
+                        xiaomi: 'fas fa-mobile-screen-button',
+                        mimo: 'fas fa-mobile-screen-button',
                         custom: 'fas fa-cog'
                     };
                     return icons[provider] || 'fas fa-robot';
@@ -11483,14 +11483,14 @@ def main(params):
 
                 getProviderGlyph(provider) {
                     const glyphs = {
-                        openai: '◎',
-                        anthropic: '◈',
+                        openai: '☀',
+                        anthropic: '✳',
                         google: '✦',
-                        azure: '⬢',
+                        azure: '☁',
                         siliconflow: '◉',
-                        deepseek: '≈',
-                        zhipu: '◆',
-                        glm: '◆',
+                        deepseek: '🐟',
+                        zhipu: '◕',
+                        glm: '◕',
                         minimax: '∞',
                         grok: '✕',
                         xai: '✕',
