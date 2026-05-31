@@ -702,6 +702,13 @@ class AIPipeline:
         if ctx.character_turn and getattr(ctx.character_turn, "memories", None):
             ctx.prompt_stack.remove("character.memories_legacy")
 
+        # 应用会话级提示词栈禁用列表
+        disabled_keys = set(ctx.metadata.get("disabled_prompt_keys", []))
+        if disabled_keys:
+            for item in ctx.prompt_stack.items:
+                if item.key in disabled_keys:
+                    item.enabled = False
+
         # PromptStack 合成最终 system prompt
         composed_system = ctx.prompt_stack.render(base_prompt)
         messages_for_ai = [

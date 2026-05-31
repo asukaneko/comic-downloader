@@ -873,6 +873,8 @@ def register_session_routes(app, server):
             session["proactive_chat"] = _normalize_proactive_chat_config(
                 data.get("proactive_chat")
             )
+        if "disabled_prompt_keys" in data:
+            session["disabled_prompt_keys"] = data.get("disabled_prompt_keys") or []
 
         new_prompt = data.get("system_prompt", session.get("system_prompt", ""))
         if new_prompt != session.get("system_prompt", ""):

@@ -5212,6 +5212,8 @@
             box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: opacity 0.15s, background 0.15s;
         }
 
         .runtime-prompt-stack {
@@ -5236,6 +5238,29 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             color: var(--accent-primary);
+        }
+
+        .runtime-prompt-chip:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .runtime-prompt-chip .fa-toggle-on {
+            color: var(--accent-primary, #8b5cf6);
+            font-size: 10px;
+        }
+
+        .runtime-prompt-chip .fa-toggle-off {
+            color: var(--text-muted, #64748b);
+            font-size: 10px;
+        }
+
+        .runtime-prompt-chip.disabled {
+            opacity: 0.45;
+        }
+
+        .runtime-prompt-chip.disabled code {
+            text-decoration: line-through;
+            color: var(--text-muted);
         }
 
         .runtime-system-prompt {

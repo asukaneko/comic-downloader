@@ -1273,6 +1273,9 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
     )
     ctx.metadata.setdefault("channel_type", "web")
     ctx.metadata.setdefault("source", "web")
+    # 注入会话级提示词栈禁用列表
+    if _session_data:
+        ctx.metadata.setdefault("disabled_prompt_keys", _session_data.get("disabled_prompt_keys", []))
     # 注入价格信息供公共 token 统计使用
     try:
         active_model_id = getattr(server, "active_model_id", None)

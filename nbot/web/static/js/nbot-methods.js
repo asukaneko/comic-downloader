@@ -1027,6 +1027,7 @@ const NbotMethods = {
                         const runtimeFields = {
                             system_prompt: fullSession.system_prompt || '',
                             prompt_stack_debug: fullSession.prompt_stack_debug || [],
+                            disabled_prompt_keys: fullSession.disabled_prompt_keys || [],
                             character_runtime_snapshot: fullSession.character_runtime_snapshot || null,
                             character_runtime_timeline: fullSession.character_runtime_timeline || []
                         };
@@ -1054,6 +1055,35 @@ const NbotMethods = {
                     } catch (e) {
                         console.error('Failed to refresh character runtime:', e);
                         this.showToast('刷新角色运行时失败', 'error');
+                    }
+                },
+
+                async togglePromptStackKey(key) {
+                    if (!this.currentSession?.id) return;
+                    await this.togglePromptStackKeyFor(this.currentSession, key);
+                },
+
+                async togglePromptStackKeyFor(session, key) {
+                    if (!session?.id) return;
+                    const disabled = new Set(session.disabled_prompt_keys || []);
+                    if (disabled.has(key)) {
+                        disabled.delete(key);
+                    } else {
+                        disabled.add(key);
+                    }
+                    const disabledList = [...disabled];
+                    session.disabled_prompt_keys = disabledList;
+                    // 同步到 currentSession
+                    if (this.currentSession?.id === session.id) {
+                        this.currentSession.disabled_prompt_keys = disabledList;
+                    }
+                    try {
+                        await api.put(`/api/sessions/${session.id}`, {
+                            disabled_prompt_keys: disabledList,
+                        });
+                    } catch (e) {
+                        console.error('Failed to toggle prompt stack key:', e);
+                        this.showToast('切换提示词状态失败', 'error');
                     }
                 },
 
@@ -6406,6 +6436,7 @@ def main(params):
                             message_count: fullSession.message_count || session.message_count || 0,
                             system_prompt: fullSession.system_prompt || session.system_prompt || '',
                             prompt_stack_debug: fullSession.prompt_stack_debug || session.prompt_stack_debug || [],
+                            disabled_prompt_keys: fullSession.disabled_prompt_keys || session.disabled_prompt_keys || [],
                             character_runtime_snapshot: fullSession.character_runtime_snapshot || session.character_runtime_snapshot || null,
                             archived: fullSession.archived || false,
                             is_archive: fullSession.is_archive || false,

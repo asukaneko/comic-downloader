@@ -1283,9 +1283,14 @@
                                         </div>
                                     </template>
                                     <div v-if="currentSession.prompt_stack_debug && currentSession.prompt_stack_debug.length" class="runtime-prompt-stack">
-                                        <div v-for="inj in currentSession.prompt_stack_debug" :key="inj.key" class="runtime-prompt-chip" :title="inj.content">
+                                        <div v-for="inj in currentSession.prompt_stack_debug" :key="inj.key"
+                                             class="runtime-prompt-chip"
+                                             :class="{ disabled: (currentSession.disabled_prompt_keys || []).includes(inj.key) }"
+                                             :title="inj.content"
+                                             @click="togglePromptStackKey(inj.key)">
                                             <span>#{{ inj.priority }}</span>
                                             <code>{{ inj.key }}</code>
+                                            <i class="fas" :class="(currentSession.disabled_prompt_keys || []).includes(inj.key) ? 'fa-toggle-off' : 'fa-toggle-on'"></i>
                                         </div>
                                     </div>
                                     <details v-if="currentSession.system_prompt && currentSession.session_mode !== 'agent'" class="runtime-system-prompt">
@@ -8175,11 +8180,15 @@
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 6px;">
                             <div v-for="(inj, idx) in viewingSession.prompt_stack_debug" :key="idx"
-                                 style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--bg-secondary); border-radius: 6px; font-size: 12px;">
+                                 class="runtime-prompt-chip"
+                                 :class="{ disabled: (viewingSession.disabled_prompt_keys || []).includes(inj.key) }"
+                                 style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 12px; max-width: 100%;"
+                                 @click="togglePromptStackKeyFor(viewingSession, inj.key)">
                                 <span style="color: var(--text-tertiary); min-width: 24px;">#{{ inj.priority }}</span>
                                 <code style="color: var(--accent-primary); min-width: 160px;">{{ inj.key }}</code>
                                 <span style="color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ inj.content }}</span>
                                 <span class="badge" style="font-size: 10px;">{{ inj.scope }}</span>
+                                <i class="fas" :class="(viewingSession.disabled_prompt_keys || []).includes(inj.key) ? 'fa-toggle-off' : 'fa-toggle-on'" style="font-size: 11px;"></i>
                             </div>
                         </div>
                     </div>
