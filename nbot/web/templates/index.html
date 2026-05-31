@@ -3663,16 +3663,7 @@
                                             <label class="form-label">{{ $t('world_book.priority') }}</label>
                                             <input type="number" v-model.number="editingWorldBookEntry.priority" min="0" max="100" class="form-input">
                                         </div>
-                                        <div class="form-group" style="flex: 0 0 auto; display: flex; align-items: flex-end; padding-bottom: 2px;">
-                                            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-secondary);" @click="editingWorldBookEntry.case_sensitive = !editingWorldBookEntry.case_sensitive" :title="$t('world_book.case_sensitive_hint')">
-                                                <span>{{ $t('world_book.case_sensitive') }}</span>
-                                                <span class="wb-toggle wb-toggle-sm" :class="{ active: editingWorldBookEntry.case_sensitive }">
-                                                    <span class="wb-toggle-knob"></span>
-                                                </span>
-                                            </label>
-                                        </div>
                                     </div>
-                                    <!-- 多源召回扩展字段 -->
                                     <div class="form-row">
                                         <div class="form-group" style="flex: 1;">
                                             <label class="form-label">{{ $t('world_book.entry_type') }}</label>
@@ -3695,6 +3686,17 @@
                                         <div class="form-group" style="flex: 0 0 100px;">
                                             <label class="form-label">{{ $t('world_book.cooldown_turns') }}</label>
                                             <input type="number" v-model.number="editingWorldBookEntry.cooldown_turns" min="0" max="50" class="form-input" :title="$t('world_book.cooldown_hint')">
+                                        </div>
+                                    </div>
+                                    <!-- 多源召回扩展字段 -->
+                                    <div class="form-row">
+                                        <div class="form-group" style="flex: 0 0 auto; display: flex; align-items: flex-end; padding-bottom: 2px;">
+                                            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-secondary);" @click="editingWorldBookEntry.case_sensitive = !editingWorldBookEntry.case_sensitive" :title="$t('world_book.case_sensitive_hint')">
+                                                <span>{{ $t('world_book.case_sensitive') }}</span>
+                                                <span class="wb-toggle wb-toggle-sm" :class="{ active: editingWorldBookEntry.case_sensitive }">
+                                                    <span class="wb-toggle-knob"></span>
+                                                </span>
+                                            </label>
                                         </div>
                                         <div class="form-group" style="flex: 0 0 120px;">
                                             <label class="form-label">{{ $t('world_book.max_injections_per_session') }}</label>
