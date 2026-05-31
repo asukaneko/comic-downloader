@@ -584,13 +584,23 @@ def register_ai_model_routes(app, server):
         queue = []
         for cfg in configs:
             mid = cfg.get("model_id", "")
+            model_name = cfg.get("model", "")
+            token_usage = {}
+            try:
+                from nbot.core.token_stats import get_token_stats_manager
+                token_usage = get_token_stats_manager().get_model_usage(model_name)
+            except Exception:
+                pass
             queue.append({
                 "model_id": mid,
                 "name": cfg.get("name", ""),
-                "model": cfg.get("model", ""),
+                "model": model_name,
                 "provider": cfg.get("provider", ""),
                 "priority": cfg.get("priority", 0),
                 "health": health.get(mid, {}),
+                "token_limit_daily": cfg.get("token_limit_daily", 0) or 0,
+                "token_limit_weekly": cfg.get("token_limit_weekly", 0) or 0,
+                "token_usage": token_usage,
             })
 
         return jsonify({
@@ -640,3 +650,63 @@ def register_ai_model_routes(app, server):
             "updated": len(updated),
             "p0_model_id": p0_model["id"] if p0_model else None,
         })
+
+    @app.route("/api/ai-models/failover-detail/<model_id>")
+    def get_failover_model_detail(model_id):
+        """获取故障转移队列中单个模型的详情"""
+        from nbot.core.failover import get_failover_state
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
+
+        model = next((m for m in server.ai_models if m["id"] == model_id), None)
+        if not model:
+            return jsonify({"error": "Model not found"}), 404
+
+        state = get_failover_state()
+        health = state.get_all_health_summary().get(model_id, {})
+        model_name = model.get("model", "")
+
+        token_usage = {}
+        try:
+            from nbot.core.token_stats import get_token_stats_manager
+            token_usage = get_token_stats_manager().get_model_usage(model_name)
+        except Exception:
+            pass
+
+        return jsonify({
+            "success": True,
+            "model_id": model_id,
+            "name": model.get("name", ""),
+            "model": model_name,
+            "provider": model.get("provider", ""),
+            "purpose": model.get("purpose", "chat"),
+            "priority": model.get("priority", 0),
+            "enabled": model.get("enabled", True),
+            "health": health,
+            "token_limit_daily": model.get("token_limit_daily", 0) or 0,
+            "token_limit_weekly": model.get("token_limit_weekly", 0) or 0,
+            "token_usage": token_usage,
+            "input_price": model.get("input_price"),
+            "output_price": model.get("output_price"),
+            "max_tokens": model.get("max_tokens", 2000),
+            "temperature": model.get("temperature", 0.7),
+        })
+
+    @app.route("/api/ai-models/failover-token-limit", methods=["POST"])
+    def set_failover_token_limit():
+        """设置模型的 token 限额"""
+        data = request.json or {}
+        model_id = data.get("model_id")
+        if not model_id:
+            return jsonify({"error": "model_id is required"}), 400
+
+        model = next((m for m in server.ai_models if m["id"] == model_id), None)
+        if not model:
+            return jsonify({"error": "Model not found"}), 404
+
+        if "token_limit_daily" in data:
+            model["token_limit_daily"] = max(0, int(data["token_limit_daily"] or 0))
+        if "token_limit_weekly" in data:
+            model["token_limit_weekly"] = max(0, int(data["token_limit_weekly"] or 0))
+
+        server._save_data("ai_models")
+        return jsonify({"success": True})

@@ -132,8 +132,8 @@ class FailoverState:
     ) -> Optional[Dict[str, Any]]:
         """Pick the best available model from the ordered list.
 
-        Skips models in cooldown. Returns the first available model,
-        or the first model as a last resort if all are in cooldown.
+        Skips models in cooldown or over token limit.
+        Returns the first available model, or the first model as a last resort.
         """
         now = time.monotonic()
         exclude = exclude_ids or set()
@@ -146,12 +146,35 @@ class FailoverState:
                     continue
                 if fallback is None:
                     fallback = config
+                # Token limit check
+                if self._is_token_limited(config):
+                    continue
                 health = self._health.get(model_id)
                 if health is None or now >= health.cooldown_until:
                     return config
 
-        # All in cooldown -- return first as last resort
+        # All unavailable -- return first as last resort
         return fallback
+
+    def _is_token_limited(self, config: Dict[str, Any]) -> bool:
+        """Check if model has exceeded its token limit."""
+        daily_limit = config.get("token_limit_daily", 0) or 0
+        weekly_limit = config.get("token_limit_weekly", 0) or 0
+        if not daily_limit and not weekly_limit:
+            return False
+        model_name = config.get("model", "")
+        if not model_name:
+            return False
+        try:
+            from nbot.core.token_stats import get_token_stats_manager
+            usage = get_token_stats_manager().get_model_usage(model_name)
+        except Exception:
+            return False
+        if daily_limit and usage.get("today_total", 0) >= daily_limit:
+            return True
+        if weekly_limit and usage.get("weekly_total", 0) >= weekly_limit:
+            return True
+        return False
 
     def record_success(self, model_id: str) -> None:
         """Reset failure counter on success."""

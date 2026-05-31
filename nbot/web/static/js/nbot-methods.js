@@ -10963,6 +10963,64 @@ def main(params):
                     }
                 },
 
+                isTokenLimited(item) {
+                    const daily = item.token_limit_daily || 0;
+                    const weekly = item.token_limit_weekly || 0;
+                    const usage = item.token_usage || {};
+                    if (daily && (usage.today_total || 0) >= daily) return true;
+                    if (weekly && (usage.weekly_total || 0) >= weekly) return true;
+                    return false;
+                },
+
+                getTokenUsagePercent(item, period) {
+                    const limit = period === 'daily' ? (item.token_limit_daily || 0) : (item.token_limit_weekly || 0);
+                    if (!limit) return 0;
+                    const used = period === 'daily' ? (item.token_usage?.today_total || 0) : (item.token_usage?.weekly_total || 0);
+                    return Math.min(100, Math.round((used / limit) * 100));
+                },
+
+                getTokenUsageColor(item, period) {
+                    const pct = this.getTokenUsagePercent(item, period);
+                    if (pct >= 90) return '#ef4444';
+                    if (pct >= 70) return '#f59e0b';
+                    return 'var(--accent-primary, #8b5cf6)';
+                },
+
+                formatTokenCount(n) {
+                    if (!n || n === 0) return '0';
+                    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+                    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+                    return String(n);
+                },
+
+                async openFailoverModelDetail(modelId) {
+                    try {
+                        const res = await api.get(`/api/ai-models/failover-detail/${modelId}`);
+                        if (res.data.success) {
+                            this.failoverDetail = res.data;
+                            this.showFailoverDetailModal = true;
+                        }
+                    } catch (e) {
+                        this.showToast('加载模型详情失败', 'error');
+                    }
+                },
+
+                async saveFailoverTokenLimit() {
+                    if (!this.failoverDetail) return;
+                    try {
+                        await api.post('/api/ai-models/failover-token-limit', {
+                            model_id: this.failoverDetail.model_id,
+                            token_limit_daily: this.failoverDetail.token_limit_daily || 0,
+                            token_limit_weekly: this.failoverDetail.token_limit_weekly || 0,
+                        });
+                        this.showToast('Token 限额已保存', 'success');
+                        this.showFailoverDetailModal = false;
+                        await this.loadFailoverQueue();
+                    } catch (e) {
+                        this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
                 getFailoverHealthBadge(modelId) {
                     const health = this.failoverHealth[modelId];
                     if (!health) return { class: 'fo-health-ok', text: '健康', icon: 'fa-check-circle' };

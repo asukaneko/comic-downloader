@@ -519,6 +519,50 @@ class TokenStatsManager:
             "users": _build(users),
         }
 
+    def get_model_usage(self, model_name: str) -> Dict[str, int]:
+        """返回指定模型的今日和近7天 token 用量。
+
+        Returns:
+            {"today_total": int, "weekly_total": int, "today_input": int,
+             "today_output": int, "weekly_input": int, "weekly_output": int,
+             "message_count": int, "cost": float}
+        """
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        week_cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+        with self._lock:
+            records = list(self._stats.get("records", []))
+
+        today_input = today_output = week_input = week_output = 0
+        msg_count = 0
+        cost = 0.0
+        for r in records:
+            if r.get("model") != model_name:
+                continue
+            date = r.get("date", "")
+            if date < week_cutoff:
+                continue
+            inp = r.get("input", 0) or 0
+            out = r.get("output", 0) or 0
+            week_input += inp
+            week_output += out
+            msg_count += 1
+            cost += float(r.get("cost", 0) or 0)
+            if date == today_str:
+                today_input += inp
+                today_output += out
+
+        return {
+            "today_total": today_input + today_output,
+            "weekly_total": week_input + week_output,
+            "today_input": today_input,
+            "today_output": today_output,
+            "weekly_input": week_input,
+            "weekly_output": week_output,
+            "message_count": msg_count,
+            "cost": round(cost, 4),
+        }
+
     # ------------------------------------------------------------------
     # 重置
     # ------------------------------------------------------------------

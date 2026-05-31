@@ -344,6 +344,9 @@ def get_model_configs_by_purpose(purpose: str) -> list:
             "supports_tools": model.get("supports_tools", True),
             "supports_reasoning": model.get("supports_reasoning", True),
             "supports_stream": model.get("supports_stream", True),
+            "token_limit_daily": model.get("token_limit_daily", 0) or 0,
+            "token_limit_weekly": model.get("token_limit_weekly", 0) or 0,
+            "name": model.get("name", ""),
             "_order": idx,
         }
 

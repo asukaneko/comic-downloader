@@ -5276,21 +5276,41 @@
                                             v-for="(item, index) in failoverQueue"
                                             :key="item.model_id"
                                             class="fo-queue-item"
-                                            :class="{ 'fo-queue-first': index === 0 }"
+                                            :class="{ 'fo-queue-first': index === 0, 'fo-queue-limited': isTokenLimited(item) }"
+                                            style="cursor: pointer;"
+                                            @click="openFailoverModelDetail(item.model_id)"
                                         >
                                             <div class="fo-queue-rank">
                                                 <span class="fo-rank-number" :class="{ 'fo-rank-primary': index === 0 }">{{ index + 1 }}</span>
                                             </div>
-                                            <div class="fo-queue-info">
+                                            <div class="fo-queue-info" style="flex: 1;">
                                                 <div class="fo-queue-name">
                                                     {{ item.name }}
                                                     <span v-if="activeModelsByPurpose[failoverQueuePurpose]?.active_model_id === item.model_id" class="fo-badge-active">当前使用</span>
                                                     <span v-else-if="index === 0" class="fo-badge-primary">首选</span>
+                                                    <span v-if="isTokenLimited(item)" class="fo-badge-limited" title="已达 Token 限额"><i class="fas fa-ban"></i> 限额</span>
                                                 </div>
                                                 <div class="fo-queue-meta">
                                                     <span><i :class="getProviderIcon(item.provider)"></i> {{ getProviderLabel(item.provider) }}</span>
                                                     <span><i class="fas fa-cube"></i> {{ item.model }}</span>
                                                     <span class="fo-priority-tag">P{{ item.priority }}</span>
+                                                </div>
+                                                <!-- Token 用量条 -->
+                                                <div v-if="item.token_limit_daily || item.token_limit_weekly" class="fo-token-bar-wrap">
+                                                    <div v-if="item.token_limit_daily" class="fo-token-bar">
+                                                        <div class="fo-token-bar-label">今日</div>
+                                                        <div class="fo-token-bar-track">
+                                                            <div class="fo-token-bar-fill" :style="{ width: getTokenUsagePercent(item, 'daily') + '%', background: getTokenUsageColor(item, 'daily') }"></div>
+                                                        </div>
+                                                        <div class="fo-token-bar-value">{{ formatTokenCount(item.token_usage?.today_total || 0) }} / {{ formatTokenCount(item.token_limit_daily) }}</div>
+                                                    </div>
+                                                    <div v-if="item.token_limit_weekly" class="fo-token-bar">
+                                                        <div class="fo-token-bar-label">7天</div>
+                                                        <div class="fo-token-bar-track">
+                                                            <div class="fo-token-bar-fill" :style="{ width: getTokenUsagePercent(item, 'weekly') + '%', background: getTokenUsageColor(item, 'weekly') }"></div>
+                                                        </div>
+                                                        <div class="fo-token-bar-value">{{ formatTokenCount(item.token_usage?.weekly_total || 0) }} / {{ formatTokenCount(item.token_limit_weekly) }}</div>
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div class="fo-queue-health">
@@ -5299,7 +5319,7 @@
                                                     {{ getFailoverHealthBadge(item.model_id).text }}
                                                 </span>
                                             </div>
-                                            <div class="fo-queue-actions">
+                                            <div class="fo-queue-actions" @click.stop>
                                                 <button class="fo-arrow-btn" :disabled="index === 0" @click="moveQueueItem(index, -1)" title="优先级提高">
                                                     <i class="fas fa-chevron-up"></i>
                                                 </button>
@@ -5325,6 +5345,120 @@
                                     <button class="btn btn-secondary" @click="closeFailoverQueue">关闭</button>
                                     <button class="btn btn-primary btn-sm" @click="loadFailoverQueue()" :disabled="failoverLoading">
                                         <i class="fas fa-refresh"></i> 刷新
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 故障转移模型详情弹窗 -->
+                        <div v-if="showFailoverDetailModal" class="modal-overlay" style="z-index: 1400;" @click.self="showFailoverDetailModal = false">
+                            <div class="modal" style="max-width: 480px;">
+                                <div class="modal-header">
+                                    <h3 class="modal-title">
+                                        <i class="fas fa-chart-line" style="color: var(--accent-primary);"></i>
+                                        模型详情
+                                    </h3>
+                                    <button class="modal-close" @click="showFailoverDetailModal = false"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div class="modal-body" v-if="failoverDetail" style="font-size: 13px;">
+                                    <div style="margin-bottom: 16px;">
+                                        <div style="font-size: 16px; font-weight: 600; margin-bottom: 4px;">{{ failoverDetail.name }}</div>
+                                        <div style="color: var(--text-secondary);">{{ failoverDetail.model }} · {{ failoverDetail.provider }}</div>
+                                    </div>
+                                    <!-- 健康状态 -->
+                                    <div class="fo-detail-section">
+                                        <div class="fo-detail-title"><i class="fas fa-heartbeat"></i> 健康状态</div>
+                                        <div class="fo-detail-grid">
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">状态</div>
+                                                <span class="fo-health-badge" :class="getFailoverHealthBadge(failoverDetail.model_id).class">
+                                                    <i class="fas" :class="getFailoverHealthBadge(failoverDetail.model_id).icon"></i>
+                                                    {{ getFailoverHealthBadge(failoverDetail.model_id).text }}
+                                                </span>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">连续失败</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.health?.consecutive_failures || 0 }} 次</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">最后错误码</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.health?.last_failure_code || '-' }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">冷却剩余</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.health?.cooldown_remaining || 0 }}s</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Token 用量 -->
+                                    <div class="fo-detail-section">
+                                        <div class="fo-detail-title"><i class="fas fa-coins"></i> Token 用量</div>
+                                        <div class="fo-detail-grid">
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">今日</div>
+                                                <div class="fo-detail-value">{{ formatTokenCount(failoverDetail.token_usage?.today_total || 0) }}</div>
+                                                <div style="font-size: 11px; color: var(--text-muted);">入 {{ formatTokenCount(failoverDetail.token_usage?.today_input || 0) }} · 出 {{ formatTokenCount(failoverDetail.token_usage?.today_output || 0) }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">近7天</div>
+                                                <div class="fo-detail-value">{{ formatTokenCount(failoverDetail.token_usage?.weekly_total || 0) }}</div>
+                                                <div style="font-size: 11px; color: var(--text-muted);">入 {{ formatTokenCount(failoverDetail.token_usage?.weekly_input || 0) }} · 出 {{ formatTokenCount(failoverDetail.token_usage?.weekly_output || 0) }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">调用次数</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.token_usage?.message_count || 0 }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">估算费用</div>
+                                                <div class="fo-detail-value">¥{{ (failoverDetail.token_usage?.cost || 0).toFixed(4) }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Token 限额设置 -->
+                                    <div class="fo-detail-section">
+                                        <div class="fo-detail-title"><i class="fas fa-sliders-h"></i> Token 限额</div>
+                                        <div style="display: flex; gap: 16px; margin-top: 8px;">
+                                            <div style="flex: 1;">
+                                                <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">每日限额</label>
+                                                <div style="display: flex; gap: 6px; align-items: center;">
+                                                    <input type="number" v-model.number="failoverDetail.token_limit_daily" min="0" class="form-input" style="flex: 1; font-size: 12px; padding: 4px 8px;" placeholder="0 = 不限制">
+                                                </div>
+                                            </div>
+                                            <div style="flex: 1;">
+                                                <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">每周限额</label>
+                                                <div style="display: flex; gap: 6px; align-items: center;">
+                                                    <input type="number" v-model.number="failoverDetail.token_limit_weekly" min="0" class="form-input" style="flex: 1; font-size: 12px; padding: 4px 8px;" placeholder="0 = 不限制">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- 模型参数 -->
+                                    <div class="fo-detail-section">
+                                        <div class="fo-detail-title"><i class="fas fa-cog"></i> 模型参数</div>
+                                        <div class="fo-detail-grid">
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">Max Tokens</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.max_tokens }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">Temperature</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.temperature }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">输入价格</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.input_price != null ? '¥' + failoverDetail.input_price + '/M' : '默认' }}</div>
+                                            </div>
+                                            <div class="fo-detail-item">
+                                                <div class="fo-detail-label">输出价格</div>
+                                                <div class="fo-detail-value">{{ failoverDetail.output_price != null ? '¥' + failoverDetail.output_price + '/M' : '默认' }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="showFailoverDetailModal = false">关闭</button>
+                                    <button class="btn btn-primary" @click="saveFailoverTokenLimit">
+                                        <i class="fas fa-save"></i> 保存限额
                                     </button>
                                 </div>
                             </div>
@@ -9350,7 +9484,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260539"></script>
+    <script src="/static/js/nbot-methods.js?v=20260539b"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -10013,6 +10147,8 @@
                     failoverQueue: [],
                     failoverHealth: {},
                     failoverLoading: false,
+                    showFailoverDetailModal: false,
+                    failoverDetail: null,
 
                     // Skills 配置
                     skills: [],
