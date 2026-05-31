@@ -947,7 +947,7 @@
                                 <div class="empty-state chat-empty-state" style="margin-bottom: 24px;">
                                     <div class="chat-empty-state-title">{{ $t('chat.empty_title') }}</div>
                                     <div class="chat-empty-state-desc">{{ $t('chat.empty_desc') }}</div>
-                                    <div class="empty-state-icon">💬</div>
+                                    <div class="empty-state-icon"><i class="fas fa-comments"></i></div>
                                     <div class="empty-state-title">选择一个会话开始聊天</div>
                                     <div class="empty-state-desc">或创建一个新的会话</div>
                                 </div>
@@ -998,8 +998,8 @@
                             
                             <!-- QQ 会话为空 -->
                             <div v-if="(chatTab === 'qq_private' || chatTab === 'qq_group') && !currentQqId" class="empty-state">
-                                <div class="empty-state-icon" v-if="chatTab === 'qq_private'">💬</div>
-                                <div class="empty-state-icon" v-else>👥</div>
+                                <div class="empty-state-icon" v-if="chatTab === 'qq_private'"><i class="fas fa-comment"></i></div>
+                                <div class="empty-state-icon" v-else><i class="fas fa-users"></i></div>
                                 <div class="empty-state-title">选择一个 QQ {{ chatTab === 'qq_private' ? '私聊' : '群聊' }}</div>
                                 <div class="empty-state-desc">点击左侧列表查看消息记录</div>
                             </div>
@@ -2285,7 +2285,7 @@
                             </div>
                             <div class="card-body">
                                 <div v-if="taskCenterItems.length === 0" class="empty-state">
-                                    <div class="empty-state-icon">⏰</div>
+                                    <div class="empty-state-icon"><i class="fas fa-clock"></i></div>
                                     <div class="empty-state-title">暂无任务</div>
                                     <div class="empty-state-subtitle">统一查看 Heartbeat、工作流和自定义定时任务。</div>
                                 </div>
@@ -2637,7 +2637,7 @@
                             </div>
                             <div class="card-body">
                                 <div v-if="workflows.length === 0" class="empty-state">
-                                    <div class="empty-state-icon">📋</div>
+                                    <div class="empty-state-icon"><i class="fas fa-list-check"></i></div>
                                     <div class="empty-state-title">暂无工作流</div>
                                     <div class="empty-state-subtitle">
                                         点击"新建工作流"创建，或使用"AI生成"让AI帮你创建
@@ -3106,7 +3106,7 @@
                                     </div>
                                     <div class="preset-personality-list">
                                         <div v-if="personalityPresets.length === 0" class="preset-empty-state">
-                                            <div class="preset-empty-icon">🎭</div>
+                                            <div class="preset-empty-icon"><i class="fas fa-masks-theater"></i></div>
                                             <div class="preset-empty-text">加载中...</div>
                                         </div>
                                         <div v-for="preset in personalityPresets" :key="preset.id"
@@ -3235,7 +3235,7 @@
                                     </div>
                                     <div class="card-body" style="padding: 12px;">
                                         <div v-if="customPersonalityPresets.length === 0" class="empty-state" style="padding: 30px;">
-                                            <div class="empty-state-icon">✨</div>
+                                            <div class="empty-state-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
                                             <div class="empty-state-title">暂无自定义角色</div>
                                             <div class="empty-state-desc">点击上方按钮创建你的角色卡</div>
                                         </div>
@@ -3698,7 +3698,7 @@
                                                 </span>
                                             </label>
                                         </div>
-                                        <div class="form-group" style="flex: 0 0 120px;">
+                                        <div class="form-group" style="flex: 1;">
                                             <label class="form-label">{{ $t('world_book.max_injections_per_session') }}</label>
                                             <input type="number" v-model.number="editingWorldBookEntry.max_injections_per_session" min="0" max="999" class="form-input" :title="$t('world_book.max_injections_hint')">
                                         </div>
@@ -4247,7 +4247,7 @@
                             </div>
                             <div class="card-body" style="padding: 0;">
                                 <div v-if="filteredKnowledgeDocs.length === 0" class="empty-state">
-                                    <div class="empty-state-icon">📚</div>
+                                    <div class="empty-state-icon"><i class="fas fa-book-open"></i></div>
                                     <div class="empty-state-title">{{ knowledgeDocs.length === 0 ? '暂无文档' : '未找到匹配的文档' }}</div>
                                     <div class="empty-state-subtitle" v-if="knowledgeDocs.length === 0">
                                         点击"添加文档"创建，或使用"导入"批量添加
@@ -5578,25 +5578,6 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="filter-group">
-                                <label class="filter-label">{{ $t('tokens.display_unit') }}</label>
-                                <div class="filter-toggle">
-                                    <button 
-                                        class="toggle-btn"
-                                        :class="{ active: tokenFilter.unit === 'tokens' }"
-                                        @click="tokenFilter.unit = 'tokens'"
-                                    >
-                                        Tokens
-                                    </button>
-                                    <button 
-                                        class="toggle-btn"
-                                        :class="{ active: tokenFilter.unit === 'cost' }"
-                                        @click="tokenFilter.unit = 'cost'"
-                                    >
-                                        Cost
-                                    </button>
-                                </div>
-                            </div>
                             <div class="filter-actions">
                                 <button class="btn btn-primary" @click="refreshTokenStats" :disabled="isLoading">
                                     <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i> 刷新
@@ -5675,7 +5656,7 @@
                                 <div class="chart-header">
                                     <div>
                                         <div class="chart-title">{{ $t('tokens.usage_trend') }}</div>
-                                        <div class="chart-subtitle">{{ tokenFilter.unit === 'tokens' ? $t('tokens.token_count') : $t('tokens.estimated_cost') }} {{ $t('tokens.over_time') }}</div>
+                                        <div class="chart-subtitle">Tokens & {{ $t('tokens.estimated_cost') }} {{ $t('tokens.over_time') }}</div>
                                     </div>
                                 </div>
                                 <div class="chart-body" style="height: 300px;">
@@ -5741,7 +5722,7 @@
                             </div>
                             <div class="card-body" style="padding: 0;">
                                 <div v-if="tokenRecords.length === 0" class="empty-state">
-                                    <div class="empty-state-icon">📊</div>
+                                    <div class="empty-state-icon"><i class="fas fa-chart-bar"></i></div>
                                     <div class="empty-state-title">暂无调用记录</div>
                                 </div>
                                 <table v-else class="data-table">
@@ -9279,7 +9260,7 @@
                 </div>
                 <div class="character-fullscreen-body">
                     <div v-if="filteredFullscreenCharacters.length === 0" class="empty-state" style="padding: 60px 20px;">
-                        <div class="empty-state-icon" style="font-size: 48px;">🔍</div>
+                        <div class="empty-state-icon" style="font-size: 48px;"><i class="fas fa-magnifying-glass"></i></div>
                         <div class="empty-state-title">未找到匹配的角色</div>
                         <div class="empty-state-desc">尝试使用其他关键词搜索</div>
                     </div>
@@ -11360,6 +11341,10 @@
                 if (this.platformChart) {
                     this.platformChart.dispose();
                     this.platformChart = null;
+                }
+                if (this.tokenTrendChart) {
+                    this.tokenTrendChart.dispose();
+                    this.tokenTrendChart = null;
                 }
                 // 清理所有 Blob URL
                 if (this.uploadedFiles) {

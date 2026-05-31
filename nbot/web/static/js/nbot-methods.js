@@ -1844,6 +1844,7 @@ const NbotMethods = {
                     this.viewportWidth = window.innerWidth || this.viewportWidth || 1200;
                     if (this.trendChart) this.trendChart.resize();
                     if (this.platformChart) this.platformChart.resize();
+                    if (this.tokenTrendChart && this.currentPage === 'tokens') this.tokenTrendChart.resize();
                     if (this.personalityTimelineChart && this.currentPage === 'personality-journey') {
                         this.updatePersonalityTimelineChart();
                     }
@@ -4278,81 +4279,134 @@ def main(params):
                 },
 
                 updateTokenTrendChart() {
-                    if (!this.$refs.tokenTrendChart) return;
+                    // 等待 DOM 渲染完成后再初始化图表
+                    this.$nextTick(() => {
+                        if (!this.$refs.tokenTrendChart) return;
 
-                    if (!this.tokenTrendChart) {
-                        this.tokenTrendChart = echarts.init(this.$refs.tokenTrendChart);
-                    }
-
-                    // 使用真实的历史数据
-                    const history = this.tokenHistory.slice(-7); // 最近7天
-                    const dates = history.map(h => {
-                        const date = new Date(h.date);
-                        return `${date.getMonth() + 1}/${date.getDate()}`;
-                    });
-                    const values = history.map(h => {
-                        if (this.tokenFilter.unit === 'cost') {
-                            return parseFloat(h.cost) || 0;
-                        }
-                        return h.total || ((h.input || 0) + (h.output || 0));
-                    });
-
-                    const option = {
-                        backgroundColor: 'transparent',
-                        tooltip: {
-                            trigger: 'axis',
-                            backgroundColor: 'rgba(22, 27, 34, 0.95)',
-                            borderColor: '#30363d',
-                            textStyle: { color: '#e6edf3' },
-                            formatter: (params) => {
-                                const p = params[0];
-                                const unit = this.tokenFilter.unit === 'cost' ? '$' : '';
-                                return `${p.axisValue}<br/>${p.marker} ${p.value} ${unit}`;
+                        // 销毁已失效的旧实例（页面切换后 DOM 已重建）
+                        if (this.tokenTrendChart) {
+                            if (!this.tokenTrendChart.getDom() || this.tokenTrendChart.getDom() !== this.$refs.tokenTrendChart) {
+                                this.tokenTrendChart.dispose();
+                                this.tokenTrendChart = null;
                             }
-                        },
-                        grid: {
-                            left: '3%',
-                            right: '4%',
-                            bottom: '3%',
-                            top: '10%',
-                            containLabel: true
-                        },
-                        xAxis: {
-                            type: 'category',
-                            data: dates,
-                            axisLine: { lineStyle: { color: '#30363d' } },
-                            axisLabel: { color: '#8b949e', fontSize: 11 }
-                        },
-                        yAxis: {
-                            type: 'value',
-                            axisLine: { show: false },
-                            axisLabel: {
-                                color: '#8b949e',
-                                fontSize: 11,
-                                formatter: (value) => {
-                                    if (this.tokenFilter.unit === 'cost') {
-                                        return '$' + value.toFixed(2);
+                        }
+
+                        if (!this.tokenTrendChart) {
+                            this.tokenTrendChart = echarts.init(this.$refs.tokenTrendChart);
+                        }
+
+                        // 使用真实的历史数据
+                        const history = this.tokenHistory.slice(-30); // 最近30天
+                        const dates = history.map(h => {
+                            const date = new Date(h.date);
+                            return `${date.getMonth() + 1}/${date.getDate()}`;
+                        });
+                        const tokenValues = history.map(h =>
+                            h.total || ((h.input || 0) + (h.output || 0))
+                        );
+                        const costValues = history.map(h =>
+                            parseFloat(h.cost) || 0
+                        );
+                        const primaryColor = this.themeSettings.primaryColor || '#8b5cf6';
+
+                        const option = {
+                            backgroundColor: 'transparent',
+                            tooltip: {
+                                trigger: 'axis',
+                                backgroundColor: 'rgba(22, 27, 34, 0.95)',
+                                borderColor: '#30363d',
+                                textStyle: { color: '#e6edf3', fontSize: 12 },
+                                formatter: (params) => {
+                                    let lines = [`<div style="font-weight:600;margin-bottom:4px;">${params[0].axisValue}</div>`];
+                                    for (const p of params) {
+                                        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;"></span>`;
+                                        if (p.seriesName === '费用') {
+                                            lines.push(`${dot}${p.seriesName}: ¥${parseFloat(p.value).toFixed(4)}`);
+                                        } else {
+                                            const val = p.value >= 1000 ? (p.value / 1000).toFixed(1) + 'k' : p.value;
+                                            lines.push(`${dot}${p.seriesName}: ${val}`);
+                                        }
                                     }
-                                    return value >= 1000 ? (value / 1000).toFixed(1) + 'k' : value;
+                                    return lines.join('<br/>');
                                 }
                             },
-                            splitLine: { lineStyle: { color: '#21262d' } }
-                        },
-                        series: [{
-                            type: 'line',
-                            smooth: true,
-                            data: values,
-                            itemStyle: { color: this.themeSettings.primaryColor },
-                            areaStyle: {
-                                color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                                    { offset: 0, color: this.themeSettings.primaryColor + '40' },
-                                    { offset: 1, color: this.themeSettings.primaryColor + '05' }
-                                ])
-                            }
-                        }]
-                    };
+                            legend: {
+                                data: ['Tokens', '费用'],
+                                top: 0,
+                                left: 'center',
+                                textStyle: { color: '#8b949e', fontSize: 11 },
+                                itemWidth: 12,
+                                itemHeight: 8
+                            },
+                            grid: {
+                                left: '3%',
+                                right: '4%',
+                                bottom: '3%',
+                                top: 32,
+                                containLabel: true
+                            },
+                            xAxis: {
+                                type: 'category',
+                                data: dates,
+                                axisLine: { lineStyle: { color: '#30363d' } },
+                                axisLabel: { color: '#8b949e', fontSize: 11 }
+                            },
+                            yAxis: [
+                                {
+                                    type: 'value',
+                                    name: 'Tokens',
+                                    nameTextStyle: { color: '#8b949e', fontSize: 10 },
+                                    axisLine: { show: false },
+                                    axisLabel: {
+                                        color: '#8b949e',
+                                        fontSize: 11,
+                                        formatter: v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v
+                                    },
+                                    splitLine: { lineStyle: { color: '#21262d' } }
+                                },
+                                {
+                                    type: 'value',
+                                    name: '费用 (¥)',
+                                    nameTextStyle: { color: '#8b949e', fontSize: 10 },
+                                    axisLine: { show: false },
+                                    axisLabel: {
+                                        color: '#8b949e',
+                                        fontSize: 11,
+                                        formatter: v => '¥' + v.toFixed(2)
+                                    },
+                                    splitLine: { show: false }
+                                }
+                            ],
+                            series: [
+                                {
+                                    name: 'Tokens',
+                                    type: 'line',
+                                    smooth: true,
+                                    data: tokenValues,
+                                    itemStyle: { color: primaryColor },
+                                    areaStyle: {
+                                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                            { offset: 0, color: primaryColor + '40' },
+                                            { offset: 1, color: primaryColor + '05' }
+                                        ])
+                                    }
+                                },
+                                {
+                                    name: '费用',
+                                    type: 'line',
+                                    smooth: true,
+                                    yAxisIndex: 1,
+                                    data: costValues,
+                                    itemStyle: { color: '#f59e0b' },
+                                    lineStyle: { width: 2, type: 'dashed' },
+                                    symbol: 'circle',
+                                    symbolSize: 4
+                                }
+                            ]
+                        };
 
-                    this.tokenTrendChart.setOption(option, true);
+                        this.tokenTrendChart.setOption(option, true);
+                    });
                 },
 
                 async exportTokenData() {
