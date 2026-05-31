@@ -4986,6 +4986,10 @@
                                                     <span v-if="activeModelsByPurpose[failoverQueuePurpose]?.active_model_id === item.model_id" class="fo-badge-active">当前使用</span>
                                                     <span v-else-if="index === 0" class="fo-badge-primary">首选</span>
                                                     <span v-if="isTokenLimited(item)" class="fo-badge-limited" title="已达 Token 限额"><i class="fas fa-ban"></i> 限额</span>
+                                                    <span class="fo-health-badge fo-inline-badge" :class="getFailoverHealthBadge(item.model_id).class">
+                                                        <i class="fas" :class="getFailoverHealthBadge(item.model_id).icon"></i>
+                                                        {{ getFailoverHealthBadge(item.model_id).text }}
+                                                    </span>
                                                 </div>
                                                 <div class="fo-queue-meta">
                                                     <span><i :class="getProviderIcon(item.provider)"></i> {{ getProviderLabel(item.provider) }}</span>
@@ -5009,12 +5013,6 @@
                                                         <div class="fo-token-bar-value">{{ formatTokenCount(item.token_usage?.weekly_total || 0) }} / {{ formatTokenCount(item.token_limit_weekly) }}</div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                            <div class="fo-queue-health">
-                                                <span class="fo-health-badge" :class="getFailoverHealthBadge(item.model_id).class">
-                                                    <i class="fas" :class="getFailoverHealthBadge(item.model_id).icon"></i>
-                                                    {{ getFailoverHealthBadge(item.model_id).text }}
-                                                </span>
                                             </div>
                                             <div class="fo-queue-actions" @click.stop>
                                                 <button class="fo-arrow-btn" :disabled="index === 0" @click="moveQueueItem(index, -1)" title="优先级提高">
@@ -5395,92 +5393,86 @@
                         <div class="usage-filters">
                             <div class="filter-group">
                                 <label class="filter-label">{{ $t('tokens.time_range') }}</label>
-                                <div class="token-range-row">
-                                    <div class="filter-buttons">
-                                        <button 
-                                            v-for="range in dateRanges" 
-                                            :key="range.value"
-                                            class="filter-btn"
-                                            :class="{ active: tokenFilter.dateRange === range.value }"
-                                            @click="setTokenDateRange(range.value)"
-                                        >
-                                            {{ range.label }}
-                                        </button>
-                                    </div>
-                                    <div class="token-date-range">
-                                        <input v-model="tokenFilter.startDate" type="date" class="token-date-input" @change="setTokenCustomDateRange">
-                                        <span class="token-date-separator"></span>
-                                        <input v-model="tokenFilter.endDate" type="date" class="token-date-input" @change="setTokenCustomDateRange">
-                                    </div>
+                                <div class="filter-buttons">
+                                    <button
+                                        v-for="range in dateRanges"
+                                        :key="range.value"
+                                        class="filter-btn"
+                                        :class="{ active: tokenFilter.dateRange === range.value }"
+                                        @click="setTokenDateRange(range.value)"
+                                        :aria-label="'筛选' + range.label"
+                                    >
+                                        {{ range.label }}
+                                    </button>
                                 </div>
                             </div>
+                            <div class="token-date-range">
+                                <input v-model="tokenFilter.startDate" type="date" class="token-date-input" @change="setTokenCustomDateRange" aria-label="开始日期">
+                                <span class="token-date-separator"></span>
+                                <input v-model="tokenFilter.endDate" type="date" class="token-date-input" @change="setTokenCustomDateRange" aria-label="结束日期">
+                            </div>
                             <div class="filter-actions">
-                                <button class="btn btn-primary" @click="refreshTokenStats" :disabled="isLoading">
-                                    <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i> 刷新
+                                <button class="token-refresh-btn" @click="refreshTokenStats" :disabled="isLoading" aria-label="刷新数据">
+                                    <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                                    <span>刷新</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- 用量概览 -->
                         <div class="usage-overview">
-                            <div class="overview-card">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #ec4899, #f472b6);">
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #ec4899, #f43f5e);">
                                     <i class="fas fa-comments"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.overview_calls') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.message_count || 0) }}</div>
-                                    <div class="overview-sub">{{ tokenStats.message_change || '+0' }} 较上期</div>
                                 </div>
                             </div>
-                            <div class="overview-card">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #3b82f6, #60a5fa);">
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">
                                     <i class="fas fa-microchip"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.overview_tokens') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.total_tokens || 0) }}</div>
-                                    <div class="overview-sub">{{ tokenStats.token_change || '+0' }} 较上期</div>
                                 </div>
                             </div>
-                            <div class="overview-card">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #10b981, #34d399);">
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #10b981, #22c55e);">
                                     <i class="fas fa-yen-sign"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.overview_cost') }}</div>
                                     <div class="overview-value">¥{{ tokenStats.estimated_cost || '0.00' }}</div>
-                                    <div class="overview-sub">{{ tokenStats.cost_change || '+0%' }} 较上期</div>
                                 </div>
                             </div>
-                            <div class="overview-card">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa);">
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #8b5cf6, #a855f7);">
                                     <i class="fas fa-chart-line"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.overview_avg_tokens') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.avg_tokens_per_msg || 0) }}</div>
-                                    <div class="overview-sub">{{ tokenStats.avg_change || '+0%' }} 较上期</div>
                                 </div>
                             </div>
-                            <div class="overview-card">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #f59e0b, #fbbf24);">
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #f59e0b, #f97316);">
                                     <i class="fas fa-tachometer-alt"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.avg_response_time') }}</div>
                                     <div class="overview-value">{{ tokenStats.avg_response_time || '0' }}s</div>
-                                    <div class="overview-sub">{{ tokenStats.response_change || '-0%' }} 较上期</div>
                                 </div>
                             </div>
-                            <div class="overview-card">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #06b6d4, #22d3ee);">
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #06b6d4, #38bdf8);">
                                     <i class="fas fa-users"></i>
                                 </div>
                                 <div class="overview-content">
                                     <div class="overview-label">{{ $t('tokens.active_sessions') }}</div>
                                     <div class="overview-value">{{ formatNumber(tokenStats.active_sessions || 0) }}</div>
-                                    <div class="overview-sub">{{ tokenStats.session_change || '+0' }} 较上期</div>
                                 </div>
                             </div>
                         </div>
@@ -5488,14 +5480,22 @@
                         <!-- 图表和排行榜 -->
                         <div class="usage-charts">
                             <!-- Token 趋势图 -->
-                            <div class="chart-card">
+                            <div class="chart-card token-chart-card">
                                 <div class="chart-header">
                                     <div>
                                         <div class="chart-title">{{ $t('tokens.usage_trend') }}</div>
                                         <div class="chart-subtitle">Tokens & {{ $t('tokens.estimated_cost') }} {{ $t('tokens.over_time') }}</div>
                                     </div>
+                                    <div class="chart-legend-pills">
+                                        <span class="chart-legend-pill">
+                                            <span class="chart-legend-dot" style="background: #3b82f6;"></span> Tokens
+                                        </span>
+                                        <span class="chart-legend-pill">
+                                            <span class="chart-legend-dot" style="background: #f59e0b;"></span> {{ $t('tokens.estimated_cost') }}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div class="chart-body" style="height: 300px;">
+                                <div class="chart-body" style="height: 360px;">
                                     <div ref="tokenTrendChart" class="chart-container"></div>
                                 </div>
                             </div>
@@ -5507,41 +5507,52 @@
                                         <i class="fas fa-trophy"></i> {{ $t('tokens.ranking_title') }}
                                     </div>
                                     <div class="ranking-tabs">
-                                        <button 
+                                        <button
                                             class="ranking-tab"
                                             :class="{ active: tokenRankingTab === 'sessions' }"
                                             @click="tokenRankingTab = 'sessions'"
+                                            aria-label="会话排行"
                                         >
                                             {{ $t('tokens.tab_sessions') }}
                                         </button>
-                                        <button 
+                                        <button
                                             class="ranking-tab"
                                             :class="{ active: tokenRankingTab === 'models' }"
                                             @click="tokenRankingTab = 'models'"
+                                            aria-label="模型排行"
                                         >
                                             {{ $t('tokens.tab_models') }}
                                         </button>
-                                        <button 
+                                        <button
                                             class="ranking-tab"
                                             :class="{ active: tokenRankingTab === 'users' }"
                                             @click="tokenRankingTab = 'users'"
+                                            aria-label="用户排行"
                                         >
                                             {{ $t('tokens.tab_users') }}
                                         </button>
                                     </div>
                                     <div class="ranking-list">
                                         <div v-for="(item, index) in tokenRankings[tokenRankingTab]" :key="index" class="ranking-item">
-                                            <div class="ranking-rank" :class="{ top: index < 3 }">{{ index + 1 }}</div>
+                                            <div class="ranking-rank"
+                                                :class="{
+                                                    'rank-gold': index === 0,
+                                                    'rank-silver': index === 1,
+                                                    'rank-bronze': index === 2
+                                                }"
+                                                :title="'第 ' + (index + 1) + ' 名'"
+                                            >{{ index + 1 }}</div>
                                             <div class="ranking-info">
-                                                <div class="ranking-name">{{ item.name }}</div>
+                                                <div class="ranking-name" :title="item.name">{{ truncateId(item.name) }}</div>
                                                 <div class="ranking-bar">
                                                     <div class="ranking-progress" :style="{ width: item.percentage + '%' }"></div>
                                                 </div>
                                             </div>
                                             <div class="ranking-value">{{ formatNumber(item.value) }}</div>
                                         </div>
-                                        <div v-if="tokenRankings[tokenRankingTab].length === 0" class="ranking-empty">
-                                            {{ $t('tokens.no_data') }}
+                                        <div v-if="!tokenRankings[tokenRankingTab] || tokenRankings[tokenRankingTab].length === 0" class="ranking-empty">
+                                            <i class="fas fa-chart-bar"></i>
+                                            {{ $t('tokens.no_data') || '暂无数据' }}
                                         </div>
                                     </div>
                                 </div>
@@ -5549,17 +5560,18 @@
                         </div>
 
                         <!-- 历史记录表格 -->
-                        <div class="card" style="margin-top: 20px;">
+                        <div class="token-records-card">
                             <div class="card-header">
                                 <span class="card-title">{{ $t('tokens.detailed_records') }}</span>
-                                <button class="btn btn-secondary" @click="exportTokenData">
+                                <button class="token-export-btn" @click="exportTokenData" aria-label="导出记录">
                                     <i class="fas fa-download"></i> 导出全部记录
                                 </button>
                             </div>
                             <div class="card-body" style="padding: 0;">
                                 <div v-if="tokenRecords.length === 0" class="empty-state">
-                                    <div class="empty-state-icon"><i class="fas fa-chart-bar"></i></div>
+                                    <div class="empty-state-icon"><i class="fas fa-inbox"></i></div>
                                     <div class="empty-state-title">暂无调用记录</div>
+                                    <div class="empty-state-desc" style="font-size: 12px; color: #475569; margin-top: 4px;">选定时间范围内没有 API 调用数据</div>
                                 </div>
                                 <table v-else class="data-table">
                                     <thead>
@@ -5579,7 +5591,7 @@
                                             <td>{{ formatFullTime(record.timestamp || record.date) }}</td>
                                             <td>{{ record.source || record.channel_type || 'api' }}</td>
                                             <td>{{ record.model || 'unknown' }}</td>
-                                            <td>{{ record.session_id || '-' }}</td>
+                                            <td :title="record.session_id">{{ truncateId(record.session_id || '-') }}</td>
                                             <td>{{ formatNumber(record.input) }}</td>
                                             <td>{{ formatNumber(record.output) }}</td>
                                             <td>{{ formatNumber(record.total || (record.input + record.output)) }}</td>

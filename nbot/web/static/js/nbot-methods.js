@@ -4212,6 +4212,44 @@ def main(params):
                     }
                 },
 
+                /* Token page helper: change class */
+                getChangeClass(changeStr, invertColors) {
+                    if (!changeStr) return 'change-neutral';
+                    const s = String(changeStr);
+                    const isPositive = s.startsWith('+') && !s.startsWith('+0') && s !== '+0%';
+                    const isNegative = s.startsWith('-') && !s.startsWith('-0') && s !== '-0%';
+                    if (invertColors) {
+                        if (isNegative) return 'change-up';
+                        if (isPositive) return 'change-down';
+                    } else {
+                        if (isPositive) return 'change-up';
+                        if (isNegative) return 'change-down';
+                    }
+                    return 'change-neutral';
+                },
+                /* Token page helper: change icon */
+                getChangeIcon(changeStr, invertColors) {
+                    if (!changeStr) return 'fas fa-minus';
+                    const s = String(changeStr);
+                    const isPositive = s.startsWith('+') && !s.startsWith('+0') && s !== '+0%';
+                    const isNegative = s.startsWith('-') && !s.startsWith('-0') && s !== '-0%';
+                    if (invertColors) {
+                        if (isNegative) return 'fas fa-arrow-down';
+                        if (isPositive) return 'fas fa-arrow-up';
+                    } else {
+                        if (isPositive) return 'fas fa-arrow-up';
+                        if (isNegative) return 'fas fa-arrow-down';
+                    }
+                    return 'fas fa-minus';
+                },
+                /* Token page helper: truncate long IDs */
+                truncateId(id) {
+                    if (!id || id === '-') return id || '-';
+                    const s = String(id);
+                    if (s.length <= 18) return s;
+                    return s.substring(0, 8) + '...' + s.substring(s.length - 6);
+                },
+
                 formatTokenDateValue(date) {
                     const year = date.getFullYear();
                     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -4343,64 +4381,63 @@ def main(params):
                             backgroundColor: 'transparent',
                             tooltip: {
                                 trigger: 'axis',
-                                backgroundColor: 'rgba(22, 27, 34, 0.95)',
-                                borderColor: '#30363d',
-                                textStyle: { color: '#e6edf3', fontSize: 12 },
+                                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                                borderColor: 'rgba(148, 163, 184, 0.15)',
+                                borderWidth: 1,
+                                padding: [12, 16],
+                                textStyle: { color: '#e2e8f0', fontSize: 12 },
+                                extraCssText: 'border-radius: 12px; backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0,0,0,0.2);',
                                 formatter: (params) => {
-                                    let lines = [`<div style="font-weight:600;margin-bottom:4px;">${params[0].axisValue}</div>`];
+                                    let lines = [`<div style="font-weight:600;margin-bottom:6px;color:#f8fafc;font-size:13px;">${params[0].axisValue}</div>`];
                                     for (const p of params) {
-                                        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;"></span>`;
+                                        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:8px;"></span>`;
                                         if (p.seriesName === '费用') {
-                                            lines.push(`${dot}${p.seriesName}: ¥${parseFloat(p.value).toFixed(4)}`);
+                                            lines.push(`<div style="margin:3px 0;">${dot}<span style="color:#94a3b8;">${p.seriesName}</span> <span style="float:right;margin-left:20px;font-weight:600;color:#f59e0b;">¥${parseFloat(p.value).toFixed(4)}</span></div>`);
                                         } else {
                                             const val = p.value >= 1000 ? (p.value / 1000).toFixed(1) + 'k' : p.value;
-                                            lines.push(`${dot}${p.seriesName}: ${val}`);
+                                            lines.push(`<div style="margin:3px 0;">${dot}<span style="color:#94a3b8;">${p.seriesName}</span> <span style="float:right;margin-left:20px;font-weight:600;color:#3b82f6;">${val}</span></div>`);
                                         }
                                     }
-                                    return lines.join('<br/>');
+                                    return lines.join('');
                                 }
                             },
-                            legend: {
-                                data: ['Tokens', '费用'],
-                                top: 0,
-                                left: 'center',
-                                textStyle: { color: '#8b949e', fontSize: 11 },
-                                itemWidth: 12,
-                                itemHeight: 8
-                            },
+                            legend: { show: false },
                             grid: {
-                                left: '3%',
-                                right: '4%',
+                                left: '2%',
+                                right: '3%',
                                 bottom: '3%',
-                                top: 32,
+                                top: 16,
                                 containLabel: true
                             },
                             xAxis: {
                                 type: 'category',
                                 data: dates,
-                                axisLine: { lineStyle: { color: '#30363d' } },
-                                axisLabel: { color: '#8b949e', fontSize: 11 }
+                                axisLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.1)' } },
+                                axisTick: { show: false },
+                                axisLabel: { color: '#64748b', fontSize: 11, margin: 12 }
                             },
                             yAxis: [
                                 {
                                     type: 'value',
                                     name: 'Tokens',
-                                    nameTextStyle: { color: '#8b949e', fontSize: 10 },
+                                    nameTextStyle: { color: '#475569', fontSize: 10, padding: [0, 40, 0, 0] },
                                     axisLine: { show: false },
+                                    axisTick: { show: false },
                                     axisLabel: {
-                                        color: '#8b949e',
+                                        color: '#475569',
                                         fontSize: 11,
                                         formatter: v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v
                                     },
-                                    splitLine: { lineStyle: { color: '#21262d' } }
+                                    splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.06)', type: 'dashed' } }
                                 },
                                 {
                                     type: 'value',
                                     name: '费用 (¥)',
-                                    nameTextStyle: { color: '#8b949e', fontSize: 10 },
+                                    nameTextStyle: { color: '#475569', fontSize: 10, padding: [0, 0, 0, 40] },
                                     axisLine: { show: false },
+                                    axisTick: { show: false },
                                     axisLabel: {
-                                        color: '#8b949e',
+                                        color: '#475569',
                                         fontSize: 11,
                                         formatter: v => '¥' + v.toFixed(2)
                                     },
@@ -4413,11 +4450,16 @@ def main(params):
                                     type: 'line',
                                     smooth: true,
                                     data: tokenValues,
-                                    itemStyle: { color: primaryColor },
+                                    symbol: 'circle',
+                                    symbolSize: 6,
+                                    showSymbol: dates.length <= 15,
+                                    itemStyle: { color: '#3b82f6', borderWidth: 2, borderColor: '#1e293b' },
+                                    lineStyle: { width: 2.5, color: '#3b82f6' },
                                     areaStyle: {
                                         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                                            { offset: 0, color: primaryColor + '40' },
-                                            { offset: 1, color: primaryColor + '05' }
+                                            { offset: 0, color: 'rgba(59, 130, 246, 0.25)' },
+                                            { offset: 0.5, color: 'rgba(59, 130, 246, 0.08)' },
+                                            { offset: 1, color: 'rgba(59, 130, 246, 0)' }
                                         ])
                                     }
                                 },
@@ -4427,12 +4469,15 @@ def main(params):
                                     smooth: true,
                                     yAxisIndex: 1,
                                     data: costValues,
-                                    itemStyle: { color: '#f59e0b' },
-                                    lineStyle: { width: 2, type: 'dashed' },
                                     symbol: 'circle',
-                                    symbolSize: 4
+                                    symbolSize: 5,
+                                    showSymbol: dates.length <= 15,
+                                    itemStyle: { color: '#f59e0b', borderWidth: 2, borderColor: '#1e293b' },
+                                    lineStyle: { width: 2, color: '#f59e0b', type: 'dashed' }
                                 }
-                            ]
+                            ],
+                            animationDuration: 800,
+                            animationEasing: 'cubicOut'
                         };
 
                         this.tokenTrendChart.setOption(option, true);

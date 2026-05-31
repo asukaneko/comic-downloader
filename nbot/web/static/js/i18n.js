@@ -1046,6 +1046,8 @@ const i18nMessages = {
     'ai_config.create_config_hint': '点击下方按钮创建配置',
 
     // Token 用量页面
+    'tokens.page_title': 'Token 用量',
+    'tokens.page_subtitle': '查看模型调用、Token 消耗与费用趋势',
     'tokens.title': 'Token 用量',
     'tokens.time_range': '时间范围',
     'tokens.display_unit': '显示单位',
