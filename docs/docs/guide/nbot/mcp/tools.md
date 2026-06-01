@@ -142,6 +142,34 @@ MCP Tools 是"会产生动作"的能力，适合包装查询、发送、重试�
 |------|------|------|------|
 | node_id | string | 是 | 节点 ID |
 
+### gateway_query_logs
+
+查询统一 Gateway 日志。
+
+**输入**：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| trace_id | string | 否 | "" | 按 trace_id 查询 |
+| source | string | 否 | "" | 来源筛选 (gateway, mcp, web) |
+| type | string | 否 | "" | 类型筛选 (receive, mcp_tool, message) |
+| level | string | 否 | "" | 级别筛选 (info, warning, error) |
+| status | string | 否 | "" | 状态筛选 |
+| tool_name | string | 否 | "" | MCP 工具名筛选 |
+| channel_id | string | 否 | "" | 频道筛选 |
+| limit | int | 否 | 100 | 返回数量上限 (1-500) |
+| offset | int | 否 | 0 | 偏移量 |
+
+### gateway_lookup_id
+
+自动识别任意 Gateway ID 的类型，返回匹配结果和建议的下一步操作。
+
+**输入**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| id | string | 是 | 任意 Gateway ID |
+
 ## 操作型工具
 
 ### gateway_receive_message

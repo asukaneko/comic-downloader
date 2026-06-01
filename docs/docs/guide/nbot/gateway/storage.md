@@ -2,9 +2,47 @@
 
 ## SQLite 持久化
 
-`GatewayStorage` 使用 SQLite（默认路径 `data/gateway.db`）存储 3 张核心表。
+`GatewayStorage` 使用 SQLite（默认路径 `data/web/gateway.db`）存储核心表。
 
-### gateway_events — 事件生命周期
+> **统一日志迁移**：自 v0.2-log 起，`_record_event()` 写入 `gateway_logs`（通过 `GatewayLogService`）。`gateway_events` 仅用于历史兼容。Bot 启动时自动迁移旧数据（一次性，`_gateway_log_migrations` 表标记）。
+
+### gateway_logs — 统一日志（主表）
+
+所有事件、MCP 工具调用统一写入此表。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | TEXT PK | 日志 ID（`log_{hex16}` 或迁移的 `evt_{id}`） |
+| `trace_id` | TEXT | 追踪 ID，索引 |
+| `source` | TEXT | 来源：`gateway` / `mcp` / `web` |
+| `type` | TEXT | 类型：`receive` / `mcp_tool` / `message` 等 |
+| `level` | TEXT | 级别：`info` / `warning` / `error` |
+| `stage` | TEXT | 阶段：`receive_start` / `auth_passed` / `parsed` 等 |
+| `action` | TEXT | 动作：`receive` / `verify` / `parse` / `dispatch` 等 |
+| `status` | TEXT | 状态：`received` / `verified` / `delivered` 等 |
+| `message` | TEXT | 描述信息 |
+| `tool_name` | TEXT | MCP 工具名（仅 `source=mcp`） |
+| `channel_id` | TEXT | 频道 ID |
+| `conversation_id` | TEXT | 会话 ID |
+| `user_id` / `message_id` | TEXT | 用户/消息 ID |
+| `metadata_json` | TEXT | 元数据 JSON（自动脱敏） |
+| `error_message` | TEXT | 错误信息 |
+| `created_at` | TEXT | 创建时间，索引 |
+
+```python
+# 查询
+records = gateway.log_service.query(source="gateway", status="delivered", limit=50)
+
+# Trace 聚合（跨 events + deliveries + mcp_logs）
+result = gateway.log_service.aggregate_trace(trace_id, ...)
+
+# ID 类型识别
+result = gateway.log_service.lookup_id("gw_20260601_xxx", ...)
+```
+
+### gateway_events — 事件生命周期（旧表，已迁移）
+
+> **已废弃**：新事件写入 `gateway_logs`。此表仅保留历史数据。
 
 记录消息和内部任务在管线中每一步的状态变化。
 
@@ -66,8 +104,8 @@ events = gateway.event_store.query(
 ### 数据清理
 
 ```python
-# 清理 30 天前的事件（失败事件保留 90 天）
-gateway.storage.event_cleanup(keep_days=30, failed_keep_days=90)
+# 清理 30 天前的统一日志
+gateway.log_service.cleanup(keep_days=30)
 
 # 清理 30 天前的投递记录
 gateway.storage.delivery_cleanup(keep_days=30)
@@ -88,6 +126,9 @@ stats = gateway.storage.get_stats()
 #     "deliveries": {"count": 890, "file_size_mb": 5.1},
 #     "dedupe": {"count": 234, "file_size_mb": 0.5},
 # }
+
+# 统一日志条数
+count = gateway.log_service.count()
 ```
 
 ## 追踪链路
@@ -118,4 +159,4 @@ with trace_context(trace_id):
 
 ### 事件元数据
 
-`_record_event()` 自动记录：`trace_id`、`channel_id`、`status`、`conversation_id`、`user_id`、`message_id`、`event_type`、`raw_event`、`error`、`metadata`（自动合并 `remote_addr`）。
+`_record_event()` 写入 `gateway_logs`（通过 `GatewayLogService`），自动映射 `status` 到 `action`/`stage`/`level`。记录字段：`trace_id`、`channel_id`、`status`、`conversation_id`、`user_id`、`message_id`、`event_type`、`error`、`metadata`（自动合并 `remote_addr`）。

@@ -377,8 +377,11 @@ nbot/web/routes/
 | GET | `/api/gateway/queue/status` | 队列状态 |
 | POST | `/api/gateway/worker/start` | 启动后台 Worker |
 | POST | `/api/gateway/worker/stop` | 停止后台 Worker |
-| GET | `/api/gateway/events` | 查询事件日志 |
-| GET | `/api/gateway/events/<trace_id>` | 查询事件链 |
+| GET | `/api/gateway/events` | 查询事件日志（从 gateway_logs 读取） |
+| GET | `/api/gateway/events/<trace_id>` | 查询事件链（从 gateway_logs 读取） |
+| GET | `/api/gateway/logs` | 查询统一日志（支持 source/type/level/status/tool_name/trace_id/channel_id/limit/offset） |
+| GET | `/api/gateway/logs/trace/<trace_id>` | Trace 聚合（events + deliveries + mcp_logs + timeline） |
+| GET | `/api/gateway/logs/lookup/<value>` | ID 类型识别 |
 
 ---
 

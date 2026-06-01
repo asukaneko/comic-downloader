@@ -87,7 +87,7 @@ gw = get_gateway()    # 获取
 | [处理管线](./pipeline.md) | `gateway.py` | 同步/异步消息处理流程 |
 | [安全认证](./security.md) | `security.py` | Token / HMAC / IP 白名单 |
 | [限流与去重](./security.md#限流) | `rate_limit.py`, `dedupe.py` | 滑动窗口限流、消息去重 |
-| [存储与追踪](./storage.md) | `storage.py`, `trace.py` | SQLite 持久化、链路追踪 |
+| [存储与追踪](./storage.md) | `storage.py`, `trace.py`, `logs/` | SQLite 持久化、统一日志、链路追踪 |
 | [队列与投递](./delivery.md) | `queue.py`, `delivery.py`, `retry.py` | 事件队列、回复投递、重试 |
 | [内部任务](./internal-tasks.md) | `gateway.py` | 心跳/工作流/定时任务追踪 |
 | [节点控制平面](./nodes.md) | `nodes/` | 节点注册、心跳、配对、权限 |
@@ -102,7 +102,7 @@ gw = get_gateway()    # 获取
 └─────────────┘     └───────────┘     └──────────┘     └──────────┘
                           │
                     ┌─────┴─────┐
-                    │  Storage  │  SQLite: events / deliveries / dedupe
+                    │  Storage  │  SQLite: gateway_logs / deliveries / dedupe
                     └───────────┘
                           │
                     ┌─────┴─────┐
@@ -122,11 +122,14 @@ facade = GatewayFacade(gateway)
 # 查询状态
 status = await facade.get_status()
 
-# 查询 trace 链路
+# 查询 trace 链路（聚合 events + deliveries + mcp_logs）
 trace = await facade.query_trace("gw_...")
 
-# 查询事件
-events = await facade.query_events(channel_id="qq", status="failed")
+# 查询统一日志
+logs = await facade.query_logs(source="gateway", status="delivered")
+
+# ID 类型识别
+result = await facade.lookup_id("gw_20260601_xxx")
 ```
 
 详细用法参见 [MCP 文档](../mcp/index.md)。

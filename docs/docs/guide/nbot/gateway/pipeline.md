@@ -63,6 +63,8 @@ class GatewayResult:
 
 ## 事件状态一览
 
+> 每个阶段通过 `_record_event()` 写入 `gateway_logs` 统一日志表。状态自动映射为 `action`/`stage`/`level`。MCP 工具调用也记录在 `gateway_logs`（`source=mcp`）。
+
 管线中可能出现的所有状态：
 
 | 状态 | 含义 |
