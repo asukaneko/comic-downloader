@@ -324,6 +324,7 @@ class ChannelGateway:
                     error=e.message,
                 )
 
+            self._record_event(trace_id=trace_id, channel_id=channel_id, status="verified")
 
             # === Step 2: 限流检查（IP/频道维度）===
             try:
