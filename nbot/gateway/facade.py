@@ -215,7 +215,10 @@ class GatewayFacade:
         )
         return {
             "ok": True,
-            "items": [r.to_dict() for r in records],
+            "items": self._gateway.log_service.records_to_dicts(
+                records,
+                event_store=self._gateway.event_store,
+            ),
             "count": len(records),
             "limit": limit,
             "offset": offset,

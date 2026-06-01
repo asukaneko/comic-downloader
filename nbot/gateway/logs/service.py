@@ -4,6 +4,7 @@
 作为 Gateway 内部各模块和 MCP 层的统一写入入口。
 """
 
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -126,6 +127,39 @@ class GatewayLogService:
         """根据 trace_id 查询所有关联日志"""
         return self._store.get_by_trace(trace_id)
 
+    def records_to_dicts(
+        self,
+        records: list[GatewayLogRecord],
+        *,
+        event_store: Any = None,
+    ) -> list[dict[str, Any]]:
+        """Convert log records to API dictionaries, enriched from matching event rows."""
+        items = [record.to_dict() for record in records]
+        if not event_store:
+            return items
+
+        events_by_trace: dict[str, list[dict[str, Any]]] = {}
+        used_event_indexes: dict[str, set[int]] = {}
+
+        for record, item in zip(records, items):
+            trace_id = record.trace_id or ""
+            if not trace_id:
+                continue
+            if trace_id not in events_by_trace:
+                try:
+                    events_by_trace[trace_id] = event_store.get_by_trace(trace_id)
+                except Exception:
+                    events_by_trace[trace_id] = []
+            events = events_by_trace[trace_id]
+            used = used_event_indexes.setdefault(trace_id, set())
+            event_index = _find_matching_event_index(record, events, used)
+            if event_index is None:
+                continue
+            used.add(event_index)
+            _merge_event_fields(item, events[event_index])
+
+        return items
+
     def lookup_id(
         self,
         value: str,
@@ -212,7 +246,8 @@ class GatewayLogService:
         raw_events = event_store.get_by_trace(trace_id) if event_store else []
         delivery = delivery_store.get_by_trace(trace_id) if delivery_store else None
         deliveries = [delivery] if delivery else []
-        mcp_logs = self._store.get_by_trace(trace_id)
+        all_logs = self._store.get_by_trace(trace_id)
+        mcp_logs = _filter_event_mirror_logs(raw_events, all_logs)
 
         # queue items
         queue_items: list[dict[str, Any]] = []
@@ -225,12 +260,7 @@ class GatewayLogService:
         timeline: list[dict[str, Any]] = []
 
         for ev in raw_events:
-            timeline.append({
-                "type": "event",
-                "status": ev.get("status", ""),
-                "created_at": ev.get("created_at", ""),
-                "channel_id": ev.get("channel_id", ""),
-            })
+            timeline.append(_event_to_timeline_item(ev))
 
         for d in deliveries:
             if d:
@@ -242,13 +272,7 @@ class GatewayLogService:
                 })
 
         for log in mcp_logs:
-            timeline.append({
-                "type": "mcp_log",
-                "status": log.status,
-                "created_at": log.created_at,
-                "action": log.action,
-                "level": log.level,
-            })
+            timeline.append(_log_to_timeline_item(log))
 
         for qi in queue_items:
             timeline.append({
@@ -278,7 +302,7 @@ class GatewayLogService:
             "events": raw_events,
             "deliveries": [_sanitize_delivery_minimal(d) for d in deliveries if d],
             "queue_items": queue_items,
-            "mcp_logs": [log.to_dict() for log in mcp_logs],
+            "mcp_logs": self.records_to_dicts(mcp_logs),
             "timeline": timeline,
         }
 
@@ -295,6 +319,141 @@ class GatewayLogService:
             }
 
         return result
+
+
+def _filter_event_mirror_logs(
+    events: list[dict[str, Any]],
+    logs: list[GatewayLogRecord],
+) -> list[GatewayLogRecord]:
+    """Remove gateway log rows that mirror lifecycle rows already present in events."""
+    if not events:
+        return logs
+
+    matched_event_indexes: set[int] = set()
+    visible_logs: list[GatewayLogRecord] = []
+
+    for log in logs:
+        event_index = _find_matching_event_index(log, events, matched_event_indexes)
+        if event_index is None:
+            visible_logs.append(log)
+            continue
+        matched_event_indexes.add(event_index)
+
+    return visible_logs
+
+
+def _find_matching_event_index(
+    log: GatewayLogRecord,
+    events: list[dict[str, Any]],
+    used_indexes: set[int],
+) -> int | None:
+    """Find the event mirrored by a gateway log record, if any."""
+    if log.source != "gateway":
+        return None
+
+    migrated_event_id = _migrated_event_id(log.id)
+    if migrated_event_id is not None:
+        for index, event in enumerate(events):
+            if index not in used_indexes and event.get("id") == migrated_event_id:
+                return index
+
+    for index, event in enumerate(events):
+        if index in used_indexes:
+            continue
+        if not _event_matches_log(event, log):
+            continue
+        return index
+
+    return None
+
+
+def _migrated_event_id(log_id: str) -> int | None:
+    """Return legacy gateway_events.id encoded in migrated evt_* log ids."""
+    if not log_id.startswith("evt_"):
+        return None
+    try:
+        return int(log_id[4:])
+    except ValueError:
+        return None
+
+
+def _event_matches_log(event: dict[str, Any], log: GatewayLogRecord) -> bool:
+    """Heuristic match for live gateway event/log pairs written in the same call path."""
+    if _norm(event.get("status")) != _norm(log.status):
+        return False
+    for event_key, log_value in (
+        ("channel_id", log.channel_id),
+        ("conversation_id", log.conversation_id),
+        ("user_id", log.user_id),
+        ("message_id", log.message_id),
+    ):
+        event_value = _norm(event.get(event_key))
+        log_value_norm = _norm(log_value)
+        if event_value and log_value_norm and event_value != log_value_norm:
+            return False
+    return _timestamps_close(event.get("created_at", ""), log.created_at)
+
+
+def _timestamps_close(left: str, right: str, max_seconds: float = 10.0) -> bool:
+    if not left or not right:
+        return True
+    try:
+        left_dt = datetime.fromisoformat(str(left))
+        right_dt = datetime.fromisoformat(str(right))
+    except ValueError:
+        return left == right
+    return abs((left_dt - right_dt).total_seconds()) <= max_seconds
+
+
+def _norm(value: Any) -> str:
+    return str(value or "")
+
+
+def _event_to_timeline_item(event: dict[str, Any]) -> dict[str, Any]:
+    item = dict(event)
+    item.setdefault("timeline_type", "event")
+    return item
+
+
+def _log_to_timeline_item(log: GatewayLogRecord) -> dict[str, Any]:
+    item = log.to_dict()
+    item.setdefault("timeline_type", "log")
+    return item
+
+
+def _merge_event_fields(item: dict[str, Any], event: dict[str, Any]) -> None:
+    """Add event-only display fields to a log item without losing log metadata."""
+    for key in (
+        "raw_event_json",
+        "event_type",
+        "conversation_id",
+        "user_id",
+        "message_id",
+        "channel_id",
+        "error",
+    ):
+        value = event.get(key)
+        if value and not item.get(key):
+            item[key] = value
+
+    event_metadata = _json_loads(event.get("metadata_json"))
+    log_metadata = _json_loads(item.get("metadata_json"))
+    merged_metadata = {**event_metadata, **log_metadata}
+    if merged_metadata:
+        item["metadata"] = merged_metadata
+        item["metadata_json"] = json.dumps(merged_metadata, ensure_ascii=False)
+
+
+def _json_loads(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if not value:
+        return {}
+    try:
+        loaded = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _compute_best_guess(matches: list[dict[str, Any]]) -> dict[str, Any]:

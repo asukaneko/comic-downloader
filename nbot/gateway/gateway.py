@@ -74,6 +74,25 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
+_LIFECYCLE_LOG_FIELDS: dict[str, tuple[str, str, str, str]] = {
+    "received": ("info", "received", "receive", "Event received"),
+    "verified": ("info", "validation", "verify", "Event verified"),
+    "dispatched": ("info", "dispatch", "dispatch", "Dispatched to AI core"),
+    "delivering": ("info", "delivery", "deliver", "Delivering response"),
+    "delivered": ("info", "completed", "deliver", "Response delivered"),
+    "built": ("info", "completed", "deliver", "Response built"),
+    "no_sender": ("info", "completed", "deliver", "No sender available"),
+    "model_selected": ("info", "dispatch", "model", "Model selected"),
+    "model_failover": ("warning", "dispatch", "model", "Model failover"),
+    "dispatch_failed": ("error", "failed", "dispatch", "AI core dispatch failed"),
+    "delivery_failed": ("error", "failed", "deliver", "Response delivery failed"),
+    "failed": ("error", "failed", "event", "Event failed"),
+}
+
+
+def _lifecycle_log_fields(status: str) -> tuple[str, str, str, str]:
+    return _LIFECYCLE_LOG_FIELDS.get(status, ("info", status or "event", "event", status))
+
 
 def _merge_internal_task_metadata(
     base_metadata: dict[str, Any],
@@ -989,6 +1008,57 @@ class ChannelGateway:
             return asyncio.run(self.submit_internal_task(**kwargs))
         raise RuntimeError("submit_internal_task_sync cannot run inside an active event loop")
 
+    def record_lifecycle_event(
+        self,
+        *,
+        trace_id: str,
+        channel_id: str,
+        status: str,
+        event_type: str = "message",
+        conversation_id: str = "",
+        user_id: str = "",
+        message_id: str = "",
+        raw_event: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+        error: str = "",
+        action: str = "",
+        level: str = "",
+        stage: str = "",
+        message: str = "",
+    ) -> None:
+        """Record one gateway lifecycle state to both legacy events and unified logs."""
+        self._record_event(
+            trace_id=trace_id,
+            channel_id=channel_id,
+            status=status,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            message_id=message_id,
+            raw_event=raw_event,
+            error=error,
+            event_type=event_type,
+            metadata=metadata,
+        )
+
+        default_level, default_stage, default_action, default_message = (
+            _lifecycle_log_fields(status)
+        )
+        self._record_log(
+            log_type=event_type,
+            action=action or default_action,
+            status=status,
+            message=message or default_message,
+            level=level or default_level,
+            stage=stage or default_stage,
+            trace_id=trace_id,
+            channel_id=channel_id,
+            conversation_id=conversation_id,
+            user_id=user_id,
+            message_id=message_id,
+            error_message=error or None,
+            metadata=metadata,
+        )
+
     def _record_event(
         self,
         *,
@@ -1031,11 +1101,13 @@ class ChannelGateway:
         *,
         action: str,
         status: str,
+        log_type: str = "receive",
         message: str = "",
         level: str = "info",
         stage: str = "",
         trace_id: str | None = None,
         channel_id: str | None = None,
+        conversation_id: str | None = None,
         user_id: str | None = None,
         message_id: str | None = None,
         queue_item_id: str | None = None,
@@ -1049,7 +1121,7 @@ class ChannelGateway:
         try:
             self.log_service.record(
                 source="gateway",
-                type="receive",
+                type=log_type,
                 action=action,
                 status=status,
                 message=message,
@@ -1057,6 +1129,7 @@ class ChannelGateway:
                 stage=stage,
                 trace_id=trace_id,
                 channel_id=channel_id,
+                conversation_id=conversation_id,
                 user_id=user_id,
                 message_id=message_id,
                 queue_item_id=queue_item_id,

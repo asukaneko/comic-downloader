@@ -3002,7 +3002,7 @@ class WebChatServer:
                 attachment_summary = f"[{len(att_names)}个附件: {', '.join(att_names[:3])}]"
 
         try:
-            gateway.event_store.record(
+            gateway.record_lifecycle_event(
                 trace_id=trace_id,
                 channel_id=channel_id,
                 status="received",
@@ -3021,7 +3021,7 @@ class WebChatServer:
                     "session_name": session_name,
                 },
             )
-            gateway.event_store.record(
+            gateway.record_lifecycle_event(
                 trace_id=trace_id,
                 channel_id=channel_id,
                 status="dispatched",
@@ -3054,7 +3054,7 @@ class WebChatServer:
             session_name = session_data.get("name", "")
 
         try:
-            gateway.event_store.record(
+            gateway.record_lifecycle_event(
                 trace_id=trace_id,
                 channel_id=channel_id,
                 status="delivered",
@@ -3084,7 +3084,7 @@ class WebChatServer:
             return
 
         try:
-            gateway.event_store.record(
+            gateway.record_lifecycle_event(
                 trace_id=trace_id,
                 channel_id=channel_id,
                 status="dispatch_failed",

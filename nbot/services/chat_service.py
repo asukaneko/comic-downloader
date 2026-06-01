@@ -603,14 +603,14 @@ def _run_qq_chat_request(
         if _gw and _gw.event_store:
             _tf = getattr(_gw, 'trace_factory', None) or TraceFactory()
             trace_id = _tf.new_trace_id()
-            _gw.event_store.record(
+            _gw.record_lifecycle_event(
                 trace_id=trace_id, channel_id="qq", status="received",
                 event_type="message", conversation_id=session_id,
                 user_id=str(group_user_id or user_id),
                 raw_event={"content": content[:150], "sender": group_user_id or user_id},
                 metadata={"content_length": len(content), "group_id": group_id or ""},
             )
-            _gw.event_store.record(
+            _gw.record_lifecycle_event(
                 trace_id=trace_id, channel_id="qq", status="dispatched",
                 conversation_id=session_id,
             )
@@ -670,7 +670,7 @@ def _run_qq_chat_request(
             _gw2 = _get_gw2()
             if _gw2 and _gw2.event_store:
                 reply_preview = (result.final_content or "")[:200]
-                _gw2.event_store.record(
+                _gw2.record_lifecycle_event(
                     trace_id=trace_id, channel_id="qq", status="delivered",
                     conversation_id=session_id,
                     raw_event={"reply_preview": reply_preview} if reply_preview else None,

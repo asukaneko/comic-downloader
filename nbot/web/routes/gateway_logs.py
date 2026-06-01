@@ -72,7 +72,10 @@ def query_gateway_logs():
         )
         return jsonify({
             "ok": True,
-            "items": [r.to_dict() for r in records],
+            "items": gateway.log_service.records_to_dicts(
+                records,
+                event_store=gateway.event_store,
+            ),
             "count": len(records),
             "limit": limit,
             "offset": offset,

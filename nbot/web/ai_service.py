@@ -1339,7 +1339,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         # 先记录故障转移事件（发生在模型选择之前）
                         failover_events = result_metadata.get("failover_events", [])
                         for ev in failover_events:
-                            gw.event_store.record(
+                            gw.record_lifecycle_event(
                                 trace_id=trace_id,
                                 channel_id="web",
                                 status="model_failover",
@@ -1356,7 +1356,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                             )
                         # 再记录最终使用的模型
                         if used_model_id or used_model_name:
-                            gw.event_store.record(
+                            gw.record_lifecycle_event(
                                 trace_id=trace_id,
                                 channel_id="web",
                                 status="model_selected",
@@ -1370,7 +1370,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                                 },
                             )
                         # 直接 record 完整的 delivered 事件（非 update）
-                        gw.event_store.record(
+                        gw.record_lifecycle_event(
                             trace_id=trace_id,
                             channel_id="web",
                             status="delivered",
