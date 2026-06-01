@@ -46,7 +46,7 @@ class GatewayGetStatsOutput(BaseModel):
 
 class QueryTraceInput(BaseModel):
     """gateway_query_trace 输入"""
-    trace_id: str = Field(..., description="Gateway trace id")
+    trace_id: str = Field(..., min_length=1, max_length=128, description="Gateway trace id")
 
 
 class GatewayEventItem(BaseModel):
@@ -138,7 +138,7 @@ class GetQueueStatsOutput(BaseModel):
 
 class RetryDeadLetterInput(BaseModel):
     """gateway_retry_dead_letter 输入"""
-    item_id: str = Field(..., description="死信队列项 ID")
+    item_id: str = Field(..., min_length=1, max_length=128, description="死信队列项 ID")
 
 
 class RetryDeadLetterOutput(BaseModel):
@@ -156,10 +156,10 @@ class RetryDeadLetterOutput(BaseModel):
 
 class ReceiveMessageInput(BaseModel):
     """gateway_receive_message 输入"""
-    channel_id: str = Field(..., description="频道标识符 (qq, web, telegram, etc.)")
-    raw_event: dict = Field(..., description="平台原始事件数据")
+    channel_id: str = Field(..., min_length=1, max_length=64, description="频道标识符 (qq, web, telegram, etc.)")
+    raw_event: dict = Field(..., min_length=1, description="平台原始事件数据（非空 dict）")
     headers: dict | None = Field(default=None, description="HTTP 请求头")
-    remote_addr: str = Field(default="127.0.0.1", description="请求来源 IP")
+    remote_addr: str = Field(default="127.0.0.1", max_length=45, description="请求来源 IP")
 
 
 class ReceiveMessageOutput(BaseModel):
@@ -173,9 +173,9 @@ class ReceiveMessageOutput(BaseModel):
 
 class SendMessageInput(BaseModel):
     """gateway_send_message 输入"""
-    channel_id: str = Field(..., description="频道标识符")
-    conversation_id: str = Field(..., description="会话 ID")
-    content: str = Field(..., description="消息内容")
+    channel_id: str = Field(..., min_length=1, max_length=64, description="频道标识符")
+    conversation_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    content: str = Field(..., min_length=1, max_length=8000, description="消息内容")
     metadata: dict | None = Field(default=None, description="附加元数据")
 
 
@@ -194,9 +194,9 @@ class SendMessageOutput(BaseModel):
 
 class SubmitInternalTaskInput(BaseModel):
     """gateway_submit_internal_task 输入"""
-    task_kind: str = Field(..., description="任务类型 (heartbeat, workflow, cron, custom)")
-    task_id: str = Field(..., description="任务 ID")
-    trigger_source: str = Field(default="mcp", description="触发来源")
+    task_kind: str = Field(..., min_length=1, max_length=64, description="任务类型 (heartbeat, workflow, cron, custom)")
+    task_id: str = Field(..., min_length=1, max_length=128, description="任务 ID")
+    trigger_source: str = Field(default="mcp", max_length=32, description="触发来源")
     metadata: dict | None = Field(default=None, description="附加元数据")
 
 
@@ -238,7 +238,7 @@ class ListNodesOutput(BaseModel):
 
 class GetNodeInput(BaseModel):
     """gateway_get_node 输入"""
-    node_id: str = Field(..., description="节点 ID")
+    node_id: str = Field(..., min_length=1, max_length=128, description="节点 ID")
 
 
 class GetNodeOutput(BaseModel):
@@ -250,10 +250,10 @@ class GetNodeOutput(BaseModel):
 
 class RegisterNodeInput(BaseModel):
     """gateway_register_node 输入"""
-    node_id: str = Field(..., description="节点 ID")
-    node_type: str = Field(default="worker", description="节点类型")
-    version: str = Field(default="", description="版本号")
-    address: str = Field(default="", description="节点地址")
+    node_id: str = Field(..., min_length=1, max_length=128, description="节点 ID")
+    node_type: str = Field(default="worker", max_length=32, description="节点类型")
+    version: str = Field(default="", max_length=32, description="版本号")
+    address: str = Field(default="", max_length=256, description="节点地址")
     metadata: dict | None = Field(default=None, description="附加元数据")
 
 

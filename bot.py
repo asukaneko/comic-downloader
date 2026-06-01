@@ -242,6 +242,14 @@ def _load_mcp_config_and_run():
                 "enabled": True,
                 "require_confirmation": True,
             },
+            "gateway_submit_internal_task": {
+                "enabled": True,
+                "require_confirmation": True,
+            },
+            "gateway_register_node": {
+                "enabled": False,
+                "require_confirmation": True,
+            },
         },
         "audit": {
             "enabled": True,

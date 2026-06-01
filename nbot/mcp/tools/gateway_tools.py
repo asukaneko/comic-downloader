@@ -2,17 +2,99 @@
 
 注册所有 Gateway 相关的 MCP Tools。
 每个 Tool 对应一个 GatewayFacade 方法调用。
+
+安全流程（每个操作型工具统一走）：
+  1. 权限检查 (check_permission)
+  2. 工具启用检查 (is_tool_enabled)
+  3. 高危确认检查 (requires_confirmation + confirm 参数)
+  4. 输入校验 (Pydantic Schema)
+  5. 执行 + 审计
 """
 
 import json
 import logging
 from typing import Any
 
+from pydantic import ValidationError
+
 from nbot.mcp.context import MCPContext
 from nbot.mcp.errors import format_mcp_error
 from nbot.mcp.permissions import audit_log_entry, check_permission
+from nbot.mcp.schemas import (
+    GetNodeInput,
+    ListNodesInput,
+    QueryDeliveriesInput,
+    QueryEventsInput,
+    QueryTraceInput,
+    ReceiveMessageInput,
+    RegisterNodeInput,
+    RetryDeadLetterInput,
+    SendMessageInput,
+    SubmitInternalTaskInput,
+)
 
 _log = logging.getLogger(__name__)
+
+
+# ========================
+# 公共 Guard
+# ========================
+
+
+def _preflight(
+    ctx: MCPContext,
+    tool_name: str,
+    confirm: bool = False,
+) -> dict[str, Any] | None:
+    """操作型工具的统一流程守卫
+
+    按顺序检查：权限 → 工具启用 → 高危确认。
+    返回 None 表示通过，返回 dict 表示应直接返回错误。
+    """
+    if not check_permission(tool_name, _get_scopes(ctx)):
+        return {"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}
+    if not ctx.is_tool_enabled(tool_name):
+        return {"ok": False, "error": {"code": "tool_disabled", "message": f"{tool_name} is disabled"}}
+    if ctx.requires_confirmation(tool_name) and not confirm:
+        return {
+            "ok": False,
+            "error": {
+                "code": "confirmation_required",
+                "message": f"{tool_name} requires confirm=true",
+                "tool": tool_name,
+            },
+        }
+    return None
+
+
+def _validate_input(schema_class: type, **kwargs: Any) -> dict[str, Any] | None:
+    """用 Pydantic Schema 校验输入
+
+    返回 None 表示通过，返回 dict 表示校验失败的错误。
+    """
+    try:
+        schema_class(**kwargs)
+        return None
+    except ValidationError as e:
+        first_error = e.errors()[0]
+        field = " → ".join(str(loc) for loc in first_error["loc"])
+        return {
+            "ok": False,
+            "error": {
+                "code": "invalid_input",
+                "message": f"{field}: {first_error['msg']}",
+            },
+        }
+
+
+def _err_json(err: dict[str, Any]) -> str:
+    """统一 JSON 序列化错误返回"""
+    return json.dumps(err, ensure_ascii=False)
+
+
+# ========================
+# Tool 注册
+# ========================
 
 
 def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
@@ -20,7 +102,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
     facade = ctx.facade
 
     # ========================
-    # 只读 Tools
+    # 只读 Tools（不需要 preflight）
     # ========================
 
     @mcp_server.tool()
@@ -30,7 +112,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             result = await facade.get_status()
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     @mcp_server.tool()
     async def gateway_get_stats() -> str:
@@ -39,18 +121,22 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             result = await facade.get_stats()
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     @mcp_server.tool()
     async def gateway_query_trace(trace_id: str) -> str:
         """根据 trace_id 查询完整事件链路"""
-        if not check_permission("gateway_query_trace", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_query_trace")
+        if err:
+            return _err_json(err)
+        err = _validate_input(QueryTraceInput, trace_id=trace_id)
+        if err:
+            return _err_json(err)
         try:
             result = await facade.query_trace(trace_id)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e, trace_id=trace_id), ensure_ascii=False)
+            return _err_json(format_mcp_error(e, trace_id=trace_id))
 
     @mcp_server.tool()
     async def gateway_query_events(
@@ -60,8 +146,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         limit: int = 50,
     ) -> str:
         """按条件查询事件历史"""
-        if not check_permission("gateway_query_events", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_query_events")
+        if err:
+            return _err_json(err)
+        err = _validate_input(QueryEventsInput, channel_id=channel_id, status=status, event_type=event_type, limit=limit)
+        if err:
+            return _err_json(err)
         try:
             result = await facade.query_events(
                 channel_id=channel_id,
@@ -71,7 +161,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     @mcp_server.tool()
     async def gateway_query_deliveries(
@@ -81,8 +171,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         limit: int = 20,
     ) -> str:
         """查询回复投递记录"""
-        if not check_permission("gateway_query_deliveries", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_query_deliveries")
+        if err:
+            return _err_json(err)
+        err = _validate_input(QueryDeliveriesInput, trace_id=trace_id, channel_id=channel_id, status=status, limit=limit)
+        if err:
+            return _err_json(err)
         try:
             result = await facade.query_deliveries(
                 trace_id=trace_id,
@@ -92,18 +186,19 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             )
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     @mcp_server.tool()
     async def gateway_get_queue_stats() -> str:
         """查看异步队列状态"""
-        if not check_permission("gateway_get_queue_stats", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_get_queue_stats")
+        if err:
+            return _err_json(err)
         try:
             result = await facade.get_queue_stats()
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     @mcp_server.tool()
     async def gateway_list_nodes(
@@ -111,27 +206,32 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         status: str = "",
     ) -> str:
         """列出所有节点"""
-        if not check_permission("gateway_list_nodes", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_list_nodes")
+        if err:
+            return _err_json(err)
         try:
             result = await facade.list_nodes(node_type=node_type, status=status)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     @mcp_server.tool()
     async def gateway_get_node(node_id: str) -> str:
         """获取节点详情"""
-        if not check_permission("gateway_get_node", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_get_node")
+        if err:
+            return _err_json(err)
+        err = _validate_input(GetNodeInput, node_id=node_id)
+        if err:
+            return _err_json(err)
         try:
             result = await facade.get_node(node_id)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return json.dumps(format_mcp_error(e), ensure_ascii=False)
+            return _err_json(format_mcp_error(e))
 
     # ========================
-    # 操作型 Tools
+    # 操作型 Tools（需要 preflight + 确认 + 校验）
     # ========================
 
     @mcp_server.tool()
@@ -147,18 +247,18 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
-        if not check_permission("gateway_receive_message", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
-        if not ctx.is_tool_enabled("gateway_receive_message"):
-            return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled"}}, ensure_ascii=False)
-        if ctx.requires_confirmation("gateway_receive_message") and not confirm:
-            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
-
-        # 输入校验
-        if not channel_id or not channel_id.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "channel_id is required"}}, ensure_ascii=False)
-        if not isinstance(raw_event, dict) or not raw_event:
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "raw_event must be a non-empty dict"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_receive_message", confirm)
+        if err:
+            return _err_json(err)
+        err = _validate_input(
+            ReceiveMessageInput,
+            channel_id=channel_id,
+            raw_event=raw_event,
+            headers=headers,
+            remote_addr=remote_addr,
+        )
+        if err:
+            return _err_json(err)
 
         args = {"channel_id": channel_id, "raw_event": raw_event, "headers": headers, "remote_addr": remote_addr}
         try:
@@ -168,7 +268,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_receive_message", args, err)
-            return json.dumps(err, ensure_ascii=False)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_send_message(
@@ -183,20 +283,18 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
-        if not check_permission("gateway_send_message", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
-        if not ctx.is_tool_enabled("gateway_send_message"):
-            return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled by config"}}, ensure_ascii=False)
-        if ctx.requires_confirmation("gateway_send_message") and not confirm:
-            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
-
-        # 输入校验
-        if not channel_id or not channel_id.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "channel_id is required"}}, ensure_ascii=False)
-        if not conversation_id or not conversation_id.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "conversation_id is required"}}, ensure_ascii=False)
-        if not content or not content.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "content is required"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_send_message", confirm)
+        if err:
+            return _err_json(err)
+        err = _validate_input(
+            SendMessageInput,
+            channel_id=channel_id,
+            conversation_id=conversation_id,
+            content=content,
+            metadata=metadata,
+        )
+        if err:
+            return _err_json(err)
 
         args = {"channel_id": channel_id, "conversation_id": conversation_id, "content": content, "metadata": metadata}
         try:
@@ -211,7 +309,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_send_message", args, err)
-            return json.dumps(err, ensure_ascii=False)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_submit_internal_task(
@@ -228,18 +326,18 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
-        if not check_permission("gateway_submit_internal_task", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
-        if not ctx.is_tool_enabled("gateway_submit_internal_task"):
-            return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled"}}, ensure_ascii=False)
-        if ctx.requires_confirmation("gateway_submit_internal_task") and not confirm:
-            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
-
-        # 输入校验
-        if not task_kind or not task_kind.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "task_kind is required"}}, ensure_ascii=False)
-        if not task_id or not task_id.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "task_id is required"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_submit_internal_task", confirm)
+        if err:
+            return _err_json(err)
+        err = _validate_input(
+            SubmitInternalTaskInput,
+            task_kind=task_kind,
+            task_id=task_id,
+            trigger_source=trigger_source,
+            metadata=metadata,
+        )
+        if err:
+            return _err_json(err)
 
         args = {"task_kind": task_kind, "task_id": task_id, "trigger_source": trigger_source, "metadata": metadata}
         try:
@@ -254,7 +352,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_submit_internal_task", args, err)
-            return json.dumps(err, ensure_ascii=False)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_retry_dead_letter(item_id: str, confirm: bool = False) -> str:
@@ -263,15 +361,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
-        if not check_permission("gateway_retry_dead_letter", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
-        if not ctx.is_tool_enabled("gateway_retry_dead_letter"):
-            return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled"}}, ensure_ascii=False)
-        if ctx.requires_confirmation("gateway_retry_dead_letter") and not confirm:
-            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
-
-        if not item_id or not item_id.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "item_id is required"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_retry_dead_letter", confirm)
+        if err:
+            return _err_json(err)
+        err = _validate_input(RetryDeadLetterInput, item_id=item_id)
+        if err:
+            return _err_json(err)
 
         args = {"item_id": item_id}
         try:
@@ -281,7 +376,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_retry_dead_letter", args, err)
-            return json.dumps(err, ensure_ascii=False)
+            return _err_json(err)
 
     # ========================
     # 节点管理 Tools
@@ -301,13 +396,19 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
-        if not check_permission("gateway_register_node", _get_scopes(ctx)):
-            return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
-        if ctx.requires_confirmation("gateway_register_node") and not confirm:
-            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
-
-        if not node_id or not node_id.strip():
-            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "node_id is required"}}, ensure_ascii=False)
+        err = _preflight(ctx, "gateway_register_node", confirm)
+        if err:
+            return _err_json(err)
+        err = _validate_input(
+            RegisterNodeInput,
+            node_id=node_id,
+            node_type=node_type,
+            version=version,
+            address=address,
+            metadata=metadata,
+        )
+        if err:
+            return _err_json(err)
 
         args = {"node_id": node_id, "node_type": node_type, "version": version, "address": address}
         try:
@@ -323,7 +424,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_register_node", args, err)
-            return json.dumps(err, ensure_ascii=False)
+            return _err_json(err)
 
 
 def _get_scopes(ctx: MCPContext) -> list[str]:
