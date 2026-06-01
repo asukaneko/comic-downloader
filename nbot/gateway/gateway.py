@@ -181,12 +181,17 @@ class ChannelGateway:
         # 统一日志服务
         self.log_service: Any = None
         if storage:
-            from nbot.gateway.logs.service import GatewayLogService
-            from nbot.gateway.logs.sqlite_store import SQLiteGatewayLogStore
+            try:
+                from nbot.gateway.logs.service import GatewayLogService
+                from nbot.gateway.logs.sqlite_store import SQLiteGatewayLogStore
 
-            log_store = SQLiteGatewayLogStore(data_dir=storage.data_dir)
-            self.log_service = GatewayLogService(log_store)
-            _log.info("[Gateway] 统一日志服务已启用")
+                log_store = SQLiteGatewayLogStore(data_dir=storage.data_dir)
+                self.log_service = GatewayLogService(log_store)
+                print("[Gateway] 统一日志服务已启用", flush=True)
+            except Exception as e:
+                print(f"[Gateway] 统一日志服务初始化失败: {e}", flush=True)
+        else:
+            print("[Gateway] storage=None, 统一日志服务未启用", flush=True)
 
         # 异步模式组件
         self._queue = queue
@@ -254,6 +259,7 @@ class ChannelGateway:
         trace_id = self.trace_factory.new_trace_id()
         headers = dict(headers or {})
         received_at = datetime.now().isoformat()
+        print(f"[Gateway] receive() called channel={channel_id} log_service={'YES' if self.log_service else 'NO'}", flush=True)
 
         with trace_context(trace_id):
             _log.info(
@@ -1036,8 +1042,9 @@ class ChannelGateway:
         error_message: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """写入统一日志（静默失败）"""
+        """写入统一日志"""
         if not self.log_service:
+            _log.debug("[Gateway] _record_log 跳过: log_service=None action=%s status=%s", action, status)
             return
         try:
             self.log_service.record(
@@ -1056,8 +1063,8 @@ class ChannelGateway:
                 error_message=error_message,
                 metadata=metadata,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            _log.error("[Gateway] _record_log 失败: action=%s status=%s error=%s", action, status, e)
 
     def _extract_message_id(self, channel_id: str, parsed: dict[str, Any]) -> str:
         """从解析结果中提取消息 ID，构建去重键"""

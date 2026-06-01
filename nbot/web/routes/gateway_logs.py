@@ -18,7 +18,7 @@ gateway_logs_bp = Blueprint("gateway_logs", __name__)
 
 
 def _parse_int(value: str, default: int, min_value: int = 0, max_value: int = 500) -> int:
-    """安全解析整数，超出范围时返回默认值"""
+    """安全解析整数；非法输入返回默认值，超出范围时截断到 min/max。"""
     try:
         n = int(value)
     except (TypeError, ValueError):

@@ -2,6 +2,7 @@
 
 基于 GatewayStorage 同一 SQLite 数据库 (data/gateway.db)，
 新增 gateway_logs 表用于统一日志记录。
+启动时自动将旧 gateway_events 数据迁移到 gateway_logs。
 """
 
 import json
@@ -17,6 +18,37 @@ from nbot.gateway.logs.store import GatewayLogStore
 _log = logging.getLogger(__name__)
 
 TABLE_LOGS = "gateway_logs"
+TABLE_EVENTS = "gateway_events"
+TABLE_MIGRATION = "_gateway_log_migrations"
+
+# 旧 events status → (level, stage) 映射
+_STATUS_MAP: dict[str, tuple[str, str]] = {
+    "received": ("info", "receive_start"),
+    "verified": ("info", "auth_passed"),
+    "auth_failed": ("warning", "auth_failed"),
+    "rate_limited": ("warning", "rate_limited"),
+    "unknown_channel": ("warning", "route_failed"),
+    "missing_parser": ("warning", "route_failed"),
+    "parsed": ("info", "parsed"),
+    "parse_failed": ("error", "parse_failed"),
+    "ignored": ("info", "ignored"),
+    "duplicated": ("info", "dedupe_hit"),
+    "deduped": ("info", "deduped"),
+    "queued": ("info", "queued"),
+    "queue_full": ("error", "queue_failed"),
+    "dispatched": ("info", "dispatched"),
+    "delivering": ("info", "delivering"),
+    "delivered": ("info", "completed"),
+    "built": ("info", "completed"),
+    "no_sender": ("info", "completed"),
+    "delivery_failed": ("error", "delivery_failed"),
+    "dispatch_failed": ("error", "dispatch_failed"),
+    "build_request_failed": ("error", "build_failed"),
+    "model_selected": ("info", "dispatched"),
+    "model_failover": ("warning", "dispatched"),
+    "failed": ("error", "failed"),
+    "dead": ("error", "failed"),
+}
 
 
 class SQLiteGatewayLogStore(GatewayLogStore):
@@ -30,6 +62,7 @@ class SQLiteGatewayLogStore(GatewayLogStore):
         self._data_dir = data_dir or "data"
         self._db_path = os.path.join(self._data_dir, "gateway.db")
         self._ensure_table()
+        self._migrate_events()
 
     def _connect(self) -> sqlite3.Connection:
         """获取数据库连接"""
@@ -89,6 +122,126 @@ class SQLiteGatewayLogStore(GatewayLogStore):
                 )
 
         _log.info("[LogStore] gateway_logs 表初始化完成 path=%s", self._db_path)
+
+    def _migrate_events(self) -> None:
+        """启动时自动将旧 gateway_events 数据迁移到 gateway_logs（一次性）"""
+        with self._connect() as conn:
+            # 检查旧表是否存在
+            tables = {r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()}
+            if TABLE_EVENTS not in tables:
+                return
+
+            # 检查是否已迁移
+            if TABLE_MIGRATION in tables:
+                done = conn.execute(
+                    f"SELECT 1 FROM {TABLE_MIGRATION} WHERE name = 'events_to_logs'"
+                ).fetchone()
+                if done:
+                    return
+
+            # 如果 gateway_logs 已有数据，说明新日志已在写入，跳过迁移避免重复
+            existing = conn.execute(f"SELECT COUNT(*) FROM {TABLE_LOGS}").fetchone()[0]
+            if existing > 0:
+                _log.info("[LogStore] gateway_logs 已有 %d 条记录，跳过旧事件迁移", existing)
+                conn.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {TABLE_MIGRATION} (
+                        name TEXT PRIMARY KEY, migrated_at TEXT NOT NULL
+                    )
+                """)
+                conn.execute(
+                    f"INSERT OR IGNORE INTO {TABLE_MIGRATION} VALUES (?, ?)",
+                    ("events_to_logs", datetime.now().isoformat()),
+                )
+                return
+
+            # 统计旧记录数
+            count = conn.execute(f"SELECT COUNT(*) FROM {TABLE_EVENTS}").fetchone()[0]
+            if count == 0:
+                # 没有旧数据，直接标记完成
+                conn.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {TABLE_MIGRATION} (
+                        name TEXT PRIMARY KEY, migrated_at TEXT NOT NULL
+                    )
+                """)
+                conn.execute(
+                    f"INSERT OR IGNORE INTO {TABLE_MIGRATION} VALUES (?, ?)",
+                    ("events_to_logs", datetime.now().isoformat()),
+                )
+                return
+
+            _log.info("[LogStore] 发现 %d 条旧事件记录，开始迁移到统一日志...", count)
+
+            # 读取旧数据
+            rows = conn.execute(
+                f"SELECT * FROM {TABLE_EVENTS} ORDER BY id"
+            ).fetchall()
+
+            migrated = 0
+            for row in rows:
+                d = dict(row)
+                status = d.get("status", "")
+                level, stage = _STATUS_MAP.get(status, ("info", ""))
+
+                # 推断 action
+                if status in ("received",):
+                    action = "receive"
+                elif status in ("verified", "auth_failed"):
+                    action = "verify"
+                elif status in ("rate_limited",):
+                    action = "rate_limit"
+                elif status in ("unknown_channel", "missing_parser"):
+                    action = "route"
+                elif status in ("parsed", "parse_failed", "ignored"):
+                    action = "parse"
+                elif status in ("duplicated", "deduped"):
+                    action = "dedupe"
+                elif status in ("queued", "queue_full"):
+                    action = "queue"
+                elif status in ("dispatched", "dispatch_failed", "build_request_failed",
+                                "model_selected", "model_failover", "delivering"):
+                    action = "dispatch" if "dispatch" in status or "build" in status or "model" in status else "deliver"
+                elif status in ("delivered", "built", "no_sender", "delivery_failed"):
+                    action = "deliver"
+                else:
+                    action = "event"
+
+                log_id = f"evt_{d['id']:08d}"
+                event_type = d.get("event_type", "message")
+                error = d.get("error", "")
+
+                conn.execute(
+                    f"""INSERT OR IGNORE INTO {TABLE_LOGS}
+                    (id, trace_id, source, type, level, stage, action, status, message,
+                     channel_id, conversation_id, user_id, message_id,
+                     metadata_json, error_message, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
+                            ?, ?, ?, ?,
+                            ?, ?, ?)""",
+                    (
+                        log_id, d.get("trace_id"), "gateway", event_type,
+                        level, stage, action, status, "",
+                        d.get("channel_id"), d.get("conversation_id"),
+                        d.get("user_id"), d.get("message_id"),
+                        d.get("metadata_json"), error or None,
+                        d.get("created_at"),
+                    ),
+                )
+                migrated += 1
+
+            # 标记迁移完成
+            conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {TABLE_MIGRATION} (
+                    name TEXT PRIMARY KEY, migrated_at TEXT NOT NULL
+                )
+            """)
+            conn.execute(
+                f"INSERT OR IGNORE INTO {TABLE_MIGRATION} VALUES (?, ?)",
+                ("events_to_logs", datetime.now().isoformat()),
+            )
+
+        _log.info("[LogStore] 旧事件迁移完成 count=%d", migrated)
 
     def _row_to_record(self, row: sqlite3.Row) -> GatewayLogRecord:
         """将数据库行转换为 GatewayLogRecord"""
