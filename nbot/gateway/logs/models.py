@@ -3,6 +3,7 @@
 定义日志类型、级别、阶段枚举和日志记录 dataclass。
 """
 
+import json as _json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -101,4 +102,9 @@ class GatewayLogRecord:
                 result[key] = val
         if self.metadata:
             result["metadata"] = self.metadata
+            # 前端兼容：提供 JSON 字符串格式
+            result["metadata_json"] = _json.dumps(self.metadata, ensure_ascii=False)
+        # 前端兼容：error 字段别名
+        if self.error_message:
+            result["error"] = self.error_message
         return result

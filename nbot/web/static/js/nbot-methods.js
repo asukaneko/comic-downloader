@@ -4549,14 +4549,15 @@ def main(params):
                 async loadGatewayLogs() {
                     try {
                         const params = new URLSearchParams();
-                        if (this.gatewayLogFilter.event_type) params.append('event_type', this.gatewayLogFilter.event_type);
+                        if (this.gatewayLogFilter.source) params.append('source', this.gatewayLogFilter.source);
+                        if (this.gatewayLogFilter.event_type) params.append('type', this.gatewayLogFilter.event_type);
                         if (this.gatewayLogFilter.status) params.append('status', this.gatewayLogFilter.status);
                         if (this.gatewayLogFilter.channel_id) params.append('channel_id', this.gatewayLogFilter.channel_id);
                         params.append('limit', String(this.gatewayLogFilter.limit));
                         params.append('offset', String(this.gatewayLogFilter.offset));
-                        const res = await api.get(`/api/gateway/events?${params.toString()}`);
+                        const res = await api.get(`/api/gateway/logs?${params.toString()}`);
                         if (res.data.ok) {
-                            this.gatewayLogs = res.data.events || [];
+                            this.gatewayLogs = res.data.items || [];
                         } else {
                             this.gatewayLogs = [];
                         }
@@ -4578,14 +4579,32 @@ def main(params):
                     this.gatewayTraceModal.loading = true;
                     this.gatewayTraceModal.events = [];
                     try {
-                        const res = await api.get(`/api/gateway/events/${trace_id}`);
+                        const res = await api.get(`/api/gateway/logs/trace/${trace_id}`);
                         if (res.data.ok) {
-                            this.gatewayTraceModal.events = res.data.events || [];
+                            // 使用 timeline（全链路聚合）或回退到 events
+                            this.gatewayTraceModal.events = res.data.timeline || res.data.events || [];
                         }
                     } catch (e) {
                         console.error('Failed to load gateway trace:', e);
                     } finally {
                         this.gatewayTraceModal.loading = false;
+                    }
+                },
+
+                async lookupGatewayId(value) {
+                    if (!value || !value.trim()) return;
+                    try {
+                        const res = await api.get(`/api/gateway/logs/lookup/${encodeURIComponent(value.trim())}`);
+                        if (res.data.ok) {
+                            this.gatewayLookupResult = res.data;
+                        } else {
+                            this.gatewayLookupResult = null;
+                            this.showToast('ID 查找失败: ' + (res.data.error || '未知错误'), 'error');
+                        }
+                    } catch (e) {
+                        console.error('Failed to lookup gateway id:', e);
+                        this.gatewayLookupResult = null;
+                        this.showToast('ID 查找失败', 'error');
                     }
                 },
 

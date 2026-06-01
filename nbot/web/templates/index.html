@@ -5658,11 +5658,19 @@
                         <div v-if="logTab === 'gateway'" class="card">
                             <div class="card-header">
                                 <span class="card-title">Gateway 事件日志</span>
-                                <div style="display: flex; gap: 8px; align-items: center;">
+                                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                    <select v-model="gatewayLogFilter.source" class="form-select" style="width: 110px;" @change="refreshGatewayLogs">
+                                        <option value="">全部来源</option>
+                                        <option value="gateway">Gateway</option>
+                                        <option value="mcp">MCP</option>
+                                        <option value="web">Web</option>
+                                    </select>
                                     <select v-model="gatewayLogFilter.event_type" class="form-select" style="width: 130px;">
                                         <option value="">全部类型</option>
                                         <option value="message">消息事件</option>
                                         <option value="operation">操作日志</option>
+                                        <option value="mcp_tool">MCP 工具</option>
+                                        <option value="receive">接收处理</option>
                                     </select>
                                     <select v-model="gatewayLogFilter.status" class="form-select" style="width: 130px;">
                                         <option value="">全部状态</option>
@@ -5677,12 +5685,18 @@
                                         <option value="built">已构建</option>
                                         <option value="failed">失败</option>
                                         <option value="duplicated">重复消息</option>
-                                        <option value="switch">切换</option>
-                                        <option value="update">更新</option>
-                                        <option value="create">创建</option>
-                                        <option value="delete">删除</option>
-                                        <option value="upload">上传</option>
+                                        <option value="success">成功</option>
+                                        <option value="denied">已拒绝</option>
+                                        <option value="error">错误</option>
                                     </select>
+                                    <div style="display: flex; gap: 4px; align-items: center;">
+                                        <input v-model="gatewayLookupValue" type="text" class="form-input"
+                                            placeholder="ID 查找..." style="width: 140px;"
+                                            @keyup.enter="lookupGatewayId(gatewayLookupValue)">
+                                        <button class="btn btn-secondary" @click="lookupGatewayId(gatewayLookupValue)" title="ID 类型识别">
+                                            <i class="fas fa-search"></i>
+                                        </button>
+                                    </div>
                                     <button class="btn btn-secondary" @click="refreshGatewayLogs" :disabled="isLoading">
                                         <i class="fas fa-sync-alt"></i> 刷新
                                     </button>
@@ -9980,12 +9994,15 @@
                     // Gateway Logs
                     gatewayLogs: [],
                     gatewayLogFilter: {
+                        source: '',
                         event_type: '',
                         status: '',
                         channel_id: '',
                         limit: 50,
                         offset: 0,
                     },
+                    gatewayLookupValue: '',
+                    gatewayLookupResult: null,
                     gatewayTraceModal: {
                         show: false,
                         trace_id: '',

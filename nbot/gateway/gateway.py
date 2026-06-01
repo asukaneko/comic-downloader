@@ -269,6 +269,10 @@ class ChannelGateway:
                 trace_id=trace_id, channel_id=channel_id, status="received",
                 raw_event=raw_event, remote_addr=remote_addr,
             )
+            self._record_log(
+                action="receive", status="received", stage="receive_start",
+                message="收到事件", trace_id=trace_id, channel_id=channel_id,
+            )
 
             # === Step 1: 安全鉴权 ===
             try:
@@ -291,6 +295,11 @@ class ChannelGateway:
                     trace_id=trace_id, channel_id=channel_id, status=e.code,
                     error=e.message,
                 )
+                self._record_log(
+                    action="verify", status=e.code, stage="auth_failed",
+                    level="warning", message="鉴权失败",
+                    trace_id=trace_id, channel_id=channel_id, error_message=e.message,
+                )
                 return GatewayResult(
                     ok=False,
                     trace_id=trace_id,
@@ -300,6 +309,10 @@ class ChannelGateway:
                 )
 
             self._record_event(trace_id=trace_id, channel_id=channel_id, status="verified")
+            self._record_log(
+                action="verify", status="verified", stage="auth_passed",
+                message="鉴权通过", trace_id=trace_id, channel_id=channel_id,
+            )
 
             # === Step 2: 限流检查（IP/频道维度）===
             try:
@@ -318,6 +331,11 @@ class ChannelGateway:
                     trace_id=trace_id, channel_id=channel_id, status="rate_limited",
                     error=e.message,
                 )
+                self._record_log(
+                    action="rate_limit", status="rate_limited", stage="rate_limited",
+                    level="warning", message="IP/频道限流",
+                    trace_id=trace_id, channel_id=channel_id, error_message=e.message,
+                )
                 return GatewayResult(
                     ok=False,
                     trace_id=trace_id,
@@ -332,6 +350,11 @@ class ChannelGateway:
                 _log.warning("[Gateway] 未知频道 trace=%s channel=%s", trace_id, channel_id)
                 self._record_event(
                     trace_id=trace_id, channel_id=channel_id, status="unknown_channel",
+                )
+                self._record_log(
+                    action="route", status="unknown_channel", stage="route_failed",
+                    level="warning", message="未知频道",
+                    trace_id=trace_id, channel_id=channel_id,
                 )
                 return GatewayResult(
                     ok=False,
@@ -369,6 +392,11 @@ class ChannelGateway:
                     trace_id=trace_id, channel_id=channel_id, status="parse_failed",
                     error=str(e), raw_event=raw_event,
                 )
+                self._record_log(
+                    action="parse", status="parse_failed", stage="parse_failed",
+                    level="error", message="事件解析失败",
+                    trace_id=trace_id, channel_id=channel_id, error_message=str(e),
+                )
                 return GatewayResult(
                     ok=True,
                     trace_id=trace_id,
@@ -380,6 +408,10 @@ class ChannelGateway:
             if not parsed:
                 _log.debug("[Gateway] 忽略空事件 trace=%s channel=%s", trace_id, channel_id)
                 self._record_event(trace_id=trace_id, channel_id=channel_id, status="ignored")
+                self._record_log(
+                    action="parse", status="ignored", stage="ignored",
+                    message="忽略空事件", trace_id=trace_id, channel_id=channel_id,
+                )
                 return GatewayResult(
                     ok=True,
                     trace_id=trace_id,
@@ -389,6 +421,10 @@ class ChannelGateway:
                 )
 
             self._record_event(trace_id=trace_id, channel_id=channel_id, status="parsed")
+            self._record_log(
+                action="parse", status="parsed", stage="parsed",
+                message="事件解析成功", trace_id=trace_id, channel_id=channel_id,
+            )
 
             user_id = parsed.get("user_id") or ""
             conversation_id = parsed.get("conversation_id") or ""
@@ -405,6 +441,12 @@ class ChannelGateway:
                 self._record_event(
                     trace_id=trace_id, channel_id=channel_id, status="rate_limited",
                     error=e.message, user_id=user_id, conversation_id=conversation_id,
+                )
+                self._record_log(
+                    action="rate_limit", status="rate_limited", stage="rate_limited",
+                    level="warning", message="用户/会话限流",
+                    trace_id=trace_id, channel_id=channel_id, user_id=user_id,
+                    error_message=e.message,
                 )
                 return GatewayResult(
                     ok=False,
@@ -429,6 +471,11 @@ class ChannelGateway:
                         trace_id=trace_id, channel_id=channel_id, status="duplicated",
                         message_id=message_id,
                     )
+                    self._record_log(
+                        action="dedupe", status="duplicated", stage="dedupe_hit",
+                        message="重复消息", trace_id=trace_id, channel_id=channel_id,
+                        message_id=message_id,
+                    )
                     return GatewayResult(
                         ok=True,
                         trace_id=trace_id,
@@ -438,6 +485,11 @@ class ChannelGateway:
                     )
 
             self._record_event(trace_id=trace_id, channel_id=channel_id, status="deduped")
+            self._record_log(
+                action="dedupe", status="deduped", stage="deduped",
+                message="去重通过", trace_id=trace_id, channel_id=channel_id,
+                message_id=message_id,
+            )
 
             # ========================
             # 分支：异步模式 vs 同步模式
@@ -507,6 +559,11 @@ class ChannelGateway:
             self._record_event(
                 trace_id=trace_id, channel_id=channel_id, status="queue_full",
             )
+            self._record_log(
+                action="queue", status="queue_full", stage="queue_failed",
+                level="error", message="队列已满",
+                trace_id=trace_id, channel_id=channel_id,
+            )
             return GatewayResult(
                 ok=False,
                 trace_id=trace_id,
@@ -517,6 +574,11 @@ class ChannelGateway:
 
         # 记录事件：queued（dedupe 标记推迟到 Worker 处理成功后）
         self._record_event(trace_id=trace_id, channel_id=channel_id, status="queued")
+        self._record_log(
+            action="queue", status="queued", stage="queued",
+            message="事件已入队", trace_id=trace_id, channel_id=channel_id,
+            queue_item_id=item.item_id,
+        )
 
         _log.info(
             "[Gateway] 事件已入队 trace=%s channel=%s queue_size=%d",
@@ -578,6 +640,11 @@ class ChannelGateway:
                 trace_id=trace_id, channel_id=channel_id,
                 status="build_request_failed", error=str(e),
             )
+            self._record_log(
+                action="dispatch", status="build_request_failed", stage="build_failed",
+                level="error", message="ChatRequest 构建失败",
+                trace_id=trace_id, channel_id=channel_id, error_message=str(e),
+            )
             return GatewayResult(
                 ok=False,
                 trace_id=trace_id,
@@ -606,6 +673,11 @@ class ChannelGateway:
             conversation_id=chat_request.conversation_id,
             user_id=user_id, message_id=message_id,
         )
+        self._record_log(
+            action="dispatch", status="dispatched", stage="dispatched",
+            message="已派发到 AI Core", trace_id=trace_id, channel_id=channel_id,
+            user_id=user_id, message_id=message_id,
+        )
 
         # === Step 8: 调度到 AI Core ===
         start_time = time.time()
@@ -623,6 +695,11 @@ class ChannelGateway:
             self._record_event(
                 trace_id=trace_id, channel_id=channel_id, status=e.code,
                 error=e.message, conversation_id=chat_request.conversation_id,
+            )
+            self._record_log(
+                action="dispatch", status=e.code, stage="dispatch_failed",
+                level="error", message="AI Core 处理失败",
+                trace_id=trace_id, channel_id=channel_id, error_message=e.message,
             )
             return GatewayResult(
                 ok=False,
@@ -646,6 +723,11 @@ class ChannelGateway:
                 status="dispatch_failed", error=str(e),
                 conversation_id=chat_request.conversation_id,
             )
+            self._record_log(
+                action="dispatch", status="dispatch_failed", stage="dispatch_failed",
+                level="error", message="AI Core 异常",
+                trace_id=trace_id, channel_id=channel_id, error_message=str(e),
+            )
             return GatewayResult(
                 ok=False,
                 trace_id=trace_id,
@@ -658,6 +740,10 @@ class ChannelGateway:
         self._record_event(
             trace_id=trace_id, channel_id=channel_id, status="delivering",
             conversation_id=chat_request.conversation_id,
+        )
+        self._record_log(
+            action="deliver", status="delivering", stage="delivering",
+            message="投递中", trace_id=trace_id, channel_id=channel_id,
         )
 
         # 记录模型信息和故障转移事件到 Gateway 日志
@@ -708,6 +794,11 @@ class ChannelGateway:
                 trace_id=trace_id, channel_id=channel_id, status="delivery_failed",
                 error=e.message, conversation_id=chat_request.conversation_id,
             )
+            self._record_log(
+                action="deliver", status="delivery_failed", stage="delivery_failed",
+                level="error", message="回复投递失败",
+                trace_id=trace_id, channel_id=channel_id, error_message=e.message,
+            )
             return GatewayResult(
                 ok=True,
                 trace_id=trace_id,
@@ -747,6 +838,13 @@ class ChannelGateway:
         self._record_event(
             trace_id=trace_id, channel_id=channel_id, status=final_status,
             conversation_id=chat_request.conversation_id,
+        )
+        self._record_log(
+            action="deliver", status=final_status, stage="completed",
+            level="info" if final_status in ("delivered", "built") else "error",
+            message=f"处理完成 {final_status}",
+            trace_id=trace_id, channel_id=channel_id,
+            metadata={"elapsed_seconds": round(total_elapsed, 2)},
         )
 
         # 同步模式：只有真正成功或 built 后才标记去重
@@ -921,6 +1019,45 @@ class ChannelGateway:
             )
         except Exception as e:
             _log.debug("[Gateway] 事件记录失败 trace=%s status=%s error=%s", trace_id, status, str(e))
+
+    def _record_log(
+        self,
+        *,
+        action: str,
+        status: str,
+        message: str = "",
+        level: str = "info",
+        stage: str = "",
+        trace_id: str | None = None,
+        channel_id: str | None = None,
+        user_id: str | None = None,
+        message_id: str | None = None,
+        queue_item_id: str | None = None,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """写入统一日志（静默失败）"""
+        if not self.log_service:
+            return
+        try:
+            self.log_service.record(
+                source="gateway",
+                type="receive",
+                action=action,
+                status=status,
+                message=message,
+                level=level,
+                stage=stage,
+                trace_id=trace_id,
+                channel_id=channel_id,
+                user_id=user_id,
+                message_id=message_id,
+                queue_item_id=queue_item_id,
+                error_message=error_message,
+                metadata=metadata,
+            )
+        except Exception:
+            pass
 
     def _extract_message_id(self, channel_id: str, parsed: dict[str, Any]) -> str:
         """从解析结果中提取消息 ID，构建去重键"""
