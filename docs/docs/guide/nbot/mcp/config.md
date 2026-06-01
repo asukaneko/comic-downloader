@@ -16,7 +16,8 @@ Ncatbot-comic-QQbot/
 │   ├── mcp/
 │   └── gateway/
 └── data/
-    └── gateway.db      ← Gateway 持久化数据
+    └── web/
+        └── gateway.db  ← Gateway 持久化数据
 ```
 
 ## MCP 配置段
@@ -49,7 +50,7 @@ audit_enabled = true
 storage_enabled = true
 
 ; 数据目录
-data_dir = data
+data_dir = data/web
 ```
 
 ### 配置项说明
@@ -57,7 +58,7 @@ data_dir = data
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | storage_enabled | bool | true | 是否启用 SQLite 持久化 |
-| data_dir | string | "data" | 数据目录路径 |
+| data_dir | string | "data/web" | 数据目录路径，与 Web Dashboard 共用 |
 
 ::: tip
 启用 `storage_enabled` 后，MCP 才能查询历史事件、投递记录和 trace 链路。
@@ -72,7 +73,7 @@ ws_uri = ws://localhost:3001
 
 [gateway]
 storage_enabled = true
-data_dir = data
+data_dir = data/web
 
 [mcp]
 send_message_enabled = false
@@ -165,7 +166,7 @@ python bot.py --mcp --web-port 8080
 
 1. 确认 `[gateway]` 段的 `storage_enabled = true`
 2. 确认 `data/` 目录存在且可写
-3. 检查 `data/gateway.db` 文件是否生成
+3. 检查 `data/web/gateway.db` 文件是否生成
 
 ### 工具调用返回 permission_denied
 

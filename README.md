@@ -299,7 +299,7 @@ audit_enabled = true
 [gateway]
 ; Gateway 持久化存储（启用后可查询历史事件）
 storage_enabled = true
-data_dir = data
+data_dir = data/web
 ```
 
 ### 可用 Tools

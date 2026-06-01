@@ -1,15 +1,19 @@
 import importlib
 import os
+import sys
 import threading
 
 from dotenv import load_dotenv
 
+from nbot.logging_config import configure_ncatbot_log_file_name
+
 # Skip ncatbot's GitHub proxy auto-detection during startup.
 # None means "probe proxies"; empty string means "connect directly".
 os.environ.setdefault("GITHUB_PROXY", "")
+configure_ncatbot_log_file_name(sys.argv, os.environ)
 
-from ncatbot.utils.config import config as ncatbot_config
-from ncatbot.utils.logger import get_log
+from ncatbot.utils.config import config as ncatbot_config  # noqa: E402
+from ncatbot.utils.logger import get_log  # noqa: E402
 
 
 def _load_env_file():
@@ -217,81 +221,12 @@ def run_mcp_only():
 
 def _load_mcp_config_and_run():
     """加载 MCP 配置并启动 MCP Server"""
-    import configparser
+    from nbot.mcp.config import load_mcp_config
 
-    config = {
-        "transport": "stdio",
-        "permissions": {
-            "default_scopes": [
-                "gateway.read",
-                "events.query",
-                "queue.read",
-                "node.read",
-            ],
-        },
-        "tools": {
-            "gateway_send_message": {
-                "enabled": False,
-                "require_confirmation": True,
-            },
-            "gateway_receive_message": {
-                "enabled": True,
-                "require_confirmation": False,
-            },
-            "gateway_retry_dead_letter": {
-                "enabled": True,
-                "require_confirmation": True,
-            },
-            "gateway_submit_internal_task": {
-                "enabled": True,
-                "require_confirmation": True,
-            },
-            "gateway_register_node": {
-                "enabled": False,
-                "require_confirmation": True,
-            },
-        },
-        "audit": {
-            "enabled": True,
-            "log_args": True,
-            "redact_fields": ["token", "secret", "password", "authorization"],
-        },
-    }
+    config = load_mcp_config()
 
-    # 从 config.ini 读取 MCP 配置
-    try:
-        cp = configparser.ConfigParser()
-        cp.read("config.ini", encoding="utf-8")
-
-        if cp.has_section("mcp"):
-            send_enabled = cp.get("mcp", "send_message_enabled", fallback="false").lower() == "true"
-            config["tools"]["gateway_send_message"]["enabled"] = send_enabled
-
-            retry_confirm = cp.get("mcp", "retry_require_confirmation", fallback="true").lower() == "true"
-            config["tools"]["gateway_retry_dead_letter"]["require_confirmation"] = retry_confirm
-
-            audit_enabled = cp.get("mcp", "audit_enabled", fallback="true").lower() == "true"
-            config["audit"]["enabled"] = audit_enabled
-
-        # Gateway 存储配置
-        if cp.has_section("gateway"):
-            storage_enabled = cp.get("gateway", "storage_enabled", fallback="true").lower() == "true"
-            if storage_enabled:
-                config["gateway"] = {"storage": {"enabled": True}}
-                config["data_dir"] = cp.get("gateway", "data_dir", fallback="data")
-    except Exception as e:
-        _log.debug(f"Failed to read MCP config from config.ini: {e}")
-
-    # 创建全局 Gateway 实例
-    try:
-        from nbot.gateway.gateway import create_gateway_from_config, set_gateway
-        gateway = create_gateway_from_config(config)
-        set_gateway(gateway)
-        _log.info("Gateway initialized for MCP")
-    except Exception as e:
-        _log.warning(f"Gateway initialization failed: {e}")
-
-    # 启动 MCP Server
+    # 启动 MCP Server。MCPContext 会优先复用已存在的全局 Gateway；
+    # mcp-only 模式下没有全局实例时，才会根据 config 创建一个共享同一数据目录的 Gateway。
     from nbot.mcp.server import create_mcp_server
     mcp = create_mcp_server(config)
     _log.info("Starting MCP Server (stdio)...")

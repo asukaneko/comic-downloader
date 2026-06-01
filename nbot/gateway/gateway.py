@@ -55,6 +55,7 @@ import inspect
 import logging
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from nbot.gateway.dedupe import DedupeStore
@@ -1133,7 +1134,10 @@ def create_gateway_from_config(config: dict[str, Any]) -> ChannelGateway:
 
     enable_storage = gateway_config.get("storage", {}).get("enabled", False)
     enable_async = gateway_config.get("async", {}).get("enabled", False)
-    data_dir = config.get("data_dir", "")
+    data_dir = _resolve_gateway_data_dir(
+        str(config.get("data_dir", "")),
+        config.get("base_dir"),
+    )
 
     if enable_async and enable_storage:
         return create_async_gateway_with_storage(
@@ -1157,6 +1161,16 @@ def create_gateway_from_config(config: dict[str, Any]) -> ChannelGateway:
         security=security,
         rate_limiter=rate_limiter,
     )
+
+
+def _resolve_gateway_data_dir(data_dir: str, base_dir: str | None = None) -> str:
+    if not data_dir:
+        return ""
+    path = Path(data_dir).expanduser()
+    if not path.is_absolute():
+        root = Path(base_dir).resolve() if base_dir else Path(__file__).resolve().parents[2]
+        path = root / path
+    return str(path.resolve())
 
 
 # ============================
