@@ -5605,59 +5605,10 @@
 
                     <!-- Logs -->
                     <div v-if="currentPage === 'logs'" class="fade-in">
-                        <!-- 日志类型标签页 -->
-                        <div class="tab-bar" style="margin-bottom: 16px;">
-                            <div
-                                class="tab-item"
-                                :class="{ active: logTab === 'system' }"
-                                @click="logTab = 'system'"
-                            >
-                                <i class="fas fa-file-alt"></i> 系统日志
-                            </div>
-                            <div
-                                class="tab-item"
-                                :class="{ active: logTab === 'gateway' }"
-                                @click="logTab = 'gateway'; loadGatewayLogs()"
-                            >
-                                <i class="fas fa-network-wired"></i> Gateway 日志
-                            </div>
-                        </div>
-
-                        <!-- 系统日志 -->
-                        <div v-if="logTab === 'system'" class="card">
-                            <div class="card-header">
-                                <span class="card-title">{{ $t('page.logs') }}</span>
-                                <div style="display: flex; gap: 8px;">
-                                    <select v-model="logLevel" class="form-select" style="width: 120px;">
-                                        <option value="all">全部</option>
-                                        <option value="info">信息</option>
-                                        <option value="warning">警告</option>
-                                        <option value="error">错误</option>
-                                    </select>
-                                    <button class="btn btn-secondary" @click="refreshLogs" :disabled="isLoading">
-                                        <i class="fas fa-sync-alt"></i> 刷新
-                                    </button>
-                                    <button class="btn btn-secondary" @click="clearLogs" :disabled="isLoading">
-                                        <i class="fas fa-trash"></i> 清空
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="card-body">
-                                <div class="code-block" style="max-height: 600px; overflow-y: auto;">
-                                    <div v-for="(log, index) in filteredLogs" :key="index" :style="{ color: getLogColor(log.level) }">
-                                        [{{ log.time }}] [{{ log.level.toUpperCase() }}] {{ log.message }}
-                                    </div>
-                                    <div v-if="filteredLogs.length === 0" style="color: var(--text-muted); text-align: center; padding: 20px;">
-                                        暂无日志
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <!-- Gateway 日志 -->
-                        <div v-if="logTab === 'gateway'" class="card">
+                        <div class="card">
                             <div class="card-header">
-                                <span class="card-title">Gateway 事件日志</span>
+                                <span class="card-title">日志</span>
                                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                                     <select v-model="gatewayLogFilter.source" class="form-select" style="width: 110px;" @change="refreshGatewayLogs">
                                         <option value="">全部来源</option>
@@ -6681,7 +6632,7 @@
                     <h3 style="color: var(--text-primary);">调试台</h3>
                     <ul>
                         <li>「API 文档」按钮查看所有可用接口。</li>
-                        <li>「系统日志」查看运行日志和错误信息。</li>
+                        <li>「日志」查看 Gateway 事件日志和 MCP 工具调用记录。</li>
                         <li>「Token 用量」监控 AI 模型调用消耗。</li>
                     </ul>
 
@@ -10460,7 +10411,7 @@
                         channels: '频道管理',
                         'ai-config': 'AI 配置',
                         tokens: 'Token 用量',
-                        logs: '系统日志',
+                        logs: '日志',
                         settings: '系统设置',
                         debug: '调试台'
                     };

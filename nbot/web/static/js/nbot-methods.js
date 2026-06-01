@@ -1622,6 +1622,9 @@ const NbotMethods = {
                                 this.updatePersonalityTimelineChart();
                             });
                             break;
+                        case 'logs':
+                            await this.loadGatewayLogs();
+                            break;
                         case 'memory':
                             await this.loadMemory();
                             break;
