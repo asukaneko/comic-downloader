@@ -140,12 +140,25 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         raw_event: dict,
         headers: dict | None = None,
         remote_addr: str = "127.0.0.1",
+        confirm: bool = False,
     ) -> str:
-        """模拟或提交一条频道消息，让 Gateway 按正常管线处理"""
+        """模拟或提交一条频道消息，让 Gateway 按正常管线处理
+
+        Args:
+            confirm: 高危操作需显式确认 (confirm=true)
+        """
         if not check_permission("gateway_receive_message", _get_scopes(ctx)):
             return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
         if not ctx.is_tool_enabled("gateway_receive_message"):
             return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled"}}, ensure_ascii=False)
+        if ctx.requires_confirmation("gateway_receive_message") and not confirm:
+            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
+
+        # 输入校验
+        if not channel_id or not channel_id.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "channel_id is required"}}, ensure_ascii=False)
+        if not isinstance(raw_event, dict) or not raw_event:
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "raw_event must be a non-empty dict"}}, ensure_ascii=False)
 
         args = {"channel_id": channel_id, "raw_event": raw_event, "headers": headers, "remote_addr": remote_addr}
         try:
@@ -163,12 +176,27 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         conversation_id: str,
         content: str,
         metadata: dict | None = None,
+        confirm: bool = False,
     ) -> str:
-        """直接向某个频道投递消息（高危操作）"""
+        """直接向某个频道投递消息（高危操作）
+
+        Args:
+            confirm: 高危操作需显式确认 (confirm=true)
+        """
         if not check_permission("gateway_send_message", _get_scopes(ctx)):
             return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
         if not ctx.is_tool_enabled("gateway_send_message"):
             return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled by config"}}, ensure_ascii=False)
+        if ctx.requires_confirmation("gateway_send_message") and not confirm:
+            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
+
+        # 输入校验
+        if not channel_id or not channel_id.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "channel_id is required"}}, ensure_ascii=False)
+        if not conversation_id or not conversation_id.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "conversation_id is required"}}, ensure_ascii=False)
+        if not content or not content.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "content is required"}}, ensure_ascii=False)
 
         args = {"channel_id": channel_id, "conversation_id": conversation_id, "content": content, "metadata": metadata}
         try:
@@ -191,12 +219,27 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         task_id: str,
         trigger_source: str = "mcp",
         metadata: dict | None = None,
+        confirm: bool = False,
     ) -> str:
-        """触发内部任务（心跳、工作流、定时任务等）"""
+        """触发内部任务（心跳、工作流、定时任务等）
+
+        注意：当前版本仅提交 noop 任务用于链路测试，后续版本将支持注册 handler。
+
+        Args:
+            confirm: 高危操作需显式确认 (confirm=true)
+        """
         if not check_permission("gateway_submit_internal_task", _get_scopes(ctx)):
             return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
         if not ctx.is_tool_enabled("gateway_submit_internal_task"):
             return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled"}}, ensure_ascii=False)
+        if ctx.requires_confirmation("gateway_submit_internal_task") and not confirm:
+            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
+
+        # 输入校验
+        if not task_kind or not task_kind.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "task_kind is required"}}, ensure_ascii=False)
+        if not task_id or not task_id.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "task_id is required"}}, ensure_ascii=False)
 
         args = {"task_kind": task_kind, "task_id": task_id, "trigger_source": trigger_source, "metadata": metadata}
         try:
@@ -214,12 +257,21 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return json.dumps(err, ensure_ascii=False)
 
     @mcp_server.tool()
-    async def gateway_retry_dead_letter(item_id: str) -> str:
-        """重试死信队列中的某个任务（高危操作）"""
+    async def gateway_retry_dead_letter(item_id: str, confirm: bool = False) -> str:
+        """重试死信队列中的某个任务（高危操作）
+
+        Args:
+            confirm: 高危操作需显式确认 (confirm=true)
+        """
         if not check_permission("gateway_retry_dead_letter", _get_scopes(ctx)):
             return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
         if not ctx.is_tool_enabled("gateway_retry_dead_letter"):
             return json.dumps({"ok": False, "error": {"code": "tool_disabled", "message": "tool is disabled"}}, ensure_ascii=False)
+        if ctx.requires_confirmation("gateway_retry_dead_letter") and not confirm:
+            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
+
+        if not item_id or not item_id.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "item_id is required"}}, ensure_ascii=False)
 
         args = {"item_id": item_id}
         try:
@@ -242,10 +294,20 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         version: str = "",
         address: str = "",
         metadata: dict | None = None,
+        confirm: bool = False,
     ) -> str:
-        """注册节点"""
+        """注册节点（高危操作）
+
+        Args:
+            confirm: 高危操作需显式确认 (confirm=true)
+        """
         if not check_permission("gateway_register_node", _get_scopes(ctx)):
             return json.dumps({"ok": False, "error": {"code": "permission_denied", "message": "no permission"}}, ensure_ascii=False)
+        if ctx.requires_confirmation("gateway_register_node") and not confirm:
+            return json.dumps({"ok": False, "error": {"code": "confirmation_required", "message": "This tool requires confirm=true"}}, ensure_ascii=False)
+
+        if not node_id or not node_id.strip():
+            return json.dumps({"ok": False, "error": {"code": "invalid_input", "message": "node_id is required"}}, ensure_ascii=False)
 
         args = {"node_id": node_id, "node_type": node_type, "version": version, "address": address}
         try:
@@ -265,11 +327,15 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
 
 
 def _get_scopes(ctx: MCPContext) -> list[str]:
-    """获取当前上下文的权限列表"""
-    default = ctx.config.get("permissions", {}).get("default_scopes", [])
-    if ctx.config.get("transport", "stdio") == "stdio":
-        return list(set(default + ["admin"]))
-    return default
+    """获取当前上下文的权限列表
+
+    stdio 模式不再自动注入 admin。
+    需要 admin 权限时，通过配置 permissions.admin = true 显式开启。
+    """
+    default = list(ctx.config.get("permissions", {}).get("default_scopes", []))
+    if ctx.config.get("permissions", {}).get("admin", False):
+        default.append("admin")
+    return list(set(default))
 
 
 def _audit(ctx: MCPContext, tool_name: str, args: dict, result: dict) -> None:
