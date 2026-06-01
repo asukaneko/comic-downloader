@@ -9,13 +9,13 @@
 ![Web](https://img.shields.io/badge/Web-Dashboard-ec4899?style=flat)
 ![QQ](https://img.shields.io/badge/QQ-NapCat%20%2B%20ncatbot-58a6ff?style=flat)
 
-面向 Web 的多渠道 AI 角色扮演系统，围绕 QQ Bot 构建，并扩展到 Web、CLI、Telegram 与 Feishu。
+面向 Web 的多渠道 AI 角色扮演系统，包含Web、QQ、CLI、Telegram、Feishu等频道。
 
 </div>
 
 ## Overview
 
-NekoBot 是一个面向角色扮演与长期互动场景的 AI 系统。项目采用统一 AI 内核与频道适配层分离的架构，在保留 QQ Bot 使用方式的同时，提供完整的 Web 管理后台、角色运行时、记忆系统、工具调用与工作区能力。
+NekoBot 是一个面向角色扮演与长期互动场景的 AI 系统。项目采用统一 AI 内核与频道适配层分离的架构，提供完整的 Web 管理后台、角色运行时、记忆系统、工具调用与工作区能力。
 
 它的核心目标不是单纯提供“聊天接口”，而是提供一套可持续运行、可配置、可观测、可扩展的角色型智能体基础设施。
 
@@ -25,7 +25,7 @@ NekoBot 是一个面向角色扮演与长期互动场景的 AI 系统。项目�
 - 角色运行时：内置实时情感引擎、六维关系模型、动态 PromptStack、自动状态评估与角色记忆。
 - Web 控制台：提供会话管理、角色管理、模型配置、工作流、知识库、记忆、日志与调试界面。
 - 工具与工作区：支持工具调用、文件读写、共享/私有工作区、文件变更预览与任务执行。
-- 模型适配：兼容 OpenAI 风格接口，可接入 MiniMax、SiliconFlow、Anthropic 及其他兼容服务。
+- 模型适配：兼容 OpenAI Chat Completions/Responses , Anthropic , Gemini接口，可接入 Deepseek、GLM、Kimi、Mimo及其他兼容服务。
 - 插件与技能：支持通过插件与技能系统扩展能力，而不破坏核心处理流程。
 
 ## Architecture
@@ -116,6 +116,13 @@ Web 后台覆盖日常运维与调试需求：
 ```bash
 git clone https://github.com/asukaneko/nekobot.git
 cd nekobot
+```
+
+```bash
+#配置虚拟环境（可选）
+python -m venv venv
+source venv/bin/activate
+# windows: venv\Scripts\activate.bat
 python -m pip install -r requirements.txt
 ```
 
@@ -147,6 +154,8 @@ API_KEY=your_api_key
 BASE_URL=https://your-openai-compatible-endpoint/v1
 MODEL=your_model_name
 ```
+
+但你仍然可以通过web界面来配置你的模型
 
 ## Running
 
@@ -219,7 +228,3 @@ CI 主要执行：
 
 本项目基于 MIT License 发布，详见 [LICENSE](LICENSE)。
 
-## Acknowledgements
-
-- [NapCatQQ](https://github.com/NapNeko/NapCatQQ)
-- [ncatbot](https://github.com/NapNeko/NcatBot)
