@@ -9,6 +9,9 @@ from typing import Any
 
 _log = logging.getLogger(__name__)
 
+# 这些工具成功时不记录日志，避免"日志记录日志"的噪音循环
+_NOISY_TOOLS: set[str] = {"gateway_query_logs"}
+
 
 class MCPToolLogger:
     """MCP 工具调用日志记录器
@@ -108,7 +111,10 @@ class MCPToolLogger:
         result: dict[str, Any],
         trace_id: str | None = None,
     ) -> None:
-        """记录执行成功"""
+        """记录执行成功（噪音工具跳过）"""
+        if tool_name in _NOISY_TOOLS:
+            return
+
         if not trace_id:
             trace_id = result.get("trace_id")
 
@@ -158,7 +164,12 @@ class MCPToolLogger:
 
 
 def _safe_args(args: dict[str, Any]) -> dict[str, Any]:
-    """脱敏参数"""
+    """脱敏参数
+
+    - token/secret/password/authorization/api_key/headers → ***
+    - raw_event → 只记 keys 和 size
+    - content → 只记 preview 和 length（不论长短）
+    """
     sensitive_keys = {"token", "secret", "password", "authorization", "api_key", "headers"}
     result: dict[str, Any] = {}
     for key, value in args.items():
@@ -167,8 +178,8 @@ def _safe_args(args: dict[str, Any]) -> dict[str, Any]:
             result[key] = "***"
         elif lower_key == "raw_event" and isinstance(value, dict):
             result[key] = {"keys": list(value.keys()), "size": len(str(value))}
-        elif lower_key == "content" and isinstance(value, str) and len(value) > 100:
-            result[key] = value[:100] + "..."
+        elif lower_key == "content" and isinstance(value, str):
+            result[key] = {"preview": value[:50], "length": len(value)}
         else:
             result[key] = value
     return result

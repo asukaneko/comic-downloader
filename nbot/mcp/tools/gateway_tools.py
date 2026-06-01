@@ -111,20 +111,30 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
     @mcp_server.tool()
     async def gateway_get_status() -> str:
         """查看 Gateway 健康状态"""
+        mcp_log = MCPToolLogger(ctx)
+        mcp_log.called("gateway_get_status", {})
         try:
             result = await facade.get_status()
+            mcp_log.completed("gateway_get_status", {}, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_get_status", {}, err)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_get_stats() -> str:
         """查看事件、投递、去重、队列统计"""
+        mcp_log = MCPToolLogger(ctx)
+        mcp_log.called("gateway_get_stats", {})
         try:
             result = await facade.get_stats()
+            mcp_log.completed("gateway_get_stats", {}, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_get_stats", {}, err)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_query_trace(trace_id: str) -> str:
@@ -220,14 +230,20 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
     @mcp_server.tool()
     async def gateway_get_queue_stats() -> str:
         """查看异步队列状态"""
+        mcp_log = MCPToolLogger(ctx)
+        mcp_log.called("gateway_get_queue_stats", {})
         err = _preflight(ctx, "gateway_get_queue_stats")
         if err:
+            mcp_log.denied("gateway_get_queue_stats", err.get("error", {}).get("code", ""), {})
             return _err_json(err)
         try:
             result = await facade.get_queue_stats()
+            mcp_log.completed("gateway_get_queue_stats", {}, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_get_queue_stats", {}, err)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_list_nodes(
@@ -235,29 +251,44 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         status: str = "",
     ) -> str:
         """列出所有节点"""
+        mcp_log = MCPToolLogger(ctx)
+        args = {"node_type": node_type, "status": status}
+        mcp_log.called("gateway_list_nodes", args)
         err = _preflight(ctx, "gateway_list_nodes")
         if err:
+            mcp_log.denied("gateway_list_nodes", err.get("error", {}).get("code", ""), args)
             return _err_json(err)
         try:
             result = await facade.list_nodes(node_type=node_type, status=status)
+            mcp_log.completed("gateway_list_nodes", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_list_nodes", args, err)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_get_node(node_id: str) -> str:
         """获取节点详情"""
+        mcp_log = MCPToolLogger(ctx)
+        args = {"node_id": node_id}
+        mcp_log.called("gateway_get_node", args)
         err = _preflight(ctx, "gateway_get_node")
         if err:
+            mcp_log.denied("gateway_get_node", err.get("error", {}).get("code", ""), args)
             return _err_json(err)
         err = _validate_input(GetNodeInput, node_id=node_id)
         if err:
+            mcp_log.validation_failed("gateway_get_node", args, err)
             return _err_json(err)
         try:
             result = await facade.get_node(node_id)
+            mcp_log.completed("gateway_get_node", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_get_node", args, err)
+            return _err_json(err)
 
     # ========================
     # 操作型 Tools（需要 preflight + 确认 + 校验 + Gateway Log）

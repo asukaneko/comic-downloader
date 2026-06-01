@@ -56,6 +56,10 @@ class GatewayFacade:
             "mode": "async" if self._gateway.async_mode else "sync",
             "storage": "sqlite" if self._gateway.storage else "memory",
             "worker_running": worker_running,
+            "log_service": {
+                "enabled": self._gateway.log_service is not None,
+                "store": "sqlite" if self._gateway.log_service else "none",
+            },
             "queue": {
                 "pending": queue_stats.get("queue_size", 0) if queue_stats else 0,
                 "processing": queue_stats.get("status_breakdown", {}).get("processing", 0) if queue_stats else 0,
