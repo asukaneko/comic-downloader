@@ -91,10 +91,11 @@ gw = get_gateway()    # 获取
 | [队列与投递](./delivery.md) | `queue.py`, `delivery.py`, `retry.py` | 事件队列、回复投递、重试 |
 | [内部任务](./internal-tasks.md) | `gateway.py` | 心跳/工作流/定时任务追踪 |
 | [节点控制平面](./nodes.md) | `nodes/` | 节点注册、心跳、配对、权限 |
+| [服务门面](../mcp/index.md) | `facade.py` | 面向 MCP 的稳定服务接口 |
 
 ## 数据流
 
-```
+```text
 ┌─────────────┐     ┌───────────┐     ┌──────────┐     ┌──────────┐
 │  QQ / Web /  │────►│  Gateway  │────►│ AI Core  │────►│  投递层   │
 │  Telegram    │     │  (receive)│     │(dispatch)│     │(delivery)│
@@ -103,4 +104,29 @@ gw = get_gateway()    # 获取
                     ┌─────┴─────┐
                     │  Storage  │  SQLite: events / deliveries / dedupe
                     └───────────┘
+                          │
+                    ┌─────┴─────┐
+                    │  Facade   │  MCP / HTTP API / Web Console
+                    └───────────┘
 ```
+
+## Gateway Facade
+
+`facade.py` 是面向 MCP 的服务门面层，将 Gateway 内部组件的能力整理成稳定的方法签名。MCP 工具层不直接操作 `gateway.storage`、`gateway.queue` 等细节，全部通过 Facade 调用。
+
+```python
+from nbot.gateway.facade import GatewayFacade
+
+facade = GatewayFacade(gateway)
+
+# 查询状态
+status = await facade.get_status()
+
+# 查询 trace 链路
+trace = await facade.query_trace("gw_...")
+
+# 查询事件
+events = await facade.query_events(channel_id="qq", status="failed")
+```
+
+详细用法参见 [MCP 文档](../mcp/index.md)。

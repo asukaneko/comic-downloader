@@ -190,6 +190,15 @@ export default defineConfig({
               ]
             },
             {
+              text: 'mcp - AI Agent 接口',
+              collapsed: true,
+              items: [
+                { text: '概述', link: '/guide/nbot/mcp/index.md' },
+                { text: 'Tools 参考', link: '/guide/nbot/mcp/tools.md' },
+                { text: '配置', link: '/guide/nbot/mcp/config.md' },
+              ]
+            },
+            {
               text: 'web - Web后台',
               collapsed: true,
               items: [

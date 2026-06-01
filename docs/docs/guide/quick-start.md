@@ -107,6 +107,18 @@ python bot.py --cli-and-web
 python bot.py --web-host 0.0.0.0 --web-port 5000
 ```
 
+### Bot + MCP 模式（AI Agent 接口）
+
+```bash
+# 启动 Bot + MCP Server
+python bot.py --mcp
+
+# 无 Web 模式
+python bot.py --mcp-only
+```
+
+MCP 模式会启动一个 stdio 传输的 MCP Server，供 Claude Code、Cursor 等 AI 智能体连接。详见 [MCP 文档](./nbot/mcp/index.md)。
+
 ## 访问 Web 后台
 
 启动后访问 `http://localhost:5000`，使用 `.env` 中设置的 `WEB_PASSWORD` 登录。
@@ -143,7 +155,9 @@ nekobot/
 │   ├── character/         # 角色情感系统
 │   ├── gateway/           # 统一消息网关
 │   │   ├── bus/           # 事件总线
-│   │   └── nodes/         # 节点控制面
+│   │   ├── nodes/         # 节点控制面
+│   │   └── facade.py      # MCP 服务门面
+│   ├── mcp/               # MCP Server (AI Agent 接口)
 │   ├── plugins/           # 插件系统
 │   ├── services/          # AI、工具、聊天服务
 │   └── web/               # Web 后台与前端
@@ -182,6 +196,7 @@ AI 可以通过工具调用来读写工作区文件，支持文件变更预览�
 ## 下一步
 
 - [命令手册](./commands.md) - 了解所有命令
+- [MCP 接口](./nbot/mcp/index.md) - AI Agent 接入
 - [开发指南](./guide.md) - 开发自己的功能
 - [频道管理](./channels.md) - 配置多频道接入
 - [更新日志](./changelog.md) - 查看版本更新记录

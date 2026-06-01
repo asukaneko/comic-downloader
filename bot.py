@@ -149,10 +149,10 @@ def run_cli():
 def run_cli_and_web(host="0.0.0.0", port=5000):
     """同时启动 CLI 和 Web"""
     _log.info("Starting NekoBot CLI and Web Dashboard...")
-    
+
     # 准备 Web 服务器
     prepared = _prepare_web_server(bot=None)
-    
+
     # 启动 Web 服务器线程
     web_thread = threading.Thread(
         target=start_web_server,
@@ -161,9 +161,133 @@ def run_cli_and_web(host="0.0.0.0", port=5000):
         daemon=True,
     )
     web_thread.start()
-    
+
     # 启动 CLI（在主线程）
     run_cli()
+
+
+def run_bot_with_mcp(host="0.0.0.0", port=5000, no_web=False):
+    """同时启动 Bot + MCP Server
+
+    Bot 在后台线程运行，MCP Server 在主线程运行（stdio 模式）。
+    适合 Claude Code / Cursor 等 AI Agent 连接。
+    """
+    _log.info("Starting NekoBot with MCP Server...")
+
+    # 启动 QQ Bot 后台线程（如果配置了）
+    if _has_qq_bot_config():
+        _log.info("Starting QQ Bot in background thread...")
+        bot_thread = threading.Thread(
+            target=run_bot,
+            name="qq-bot-main",
+            daemon=True,
+        )
+        bot_thread.start()
+    else:
+        _log.info("No QQ bot config found, skipping QQ bot startup")
+
+    # 启动 Web 服务器线程（除非禁用）
+    if not no_web:
+        try:
+            prepared = _prepare_web_server(bot=None)
+            web_thread = threading.Thread(
+                target=start_web_server,
+                args=(host, port, None, prepared),
+                name="web-server",
+                daemon=True,
+            )
+            web_thread.start()
+            _log.info(f"Web Dashboard starting on {host}:{port}")
+        except Exception as e:
+            _log.warning(f"Web server failed to start: {e}")
+
+    # 在主线程启动 MCP Server（stdio 模式）
+    _load_mcp_config_and_run()
+
+
+def run_mcp_only():
+    """仅启动 MCP Server（不启动 QQ Bot 和 Web）
+
+    适合 Claude Code / Cursor 等 AI Agent 连接，
+    不依赖 QQ Bot 配置，不启动 Web Dashboard。
+    """
+    _log.info("Starting MCP Server only (no bot, no web)...")
+    _load_mcp_config_and_run()
+
+
+def _load_mcp_config_and_run():
+    """加载 MCP 配置并启动 MCP Server"""
+    import configparser
+
+    config = {
+        "transport": "stdio",
+        "permissions": {
+            "default_scopes": [
+                "gateway.read",
+                "events.query",
+                "queue.read",
+                "node.read",
+            ],
+        },
+        "tools": {
+            "gateway_send_message": {
+                "enabled": False,
+                "require_confirmation": True,
+            },
+            "gateway_receive_message": {
+                "enabled": True,
+                "require_confirmation": False,
+            },
+            "gateway_retry_dead_letter": {
+                "enabled": True,
+                "require_confirmation": True,
+            },
+        },
+        "audit": {
+            "enabled": True,
+            "log_args": True,
+            "redact_fields": ["token", "secret", "password", "authorization"],
+        },
+    }
+
+    # 从 config.ini 读取 MCP 配置
+    try:
+        cp = configparser.ConfigParser()
+        cp.read("config.ini", encoding="utf-8")
+
+        if cp.has_section("mcp"):
+            send_enabled = cp.get("mcp", "send_message_enabled", fallback="false").lower() == "true"
+            config["tools"]["gateway_send_message"]["enabled"] = send_enabled
+
+            retry_confirm = cp.get("mcp", "retry_require_confirmation", fallback="true").lower() == "true"
+            config["tools"]["gateway_retry_dead_letter"]["require_confirmation"] = retry_confirm
+
+            audit_enabled = cp.get("mcp", "audit_enabled", fallback="true").lower() == "true"
+            config["audit"]["enabled"] = audit_enabled
+
+        # Gateway 存储配置
+        if cp.has_section("gateway"):
+            storage_enabled = cp.get("gateway", "storage_enabled", fallback="true").lower() == "true"
+            if storage_enabled:
+                config["gateway"] = {"storage": {"enabled": True}}
+                config["data_dir"] = cp.get("gateway", "data_dir", fallback="data")
+    except Exception as e:
+        _log.debug(f"Failed to read MCP config from config.ini: {e}")
+
+    # 创建全局 Gateway 实例
+    try:
+        from nbot.gateway.gateway import create_gateway_from_config, set_gateway
+        gateway = create_gateway_from_config(config)
+        set_gateway(gateway)
+        _log.info("Gateway initialized for MCP")
+    except Exception as e:
+        _log.warning(f"Gateway initialization failed: {e}")
+
+    # 启动 MCP Server
+    from nbot.mcp.server import create_mcp_server
+    mcp = create_mcp_server(config)
+    _log.info("Starting MCP Server (stdio)...")
+    mcp.run(transport="stdio")
 
 
 def _has_qq_bot_config():
@@ -196,6 +320,8 @@ if __name__ == "__main__":
     only_web = "--only-web" in sys.argv
     cli_mode = "--cli" in sys.argv
     cli_and_web = "--cli-and-web" in sys.argv
+    mcp_mode = "--mcp" in sys.argv
+    mcp_only = "--mcp-only" in sys.argv
     web_port = 5000
     web_host = "0.0.0.0"
 
@@ -205,7 +331,13 @@ if __name__ == "__main__":
         if arg == "--web-host" and i + 1 < len(sys.argv):
             web_host = sys.argv[i + 1]
 
-    if cli_and_web:
+    if mcp_only:
+        # 仅 MCP 模式 - 不启动 Bot 和 Web
+        run_mcp_only()
+    elif mcp_mode:
+        # Bot + MCP 模式 - Bot 后台运行，MCP Server 主线程 stdio
+        run_bot_with_mcp(host=web_host, port=web_port, no_web=web_disabled)
+    elif cli_and_web:
         # CLI + Web 模式 - 同时启动命令行和 Web 界面
         run_cli_and_web(host=web_host, port=web_port)
     elif cli_mode:

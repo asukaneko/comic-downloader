@@ -8,6 +8,7 @@
 ![License](https://img.shields.io/badge/License-MIT-2ea043?style=flat)
 ![Web](https://img.shields.io/badge/Web-Dashboard-ec4899?style=flat)
 ![QQ](https://img.shields.io/badge/QQ-NapCat%20%2B%20ncatbot-58a6ff?style=flat)
+![MCP](https://img.shields.io/badge/MCP-AI%20Agent%20Interface-8b5cf6?style=flat)
 
 面向 Web 的多渠道 AI 角色扮演系统，包含Web、QQ、CLI、Telegram、Feishu等频道。
 
@@ -27,6 +28,7 @@ NekoBot 是一个面向角色扮演与长期互动场景的 AI 系统。项目�
 - 工具与工作区：支持工具调用、文件读写、共享/私有工作区、文件变更预览与任务执行。
 - 模型适配：兼容 OpenAI Chat Completions/Responses , Anthropic , Gemini接口，可接入 Deepseek、GLM、Kimi、Mimo及其他兼容服务。
 - 插件与技能：支持通过插件与技能系统扩展能力，而不破坏核心处理流程。
+- MCP 接口：通过 Model Context Protocol 暴露 Gateway 能力，支持 Claude Code、Cursor、ChatGPT Agent 等 AI 智能体直接调用。
 
 ## Architecture
 
@@ -50,7 +52,13 @@ bot.py
     ├── services/               # AI client, chat service, tools, TTS/STT
     ├── plugins/                # Plugin and skill system
     ├── gateway/                # Message bus, routing, delivery, dedupe
+    │   └── facade.py            # Gateway service facade for MCP
     ├── web/                    # Flask blueprints, Socket.IO events, dashboard
+    ├── mcp/                    # MCP Server (AI Agent interface)
+    │   ├── server.py            # FastMCP entry point
+    │   ├── tools/               # MCP Tools
+    │   ├── resources/           # MCP Resources
+    │   └── prompts/             # MCP Prompts
     └── cli/                    # Terminal UI
 ```
 
@@ -216,6 +224,101 @@ CI 主要执行：
 - 频道接入：[docs/docs/guide/channels.md](docs/docs/guide/channels.md)
 - 贡献指南：[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - 更新记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)
+
+
+## MCP (Model Context Protocol)
+
+NekoBot 内置 MCP Server，可以将 Gateway 的消息、事件、队列、节点等能力以标准 MCP 协议暴露给 AI 智能体。
+
+### 支持的能力
+
+| 类型 | 说明 |
+|------|------|
+| Tools | 查询状态、查询事件链路、查询队列、模拟消息、触发任务、重试死信、节点管理 |
+| Resources | Gateway 状态、统计数据、能力清单、队列状态、节点列表 |
+| Prompts | 故障诊断、频道测试、节点健康检查 |
+
+### 快速开始
+
+```bash
+# 启动 Bot + MCP
+python bot.py --mcp
+```
+
+### Claude Code 配置
+
+在项目根目录创建 `.mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "nekobot": {
+      "command": "python",
+      "args": ["bot.py", "--mcp-only"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
+```
+
+> **提示**：`bot.py` 是相对路径，会从当前工作目录查找。如果 Claude Code 不在项目根目录启动，需要通过 `cwd` 指定项目路径，或将 `args` 改为绝对路径。
+
+### Cursor 配置
+
+在项目根目录创建 `.cursor/mcp.json`：
+
+```json
+{
+  "mcpServers": {
+    "nekobot": {
+      "command": "python",
+      "args": ["bot.py", "--mcp-only"],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
+```
+
+### MCP 配置项
+
+在 `config.ini` 中配置 MCP 行为：
+
+```ini
+[mcp]
+; 是否允许 MCP 发送真实消息（高危，默认关闭）
+send_message_enabled = false
+; 重试死信是否需要确认
+retry_require_confirmation = true
+; 审计日志
+audit_enabled = true
+
+[gateway]
+; Gateway 持久化存储（启用后可查询历史事件）
+storage_enabled = true
+data_dir = data
+```
+
+### 可用 Tools
+
+| Tool | 说明 | 风险 |
+|------|------|------|
+| `gateway_get_status` | Gateway 健康状态 | 只读 |
+| `gateway_get_stats` | 事件/投递/去重统计 | 只读 |
+| `gateway_query_trace` | 查询 trace 完整链路 | 只读 |
+| `gateway_query_events` | 按条件查询事件 | 只读 |
+| `gateway_query_deliveries` | 查询投递记录 | 只读 |
+| `gateway_get_queue_stats` | 队列状态 | 只读 |
+| `gateway_list_nodes` | 节点列表 | 只读 |
+| `gateway_get_node` | 节点详情 | 只读 |
+| `gateway_receive_message` | 模拟频道消息 | 操作 |
+| `gateway_send_message` | 发送真实消息 | 高危 |
+| `gateway_submit_internal_task` | 触发内部任务 | 操作 |
+| `gateway_retry_dead_letter` | 重试死信 | 高危 |
+| `gateway_register_node` | 注册节点 | 操作 |
 
 ## Security Notes
 
