@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from nbot.gateway.logs.models import GatewayLogRecord
-from nbot.gateway.logs.redact import redact_metadata
+from nbot.gateway.logs.redact import redact_metadata, redact_sensitive
 from nbot.gateway.logs.store import GatewayLogStore
 
 _log = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ class GatewayLogService:
         node_id: str | None = None,
         request_id: str | None = None,
         parent_id: str | None = None,
+        raw_event: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
         error_code: str | None = None,
         error_message: str | None = None,
@@ -67,6 +68,7 @@ class GatewayLogService:
         log_id = f"log_{uuid.uuid4().hex[:16]}"
 
         safe_metadata = redact_metadata(metadata)
+        safe_raw_event = redact_sensitive(raw_event) if raw_event else None
 
         record = GatewayLogRecord(
             id=log_id,
@@ -88,6 +90,7 @@ class GatewayLogService:
             node_id=node_id,
             request_id=request_id,
             parent_id=parent_id,
+            raw_event=safe_raw_event,
             metadata=safe_metadata,
             error_code=error_code,
             error_message=error_message,
@@ -141,7 +144,7 @@ class GatewayLogService:
         events_by_trace: dict[str, list[dict[str, Any]]] = {}
         used_event_indexes: dict[str, set[int]] = {}
 
-        for record, item in zip(records, items):
+        for record, item in zip(records, items, strict=False):
             trace_id = record.trace_id or ""
             if not trace_id:
                 continue

@@ -921,7 +921,7 @@ class ChannelGateway:
         stage: str = "",
         message: str = "",
     ) -> None:
-        """Record one gateway lifecycle state to both legacy events and unified logs."""
+        """Record one gateway lifecycle state to unified logs."""
         self._record_event(
             trace_id=trace_id,
             channel_id=channel_id,
@@ -933,10 +933,10 @@ class ChannelGateway:
             error=error,
             event_type=event_type,
             metadata=metadata,
-        )
-
-        default_level, default_stage, default_action, default_message = (
-            _lifecycle_log_fields(status)
+            action=action,
+            level=level,
+            stage=stage,
+            message=message,
         )
 
     # 状态 → (action, stage, level) 映射
@@ -979,11 +979,20 @@ class ChannelGateway:
         remote_addr: str = "",
         event_type: str = "message",
         metadata: dict[str, Any] | None = None,
+        action: str = "",
+        level: str = "",
+        stage: str = "",
+        message: str = "",
     ) -> None:
         """记录事件状态变更到统一日志 gateway_logs"""
         if not self.log_service:
             return
-        action, stage, level = self._EVENT_STATUS_MAP.get(status, ("event", "", "info"))
+        mapped_action, mapped_stage, mapped_level = self._EVENT_STATUS_MAP.get(
+            status, ("event", status or "event", "info")
+        )
+        default_level, default_stage, default_action, default_message = (
+            _lifecycle_log_fields(status)
+        )
         merged_meta = dict(metadata or {})
         if remote_addr:
             merged_meta.setdefault("remote_addr", remote_addr)
@@ -991,16 +1000,17 @@ class ChannelGateway:
             self.log_service.record(
                 source="gateway",
                 type=event_type or "message",
-                action=action,
+                action=action or mapped_action or default_action,
                 status=status,
-                message=status,
-                level=level,
-                stage=stage,
+                message=message or default_message or status,
+                level=level or mapped_level or default_level,
+                stage=stage or mapped_stage or default_stage,
                 trace_id=trace_id,
                 channel_id=channel_id or None,
                 conversation_id=conversation_id or None,
                 user_id=user_id or None,
                 message_id=message_id or None,
+                raw_event=raw_event,
                 error_message=error or None,
                 metadata=merged_meta or None,
             )
@@ -1036,6 +1046,10 @@ class ChannelGateway:
             error=error_message or "",
             event_type=log_type,
             metadata=metadata,
+            action=action,
+            level=level,
+            stage=stage,
+            message=message,
         )
 
     def _extract_message_id(self, channel_id: str, parsed: dict[str, Any]) -> str:

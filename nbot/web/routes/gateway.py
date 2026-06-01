@@ -270,7 +270,10 @@ def register_gateway_routes(app):
                 )
                 return jsonify({
                     "ok": True,
-                    "events": [r.to_dict() for r in records],
+                    "events": gateway.log_service.records_to_dicts(
+                        records,
+                        event_store=gateway.event_store,
+                    ),
                     "count": len(records),
                     "limit": limit,
                     "offset": offset,
@@ -296,7 +299,10 @@ def register_gateway_routes(app):
                 return jsonify({
                     "ok": True,
                     "trace_id": trace_id,
-                    "events": [r.to_dict() for r in records],
+                    "events": gateway.log_service.records_to_dicts(
+                        records,
+                        event_store=gateway.event_store,
+                    ),
                     "count": len(records),
                 })
             return jsonify({

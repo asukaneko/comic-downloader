@@ -233,6 +233,22 @@ class GatewayFacade:
         limit: int = 50,
     ) -> dict[str, Any]:
         """按条件查询事件历史"""
+        if self._gateway.log_service:
+            records = self._gateway.log_service.query(
+                source="gateway",
+                type=event_type,
+                channel_id=channel_id,
+                status=status,
+                limit=limit,
+            )
+            return {
+                "ok": True,
+                "items": self._gateway.log_service.records_to_dicts(
+                    records,
+                    event_store=self._gateway.event_store,
+                ),
+            }
+
         if not self._gateway.event_store:
             return {"ok": False, "items": [], "error": "event store not available"}
 

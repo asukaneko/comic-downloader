@@ -3134,7 +3134,7 @@ class WebChatServer:
         from nbot.gateway.trace import TraceFactory
 
         gateway = get_gateway()
-        if not gateway or not gateway.event_store:
+        if not gateway or not (gateway.log_service or gateway.event_store):
             return
 
         trace_factory = getattr(gateway, 'trace_factory', None) or TraceFactory()
@@ -3146,15 +3146,32 @@ class WebChatServer:
             raw_event = {"description": description[:200], "detail": detail[:300]}
 
         try:
-            gateway.event_store.record(
-                trace_id=trace_id,
-                channel_id=module,
-                status=action,
-                event_type="operation",
-                raw_event=raw_event,
-                metadata=metadata,
-                error=error if status == "failed" else "",
-            )
+            if gateway.log_service:
+                operation_metadata = dict(metadata or {})
+                operation_metadata.setdefault("operation_status", status)
+                gateway.record_lifecycle_event(
+                    trace_id=trace_id,
+                    channel_id=module,
+                    status=action,
+                    event_type="operation",
+                    raw_event=raw_event,
+                    metadata=operation_metadata,
+                    error=error if status == "failed" else "",
+                    action=action,
+                    level="error" if status == "failed" else "info",
+                    stage=status,
+                    message=description or action,
+                )
+            elif gateway.event_store:
+                gateway.event_store.record(
+                    trace_id=trace_id,
+                    channel_id=module,
+                    status=action,
+                    event_type="operation",
+                    raw_event=raw_event,
+                    metadata=metadata,
+                    error=error if status == "failed" else "",
+                )
         except Exception as e:
             _log.debug("[Gateway] 操作日志记录失败 module=%s action=%s: %s", module, action, str(e))
 

@@ -72,6 +72,7 @@ class GatewayLogRecord:
     request_id: str | None = None
     parent_id: str | None = None
 
+    raw_event: dict[str, Any] | None = None
     metadata: dict[str, Any] | None = None
     error_code: str | None = None
     error_message: str | None = None
@@ -100,6 +101,11 @@ class GatewayLogRecord:
             val = getattr(self, key)
             if val is not None:
                 result[key] = val
+        if self.source == "gateway":
+            result["event_type"] = self.type
+        if self.raw_event:
+            result["raw_event"] = self.raw_event
+            result["raw_event_json"] = _json.dumps(self.raw_event, ensure_ascii=False)
         if self.metadata:
             result["metadata"] = self.metadata
             # 前端兼容：提供 JSON 字符串格式

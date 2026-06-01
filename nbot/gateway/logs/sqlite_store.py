@@ -98,6 +98,7 @@ class SQLiteGatewayLogStore(GatewayLogStore):
                     request_id TEXT,
                     parent_id TEXT,
 
+                    raw_event_json TEXT,
                     metadata_json TEXT,
                     error_code TEXT,
                     error_message TEXT,
@@ -105,6 +106,12 @@ class SQLiteGatewayLogStore(GatewayLogStore):
                     created_at TEXT NOT NULL
                 )
             """)
+            columns = {
+                row["name"]
+                for row in conn.execute(f"PRAGMA table_info({TABLE_LOGS})").fetchall()
+            }
+            if "raw_event_json" not in columns:
+                conn.execute(f"ALTER TABLE {TABLE_LOGS} ADD COLUMN raw_event_json TEXT")
             indices = [
                 ("idx_gateway_logs_trace_id", "trace_id"),
                 ("idx_gateway_logs_source", "source"),
@@ -215,16 +222,16 @@ class SQLiteGatewayLogStore(GatewayLogStore):
                     f"""INSERT OR IGNORE INTO {TABLE_LOGS}
                     (id, trace_id, source, type, level, stage, action, status, message,
                      channel_id, conversation_id, user_id, message_id,
-                     metadata_json, error_message, created_at)
+                     raw_event_json, metadata_json, error_message, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
-                            ?, ?, ?, ?,
-                            ?, ?, ?)""",
+                             ?, ?, ?, ?,
+                             ?, ?, ?, ?)""",
                     (
                         log_id, d.get("trace_id"), "gateway", event_type,
                         level, stage, action, status, "",
                         d.get("channel_id"), d.get("conversation_id"),
                         d.get("user_id"), d.get("message_id"),
-                        d.get("metadata_json"), error or None,
+                        d.get("raw_event_json"), d.get("metadata_json"), error or None,
                         d.get("created_at"),
                     ),
                 )
@@ -247,6 +254,12 @@ class SQLiteGatewayLogStore(GatewayLogStore):
         """将数据库行转换为 GatewayLogRecord"""
         d = dict(row)
         metadata = None
+        raw_event = None
+        if d.get("raw_event_json"):
+            try:
+                raw_event = json.loads(d["raw_event_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
         if d.get("metadata_json"):
             try:
                 metadata = json.loads(d["metadata_json"])
@@ -272,6 +285,7 @@ class SQLiteGatewayLogStore(GatewayLogStore):
             node_id=d.get("node_id"),
             request_id=d.get("request_id"),
             parent_id=d.get("parent_id"),
+            raw_event=raw_event,
             metadata=metadata,
             error_code=d.get("error_code"),
             error_message=d.get("error_message"),
@@ -280,6 +294,9 @@ class SQLiteGatewayLogStore(GatewayLogStore):
 
     def insert(self, record: GatewayLogRecord) -> None:
         """插入一条日志记录"""
+        raw_event_json = (
+            json.dumps(record.raw_event, ensure_ascii=False) if record.raw_event else None
+        )
         meta_json = json.dumps(record.metadata, ensure_ascii=False) if record.metadata else None
         with self._connect() as conn:
             conn.execute(
@@ -289,13 +306,13 @@ class SQLiteGatewayLogStore(GatewayLogStore):
                  tool_name, channel_id, conversation_id, user_id, message_id,
                  delivery_id, queue_item_id, node_id,
                  request_id, parent_id,
-                 metadata_json, error_code, error_message,
+                 raw_event_json, metadata_json, error_code, error_message,
                  created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?,
                         ?, ?, ?,
                         ?, ?,
-                        ?, ?, ?,
+                        ?, ?, ?, ?,
                         ?)
                 """,
                 (
@@ -306,7 +323,7 @@ class SQLiteGatewayLogStore(GatewayLogStore):
                     record.user_id, record.message_id,
                     record.delivery_id, record.queue_item_id, record.node_id,
                     record.request_id, record.parent_id,
-                    meta_json, record.error_code, record.error_message,
+                    raw_event_json, meta_json, record.error_code, record.error_message,
                     record.created_at,
                 ),
             )
