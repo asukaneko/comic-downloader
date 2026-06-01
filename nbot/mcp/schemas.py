@@ -265,6 +265,29 @@ class RegisterNodeOutput(BaseModel):
 
 
 # ========================
+# Log & Lookup Tools
+# ========================
+
+
+class LookupIdInput(BaseModel):
+    """gateway_lookup_id 输入"""
+    id: str = Field(..., min_length=1, max_length=128, description="任意 Gateway ID")
+
+
+class QueryLogsInput(BaseModel):
+    """gateway_query_logs 输入"""
+    trace_id: str = Field(default="", max_length=128, description="按 trace_id 筛选")
+    source: str = Field(default="", max_length=32, description="来源筛选 (mcp, gateway, web)")
+    type: str = Field(default="", max_length=32, description="类型筛选 (mcp_tool, security, etc.)")
+    level: str = Field(default="", max_length=16, description="级别筛选 (info, warning, error)")
+    status: str = Field(default="", max_length=32, description="状态筛选")
+    tool_name: str = Field(default="", max_length=128, description="工具名筛选")
+    channel_id: str = Field(default="", max_length=64, description="频道 ID 筛选")
+    limit: int = Field(default=100, ge=1, le=500, description="返回数量上限")
+    offset: int = Field(default=0, ge=0, description="偏移量")
+
+
+# ========================
 # Capability
 # ========================
 

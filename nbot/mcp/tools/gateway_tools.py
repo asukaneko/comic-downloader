@@ -8,7 +8,7 @@
   2. 工具启用检查 (is_tool_enabled)
   3. 高危确认检查 (requires_confirmation + confirm 参数)
   4. 输入校验 (Pydantic Schema)
-  5. 执行 + 审计
+  5. 执行 + 审计 + Gateway Log
 """
 
 import json
@@ -19,12 +19,15 @@ from pydantic import ValidationError
 
 from nbot.mcp.context import MCPContext
 from nbot.mcp.errors import format_mcp_error
+from nbot.mcp.logging import MCPToolLogger
 from nbot.mcp.permissions import audit_log_entry, check_permission
 from nbot.mcp.schemas import (
     GetNodeInput,
     ListNodesInput,
+    LookupIdInput,
     QueryDeliveriesInput,
     QueryEventsInput,
+    QueryLogsInput,
     QueryTraceInput,
     ReceiveMessageInput,
     RegisterNodeInput,
@@ -125,18 +128,26 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
 
     @mcp_server.tool()
     async def gateway_query_trace(trace_id: str) -> str:
-        """根据 trace_id 查询完整事件链路"""
+        """根据 trace_id 查询完整事件链路（聚合 events + deliveries + mcp_logs + timeline）"""
+        mcp_log = MCPToolLogger(ctx)
+        mcp_log.called("gateway_query_trace", {"trace_id": trace_id})
+
         err = _preflight(ctx, "gateway_query_trace")
         if err:
+            mcp_log.denied("gateway_query_trace", err.get("error", {}).get("code", ""), {"trace_id": trace_id})
             return _err_json(err)
         err = _validate_input(QueryTraceInput, trace_id=trace_id)
         if err:
+            mcp_log.validation_failed("gateway_query_trace", {"trace_id": trace_id}, err)
             return _err_json(err)
         try:
             result = await facade.query_trace(trace_id)
+            mcp_log.completed("gateway_query_trace", {"trace_id": trace_id}, result, trace_id=trace_id)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e, trace_id=trace_id))
+            err = format_mcp_error(e, trace_id=trace_id)
+            mcp_log.failed("gateway_query_trace", {"trace_id": trace_id}, err, trace_id=trace_id)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_query_events(
@@ -146,11 +157,17 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         limit: int = 50,
     ) -> str:
         """按条件查询事件历史"""
+        mcp_log = MCPToolLogger(ctx)
+        args = {"channel_id": channel_id, "status": status, "event_type": event_type, "limit": limit}
+        mcp_log.called("gateway_query_events", args)
+
         err = _preflight(ctx, "gateway_query_events")
         if err:
+            mcp_log.denied("gateway_query_events", err.get("error", {}).get("code", ""), args)
             return _err_json(err)
         err = _validate_input(QueryEventsInput, channel_id=channel_id, status=status, event_type=event_type, limit=limit)
         if err:
+            mcp_log.validation_failed("gateway_query_events", args, err)
             return _err_json(err)
         try:
             result = await facade.query_events(
@@ -159,9 +176,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 event_type=event_type,
                 limit=limit,
             )
+            mcp_log.completed("gateway_query_events", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_query_events", args, err)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_query_deliveries(
@@ -171,11 +191,17 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         limit: int = 20,
     ) -> str:
         """查询回复投递记录"""
+        mcp_log = MCPToolLogger(ctx)
+        args = {"trace_id": trace_id, "channel_id": channel_id, "status": status, "limit": limit}
+        mcp_log.called("gateway_query_deliveries", args)
+
         err = _preflight(ctx, "gateway_query_deliveries")
         if err:
+            mcp_log.denied("gateway_query_deliveries", err.get("error", {}).get("code", ""), args)
             return _err_json(err)
         err = _validate_input(QueryDeliveriesInput, trace_id=trace_id, channel_id=channel_id, status=status, limit=limit)
         if err:
+            mcp_log.validation_failed("gateway_query_deliveries", args, err)
             return _err_json(err)
         try:
             result = await facade.query_deliveries(
@@ -184,9 +210,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 status=status,
                 limit=limit,
             )
+            mcp_log.completed("gateway_query_deliveries", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
-            return _err_json(format_mcp_error(e))
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_query_deliveries", args, err)
+            return _err_json(err)
 
     @mcp_server.tool()
     async def gateway_get_queue_stats() -> str:
@@ -231,7 +260,7 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(format_mcp_error(e))
 
     # ========================
-    # 操作型 Tools（需要 preflight + 确认 + 校验）
+    # 操作型 Tools（需要 preflight + 确认 + 校验 + Gateway Log）
     # ========================
 
     @mcp_server.tool()
@@ -247,8 +276,17 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
+        mcp_log = MCPToolLogger(ctx)
+        args = {"channel_id": channel_id, "raw_event": raw_event, "headers": headers, "remote_addr": remote_addr}
+        mcp_log.called("gateway_receive_message", args)
+
         err = _preflight(ctx, "gateway_receive_message", confirm)
         if err:
+            code = err.get("error", {}).get("code", "")
+            if code == "confirmation_required":
+                mcp_log.confirmation_required("gateway_receive_message", args)
+            else:
+                mcp_log.denied("gateway_receive_message", code, args)
             return _err_json(err)
         err = _validate_input(
             ReceiveMessageInput,
@@ -258,16 +296,18 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             remote_addr=remote_addr,
         )
         if err:
+            mcp_log.validation_failed("gateway_receive_message", args, err)
             return _err_json(err)
 
-        args = {"channel_id": channel_id, "raw_event": raw_event, "headers": headers, "remote_addr": remote_addr}
         try:
             result = await facade.receive_message(args)
             _audit(ctx, "gateway_receive_message", args, result)
+            mcp_log.completed("gateway_receive_message", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_receive_message", args, err)
+            mcp_log.failed("gateway_receive_message", args, err)
             return _err_json(err)
 
     @mcp_server.tool()
@@ -283,8 +323,17 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
+        mcp_log = MCPToolLogger(ctx)
+        args = {"channel_id": channel_id, "conversation_id": conversation_id, "content": content, "metadata": metadata}
+        mcp_log.called("gateway_send_message", args)
+
         err = _preflight(ctx, "gateway_send_message", confirm)
         if err:
+            code = err.get("error", {}).get("code", "")
+            if code == "confirmation_required":
+                mcp_log.confirmation_required("gateway_send_message", args)
+            else:
+                mcp_log.denied("gateway_send_message", code, args)
             return _err_json(err)
         err = _validate_input(
             SendMessageInput,
@@ -294,9 +343,9 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             metadata=metadata,
         )
         if err:
+            mcp_log.validation_failed("gateway_send_message", args, err)
             return _err_json(err)
 
-        args = {"channel_id": channel_id, "conversation_id": conversation_id, "content": content, "metadata": metadata}
         try:
             result = await facade.send_channel_message(
                 channel_id=channel_id,
@@ -305,10 +354,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 metadata=metadata,
             )
             _audit(ctx, "gateway_send_message", args, result)
+            mcp_log.completed("gateway_send_message", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_send_message", args, err)
+            mcp_log.failed("gateway_send_message", args, err)
             return _err_json(err)
 
     @mcp_server.tool()
@@ -326,8 +377,17 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
+        mcp_log = MCPToolLogger(ctx)
+        args = {"task_kind": task_kind, "task_id": task_id, "trigger_source": trigger_source, "metadata": metadata}
+        mcp_log.called("gateway_submit_internal_task", args)
+
         err = _preflight(ctx, "gateway_submit_internal_task", confirm)
         if err:
+            code = err.get("error", {}).get("code", "")
+            if code == "confirmation_required":
+                mcp_log.confirmation_required("gateway_submit_internal_task", args)
+            else:
+                mcp_log.denied("gateway_submit_internal_task", code, args)
             return _err_json(err)
         err = _validate_input(
             SubmitInternalTaskInput,
@@ -337,9 +397,9 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             metadata=metadata,
         )
         if err:
+            mcp_log.validation_failed("gateway_submit_internal_task", args, err)
             return _err_json(err)
 
-        args = {"task_kind": task_kind, "task_id": task_id, "trigger_source": trigger_source, "metadata": metadata}
         try:
             result = await facade.submit_internal_task(
                 task_kind=task_kind,
@@ -348,10 +408,12 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 metadata=metadata,
             )
             _audit(ctx, "gateway_submit_internal_task", args, result)
+            mcp_log.completed("gateway_submit_internal_task", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_submit_internal_task", args, err)
+            mcp_log.failed("gateway_submit_internal_task", args, err)
             return _err_json(err)
 
     @mcp_server.tool()
@@ -361,21 +423,32 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
+        mcp_log = MCPToolLogger(ctx)
+        args = {"item_id": item_id}
+        mcp_log.called("gateway_retry_dead_letter", args)
+
         err = _preflight(ctx, "gateway_retry_dead_letter", confirm)
         if err:
+            code = err.get("error", {}).get("code", "")
+            if code == "confirmation_required":
+                mcp_log.confirmation_required("gateway_retry_dead_letter", args)
+            else:
+                mcp_log.denied("gateway_retry_dead_letter", code, args)
             return _err_json(err)
         err = _validate_input(RetryDeadLetterInput, item_id=item_id)
         if err:
+            mcp_log.validation_failed("gateway_retry_dead_letter", args, err)
             return _err_json(err)
 
-        args = {"item_id": item_id}
         try:
             result = await facade.retry_dead_letter(item_id)
             _audit(ctx, "gateway_retry_dead_letter", args, result)
+            mcp_log.completed("gateway_retry_dead_letter", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_retry_dead_letter", args, err)
+            mcp_log.failed("gateway_retry_dead_letter", args, err)
             return _err_json(err)
 
     # ========================
@@ -396,8 +469,17 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
         Args:
             confirm: 高危操作需显式确认 (confirm=true)
         """
+        mcp_log = MCPToolLogger(ctx)
+        args = {"node_id": node_id, "node_type": node_type, "version": version, "address": address}
+        mcp_log.called("gateway_register_node", args)
+
         err = _preflight(ctx, "gateway_register_node", confirm)
         if err:
+            code = err.get("error", {}).get("code", "")
+            if code == "confirmation_required":
+                mcp_log.confirmation_required("gateway_register_node", args)
+            else:
+                mcp_log.denied("gateway_register_node", code, args)
             return _err_json(err)
         err = _validate_input(
             RegisterNodeInput,
@@ -408,9 +490,9 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
             metadata=metadata,
         )
         if err:
+            mcp_log.validation_failed("gateway_register_node", args, err)
             return _err_json(err)
 
-        args = {"node_id": node_id, "node_type": node_type, "version": version, "address": address}
         try:
             result = await facade.register_node(
                 node_id=node_id,
@@ -420,10 +502,96 @@ def register_gateway_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 metadata=metadata,
             )
             _audit(ctx, "gateway_register_node", args, result)
+            mcp_log.completed("gateway_register_node", args, result)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             err = format_mcp_error(e)
             _audit(ctx, "gateway_register_node", args, err)
+            mcp_log.failed("gateway_register_node", args, err)
+            return _err_json(err)
+
+    # ========================
+    # 日志与追踪 Tools（Step 5 新增）
+    # ========================
+
+    @mcp_server.tool()
+    async def gateway_lookup_id(id: str) -> str:
+        """自动识别任意 Gateway ID 的类型
+
+        输入任意 gw id，系统自动判断它是 trace_id、event_id、
+        delivery_id、queue_item_id、message_id 还是 mcp_log_id，
+        并返回匹配结果和建议的下一步操作。
+        """
+        mcp_log = MCPToolLogger(ctx)
+        args = {"id": id}
+        mcp_log.called("gateway_lookup_id", args)
+
+        err = _preflight(ctx, "gateway_lookup_id")
+        if err:
+            mcp_log.denied("gateway_lookup_id", err.get("error", {}).get("code", ""), args)
+            return _err_json(err)
+        err = _validate_input(LookupIdInput, id=id)
+        if err:
+            mcp_log.validation_failed("gateway_lookup_id", args, err)
+            return _err_json(err)
+        try:
+            result = await facade.lookup_id(id)
+            mcp_log.completed("gateway_lookup_id", args, result)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_lookup_id", args, err)
+            return _err_json(err)
+
+    @mcp_server.tool()
+    async def gateway_query_logs(
+        trace_id: str = "",
+        source: str = "",
+        type: str = "",
+        level: str = "",
+        status: str = "",
+        tool_name: str = "",
+        channel_id: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> str:
+        """查询统一 Gateway 日志
+
+        支持按 source（mcp/gateway/web）、type（mcp_tool/security 等）、
+        level（info/warning/error）、tool_name、trace_id 等条件筛选。
+        """
+        mcp_log = MCPToolLogger(ctx)
+        args = {
+            "trace_id": trace_id, "source": source, "type": type,
+            "level": level, "status": status, "tool_name": tool_name,
+            "channel_id": channel_id, "limit": limit, "offset": offset,
+        }
+        mcp_log.called("gateway_query_logs", args)
+
+        err = _preflight(ctx, "gateway_query_logs")
+        if err:
+            mcp_log.denied("gateway_query_logs", err.get("error", {}).get("code", ""), args)
+            return _err_json(err)
+        err = _validate_input(
+            QueryLogsInput,
+            trace_id=trace_id, source=source, type=type,
+            level=level, status=status, tool_name=tool_name,
+            channel_id=channel_id, limit=limit, offset=offset,
+        )
+        if err:
+            mcp_log.validation_failed("gateway_query_logs", args, err)
+            return _err_json(err)
+        try:
+            result = await facade.query_logs(
+                trace_id=trace_id, source=source, type=type,
+                level=level, status=status, tool_name=tool_name,
+                channel_id=channel_id, limit=limit, offset=offset,
+            )
+            mcp_log.completed("gateway_query_logs", args, result)
+            return json.dumps(result, ensure_ascii=False)
+        except Exception as e:
+            err = format_mcp_error(e)
+            mcp_log.failed("gateway_query_logs", args, err)
             return _err_json(err)
 
 

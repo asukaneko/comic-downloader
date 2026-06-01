@@ -21,6 +21,9 @@ TOOL_PERMISSIONS: dict[str, str] = {
     "gateway_get_queue_stats": "queue.read",
     "gateway_list_nodes": "node.read",
     "gateway_get_node": "node.read",
+    # 日志与追踪
+    "gateway_lookup_id": "events.query",
+    "gateway_query_logs": "events.query",
     # 操作型
     "gateway_receive_message": "events.publish",
     "gateway_send_message": "channels.send",

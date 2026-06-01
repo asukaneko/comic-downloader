@@ -104,22 +104,117 @@ class GatewayFacade:
     # ========================
 
     async def query_trace(self, trace_id: str) -> dict[str, Any]:
-        """根据 trace_id 查询完整事件链路"""
+        """根据 trace_id 聚合查询完整链路
+
+        升级为聚合查询：events + deliveries + mcp_logs + timeline。
+        空结果时返回 diagnostics 诊断信息。
+        """
+        if self._gateway.log_service:
+            return self._gateway.log_service.aggregate_trace(
+                trace_id,
+                event_store=self._gateway.event_store,
+                delivery_store=self._gateway.delivery_store_obj,
+                queue=self._gateway.queue,
+            )
+
+        # 回退：无 log_service 时只查 event_store
         if not self._gateway.event_store:
             return {
-                "ok": False,
+                "ok": True,
                 "trace_id": trace_id,
+                "summary": {"events_count": 0, "deliveries_count": 0, "queue_items_count": 0, "mcp_logs_count": 0, "has_content": False},
                 "events": [],
-                "error": "event store not available",
+                "deliveries": [],
+                "queue_items": [],
+                "mcp_logs": [],
+                "timeline": [],
+                "diagnostics": {
+                    "reason": "event store not available",
+                    "possible_causes": ["storage not configured"],
+                    "next_step": "check gateway configuration",
+                },
             }
 
         raw_events = self._gateway.event_store.get_by_trace(trace_id)
         events = [_sanitize_event(ev) for ev in raw_events]
+        has_content = len(events) > 0
 
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "trace_id": trace_id,
+            "summary": {
+                "events_count": len(events),
+                "deliveries_count": 0,
+                "queue_items_count": 0,
+                "mcp_logs_count": 0,
+                "has_content": has_content,
+            },
             "events": events,
+            "deliveries": [],
+            "queue_items": [],
+            "mcp_logs": [],
+            "timeline": [],
+        }
+
+        if not has_content:
+            result["diagnostics"] = {
+                "reason": "no records found for this trace_id",
+                "possible_causes": [
+                    "the given id is not a trace_id",
+                    "the event was not persisted",
+                    "the id belongs to delivery, queue or message instead",
+                ],
+                "next_step": "call gateway_lookup_id with the same id",
+            }
+
+        return result
+
+    async def lookup_id(self, value: str) -> dict[str, Any]:
+        """识别任意 ID 的类型"""
+        if not self._gateway.log_service:
+            return {"ok": False, "error": "log service not available"}
+
+        return self._gateway.log_service.lookup_id(
+            value,
+            event_store=self._gateway.event_store,
+            delivery_store=self._gateway.delivery_store_obj,
+            queue=self._gateway.queue,
+        )
+
+    async def query_logs(
+        self,
+        *,
+        trace_id: str = "",
+        source: str = "",
+        type: str = "",
+        level: str = "",
+        status: str = "",
+        tool_name: str = "",
+        channel_id: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """查询统一日志"""
+        if not self._gateway.log_service:
+            return {"ok": False, "items": [], "error": "log service not available"}
+
+        records = self._gateway.log_service.query(
+            trace_id=trace_id,
+            source=source,
+            type=type,
+            level=level,
+            status=status,
+            tool_name=tool_name,
+            channel_id=channel_id,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "ok": True,
+            "items": [r.to_dict() for r in records],
+            "count": len(records),
+            "limit": limit,
+            "offset": offset,
         }
 
     async def query_events(

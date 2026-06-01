@@ -178,6 +178,16 @@ class ChannelGateway:
         self.rate_limiter = rate_limiter or RateLimiter()
         self.dispatcher = dispatcher or GatewayDispatcher()
 
+        # 统一日志服务
+        self.log_service: Any = None
+        if storage:
+            from nbot.gateway.logs.service import GatewayLogService
+            from nbot.gateway.logs.sqlite_store import SQLiteGatewayLogStore
+
+            log_store = SQLiteGatewayLogStore(data_dir=storage.data_dir)
+            self.log_service = GatewayLogService(log_store)
+            _log.info("[Gateway] 统一日志服务已启用")
+
         # 异步模式组件
         self._queue = queue
         self._worker = worker
