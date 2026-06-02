@@ -21,6 +21,7 @@ python-dotenv
 pyyaml
 Pillow==11.0.0
 configparser == 7.2.0
+mcp
 # 网络请求
 httpx>=0.25.0
 requests~=2.32.3
@@ -72,3 +73,4 @@ feedparser
 # ---------- Web Push 通知 ----------
 py-vapid>=1.8,<1.9
 pywebpush>=2.0.3
+
