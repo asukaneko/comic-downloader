@@ -32,6 +32,9 @@ retry_require_confirmation = true
 
 ; 审计日志
 audit_enabled = true
+
+; 授予 MCP 全部权限（本地 stdio 模式建议开启）
+admin = false
 ```
 
 ### 配置项说明
@@ -41,6 +44,13 @@ audit_enabled = true
 | send_message_enabled | bool | false | 是否启用 `gateway_send_message` 工具 |
 | retry_require_confirmation | bool | true | `gateway_retry_dead_letter` 是否需要确认 |
 | audit_enabled | bool | true | 是否记录审计日志 |
+| admin | bool | false | 是否授予 MCP 全部权限（admin scope） |
+
+::: warning 工具启用 ≠ 权限授予
+`send_message_enabled` 只控制工具是否**可用**，不控制是否有**权限**调用。
+即使工具已启用，如果未授予对应权限，调用时仍会返回 `permission_denied`。
+本地使用建议设置 `admin = true` 以授予全部权限。
+:::
 
 ## Gateway 配置段
 
@@ -76,22 +86,43 @@ storage_enabled = true
 data_dir = data/web
 
 [mcp]
-send_message_enabled = false
+; 启用发送消息工具
+send_message_enabled = true
+; 重试死信需要确认
 retry_require_confirmation = true
+; 审计日志
 audit_enabled = true
+; 授予全部权限（本地使用必开）
+admin = true
 ```
 
 ## 权限配置
 
-本地 stdio 模式默认具有所有权限（admin）。未来远程 HTTP 模式将支持更细粒度的权限控制。
+MCP 工具调用经过两层检查：
 
-默认权限范围：
+1. **工具是否启用** — 由 `send_message_enabled` 等配置控制
+2. **是否有权限调用** — 由 `admin` 配置控制
+
+### 权限模型
+
+| 权限级别 | Scope | 说明 |
+|----------|-------|------|
+| 只读 | gateway.read, events.query, queue.read, node.read | 查看状态、查询事件/日志 |
+| 操作 | events.publish, channels.send, worker.manage | 发送消息、触发任务 |
+| 管理 | gateway.manage, queue.manage, node.manage | 管理队列和节点 |
+| 超级管理 | admin | 包含以上所有权限 |
+
+默认只授予 4 个只读 scope。要使用操作型工具（如发送消息、重试死信等），需要开启 `admin`：
 
 ```ini
 [mcp]
-; 以下配置仅在远程 HTTP 模式生效
-; default_scopes = gateway.read, events.query, queue.read, node.read
+; 授予全部权限，本地使用建议开启
+admin = true
 ```
+
+::: tip
+配置修改后需要**重启 MCP Server** 才能生效（配置在启动时加载，不支持热更新）。
+:::
 
 ## 启动参数
 
@@ -170,5 +201,6 @@ python bot.py --mcp --web-port 8080
 
 ### 工具调用返回 permission_denied
 
-1. 本地 stdio 模式默认全权限，检查是否使用了其他传输模式
-2. 检查 `[mcp]` 段的配置是否正确
+1. 确认 `config.ini` 中 `[mcp]` 段有 `admin = true`
+2. 确认已**重启 MCP Server**（配置不支持热更新）
+3. 检查 `send_message_enabled` 是否已启用对应工具

@@ -250,6 +250,15 @@ class GatewayLogService:
         delivery = delivery_store.get_by_trace(trace_id) if delivery_store else None
         deliveries = [delivery] if delivery else []
         all_logs = self._store.get_by_trace(trace_id)
+
+        # 回退：前端对无 trace_id 的记录构造了 event-{log_id} 伪 ID，
+        # 按 trace_id 查不到时，尝试提取 log ID 并按 ID 查询。
+        if not all_logs and trace_id.startswith("event-"):
+            log_id = trace_id[len("event-"):]
+            record = self._store.get_by_id(log_id)
+            if record:
+                all_logs = [record]
+
         mcp_logs = _filter_event_mirror_logs(raw_events, all_logs)
 
         # queue items

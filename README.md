@@ -295,6 +295,8 @@ send_message_enabled = false
 retry_require_confirmation = true
 ; 审计日志
 audit_enabled = true
+; 授予 MCP 全部权限（本地使用建议开启）
+admin = true
 
 [gateway]
 ; Gateway 持久化存储（启用后可查询历史事件）

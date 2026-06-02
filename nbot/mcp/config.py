@@ -94,6 +94,10 @@ def load_mcp_config(
             audit_enabled = cp.getboolean("mcp", "audit_enabled", fallback=True)
             config["audit"]["enabled"] = audit_enabled
 
+            # 权限：admin = true 时授予全部权限（适用于本地 stdio 模式）
+            admin_enabled = cp.getboolean("mcp", "admin", fallback=False)
+            config["permissions"]["admin"] = admin_enabled
+
         if cp.has_section("gateway"):
             storage_enabled = cp.getboolean("gateway", "storage_enabled", fallback=True)
             config["gateway"]["storage"]["enabled"] = storage_enabled
