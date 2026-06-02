@@ -224,13 +224,29 @@ def _load_mcp_config_and_run():
     from nbot.mcp.config import load_mcp_config
 
     config = load_mcp_config()
+    transport = config.get("transport", "stdio")
 
     # 启动 MCP Server。MCPContext 会优先复用已存在的全局 Gateway；
     # mcp-only 模式下没有全局实例时，才会根据 config 创建一个共享同一数据目录的 Gateway。
     from nbot.mcp.server import create_mcp_server
     mcp = create_mcp_server(config)
-    _log.info("Starting MCP Server (stdio)...")
-    mcp.run(transport="stdio")
+
+    if transport == "streamable-http":
+        host = config.get("server", {}).get("host", "127.0.0.1")
+        port = config.get("server", {}).get("port", 5001)
+        _log.info("Starting MCP Server (streamable-http) on %s:%s ...", host, port)
+    else:
+        _log.info("Starting MCP Server (stdio)...")
+
+    mcp.run(transport=transport)
+
+
+def run_mcp_connect(url: str):
+    """连接远程 MCP Server 并启动交互式客户端"""
+    import asyncio
+    from nbot.mcp.client import run_mcp_connect as _run_connect
+    _log.info("Connecting to remote MCP Server: %s", url)
+    asyncio.run(_run_connect(url))
 
 
 def _has_qq_bot_config():
@@ -265,16 +281,37 @@ if __name__ == "__main__":
     cli_and_web = "--cli-and-web" in sys.argv
     mcp_mode = "--mcp" in sys.argv
     mcp_only = "--mcp-only" in sys.argv
+    mcp_connect = "--mcp-connect" in sys.argv
     web_port = 5000
     web_host = "0.0.0.0"
 
+    mcp_connect_url = ""
     for i, arg in enumerate(sys.argv):
         if arg == "--web-port" and i + 1 < len(sys.argv):
             web_port = int(sys.argv[i + 1])
         if arg == "--web-host" and i + 1 < len(sys.argv):
             web_host = sys.argv[i + 1]
+        if arg == "--mcp-connect" and i + 1 < len(sys.argv):
+            mcp_connect_url = sys.argv[i + 1]
 
-    if mcp_only:
+    if mcp_connect:
+        # MCP 客户端模式 - 连接远程 MCP Server
+        if not mcp_connect_url:
+            # 从 config.ini 读取 connect_url
+            try:
+                import configparser
+                cp = configparser.ConfigParser()
+                cp.read("config.ini", encoding="utf-8")
+                mcp_connect_url = cp.get("mcp", "connect_url", fallback="")
+            except Exception:
+                pass
+        if not mcp_connect_url:
+            print("错误: 请指定远程 MCP Server URL")
+            print("用法: python bot.py --mcp-connect <url>")
+            print("示例: python bot.py --mcp-connect http://127.0.0.1:5001/mcp")
+            sys.exit(1)
+        run_mcp_connect(mcp_connect_url)
+    elif mcp_only:
         # 仅 MCP 模式 - 不启动 Bot 和 Web
         run_mcp_only()
     elif mcp_mode:

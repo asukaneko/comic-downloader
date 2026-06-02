@@ -5678,7 +5678,7 @@
                                             :class="{ 'has-error': group.hasError }"
                                         >
                                             <tr class="gateway-trace-summary-row">
-                                                <td colspan="6">
+                                                <td colspan="5">
                                                     <div class="gateway-trace-summary">
                                                         <div class="gateway-trace-group-title">
                                                             <span class="gateway-trace-dot"></span>
@@ -5688,11 +5688,13 @@
                                                         <div class="gateway-trace-group-meta">
                                                             <span>{{ formatGatewayTime(group.first.created_at) }}</span>
                                                             <span v-if="getSessionName(group.first)">{{ getSessionName(group.first) }}</span>
-                                                            <button class="btn-icon-sm" @click="showGatewayTrace(group.traceId)" title="&#26597;&#30475;&#23436;&#25972;&#38142;&#36335;">
-                                                                <i class="fas fa-stream"></i>
-                                                            </button>
                                                         </div>
                                                     </div>
+                                                </td>
+                                                <td>
+                                                    <button class="btn-icon-sm" @click="showGatewayTrace(group.traceId)" title="&#26597;&#30475;&#23436;&#25972;&#38142;&#36335;">
+                                                        <i class="fas fa-stream"></i>
+                                                    </button>
                                                 </td>
                                             </tr>
                                             <tr v-for="log in group.logs" :key="log.id"
@@ -5779,7 +5781,7 @@
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <button class="btn-icon-sm" @click="showGatewayTrace(log.trace_id)" title="查看完整链路">
+                                                    <button class="btn-icon-sm" @click="showGatewayTrace(log.trace_id || 'event-' + log.id)" title="查看完整链路">
                                                         <i class="fas fa-stream"></i>
                                                     </button>
                                                 </td>

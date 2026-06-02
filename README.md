@@ -297,11 +297,42 @@ retry_require_confirmation = true
 audit_enabled = true
 ; 授予 MCP 全部权限（本地使用建议开启）
 admin = true
+; 传输模式: stdio (本地) | streamable-http (远程)
+transport = stdio
+; 服务端配置（streamable-http 模式）
+host = 127.0.0.1
+port = 5001
+; 远程连接 URL（--mcp-connect 使用）
+connect_url = http://127.0.0.1:5001/mcp
 
 [gateway]
 ; Gateway 持久化存储（启用后可查询历史事件）
 storage_enabled = true
 data_dir = data/web
+```
+
+### 远程连接
+
+MCP Server 支持 `streamable-http` 远程访问：
+
+```bash
+# 服务端：config.ini 设置 transport = streamable-http，然后启动
+python bot.py --mcp-only
+
+# 客户端：连接远程 MCP Server
+python bot.py --mcp-connect http://192.168.1.100:5001/mcp
+```
+
+Claude Code 远程连接配置（`.mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "nekobot": {
+      "url": "http://192.168.1.100:5001/mcp"
+    }
+  }
+}
 ```
 
 ### 可用 Tools
@@ -321,6 +352,8 @@ data_dir = data/web
 | `gateway_submit_internal_task` | 触发内部任务 | 操作 |
 | `gateway_retry_dead_letter` | 重试死信 | 高危 |
 | `gateway_register_node` | 注册节点 | 操作 |
+  
+查看详细文档：[docs/MCP](./docs/docs/guide/nbot/mcp/index.md)
 
 ## Security Notes
 

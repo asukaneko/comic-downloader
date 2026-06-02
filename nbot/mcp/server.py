@@ -39,9 +39,15 @@ def create_mcp_server(config: dict[str, Any] | None = None) -> Any:
     config = config or {}
     ctx = create_mcp_context(config)
 
+    server_cfg = config.get("server", {})
+    host = server_cfg.get("host", "127.0.0.1")
+    port = server_cfg.get("port", 5001)
+
     mcp = FastMCP(
         "nekobot-gateway",
         instructions="NekoBot Gateway control and observation interface for AI Agents",
+        host=host,
+        port=port,
     )
 
     # Register tools
@@ -67,12 +73,18 @@ def main():
     )
 
     config = load_mcp_config()
+    transport = config.get("transport", "stdio")
 
     mcp = create_mcp_server(config)
-    _log.info("[MCP] Starting NekoBot Gateway MCP Server (stdio)...")
 
-    # Run with stdio transport
-    mcp.run(transport="stdio")
+    if transport == "streamable-http":
+        host = config.get("server", {}).get("host", "127.0.0.1")
+        port = config.get("server", {}).get("port", 5001)
+        _log.info("[MCP] Starting NekoBot Gateway MCP Server (streamable-http) on %s:%s ...", host, port)
+    else:
+        _log.info("[MCP] Starting NekoBot Gateway MCP Server (stdio)...")
+
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":

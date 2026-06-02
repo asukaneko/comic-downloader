@@ -44,6 +44,8 @@ class MCPToolLogger:
         if hasattr(ctx, "gateway") and hasattr(ctx.gateway, "log_service"):
             self._log_service = ctx.gateway.log_service
         self._started_at: float = time.monotonic()
+        self._cached_args: dict[str, Any] = {}
+        self._cached_args_preview: str = ""
 
     # ------------------------------------------------------------------
     # 内部辅助
@@ -67,7 +69,7 @@ class MCPToolLogger:
     # ------------------------------------------------------------------
 
     def called(self, tool_name: str, args: dict[str, Any]) -> None:
-        """记录工具调用开始"""
+        """记录工具调用开始（仅 Python log，Gateway 日志在 completed/failed 时统一写入）"""
         safe = _safe_args(args)
         args_preview = _format_args_for_log(safe)
 
@@ -77,20 +79,9 @@ class MCPToolLogger:
             args_preview,
         )
 
-        self._record(
-            source="mcp",
-            type="mcp_tool",
-            level="info",
-            stage="called",
-            action=tool_name,
-            status="pending",
-            message=f"MCP tool called: {tool_name}",
-            tool_name=tool_name,
-            metadata={
-                "args": safe,
-                "args_preview": args_preview,
-            },
-        )
+        # 缓存 args 供 completed/failed 使用
+        self._cached_args = safe
+        self._cached_args_preview = args_preview
 
     def denied(self, tool_name: str, reason: str, args: dict[str, Any]) -> None:
         """记录权限拒绝"""
@@ -197,7 +188,9 @@ class MCPToolLogger:
 
         result_summary = _build_result_summary(result)
         result_keys = list(result.keys()) if isinstance(result, dict) else []
-        safe = _safe_args(args)
+        # 使用缓存的 args（来自 called），如果没有则重新计算
+        safe = self._cached_args or _safe_args(args)
+        args_preview = self._cached_args_preview or _format_args_for_log(safe)
 
         _log.info(
             "[MCP] ✓ tool=%s elapsed=%sms summary=%s result_keys=%s trace=%s",
@@ -220,6 +213,7 @@ class MCPToolLogger:
             trace_id=trace_id,
             metadata={
                 "args": safe,
+                "args_preview": args_preview,
                 "result_summary": result_summary,
                 "result_keys": result_keys,
                 "elapsed_ms": elapsed,
@@ -241,7 +235,9 @@ class MCPToolLogger:
         err_info = error.get("error", {}) if isinstance(error.get("error"), dict) else {}
         err_code = err_info.get("code", "unknown")
         err_msg = err_info.get("message", str(error))
-        safe = _safe_args(args)
+        # 使用缓存的 args（来自 called），如果没有则重新计算
+        safe = self._cached_args or _safe_args(args)
+        args_preview = self._cached_args_preview or _format_args_for_log(safe)
 
         _log.error(
             "[MCP] ✕ FAILED tool=%s elapsed=%sms code=%s error=%s trace=%s args=%s",
@@ -250,7 +246,7 @@ class MCPToolLogger:
             err_code,
             err_msg,
             trace_id or "-",
-            _format_args_for_log(safe),
+            args_preview,
         )
 
         self._record(
@@ -267,6 +263,7 @@ class MCPToolLogger:
             error_message=err_msg,
             metadata={
                 "args": safe,
+                "args_preview": args_preview,
                 "elapsed_ms": elapsed,
                 "error_detail": err_info,
             },
