@@ -6920,7 +6920,7 @@
                 padding: 10px 14px;
                 font-size: 16px; /* 防止 iOS 缩放 */
                 min-height: 44px;
-                max-height: 120px;
+                max-height: clamp(132px, 36vh, 240px);
             }
 
             .chat-input-actions {
@@ -8073,6 +8073,8 @@
             background: transparent;
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
+            position: relative;
+            isolation: isolate;
         }
 
         .chat-main .chat-input-area {
@@ -8322,16 +8324,79 @@
 
         .chat-input-wrapper {
             display: flex;
-            gap: 10px;
-            align-items: center;
+            gap: 8px;
+            align-items: flex-end;
+            position: relative;
             min-height: 58px;
             padding: 7px 8px;
             border: 1px solid color-mix(in srgb, var(--border-color) 55%, transparent);
-            border-radius: 999px;
-            background: color-mix(in srgb, var(--bg-secondary) 92%, white 8%);
-            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.18);
+            border-radius: 30px;
+            background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+            box-shadow: 0 16px 38px rgba(0, 0, 0, 0.16);
             backdrop-filter: blur(18px);
             -webkit-backdrop-filter: blur(18px);
+            transition:
+                background 0.24s ease,
+                border-color 0.24s ease,
+                box-shadow 0.24s ease,
+                border-radius 0.35s ease,
+                min-height 0.35s cubic-bezier(0.34, 1.2, 0.64, 1);
+        }
+
+        /* ChatGPT-like composer: one stable surface, subtle focus response. */
+        .chat-input-wrapper.chat-input-wrapper.input-focused {
+            border-color: color-mix(in srgb, var(--border-color) 64%, var(--accent-primary) 36%);
+            box-shadow:
+                0 0 0 2px color-mix(in srgb, var(--accent-primary) 14%, transparent),
+                0 16px 38px rgba(0, 0, 0, 0.16);
+        }
+
+        .chat-input-wrapper.input-multiline {
+            border-radius: 28px;
+            padding-top: 9px;
+            padding-bottom: 9px;
+        }
+
+        .chat-input-wrapper.input-focused .chat-input-container {
+            position: relative;
+            z-index: 1;
+            padding: 0;
+            border-color: transparent;
+            background: transparent;
+            box-shadow: none;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
+
+        .chat-input-wrapper .chat-actions .file-upload-trigger {
+            width: 44px;
+            height: 44px;
+            min-width: 44px;
+            border-radius: 50%;
+            color: var(--text-secondary);
+            background: transparent;
+            border-color: transparent;
+            transition:
+                background 0.24s ease,
+                border-color 0.24s ease,
+                box-shadow 0.24s ease,
+                color 0.24s ease;
+            transform-origin: 50% 50%;
+        }
+
+        .chat-input-wrapper.input-focused .chat-actions .file-upload-menu > .file-upload-trigger,
+        .chat-input-wrapper .chat-actions .file-upload-menu.active > .file-upload-trigger {
+            position: relative;
+            z-index: 2;
+            color: var(--text-primary);
+            background: color-mix(in srgb, var(--bg-primary) 48%, transparent);
+            border-color: transparent;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        }
+
+        .chat-input-wrapper .chat-actions .file-upload-trigger:hover {
+            color: var(--text-primary);
+            background: color-mix(in srgb, var(--bg-primary) 42%, transparent);
         }
 
         .chat-input-container {
@@ -8342,6 +8407,18 @@
             position: relative;
             order: 2;
             min-width: 0;
+            border: 1px solid transparent;
+            background: transparent;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            box-sizing: border-box;
+            transition:
+                padding 0.24s ease,
+                background 0.24s ease,
+                border-color 0.24s ease,
+                border-radius 0.35s ease,
+                box-shadow 0.24s ease,
+                min-height 0.35s cubic-bezier(0.34, 1.2, 0.64, 1);
         }
 
         .chat-input-header {
@@ -8371,17 +8448,22 @@
         }
 
         .chat-input {
-            flex: 1;
+            flex: 0 1 auto;
+            width: 100%;
+            box-sizing: border-box;
             background: transparent;
             border: 0;
             border-radius: 0;
             padding: 12px 4px;
             color: var(--text-primary);
             font-size: 15px;
+            line-height: 22px;
             resize: none;
             min-height: 44px;
+            max-height: clamp(160px, 45vh, 360px);
+            overflow-y: hidden;
             outline: none;
-            transition: all 0.3s ease;
+            transition: height 0.16s ease, color 0.2s ease;
         }
 
         .chat-input:focus {
@@ -8764,6 +8846,24 @@
 
         .chat-input-wrapper .file-upload-menu.active > .btn::after {
             transform: translate(-50%, -50%) rotate(135deg);
+        }
+
+        .chat-input-wrapper .file-upload-menu > .file-upload-trigger,
+        .chat-input-wrapper .chat-actions .chat-input-expand-btn {
+            color: var(--text-secondary);
+            background: transparent;
+            border-color: transparent;
+            box-shadow: none;
+        }
+
+        .chat-input-wrapper.input-focused .file-upload-menu > .file-upload-trigger,
+        .chat-input-wrapper .file-upload-menu.active > .file-upload-trigger,
+        .chat-input-wrapper .file-upload-menu > .file-upload-trigger:hover,
+        .chat-input-wrapper .chat-actions .chat-input-expand-btn:hover {
+            color: var(--text-primary);
+            background: color-mix(in srgb, var(--bg-primary) 34%, transparent);
+            border-color: transparent;
+            box-shadow: none;
         }
 
         .chat-input-wrapper .chat-actions > .btn-primary,
@@ -18262,6 +18362,21 @@
             -webkit-backdrop-filter: blur(12px);
         }
 
+        body.has-bg-image .chat-input-wrapper .chat-input-container,
+        body.has-bg-image .chat-input-wrapper .chat-input {
+            background: transparent;
+            border-color: transparent;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
+
+        body.has-bg-image .chat-input-wrapper.input-focused {
+            border-color: color-mix(in srgb, var(--border-color) 64%, var(--accent-primary) 36%);
+            box-shadow:
+                0 0 0 2px color-mix(in srgb, var(--accent-primary) 14%, transparent),
+                0 16px 38px rgba(0, 0, 0, 0.16);
+        }
+
         [data-theme="light"] .global-thinking-cards .thinking-card,
         [data-theme="light"] .message-thinking-cards .thinking-card,
         [data-theme="light"] .global-thinking-cards .thinking-card.is-complete,
@@ -18659,6 +18774,13 @@
                 -webkit-backdrop-filter: blur(18px);
             }
 
+            .chat-input-wrapper.input-multiline {
+                align-items: flex-end;
+                border-radius: 26px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+            }
+
             .chat-input-container {
                 flex: 1 1 auto;
                 min-width: 0;
@@ -18666,9 +18788,9 @@
             }
 
             .chat-input {
-                height: 42px;
+                height: auto;
                 min-height: 42px;
-                max-height: 42px;
+                max-height: clamp(132px, 36dvh, 240px);
                 padding: 10px 4px;
                 border: 0;
                 border-radius: 0;
@@ -18841,6 +18963,24 @@
 
             .chat-input-wrapper .chat-actions .file-upload-menu.active > .btn::after {
                 transform: translate(-50%, -50%) rotate(135deg);
+            }
+
+            .chat-input-wrapper .chat-actions .file-upload-menu > .file-upload-trigger,
+            .chat-input-wrapper .chat-actions .chat-input-expand-btn {
+                color: var(--text-secondary);
+                background: transparent;
+                border-color: transparent;
+                box-shadow: none;
+            }
+
+            .chat-input-wrapper.input-focused .chat-actions .file-upload-menu > .file-upload-trigger,
+            .chat-input-wrapper .chat-actions .file-upload-menu.active > .file-upload-trigger,
+            .chat-input-wrapper .chat-actions .file-upload-menu > .file-upload-trigger:hover,
+            .chat-input-wrapper .chat-actions .chat-input-expand-btn:hover {
+                color: var(--text-primary);
+                background: color-mix(in srgb, var(--bg-primary) 34%, transparent);
+                border-color: transparent;
+                box-shadow: none;
             }
 
             .chat-input-wrapper .chat-actions > .btn-primary,
@@ -19465,9 +19605,9 @@
             }
 
             .chat-input {
-                height: 36px;
+                height: auto;
                 min-height: 36px;
-                max-height: 36px;
+                max-height: clamp(132px, 36dvh, 240px);
                 padding: 7px 10px;
                 line-height: 20px;
             }

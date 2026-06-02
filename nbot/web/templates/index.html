@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260528';
+        window.__nbotAssetVersion = '20260602-composer3';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260542">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260602-composer3">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -1638,7 +1638,7 @@
                                             </button>
                                         </div>
                                     </div>
-                                    <div class="chat-input-wrapper">
+                                    <div class="chat-input-wrapper" :class="{ 'input-focused': inputFocused || showFileMenu, 'input-multiline': inputMultiline }">
                                         <div class="chat-input-container">
                                             <textarea
                                                 v-model="inputMessage"
@@ -1648,6 +1648,8 @@
                                                 :disabled="currentSession?.read_only"
                                                 @input="handleInputMessageChange"
                                                 @keydown="handleChatInputKeydown"
+                                                @focus="handleInputFocus"
+                                                @blur="handleInputBlur"
                                                 rows="1"
                                             ></textarea>
                                             <div v-if="showCommandCategorySuggestions || showCommandSuggestions" class="command-suggestions">
@@ -1780,7 +1782,7 @@
                                             </button>
                                             <!-- 文件上传菜单 -->
                                             <div v-if="!currentSession?.read_only" class="file-upload-menu" :class="{ active: showFileMenu }" v-click-outside="closeFileMenu">
-                                                <button class="btn btn-icon" @click="toggleFileMenu" :disabled="isLoading" title="上传文件">
+                                                <button class="btn btn-icon file-upload-trigger" @click="toggleFileMenu" :disabled="isLoading" title="上传文件">
                                                     <i class="fas fa-paperclip"></i>
                                                 </button>
                                                 <div class="file-menu-dropdown" v-show="showFileMenu">
@@ -9214,7 +9216,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260539b"></script>
+    <script src="/static/js/nbot-methods.js?v=20260602-composer3"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -10099,6 +10101,9 @@
                     expandEditorContent: '',
                     expandEditorMode: 'edit',  // 'edit' 或 'preview'
                     expandEditorCallback: null,
+                    // Chat input dynamic state.
+                    inputFocused: false,
+                    inputMultiline: false,
                     // 工作区浏览器
                     showWorkspaceBrowser: false,
                     workspaceFiles: [],

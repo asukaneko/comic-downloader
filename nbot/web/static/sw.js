@@ -1,5 +1,5 @@
 // NekoBot Service Worker
-const CACHE_NAME = 'nekobot-v20260527';
+const CACHE_NAME = 'nekobot-v20260602-composer3';
 const STATIC_ASSETS = [
     '/',
     '/static/css/app.css',

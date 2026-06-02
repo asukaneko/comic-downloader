@@ -5767,6 +5767,7 @@ def main(params):
 
                     this.inputMessage = '';
                     this.uploadedFiles = [];
+                    this.queueAutoResizeTextarea();
 
                     // 如果正在加载，或者当前会话有待发送队列消息，都应入队以保证顺序
                     const hasQueuedMessages = (this.pendingMessageQueues[this.currentSession.id] || []).length > 0;
@@ -5897,6 +5898,7 @@ def main(params):
                 },
 
                 handleInputMessageChange() {
+                    this.queueAutoResizeTextarea();
                     if (this.commandQuery !== '/') {
                         this.selectedCommandCategory = null;
                     }
@@ -5979,6 +5981,7 @@ def main(params):
                     this.selectedCommandCategory = null;
                     this.activeCommandSuggestionIndex = 0;
                     this.$nextTick(() => {
+                        this.queueAutoResizeTextarea();
                         if (this.$refs.chatInput) {
                             this.$refs.chatInput.focus();
                         }
@@ -6137,7 +6140,7 @@ def main(params):
                             this.showToast('语音识别成功', 'success');
                             // 自动调整输入框高度
                             this.$nextTick(() => {
-                                this.autoResizeTextarea();
+                                this.queueAutoResizeTextarea();
                             });
                         } else {
                             this.showToast('语音识别失败: ' + (res.data.error || '未知错误'), 'error');
@@ -7444,6 +7447,48 @@ def main(params):
                     this.expandEditorMode = 'edit';
                 },
 
+                // Chat input dynamic effects.
+                handleInputFocus() {
+                    this.inputFocused = true;
+                    this.queueAutoResizeTextarea();
+                },
+
+                handleInputBlur() {
+                    this.inputFocused = false;
+                },
+
+                autoResizeTextarea() {
+                    const input = this.$refs.chatInput;
+                    if (!input) return;
+                    const styles = window.getComputedStyle(input);
+                    const lineHeight = parseFloat(styles.lineHeight) || 20;
+                    const paddingY =
+                        (parseFloat(styles.paddingTop) || 0) + (parseFloat(styles.paddingBottom) || 0);
+                    const minHeight = parseFloat(styles.minHeight) || Math.ceil(lineHeight + paddingY);
+                    const viewportHeight = window.visualViewport && window.visualViewport.height
+                        ? window.visualViewport.height
+                        : window.innerHeight;
+                    const isCompactViewport = window.matchMedia
+                        ? window.matchMedia("(max-width: 768px)").matches
+                        : window.innerWidth <= 768;
+                    const maxHeight = isCompactViewport
+                        ? Math.max(132, Math.min(Math.round(viewportHeight * 0.36), 240))
+                        : Math.max(160, Math.min(Math.round(viewportHeight * 0.45), 360));
+                    input.style.height = 'auto';
+                    const nextHeight = Math.max(minHeight, Math.min(input.scrollHeight, maxHeight));
+                    input.style.height = `${nextHeight}px`;
+                    input.style.overflowY = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+                    this.inputMultiline = nextHeight > Math.ceil(lineHeight + paddingY + 2);
+                },
+
+                queueAutoResizeTextarea() {
+                    this.$nextTick(() => {
+                        window.requestAnimationFrame(() => {
+                            this.autoResizeTextarea();
+                        });
+                    });
+                },
+
                 // 工作区浏览器
                 openWorkspaceBrowser() {
                     this.showWorkspaceBrowser = true;
@@ -7673,6 +7718,7 @@ def main(params):
                     }
                     
                     this.closeWorkspaceBrowser();
+                    this.queueAutoResizeTextarea();
                 },
                 
                 refreshWorkspaceFiles() {
@@ -7847,6 +7893,7 @@ def main(params):
                     this.expandEditorMode = 'edit';
                     // 将内容设置到主输入框
                     this.inputMessage = content;
+                    this.queueAutoResizeTextarea();
                 },
                 
                 // 文件预览
