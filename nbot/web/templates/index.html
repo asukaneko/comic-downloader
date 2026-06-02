@@ -5743,6 +5743,26 @@
                                                         <template v-else-if="log.status === 'model_failover' && parseJson(log.metadata_json)">
                                                             <span class="gw-error-text"><i class="fas fa-random"></i> {{ parseJson(log.metadata_json).failed_model_name || parseJson(log.metadata_json).failed_model_id }} → 备用模型</span>
                                                         </template>
+                                                        <!-- MCP 工具调用日志 -->
+                                                        <template v-else-if="isMcpLog(log)">
+                                                            <div class="gw-mcp-cell">
+                                                                <span class="gw-mcp-tool">
+                                                                    <i :class="getMcpStageIcon(log.stage || log.status)"></i>
+                                                                    <strong>{{ getMcpToolDisplayName(getMcpToolInfo(log).toolName) }}</strong>
+                                                                    <span v-if="getMcpToolInfo(log).elapsed" class="gw-mcp-elapsed">{{ getMcpToolInfo(log).elapsed }}</span>
+                                                                </span>
+                                                                <span v-if="getMcpToolInfo(log).resultSummary && log.status === 'success'" class="gw-mcp-result">
+                                                                    <i class="fas fa-check-circle" style="color: var(--color-success);"></i> {{ getMcpToolInfo(log).resultSummary }}
+                                                                </span>
+                                                                <span v-else-if="getMcpToolInfo(log).errMsg" class="gw-mcp-error">
+                                                                    <i class="fas fa-exclamation-triangle" style="color: var(--color-danger);"></i>
+                                                                    {{ getMcpToolInfo(log).errCode ? '[' + getMcpToolInfo(log).errCode + '] ' : '' }}{{ getMcpToolInfo(log).errMsg }}
+                                                                </span>
+                                                                <span v-if="getMcpToolInfo(log).argsPreview && log.status !== 'success'" class="gw-mcp-args">
+                                                                    {{ getMcpToolInfo(log).argsPreview }}
+                                                                </span>
+                                                            </div>
+                                                        </template>
                                                         <!-- 其他中间状态：显示状态描述 -->
                                                         <template v-else>
                                                             <span style="color: var(--text-muted); font-size: 12px;">{{ getGatewayStatusDesc(log.status) }}</span>
@@ -5917,6 +5937,40 @@
                                                 <div v-if="evt.status === 'delivered' && parseJson(evt.raw_event_json)" class="trace-detail-box reply-box">
                                                     <div class="trace-detail-label"><i class="fas fa-robot"></i> AI 回复</div>
                                                     <div class="trace-detail-content reply-content">{{ parseJson(evt.raw_event_json).reply_preview || '(无回复内容)' }}</div>
+                                                </div>
+                                                <!-- MCP 工具调用详情 -->
+                                                <div v-if="isMcpLog(evt)" class="trace-detail-box" :class="{ 'error-box': evt.status === 'failed' || evt.status === 'denied', 'reply-box': evt.status === 'success' }">
+                                                    <div class="trace-detail-label">
+                                                        <i class="fas fa-plug"></i> MCP 工具
+                                                        <span class="badge" :class="'badge-' + getGatewayStatusClass(evt.status)" style="margin-left: 6px;">{{ getGatewayStatusLabel(evt.status) }}</span>
+                                                    </div>
+                                                    <div class="trace-meta-grid">
+                                                        <div v-if="evt.tool_name" class="trace-meta-item">
+                                                            <span class="trace-meta-label">工具名称</span>
+                                                            <span class="trace-meta-value">{{ evt.tool_name }}</span>
+                                                        </div>
+                                                        <div v-if="evt.stage" class="trace-meta-item">
+                                                            <span class="trace-meta-label">阶段</span>
+                                                            <span class="trace-meta-value">{{ evt.stage }}</span>
+                                                        </div>
+                                                        <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).elapsed_ms != null" class="trace-meta-item">
+                                                            <span class="trace-meta-label">耗时</span>
+                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).elapsed_ms }}ms</span>
+                                                        </div>
+                                                        <div v-if="evt.error_code" class="trace-meta-item">
+                                                            <span class="trace-meta-label">错误码</span>
+                                                            <span class="trace-meta-value" style="color: var(--color-danger);">{{ evt.error_code }}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).result_summary" class="trace-detail-content" style="margin-top: 8px;">
+                                                        <i class="fas fa-clipboard-check"></i> {{ parseJson(evt.metadata_json).result_summary }}
+                                                    </div>
+                                                    <div v-if="parseJson(evt.metadata_json) && parseJson(evt.metadata_json).args_preview" class="trace-detail-meta" style="margin-top: 6px;">
+                                                        <i class="fas fa-code"></i> {{ parseJson(evt.metadata_json).args_preview }}
+                                                    </div>
+                                                    <div v-if="evt.error_message" class="trace-detail-content error-content" style="margin-top: 6px;">
+                                                        <i class="fas fa-exclamation-triangle"></i> {{ evt.error_message }}
+                                                    </div>
                                                 </div>
                                                 <div v-if="evt.error" class="trace-detail-box error-box">
                                                     <div class="trace-detail-label"><i class="fas fa-exclamation-triangle"></i> 错误信息</div>

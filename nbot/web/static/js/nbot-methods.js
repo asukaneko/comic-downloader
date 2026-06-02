@@ -4650,6 +4650,11 @@ def main(params):
                         no_sender: 'warning',
                         model_selected: 'success',
                         model_failover: 'warning',
+                        // MCP 工具调用状态
+                        pending: 'info',
+                        success: 'success',
+                        denied: 'danger',
+                        confirmation_required: 'warning',
                         // 操作日志类型
                         switch: 'info',
                         update: 'warning',
@@ -4689,6 +4694,11 @@ def main(params):
                         no_sender: '无发送器',
                         model_selected: 'AI 模型',
                         model_failover: '模型切换',
+                        // MCP 工具调用状态
+                        pending: 'MCP 调用',
+                        success: 'MCP 成功',
+                        denied: 'MCP 拒绝',
+                        confirmation_required: 'MCP 待确认',
                         // 操作日志类型
                         switch: '切换',
                         update: '更新',
@@ -4728,6 +4738,11 @@ def main(params):
                         missing_parser: '频道适配器缺少解析方法',
                         queue_full: '异步队列已满，事件被丢弃',
                         no_sender: '目标频道无可用发送器',
+                        // MCP 工具调用状态
+                        pending: 'MCP 工具正在执行',
+                        success: 'MCP 工具执行成功',
+                        denied: 'MCP 工具权限被拒绝',
+                        confirmation_required: 'MCP 工具需要确认才能执行',
                         // 操作日志类型
                         switch: '切换配置或模型',
                         update: '更新数据或设置',
@@ -4745,7 +4760,53 @@ def main(params):
                 // 判断是否为错误状态
                 isGatewayErrorStatus(status) {
                     return ['failed', 'parse_failed', 'dispatch_failed', 'delivery_failed',
-                            'rate_limited', 'unknown_channel', 'missing_parser', 'queue_full'].includes(status);
+                            'rate_limited', 'unknown_channel', 'missing_parser', 'queue_full',
+                            'denied'].includes(status);
+                },
+
+                // 判断是否为 MCP 工具调用日志
+                isMcpLog(log) {
+                    return log.source === 'mcp' || log.type === 'mcp_tool' || log.type === 'security';
+                },
+
+                // 获取 MCP 工具显示信息
+                getMcpToolInfo(log) {
+                    const meta = this.parseJson(log.metadata_json) || {};
+                    const toolName = log.tool_name || meta.tool_name || '';
+                    const elapsed = meta.elapsed_ms;
+                    const resultSummary = meta.result_summary || '';
+                    const argsPreview = meta.args_preview || '';
+                    const errCode = log.error_code || '';
+                    const errMsg = log.error_message || log.error || '';
+
+                    return {
+                        toolName,
+                        elapsed: elapsed != null ? elapsed + 'ms' : '',
+                        resultSummary,
+                        argsPreview,
+                        errCode,
+                        errMsg,
+                        stage: log.stage || '',
+                    };
+                },
+
+                // 获取 MCP 工具名称显示
+                getMcpToolDisplayName(toolName) {
+                    if (!toolName) return '未知工具';
+                    return toolName.replace(/^gateway_/, '').replace(/_/g, ' ');
+                },
+
+                // MCP 工具阶段图标
+                getMcpStageIcon(stage) {
+                    const icons = {
+                        called: 'fas fa-play',
+                        preflight: 'fas fa-shield-alt',
+                        validation: 'fas fa-check-circle',
+                        confirmation: 'fas fa-question-circle',
+                        completed: 'fas fa-check',
+                        failed: 'fas fa-times',
+                    };
+                    return icons[stage] || 'fas fa-cog';
                 },
 
                 // 从 raw_event 中提取用户消息内容
@@ -4884,6 +4945,11 @@ def main(params):
                         rate_limited: 'fas fa-tachometer-alt',
                         model_selected: 'fas fa-microchip',
                         model_failover: 'fas fa-random',
+                        // MCP 工具调用图标
+                        pending: 'fas fa-cog',
+                        success: 'fas fa-check',
+                        denied: 'fas fa-ban',
+                        confirmation_required: 'fas fa-question-circle',
                         // 操作日志图标
                         switch: 'fas fa-exchange-alt',
                         update: 'fas fa-edit',
