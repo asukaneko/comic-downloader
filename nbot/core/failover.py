@@ -30,16 +30,14 @@ def classify_http_error(status_code: int) -> str:
     """Classify an HTTP status code for failover decisions.
 
     Returns:
-        "failover"  -- try next model (429, 500, 502, 503)
-        "config"    -- do not failover (400, 401, 403, 404, 422)
+        "failover"  -- try next model (40x, 429, 5xx)
+        "config"    -- do not failover (reserved for future use)
         "transient" -- try next model after short cooldown
     """
-    if status_code == 429:
+    if 400 <= status_code < 500:
         return "failover"
-    if status_code in (500, 502, 503, 504):
+    if 500 <= status_code < 600:
         return "failover"
-    if status_code in (400, 401, 403, 404, 422):
-        return "config"
     # Connection errors (-1), timeouts (-2), unknown (0)
     if status_code < 0:
         return "transient"
@@ -74,6 +72,7 @@ def _extract_status_code(error: Exception) -> int:
 _COOLDOWN_PARAMS = {
     "rate_limit": (60.0, 300.0),   # (base, max) seconds
     "server":     (30.0, 120.0),
+    "bad_request": (30.0, 120.0),  # 400: context-length, format issues
     "transient":  (15.0, 60.0),
     "config":     (0.0, 0.0),       # no cooldown for config errors
 }
@@ -83,10 +82,10 @@ def _cooldown_category(status_code: int) -> str:
     """Map status code to cooldown category."""
     if status_code == 429:
         return "rate_limit"
-    if status_code in (500, 502, 503, 504):
+    if 400 <= status_code < 500:
+        return "bad_request"
+    if 500 <= status_code < 600:
         return "server"
-    if status_code in (400, 401, 403, 404, 422):
-        return "config"
     return "transient"
 
 
