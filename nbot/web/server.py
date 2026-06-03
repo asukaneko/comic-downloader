@@ -3967,6 +3967,16 @@ def create_web_app(config: dict[str, Any] = None) -> tuple[Flask, SocketIO]:
         upgrade=True,
     )
 
+    # 全局错误处理器：防止未捕获异常在 WSGI 层触发 "write() before start_response"
+    @app.errorhandler(Exception)
+    def _handle_unexpected_error(exc):
+        import traceback as _tb
+        _tb.print_exc()
+        return (
+            jsonify({"success": False, "error": "Internal server error"}),
+            500,
+        )
+
     server = WebChatServer(app, socketio)
 
     register_file_routes(app, server, WORKSPACE_AVAILABLE, workspace_manager)

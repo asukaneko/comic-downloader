@@ -247,6 +247,9 @@ def register_file_gateway_routes(app, server):
             payload = verify_file_token(server, token)
             file_path = payload["path"]
             filename = payload["filename"]
+            # TOCTOU 防护：在 send_file 前再次确认文件存在
+            if not os.path.isfile(file_path):
+                return jsonify({"success": False, "error": "File not found"}), 404
             mime_type, _ = mimetypes.guess_type(file_path)
             inline = request.args.get("inline") in {"1", "true", "yes"}
             return send_file(
