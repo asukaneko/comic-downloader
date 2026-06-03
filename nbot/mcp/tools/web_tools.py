@@ -202,18 +202,28 @@ def _save_json_file(filepath: str, data: Any) -> bool:
 
 
 def _get_sessions(ctx: MCPContext) -> dict:
-    """获取所有会话"""
+    """获取所有会话（只读，不加锁，仅用于 list/get）"""
     data_dir = _get_data_dir(ctx)
-    with _file_lock("sessions.json"):
-        sessions = _load_json_file(os.path.join(data_dir, "sessions.json"))
+    sessions = _load_json_file(os.path.join(data_dir, "sessions.json"))
     return sessions if isinstance(sessions, dict) else {}
 
 
-def _save_sessions(ctx: MCPContext, sessions: dict) -> bool:
-    """保存所有会话（带线程锁）"""
+def _with_sessions(ctx: MCPContext, mutator):
+    """原子读-改-写 sessions.json，mutator(sessions) 在锁内执行
+
+    Returns:
+        (True, mutator_return) on success, (False, None) on save failure.
+    """
     data_dir = _get_data_dir(ctx)
-    with _file_lock("sessions.json"):
-        return _save_json_file(os.path.join(data_dir, "sessions.json"), sessions)
+    path = os.path.abspath(os.path.join(data_dir, "sessions.json"))
+    with _file_lock(path):
+        sessions = _load_json_file(path)
+        if not isinstance(sessions, dict):
+            sessions = {}
+        result = mutator(sessions)
+        if not _save_json_file(path, sessions):
+            return False, None
+        return True, result
 
 
 def _get_ai_models(ctx: MCPContext) -> list:
@@ -224,18 +234,28 @@ def _get_ai_models(ctx: MCPContext) -> list:
 
 
 def _get_memories(ctx: MCPContext) -> list:
-    """获取所有记忆"""
+    """获取所有记忆（只读，不加锁，仅用于 list）"""
     data_dir = _get_data_dir(ctx)
-    with _file_lock("memories.json"):
-        memories = _load_json_file(os.path.join(data_dir, "memories.json"))
+    memories = _load_json_file(os.path.join(data_dir, "memories.json"))
     return memories if isinstance(memories, list) else []
 
 
-def _save_memories(ctx: MCPContext, memories: list) -> bool:
-    """保存所有记忆（带线程锁）"""
+def _with_memories(ctx: MCPContext, mutator):
+    """原子读-改-写 memories.json，mutator(memories) 在锁内执行
+
+    Returns:
+        (True, mutator_return) on success, (False, None) on save failure.
+    """
     data_dir = _get_data_dir(ctx)
-    with _file_lock("memories.json"):
-        return _save_json_file(os.path.join(data_dir, "memories.json"), memories)
+    path = os.path.abspath(os.path.join(data_dir, "memories.json"))
+    with _file_lock(path):
+        memories = _load_json_file(path)
+        if not isinstance(memories, list):
+            memories = []
+        result = mutator(memories)
+        if not _save_json_file(path, memories):
+            return False, None
+        return True, result
 
 
 def _get_character_profiles(ctx: MCPContext) -> dict:
@@ -270,7 +290,9 @@ def _save_character_profile(ctx: MCPContext, profile: dict) -> bool:
 
 def _validate_id_path(filepath: str, expected_dir: str) -> bool:
     """校验拼接后的路径确实在预期目录内，防止路径穿越"""
-    return os.path.normpath(filepath).startswith(os.path.normpath(expected_dir) + os.sep)
+    base = os.path.realpath(expected_dir)
+    target = os.path.realpath(filepath)
+    return os.path.commonpath([base, target]) == base
 
 
 def _delete_character_profile(ctx: MCPContext, character_id: str) -> bool:
@@ -489,7 +511,6 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            sessions = _get_sessions(ctx)
             session_id = str(uuid.uuid4())
             now = datetime.now().isoformat()
 
@@ -514,7 +535,7 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 "archived_at": None,
                 "messages": messages,
                 "system_prompt": system_prompt,
-                "character_id": character_id or sender_name,
+                "character_id": character_id,
                 "sender_name": sender_name,
                 "sender_avatar": "",
                 "sender_portrait": "",
@@ -527,8 +548,11 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 "character_runtime_timeline": [],
             }
 
-            sessions[session_id] = session
-            if not _save_sessions(ctx, sessions):
+            def _create(sessions):
+                sessions[session_id] = session
+
+            ok, _ = _with_sessions(ctx, _create)
+            if not ok:
                 return _save_error("sessions")
 
             result = {"ok": True, "session_id": session_id, "name": session["name"]}
@@ -573,31 +597,37 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            sessions = _get_sessions(ctx)
-            session = sessions.get(session_id)
-            if not session or not isinstance(session, dict):
+            message_id_holder = {}
+
+            def _append(sessions):
+                session = sessions.get(session_id)
+                if not session or not isinstance(session, dict):
+                    return "not_found"
+                message = {
+                    "id": str(uuid.uuid4()),
+                    "role": "user",
+                    "content": content,
+                    "timestamp": datetime.now().isoformat(),
+                    "sender": sender,
+                    "source": "mcp",
+                    "session_id": session_id,
+                }
+                message_id_holder["id"] = message["id"]
+                messages = session.get("messages", [])
+                if not isinstance(messages, list):
+                    messages = []
+                messages.append(message)
+                session["messages"] = messages
+                sessions[session_id] = session
+                return None
+
+            ok, err_code = _with_sessions(ctx, _append)
+            if not ok:
+                return _save_error("sessions")
+            if err_code == "not_found":
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Session not found"}})
 
-            message = {
-                "id": str(uuid.uuid4()),
-                "role": "user",
-                "content": content,
-                "timestamp": datetime.now().isoformat(),
-                "sender": sender,
-                "source": "mcp",
-                "session_id": session_id,
-            }
-
-            messages = session.get("messages", [])
-            if not isinstance(messages, list):
-                messages = []
-            messages.append(message)
-            session["messages"] = messages
-            sessions[session_id] = session
-            if not _save_sessions(ctx, sessions):
-                return _save_error("sessions")
-
-            result = {"ok": True, "message_id": message["id"], "session_id": session_id}
+            result = {"ok": True, "message_id": message_id_holder["id"], "session_id": session_id}
             _audit(ctx, "web_send_message", args, result)
             mcp_log.completed("web_send_message", args, result)
             return json.dumps(result, ensure_ascii=False)
@@ -674,13 +704,17 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            sessions = _get_sessions(ctx)
-            if session_id not in sessions:
-                return _err_json({"ok": False, "error": {"code": "not_found", "message": "Session not found"}})
+            def _delete(sessions):
+                if session_id not in sessions:
+                    return "not_found"
+                del sessions[session_id]
+                return None
 
-            del sessions[session_id]
-            if not _save_sessions(ctx, sessions):
+            ok, err_code = _with_sessions(ctx, _delete)
+            if not ok:
                 return _save_error("sessions")
+            if err_code == "not_found":
+                return _err_json({"ok": False, "error": {"code": "not_found", "message": "Session not found"}})
 
             result = {"ok": True, "session_id": session_id}
             _audit(ctx, "web_delete_session", args, result)
@@ -1311,7 +1345,6 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            memories = _get_memories(ctx)
             memory_id = str(uuid.uuid4())
             now = datetime.now().isoformat()
 
@@ -1328,8 +1361,11 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 "updated_at": now,
             }
 
-            memories.append(memory)
-            if not _save_memories(ctx, memories):
+            def _add(memories):
+                memories.append(memory)
+
+            ok, _ = _with_memories(ctx, _add)
+            if not ok:
                 return _save_error("memories")
 
             result = {"ok": True, "memory_id": memory_id}
@@ -1381,26 +1417,28 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            memories = _get_memories(ctx)
-            target = next((m for m in memories if m.get("id") == memory_id), None)
-            if not target:
-                return _err_json({"ok": False, "error": {"code": "not_found", "message": "Memory not found"}})
+            def _update(memories):
+                target = next((m for m in memories if m.get("id") == memory_id), None)
+                if not target:
+                    return "not_found"
+                if title is not None:
+                    target["title"] = title
+                if content is not None:
+                    target["content"] = content
+                if mem_type is not None:
+                    target["type"] = mem_type
+                if target_id is not None:
+                    target["target_id"] = target_id
+                if character_name is not None:
+                    target["character_name"] = character_name
+                target["updated_at"] = datetime.now().isoformat()
+                return None
 
-            # None = 不更新，空字符串 = 清空
-            if title is not None:
-                target["title"] = title
-            if content is not None:
-                target["content"] = content
-            if mem_type is not None:
-                target["type"] = mem_type
-            if target_id is not None:
-                target["target_id"] = target_id
-            if character_name is not None:
-                target["character_name"] = character_name
-            target["updated_at"] = datetime.now().isoformat()
-
-            if not _save_memories(ctx, memories):
+            ok, err_code = _with_memories(ctx, _update)
+            if not ok:
                 return _save_error("memories")
+            if err_code == "not_found":
+                return _err_json({"ok": False, "error": {"code": "not_found", "message": "Memory not found"}})
 
             result = {"ok": True, "memory_id": memory_id}
             _audit(ctx, "web_update_memory", args, result)
@@ -1439,15 +1477,16 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            memories = _get_memories(ctx)
-            original_len = len(memories)
-            memories = [m for m in memories if m.get("id") != memory_id]
+            def _delete(memories):
+                original_len = len(memories)
+                memories[:] = [m for m in memories if m.get("id") != memory_id]
+                return "not_found" if len(memories) == original_len else None
 
-            if len(memories) == original_len:
-                return _err_json({"ok": False, "error": {"code": "not_found", "message": "Memory not found"}})
-
-            if not _save_memories(ctx, memories):
+            ok, err_code = _with_memories(ctx, _delete)
+            if not ok:
                 return _save_error("memories")
+            if err_code == "not_found":
+                return _err_json({"ok": False, "error": {"code": "not_found", "message": "Memory not found"}})
 
             result = {"ok": True, "memory_id": memory_id}
             _audit(ctx, "web_delete_memory", args, result)
