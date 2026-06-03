@@ -457,6 +457,172 @@ def register_ai_model_routes(app, server):
             return jsonify({"success": True, "model": cloned})
         return jsonify({"error": "Model not found"}), 404
 
+    @app.route("/api/ai-models/fetch-models", methods=["POST"])
+    def fetch_available_models():
+        """获取可用的模型列表
+
+        根据提供的 API Key、Base URL 和协议类型，自动获取可用的模型列表。
+        支持 OpenAI 兼容 API（GET /v1/models）和 Google Gemini API。
+        """
+        data = request.json or {}
+        api_key = data.get("api_key", "")
+        selected_key_id = data.get("selectedApiKeyId", "")
+        base_url = data.get("base_url", "")
+        provider_type = data.get("provider_type", "openai_compatible")
+        append_base_url_path = data.get("append_base_url_path", True)
+
+        if not base_url:
+            return jsonify({"success": False, "message": "Base URL is required", "models": []})
+
+        # 优先使用 API 管理器中选择的 Key
+        if selected_key_id:
+            from nbot.web.routes.api_keys import load_api_keys
+            api_keys = load_api_keys(server)
+            selected_key = next((k for k in api_keys if k.get("id") == selected_key_id), None)
+            if selected_key and selected_key.get("key"):
+                api_key = selected_key["key"]
+
+        # 如果 API Key 为空或者是脱敏的星号，则使用 resolve_runtime_api_key 解析实际的 Key
+        if not api_key or api_key == "********":
+            api_key = resolve_runtime_api_key(api_key, provider_type)
+
+        if not api_key:
+            return jsonify({"success": False, "message": "API Key is required", "models": []})
+
+        try:
+            import requests
+
+            # 根据协议类型构建模型列表请求 URL
+            if provider_type == "gemini_native":
+                # Google Gemini API
+                url = f"{base_url.rstrip('/')}/v1beta/models"
+                headers = {
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json"
+                }
+            elif provider_type == "anthropic":
+                # Anthropic API - 使用标准的 /v1/models 端点
+                base = base_url.rstrip("/")
+                # Anthropic 的 base URL 通常是 https://api.anthropic.com
+                if not base.endswith("/v1"):
+                    url = f"{base}/v1/models"
+                else:
+                    url = f"{base}/models"
+                headers = {
+                    "x-api-key": api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json"
+                }
+            else:
+                # OpenAI 兼容 API（包括 openai_compatible、openai_responses 等）
+                base = base_url.rstrip("/")
+                if append_base_url_path:
+                    # 自动补全 /v1/models 路径
+                    # 处理各种常见的 base URL 格式
+                    if base.endswith("/v1"):
+                        url = f"{base}/models"
+                    elif base.endswith("/v1/"):
+                        url = f"{base}models"
+                    else:
+                        url = f"{base}/v1/models"
+                else:
+                    # 用户已提供完整 URL，直接使用
+                    if base.endswith("/models"):
+                        url = base
+                    else:
+                        url = f"{base}/models"
+
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+
+            # 发送请求获取模型列表
+            resp = requests.get(url, headers=headers, timeout=15)
+
+            # 如果 401 错误，尝试不带 Bearer 前缀的认证方式
+            if resp.status_code == 401 and provider_type not in ("gemini_native", "anthropic"):
+                headers_alt = {
+                    "Authorization": api_key,
+                    "Content-Type": "application/json"
+                }
+                resp_alt = requests.get(url, headers=headers_alt, timeout=15)
+                if resp_alt.status_code == 200:
+                    resp = resp_alt
+                    headers = headers_alt  # 更新 headers 用于调试显示
+
+            # 记录调试信息
+            auth_value = headers.get("Authorization", "") or headers.get("x-api-key", "")
+            debug_info = {
+                "url": url,
+                "auth_header": auth_value[:30] + "..." if len(auth_value) > 30 else auth_value,
+                "status_code": resp.status_code
+            }
+
+            resp.raise_for_status()
+            result = resp.json()
+
+            # 解析模型列表
+            models = []
+
+            if provider_type == "gemini_native":
+                # Google Gemini 响应格式
+                for model in result.get("models", []):
+                    model_name = model.get("name", "").replace("models/", "")
+                    if model_name:
+                        models.append({
+                            "id": model_name,
+                            "name": model.get("displayName", model_name),
+                            "description": model.get("description", "")
+                        })
+            else:
+                # OpenAI 兼容格式
+                for model in result.get("data", []):
+                    model_id = model.get("id", "")
+                    if model_id:
+                        models.append({
+                            "id": model_id,
+                            "name": model.get("id", model_id),
+                            "owned_by": model.get("owned_by", "")
+                        })
+
+            # 按名称排序
+            models.sort(key=lambda x: x.get("name", x.get("id", "")))
+
+            return jsonify({
+                "success": True,
+                "message": f"成功获取 {len(models)} 个模型",
+                "models": models,
+                "debug_url": url,
+                "debug_auth": debug_info.get("auth_header", "")
+            })
+
+        except requests.exceptions.Timeout:
+            return jsonify({"success": False, "message": "获取模型列表超时，请检查网络连接", "models": []})
+        except requests.exceptions.ConnectionError:
+            return jsonify({"success": False, "message": "连接失败，请检查 Base URL 是否正确", "models": []})
+        except requests.exceptions.HTTPError as e:
+            error_msg = f"HTTP 错误: {e.response.status_code}"
+            debug_auth = debug_info.get("auth_header", "") if 'debug_info' in locals() else ""
+            try:
+                error_data = e.response.json()
+                if "error" in error_data:
+                    error_msg += f" - {error_data['error'].get('message', '')}"
+                # 记录完整的错误信息用于调试
+                import logging
+                logging.warning(f"Fetch models failed: {url} -> {e.response.status_code}: {error_data}")
+            except Exception:
+                pass
+            return jsonify({
+                "success": False,
+                "message": error_msg,
+                "models": [],
+                "debug_url": url if 'url' in locals() else "",
+                "debug_auth": debug_auth
+            })
+        except Exception as e:
+            return jsonify({"success": False, "message": f"获取失败: {str(e)}", "models": []})
+
     @app.route("/api/ai-models/<model_id>/test", methods=["POST"])
     def test_ai_model(model_id):
         for model in server.ai_models:

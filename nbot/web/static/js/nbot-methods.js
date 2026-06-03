@@ -11593,6 +11593,16 @@ def main(params):
                     this.loadApiKeys();
                     // 加载协议列表
                     this.fetchProtocols();
+                    // 重置模型获取相关状态
+                    this.fetchedModels = [];
+                    this.isFetchingModels = false;
+                    this.fetchModelsMessage = '';
+                    this.fetchModelsSuccess = false;
+                    this.fetchModelsDebugUrl = '';
+                    this.fetchModelsDebugAuth = '';
+                    this.showModelDropdown = false;
+                    this.showModelSelector = false;
+                    this.modelSearchQuery = '';
 
                     if (model) {
                         this.editingModel = model;
@@ -11795,6 +11805,89 @@ def main(params):
                             }
                         }
                     });
+                },
+
+                async fetchModels() {
+                    if (!this.modelForm.base_url) {
+                        this.showToast('请先填写 Base URL', 'error');
+                        return;
+                    }
+
+                    this.isFetchingModels = true;
+                    this.fetchModelsMessage = '';
+                    this.fetchModelsSuccess = false;
+                    this.fetchModelsDebugUrl = '';
+                    this.fetchModelsDebugAuth = '';
+                    this.fetchedModels = [];
+
+                    try {
+                        // 获取实际的 API Key
+                        let apiKey = this.modelForm.api_key;
+
+                        // 如果 API Key 是脱敏的星号，尝试从 API 管理器获取
+                        if (apiKey === '********' || !apiKey) {
+                            if (this.modelForm.selectedApiKeyId) {
+                                // 如果有 selectedApiKeyId，直接获取
+                                apiKey = await this.getApiKeyValue(this.modelForm.selectedApiKeyId);
+                            } else {
+                                // 没有选择 Key，提示用户
+                                this.fetchModelsMessage = '请先在"已保存的Key"下拉框中选择对应的 API Key，或手动输入';
+                                this.fetchModelsSuccess = false;
+                                this.isFetchingModels = false;
+                                return;
+                            }
+                        }
+
+                        if (!apiKey) {
+                            this.fetchModelsMessage = '请先填写或选择 API Key';
+                            this.fetchModelsSuccess = false;
+                            this.isFetchingModels = false;
+                            return;
+                        }
+
+                        const res = await api.post('/api/ai-models/fetch-models', {
+                            api_key: apiKey,
+                            base_url: this.modelForm.base_url,
+                            provider_type: this.modelForm.provider_type,
+                            append_base_url_path: this.modelForm.append_base_url_path
+                        });
+
+                        this.fetchModelsDebugUrl = res.data.debug_url || '';
+                        this.fetchModelsDebugAuth = res.data.debug_auth || '';
+
+                        if (res.data.success) {
+                            this.fetchedModels = res.data.models || [];
+                            this.fetchModelsSuccess = true;
+                            this.fetchModelsMessage = res.data.message;
+                            // 自动打开模型选择弹窗
+                            if (this.fetchedModels.length > 0) {
+                                this.openModelSelector();
+                            }
+                        } else {
+                            this.fetchModelsMessage = res.data.message || '获取模型列表失败';
+                        }
+                    } catch (e) {
+                        this.fetchModelsDebugUrl = e.response?.data?.debug_url || '';
+                        this.fetchModelsDebugAuth = e.response?.data?.debug_auth || '';
+                        this.fetchModelsMessage = '获取失败: ' + (e.response?.data?.message || e.message);
+                    } finally {
+                        this.isFetchingModels = false;
+                    }
+                },
+
+                openModelSelector() {
+                    this.modelSearchQuery = '';
+                    this.showModelSelector = true;
+                },
+
+                closeModelSelector() {
+                    this.showModelSelector = false;
+                    this.modelSearchQuery = '';
+                },
+
+                selectModelFromSelector(model) {
+                    this.modelForm.model = model.id;
+                    this.closeModelSelector();
                 },
 
                 getProviderIcon(provider) {

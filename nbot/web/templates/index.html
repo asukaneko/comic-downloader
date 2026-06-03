@@ -4734,7 +4734,39 @@
 
                                     <div class="form-group">
                                         <label class="form-label">模型 <span class="required">*</span></label>
-                                        <input v-model="modelForm.model" type="text" class="form-input" placeholder="例如：gpt-4">
+                                        <div style="display: flex; gap: 8px;">
+                                            <input
+                                                v-model="modelForm.model"
+                                                type="text"
+                                                class="form-input"
+                                                placeholder="例如：gpt-4"
+                                                style="flex: 1;"
+                                            >
+                                            <button
+                                                v-if="fetchedModels.length > 0"
+                                                class="btn btn-secondary"
+                                                @click="openModelSelector"
+                                                style="white-space: nowrap;"
+                                            >
+                                                <i class="fas fa-list"></i>
+                                                选择模型 ({{ fetchedModels.length }})
+                                            </button>
+                                            <button
+                                                class="btn btn-secondary"
+                                                @click="fetchModels"
+                                                :disabled="isFetchingModels || !modelForm.api_key || !modelForm.base_url"
+                                                style="white-space: nowrap;"
+                                            >
+                                                <i :class="isFetchingModels ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"></i>
+                                                {{ isFetchingModels ? '获取中...' : '获取模型' }}
+                                            </button>
+                                        </div>
+                                        <div class="form-hint">
+                                            <span v-if="fetchModelsMessage" :style="{ color: fetchModelsSuccess ? 'var(--success-color)' : 'var(--error-color)' }">
+                                                {{ fetchModelsMessage }}
+                                            </span>
+                                            <span v-else>输入 API Key 和 Base URL 后，点击"获取模型"自动获取可用模型列表</span>
+                                        </div>
                                     </div>
 
                                     <div class="form-row">
@@ -4914,6 +4946,47 @@
                                     <button class="btn btn-primary" @click="saveModel" :disabled="isLoading">
                                         <i class="fas fa-save"></i> {{ isLoading ? '保存中...' : '保存' }}
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 模型选择弹窗 -->
+                        <div v-if="showModelSelector" class="modal-overlay" style="z-index: 1400;" @click.self="closeModelSelector">
+                            <div class="modal" style="max-width: 500px; max-height: 80vh;">
+                                <div class="modal-header">
+                                    <h3 class="modal-title">
+                                        <i class="fas fa-list" style="color: var(--accent-primary);"></i>
+                                        选择模型
+                                        <span style="font-size: 13px; font-weight: 400; opacity: 0.6;">共 {{ fetchedModels.length }} 个模型</span>
+                                    </h3>
+                                    <button class="modal-close" @click="closeModelSelector">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="modal-body" style="padding: 0;">
+                                    <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-color);">
+                                        <input
+                                            v-model="modelSearchQuery"
+                                            type="text"
+                                            class="form-input"
+                                            placeholder="搜索模型名称..."
+                                            style="margin: 0;"
+                                        >
+                                    </div>
+                                    <div style="max-height: 50vh; overflow-y: auto;">
+                                        <div
+                                            v-for="m in filteredModelsForSelector"
+                                            :key="m.id"
+                                            class="model-selector-item"
+                                            @click="selectModelFromSelector(m)"
+                                        >
+                                            <div class="model-selector-id">{{ m.id }}</div>
+                                            <div v-if="m.owned_by" class="model-selector-owner">{{ m.owned_by }}</div>
+                                        </div>
+                                        <div v-if="filteredModelsForSelector.length === 0" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                                            没有找到匹配的模型
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -9943,6 +10016,14 @@
                     showModelManager: false,
                     showModelEditModal: false,
                     editingModel: null,
+                    // 模型获取相关
+                    fetchedModels: [],
+                    isFetchingModels: false,
+                    fetchModelsMessage: '',
+                    fetchModelsSuccess: false,
+                    // 模型选择弹窗相关
+                    showModelSelector: false,
+                    modelSearchQuery: '',
                     modelForm: {
                         id: null,
                         name: '',
@@ -10600,6 +10681,16 @@
                         item => item.key === this.modelForm.provider_type
                     );
                     return p ? p.name : this.modelForm.provider_type;
+                },
+                filteredModelsForSelector() {
+                    if (!this.fetchedModels || this.fetchedModels.length === 0) return [];
+                    const search = (this.modelSearchQuery || '').toLowerCase();
+                    if (!search) return [...this.fetchedModels];
+                    return this.fetchedModels.filter(m =>
+                        (m.id || '').toLowerCase().includes(search) ||
+                        (m.name || '').toLowerCase().includes(search) ||
+                        (m.owned_by || '').toLowerCase().includes(search)
+                    );
                 },
                 pageTitle() {
                     const titles = {
