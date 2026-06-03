@@ -6398,6 +6398,132 @@
                         </div>
                     </div>
 
+                    <!-- MCP Servers -->
+                    <div v-if="currentPage === 'mcp-servers'" class="fade-in">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title"><i class="fas fa-server"></i> {{ $t('nav.mcp_servers') }}</span>
+                                <button class="btn btn-primary" @click="openMCPServerModal()">
+                                    <i class="fas fa-plus"></i> 添加 MCP 服务
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div v-if="mcpServers.length === 0" class="empty-state">
+                                    <i class="fas fa-server" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 16px;"></i>
+                                    <p>还没有配置 MCP 服务</p>
+                                    <p style="color: var(--text-muted); font-size: 13px;">添加 MCP Server 连接后，AI 可以使用远程工具</p>
+                                </div>
+                                <div v-else>
+                                    <div v-for="srv in mcpServers" :key="srv.id" class="tool-card" style="margin-bottom: 12px;">
+                                        <div class="tool-card-header">
+                                            <div style="display: flex; align-items: center; gap: 10px;">
+                                                <span class="tool-card-name">{{ srv.name }}</span>
+                                                <span class="badge" :class="srv.connected ? 'badge-success' : 'badge-secondary'">
+                                                    {{ srv.connected ? '已连接' : '未连接' }}
+                                                </span>
+                                                <span v-if="srv._builtin" class="badge badge-info">内置</span>
+                                                <span v-if="srv.tool_count > 0" class="badge badge-info">{{ srv.tool_count }} 个工具</span>
+                                            </div>
+                                            <div style="display: flex; gap: 6px;">
+                                                <button v-if="!srv.connected" class="btn btn-primary btn-sm" @click="connectMCPServer(srv)" :disabled="isLoading" style="font-size: 12px; padding: 4px 10px;">
+                                                    <i class="fas fa-plug"></i> 连接
+                                                </button>
+                                                <button v-else class="btn btn-secondary btn-sm" @click="disconnectMCPServer(srv)" :disabled="isLoading" style="font-size: 12px; padding: 4px 10px;">
+                                                    <i class="fas fa-unlink"></i> 断开
+                                                </button>
+                                                <button class="btn btn-secondary btn-sm" @click="testMCPServer(srv)" :disabled="isLoading" style="font-size: 12px; padding: 4px 10px;">
+                                                    <i class="fas fa-vial"></i> 测试
+                                                </button>
+                                                <button class="btn btn-secondary btn-sm" @click="openMCPServerModal(srv)" style="font-size: 12px; padding: 4px 10px;">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button v-if="!srv._builtin" class="btn btn-danger btn-sm" @click="deleteMCPServer(srv)" style="font-size: 12px; padding: 4px 10px;">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="tool-card-desc">
+                                            <div v-if="srv.transport === 'stdio'">
+                                                <strong>Stdio:</strong> <code style="font-size: 12px;">{{ srv.command }} {{ (srv.args || []).join(' ') }}</code>
+                                            </div>
+                                            <div v-else>
+                                                <strong>HTTP:</strong> <code style="font-size: 12px;">{{ srv.url }}</code>
+                                            </div>
+                                            <div v-if="srv.description" style="margin-top: 4px;">{{ srv.description }}</div>
+                                            <div v-if="srv.last_connected_at" style="margin-top: 4px; font-size: 12px; color: var(--text-muted);">
+                                                上次连接: {{ formatTimeAgo(srv.last_connected_at) }}
+                                            </div>
+                                        </div>
+
+                                        <!-- 展开的工具列表 -->
+                                        <div v-if="srv.connected && srv.tool_count > 0" class="tool-card-section" style="margin-top: 8px;">
+                                            <div class="tool-card-section-title" style="cursor: pointer;" @click="toggleMCPServerTools(srv.id)">
+                                                <i :class="mcpServerTools[srv.id] ? 'fas fa-chevron-down' : 'fas fa-chevron-right'" style="margin-right: 6px;"></i>
+                                                远程工具 ({{ srv.tool_count }})
+                                            </div>
+                                            <div v-if="mcpServerTools[srv.id]" style="margin-top: 8px;">
+                                                <div v-for="tool in mcpServerTools[srv.id]" :key="tool.name" class="tool-param-item" style="flex-direction: column; align-items: flex-start;">
+                                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                                        <span class="tool-param-name">{{ tool.name }}</span>
+                                                    </div>
+                                                    <span v-if="tool.description" class="tool-param-desc">{{ tool.description }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- MCP Server Modal -->
+                    <div v-if="showMCPServerModal" class="modal-overlay" @click.self="showMCPServerModal = false">
+                        <div class="modal" style="max-width: 600px;">
+                            <div class="modal-header">
+                                <span class="modal-title">{{ editingMCPServer ? '编辑 MCP 服务' : '添加 MCP 服务' }}</span>
+                                <button class="modal-close" @click="showMCPServerModal = false">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="form-group">
+                                    <label>名称 *</label>
+                                    <input v-model="mcpServerForm.name" class="form-input" placeholder="例如: Fetch Server">
+                                </div>
+                                <div class="form-group">
+                                    <label>连接配置（JSON）*</label>
+                                    <textarea v-model="mcpServerForm.configText" class="form-input" rows="8" style="font-family: monospace; font-size: 13px;"
+                                        placeholder='{
+  "type": "stdio",
+  "command": "uvx",
+  "args": ["mcp-server-fetch"]
+}'></textarea>
+                                    <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+                                        支持两种格式：<br>
+                                        <code>{"type": "stdio", "command": "...", "args": [...]}</code><br>
+                                        <code>{"type": "streamable-http", "url": "http://..."}</code>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>描述</label>
+                                    <input v-model="mcpServerForm.description" class="form-input" placeholder="可选描述">
+                                </div>
+                                <div class="form-group" style="display: flex; gap: 20px;">
+                                    <label class="toggle-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" v-model="mcpServerForm.enabled"> 启用
+                                    </label>
+                                    <label class="toggle-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                        <input type="checkbox" v-model="mcpServerForm.auto_connect"> 自动连接
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-secondary" @click="showMCPServerModal = false">取消</button>
+                                <button class="btn btn-primary" @click="saveMCPServer" :disabled="!mcpServerForm.name || !mcpServerForm.configText.trim()">
+                                    {{ editingMCPServer ? '保存' : '添加' }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Channels -->
                     <div v-if="currentPage === 'channels'" class="fade-in">
                         <div class="card">
@@ -9284,8 +9410,9 @@
                             { id: 'memory', labelKey: 'nav.memory', icon: 'fas fa-brain' },
                             { id: 'knowledge', labelKey: 'nav.knowledge', icon: 'fas fa-book' },
                             { id: 'skills', labelKey: 'nav.skills', icon: 'fas fa-magic' },
-                            { id: 'tools', labelKey: 'nav.tools', icon: 'fas fa-toolbox' }
-                            , { id: 'channels', labelKey: 'nav.channels', icon: 'fas fa-plug' }
+                            { id: 'tools', labelKey: 'nav.tools', icon: 'fas fa-toolbox' },
+                            { id: 'mcp-servers', labelKey: 'nav.mcp_servers', icon: 'fas fa-server' },
+                            { id: 'channels', labelKey: 'nav.channels', icon: 'fas fa-plug' }
                         ],
                         system: [
                             { id: 'ai-config', labelKey: 'nav.ai_config', icon: 'fas fa-robot' },
@@ -9936,6 +10063,21 @@
                         enabled: true,
                         parameters: {}
                     },
+
+                    // MCP 服务
+                    mcpServers: [],
+                    showMCPServerModal: false,
+                    editingMCPServer: null,
+                    mcpServerForm: {
+                        id: null,
+                        name: '',
+                        configText: '{\n  "type": "stdio",\n  "command": "",\n  "args": []\n}',
+                        description: '',
+                        enabled: true,
+                        auto_connect: false
+                    },
+                    mcpServerTools: {},
+                    mcpTestingServer: null,
 
                     // 频道管理
                     channels: [],

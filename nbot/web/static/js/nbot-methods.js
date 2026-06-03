@@ -1667,6 +1667,9 @@ const NbotMethods = {
                         case 'tools':
                             await this.loadTools();
                             break;
+                        case 'mcp-servers':
+                            await this.loadMCPServers();
+                            break;
                         case 'channels':
                             await this.loadChannels();
                             break;
@@ -3468,6 +3471,160 @@ def main(params):
                         this.showToast('操作失败', 'error');
                     } finally {
                         this.isLoading = false;
+                    }
+                },
+
+                // ========== MCP 服务管理 ==========
+
+                async loadMCPServers() {
+                    try {
+                        const res = await api.get('/api/mcp-servers');
+                        this.mcpServers = res.data || [];
+                    } catch (e) {
+                        console.error('Failed to load MCP servers:', e);
+                    }
+                },
+
+                openMCPServerModal(srv = null) {
+                    if (srv) {
+                        this.editingMCPServer = srv;
+                        // 从存储的字段还原 JSON 配置
+                        const cfg = { type: srv.transport || 'streamable-http' };
+                        if (cfg.type === 'stdio') {
+                            cfg.command = srv.command || '';
+                            cfg.args = srv.args || [];
+                            if (srv.env) cfg.env = srv.env;
+                        } else {
+                            cfg.url = srv.url || '';
+                        }
+                        this.mcpServerForm = {
+                            id: srv.id,
+                            name: srv.name,
+                            configText: JSON.stringify(cfg, null, 2),
+                            description: srv.description || '',
+                            enabled: srv.enabled !== false,
+                            auto_connect: srv.auto_connect || false
+                        };
+                    } else {
+                        this.editingMCPServer = null;
+                        this.mcpServerForm = {
+                            id: null,
+                            name: '',
+                            configText: '{\n  "type": "stdio",\n  "command": "",\n  "args": []\n}',
+                            description: '',
+                            enabled: true,
+                            auto_connect: false
+                        };
+                    }
+                    this.showMCPServerModal = true;
+                },
+
+                async saveMCPServer() {
+                    // 解析 JSON 配置
+                    let cfg;
+                    try {
+                        cfg = JSON.parse(this.mcpServerForm.configText);
+                    } catch (e) {
+                        this.showToast('JSON 格式错误: ' + e.message, 'error');
+                        return;
+                    }
+                    const transport = cfg.type || 'streamable-http';
+                    const payload = {
+                        name: this.mcpServerForm.name,
+                        transport: transport,
+                        description: this.mcpServerForm.description,
+                        enabled: this.mcpServerForm.enabled,
+                        auto_connect: this.mcpServerForm.auto_connect
+                    };
+                    if (transport === 'stdio') {
+                        payload.command = cfg.command || '';
+                        payload.args = cfg.args || [];
+                        if (cfg.env) payload.env = cfg.env;
+                    } else {
+                        payload.url = cfg.url || '';
+                    }
+                    this.isLoading = true;
+                    try {
+                        if (this.editingMCPServer) {
+                            await api.put(`/api/mcp-servers/${this.editingMCPServer.id}`, payload);
+                            this.showToast('MCP 服务已更新', 'success');
+                        } else {
+                            await api.post('/api/mcp-servers', payload);
+                            this.showToast('MCP 服务已添加', 'success');
+                        }
+                        this.showMCPServerModal = false;
+                        await this.loadMCPServers();
+                    } catch (e) {
+                        this.showToast('操作失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async deleteMCPServer(srv) {
+                    if (!confirm(`确定删除 MCP 服务 "${srv.name}"？`)) return;
+                    this.isLoading = true;
+                    try {
+                        await api.delete(`/api/mcp-servers/${srv.id}`);
+                        this.showToast('已删除', 'success');
+                        await this.loadMCPServers();
+                    } catch (e) {
+                        this.showToast('删除失败', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async connectMCPServer(srv) {
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post(`/api/mcp-servers/${srv.id}/connect`);
+                        this.showToast(`已连接，${res.data.tool_count || 0} 个工具可用`, 'success');
+                        await this.loadMCPServers();
+                    } catch (e) {
+                        this.showToast('连接失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async disconnectMCPServer(srv) {
+                    this.isLoading = true;
+                    try {
+                        await api.post(`/api/mcp-servers/${srv.id}/disconnect`);
+                        this.showToast('已断开', 'success');
+                        delete this.mcpServerTools[srv.id];
+                        await this.loadMCPServers();
+                    } catch (e) {
+                        this.showToast('断开失败', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async testMCPServer(srv) {
+                    this.mcpTestingServer = srv.id;
+                    try {
+                        const res = await api.post(`/api/mcp-servers/${srv.id}/test`);
+                        this.showToast(`测试成功！${res.data.tool_count} 个工具`, 'success');
+                    } catch (e) {
+                        this.showToast('测试失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.mcpTestingServer = null;
+                    }
+                },
+
+                async toggleMCPServerTools(serverId) {
+                    if (this.mcpServerTools[serverId]) {
+                        delete this.mcpServerTools[serverId];
+                        this.mcpServerTools = { ...this.mcpServerTools };
+                    } else {
+                        try {
+                            const res = await api.get(`/api/mcp-servers/${serverId}/tools`);
+                            this.mcpServerTools = { ...this.mcpServerTools, [serverId]: res.data.tools || [] };
+                        } catch (e) {
+                            this.showToast('加载工具列表失败', 'error');
+                        }
                     }
                 },
 

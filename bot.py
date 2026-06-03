@@ -1,4 +1,5 @@
 import importlib
+import logging
 import os
 import sys
 import threading
@@ -214,8 +215,31 @@ def run_mcp_only():
 
     适合 Claude Code / Cursor 等 AI Agent 连接，
     不依赖 QQ Bot 配置，不启动 Web Dashboard。
+    stdout 保留给 MCP JSON-RPC 协议，所有非协议输出重定向到 stderr。
     """
-    _log.info("Starting MCP Server only (no bot, no web)...")
+    import builtins
+    import logging
+    import sys
+
+    # 1. 重定向所有 logging handler 到 stderr
+    stderr_handler = logging.StreamHandler(sys.stderr)
+    stderr_handler.setLevel(logging.DEBUG)
+    stderr_handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(stderr_handler)
+    root.setLevel(logging.INFO)
+
+    # 2. 重定向 print() 到 stderr（不影响 sys.stdout，MCP SDK 仍用它做协议通信）
+    _original_print = builtins.print
+
+    def _print_to_stderr(*args, **kwargs):
+        kwargs.setdefault("file", sys.stderr)
+        _original_print(*args, **kwargs)
+
+    builtins.print = _print_to_stderr
+
+    root.info("Starting MCP Server only (no bot, no web)...")
     _load_mcp_config_and_run()
 
 
@@ -234,11 +258,87 @@ def _load_mcp_config_and_run():
     if transport == "streamable-http":
         host = config.get("server", {}).get("host", "127.0.0.1")
         port = config.get("server", {}).get("port", 5001)
-        _log.info("Starting MCP Server (streamable-http) on %s:%s ...", host, port)
+        logging.getLogger("bot").info("Starting MCP Server (streamable-http) on %s:%s ...", host, port)
     else:
-        _log.info("Starting MCP Server (stdio)...")
+        logging.getLogger("bot").info("Starting MCP Server (stdio)...")
+
+    # 注册本机 MCP 服务到 Web 管理界面（两种模式都注册）
+    _register_builtin_mcp_server(transport, config)
 
     mcp.run(transport=transport)
+
+
+def _register_builtin_mcp_server(transport: str, config: dict):
+    """将本机 MCP Server 注册为 Web 管理界面的内置服务
+
+    写入 data/web/mcp_servers.json，标记 _builtin=True（不可删除，可关闭）。
+    根据 transport 类型生成不同的连接配置。
+    """
+    import json
+    import os
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent
+    data_dir = root / "data" / "web"
+    config_path = data_dir / "mcp_servers.json"
+
+    os.makedirs(data_dir, exist_ok=True)
+
+    # 构建条目
+    builtin_id = "_builtin_local_mcp"
+    entry = {
+        "id": builtin_id,
+        "name": "本机 MCP 服务",
+        "transport": transport,
+        "enabled": True,
+        "auto_connect": True,
+        "_builtin": True,
+        "connected": False,
+        "tool_count": 0,
+        "last_connected_at": None,
+    }
+
+    if transport == "streamable-http":
+        host = config.get("server", {}).get("host", "127.0.0.1")
+        port = config.get("server", {}).get("port", 5001)
+        display_host = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+        entry["url"] = f"http://{display_host}:{port}/mcp"
+        entry["description"] = f"Bot MCP Server（HTTP {display_host}:{port}）"
+    else:
+        # stdio 模式：用当前 Python 解释器 + bot.py --mcp
+        entry["command"] = sys.executable
+        entry["args"] = [str(root / "bot.py"), "--mcp-only"]
+        entry["description"] = "Bot MCP Server（stdio 子进程）"
+
+    # 读取现有配置
+    configs = []
+    if config_path.exists():
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                configs = data
+        except Exception:
+            pass
+
+    existing = next((c for c in configs if c.get("id") == builtin_id), None)
+
+    if existing:
+        # 更新，保留 created_at
+        entry["created_at"] = existing.get("created_at", "")
+        existing.update(entry)
+    else:
+        from datetime import datetime
+        entry["created_at"] = datetime.now().isoformat()
+        configs.insert(0, entry)
+
+    try:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(configs, f, ensure_ascii=False, indent=2)
+        _log.info("[MCP] 已注册本机 MCP 服务: %s", transport)
+    except Exception as e:
+        _log.warning("[MCP] 注册本机 MCP 服务失败: %s", e)
 
 
 def run_mcp_connect(url: str):

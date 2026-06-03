@@ -347,6 +347,16 @@ def get_enabled_tools() -> List[Dict]:
     # 添加注册表中的工具
     tools.extend(registered_tools)
 
+    # 添加 MCP 工具
+    try:
+        from nbot.services.mcp_bridge import get_mcp_bridge
+        bridge = get_mcp_bridge()
+        mcp_tools = bridge.get_all_openai_tools()
+        if mcp_tools:
+            tools.extend(mcp_tools)
+    except Exception:
+        pass
+
     return tools
 
 
@@ -1805,7 +1815,20 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any], context: Dict = None
     if tool_name == "read_memory":
         return _execute_read_memory(arguments, context)
 
-    # 3. 从 Web 配置查找
+    # 3.5 MCP 工具（mcp__<server>__<tool> 格式）
+    if tool_name.startswith("mcp__"):
+        try:
+            from nbot.services.mcp_bridge import get_mcp_bridge
+            bridge = get_mcp_bridge()
+            result = bridge.run_async(bridge.execute_by_full_name(tool_name, arguments))
+            if isinstance(result, dict):
+                return result
+            return {"success": True, "result": result}
+        except Exception as e:
+            _log.error(f"MCP tool execution error: {tool_name} - {e}")
+            return {"success": False, "error": str(e)}
+
+    # 4. 从 Web 配置查找
     web_config = load_tools_config()
     tool_config = None
 

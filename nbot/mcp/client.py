@@ -18,11 +18,24 @@ _log = logging.getLogger(__name__)
 class MCPRemoteClient:
     """MCP 远程客户端
 
-    连接远程 MCP Server 并提供工具列表、调用、交互式 CLI。
+    支持两种传输方式：
+    - streamable-http: 通过 HTTP URL 连接远程 MCP Server
+    - stdio: 通过启动子进程（command + args）通信
     """
 
-    def __init__(self, url: str):
+    def __init__(
+        self,
+        url: str = "",
+        transport: str = "streamable-http",
+        command: str = "",
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+    ):
         self._url = url
+        self._transport = transport
+        self._command = command
+        self._args = args or []
+        self._env = env
         self._session: Any = None
         self._read_stream: Any = None
         self._write_stream: Any = None
@@ -32,17 +45,33 @@ class MCPRemoteClient:
         """连接远程 MCP Server"""
         from contextlib import AsyncExitStack
         from mcp import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
 
         self._exit_stack = AsyncExitStack()
-        read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
-            streamablehttp_client(self._url)
-        )
+
+        if self._transport == "stdio":
+            from mcp.client.stdio import StdioServerParameters, stdio_client
+
+            params = StdioServerParameters(
+                command=self._command,
+                args=self._args,
+                env=self._env,
+            )
+            read_stream, write_stream = await self._exit_stack.enter_async_context(
+                stdio_client(params)
+            )
+            _log.info("[MCP Client] 已连接 stdio: %s %s", self._command, self._args)
+        else:
+            from mcp.client.streamable_http import streamablehttp_client
+
+            read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
+                streamablehttp_client(self._url)
+            )
+            _log.info("[MCP Client] 已连接 HTTP %s", self._url)
+
         self._session = await self._exit_stack.enter_async_context(
             ClientSession(read_stream, write_stream)
         )
         await self._session.initialize()
-        _log.info("[MCP Client] 已连接 %s", self._url)
 
     async def close(self) -> None:
         """关闭连接"""
