@@ -197,6 +197,7 @@ export default defineConfig({
                 { text: 'Gateway Tools', link: '/guide/nbot/mcp/tools.md' },
                 { text: 'Web Tools', link: '/guide/nbot/mcp/web_tools.md' },
                 { text: '配置', link: '/guide/nbot/mcp/config.md' },
+                { text: 'MCP Client', link: '/guide/nbot/mcp/client.md' },
               ]
             },
             {

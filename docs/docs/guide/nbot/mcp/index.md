@@ -114,3 +114,21 @@ python bot.py --mcp
 - **高危工具保护**：发送消息、重试死信等需要显式启用
 - **审计日志**：所有操作型工具调用都记录审计日志
 - **敏感字段脱敏**：token、secret 等字段自动脱敏
+
+## MCP Client 模式
+
+除了作为 MCP Server 对外暴露工具，NekoBot 还支持作为 MCP Client 连接外部 MCP 服务器：
+
+```bash
+# 启动 Bot + MCP Server + Web Dashboard
+python bot.py --mcp
+```
+
+通过 Web Dashboard 的「MCP 服务」页面，可以：
+
+- 添加 stdio / streamable-http 类型的 MCP 服务
+- 管理连接状态（连接/断开/测试）
+- 查看每个服务暴露的工具列表
+- AI 在 ReAct 循环中自动使用已连接的 MCP 工具
+
+详细配置参见 [MCP Client](./client.md)。
