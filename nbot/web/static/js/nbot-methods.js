@@ -969,6 +969,14 @@ const NbotMethods = {
                 },
 
                 goDashboard(page = 'dashboard') {
+                    if (this.appMode === 'dashboard') {
+                        this.currentPage = page;
+                        localStorage.setItem('nbot_dashboard_page', page);
+                        this.isMobileMenuOpen = false;
+                        this.isMobileChatPickerOpen = false;
+                        this.loadPageData(page);
+                        return;
+                    }
                     localStorage.setItem('nbot_dashboard_page', page);
                     window.location.href = '/dashboard';
                 },
