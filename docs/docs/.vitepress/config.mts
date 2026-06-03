@@ -194,7 +194,8 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { text: '概述', link: '/guide/nbot/mcp/index.md' },
-                { text: 'Tools 参考', link: '/guide/nbot/mcp/tools.md' },
+                { text: 'Gateway Tools', link: '/guide/nbot/mcp/tools.md' },
+                { text: 'Web Tools', link: '/guide/nbot/mcp/web_tools.md' },
                 { text: '配置', link: '/guide/nbot/mcp/config.md' },
               ]
             },
