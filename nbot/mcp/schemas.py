@@ -3,7 +3,12 @@
 使用 Pydantic 定义 MCP Tools 和 Resources 的输入输出 Schema。
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+# 所有 ID 字段统一校验模式：只允许 UUID 格式或安全字符，防路径穿越
+ID_PATTERN = r"^[a-zA-Z0-9_-]{1,128}$"
 
 # ========================
 # Gateway Tools
@@ -311,35 +316,35 @@ class WebListSessionsInput(BaseModel):
 
 class WebGetSessionInput(BaseModel):
     """web_get_session 输入"""
-    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    session_id: str = Field(..., pattern=ID_PATTERN, description="会话 ID")
 
 
 class WebCreateSessionInput(BaseModel):
     """web_create_session 输入"""
     name: str = Field(default="", max_length=100, description="会话名称")
-    session_mode: str = Field(default="character", description="会话模式 (character / agent)")
+    session_mode: Literal["character", "agent"] = Field(default="character", description="会话模式")
     sender_name: str = Field(default="", max_length=100, description="角色名称")
     system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
     first_message: str = Field(default="", max_length=5000, description="开场白")
-    character_id: str = Field(default="", max_length=128, description="角色 ID")
+    character_id: str = Field(default="", pattern=ID_PATTERN, description="角色 ID")
 
 
 class WebSendMessageInput(BaseModel):
     """web_send_message 输入"""
-    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    session_id: str = Field(..., pattern=ID_PATTERN, description="会话 ID")
     content: str = Field(..., min_length=1, max_length=10000, description="消息内容")
     sender: str = Field(default="mcp_user", max_length=64, description="发送者标识")
 
 
 class WebGetMessagesInput(BaseModel):
     """web_get_messages 输入"""
-    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    session_id: str = Field(..., pattern=ID_PATTERN, description="会话 ID")
     limit: int = Field(default=50, ge=1, le=500, description="返回消息数量上限")
 
 
 class WebDeleteSessionInput(BaseModel):
     """web_delete_session 输入"""
-    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    session_id: str = Field(..., pattern=ID_PATTERN, description="会话 ID")
 
 
 # ========================
@@ -354,7 +359,7 @@ class WebListCharactersInput(BaseModel):
 
 class WebGetCharacterInput(BaseModel):
     """web_get_character 输入"""
-    character_id: str = Field(..., min_length=1, max_length=128, description="角色 ID")
+    character_id: str = Field(..., pattern=ID_PATTERN, description="角色 ID")
 
 
 class WebCreateCharacterInput(BaseModel):
@@ -365,26 +370,26 @@ class WebCreateCharacterInput(BaseModel):
     scenario: str = Field(default="", max_length=2000, description="背景设定")
     system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
     first_message: str = Field(default="", max_length=5000, description="开场白")
-    rules: list[str] = Field(default=[], description="行为规则列表")
-    tags: list[str] = Field(default=[], description="标签")
+    rules: list[str] = Field(default_factory=list, description="行为规则列表")
+    tags: list[str] = Field(default_factory=list, description="标签")
 
 
 class WebUpdateCharacterInput(BaseModel):
-    """web_update_character 输入"""
-    character_id: str = Field(..., min_length=1, max_length=128, description="角色 ID")
-    name: str = Field(default="", max_length=100, description="角色名称")
-    description: str = Field(default="", max_length=2000, description="角色描述")
-    personality: str = Field(default="", max_length=2000, description="性格描述")
-    scenario: str = Field(default="", max_length=2000, description="背景设定")
-    system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
-    first_message: str = Field(default="", max_length=5000, description="开场白")
-    rules: list[str] = Field(default=[], description="行为规则列表")
-    tags: list[str] = Field(default=[], description="标签")
+    """web_update_character 输入 — None 表示不更新，空字符串表示清空"""
+    character_id: str = Field(..., pattern=ID_PATTERN, description="角色 ID")
+    name: str | None = Field(default=None, max_length=100, description="角色名称")
+    description: str | None = Field(default=None, max_length=2000, description="角色描述")
+    personality: str | None = Field(default=None, max_length=2000, description="性格描述")
+    scenario: str | None = Field(default=None, max_length=2000, description="背景设定")
+    system_prompt: str | None = Field(default=None, max_length=10000, description="系统提示词")
+    first_message: str | None = Field(default=None, max_length=5000, description="开场白")
+    rules: list[str] | None = Field(default=None, description="行为规则列表（None=不更新，空列表=清空）")
+    tags: list[str] | None = Field(default=None, description="标签（None=不更新，空列表=清空）")
 
 
 class WebDeleteCharacterInput(BaseModel):
     """web_delete_character 输入"""
-    character_id: str = Field(..., min_length=1, max_length=128, description="角色 ID")
+    character_id: str = Field(..., pattern=ID_PATTERN, description="角色 ID")
 
 
 # ========================
@@ -399,30 +404,33 @@ class WebListWorldBooksInput(BaseModel):
 
 class WebGetWorldBookInput(BaseModel):
     """web_get_world_book 输入"""
-    book_id: str = Field(..., min_length=1, max_length=128, description="世界书 ID")
+    book_id: str = Field(..., pattern=ID_PATTERN, description="世界书 ID")
 
 
 class WebCreateWorldBookInput(BaseModel):
     """web_create_world_book 输入"""
     name: str = Field(..., min_length=1, max_length=100, description="世界书名称")
     description: str = Field(default="", max_length=2000, description="世界书描述")
-    character_ids: list[str] = Field(default=[], description="绑定的角色 ID 列表")
+    character_ids: list[str] = Field(default_factory=list, description="绑定的角色 ID 列表")
+
+
+_ENTRY_TYPE = Literal["lore", "location", "npc", "faction", "relationship", "rule", "style", "event", "secret"]
 
 
 class WebAddWorldBookEntryInput(BaseModel):
     """web_add_world_book_entry 输入"""
-    book_id: str = Field(..., min_length=1, max_length=128, description="世界书 ID")
+    book_id: str = Field(..., pattern=ID_PATTERN, description="世界书 ID")
     name: str = Field(default="", max_length=100, description="条目名称")
-    keywords: list[str] = Field(default=[], description="关键词列表")
+    keywords: list[str] = Field(default_factory=list, description="关键词列表")
     content: str = Field(..., min_length=1, max_length=10000, description="注入内容")
     priority: int = Field(default=50, ge=0, le=100, description="优先级")
-    entry_type: str = Field(default="lore", description="条目类型 (lore, location, npc, faction, rule, etc.)")
+    entry_type: _ENTRY_TYPE = Field(default="lore", description="条目类型")
     always_on: bool = Field(default=False, description="是否常驻注入")
 
 
 class WebDeleteWorldBookInput(BaseModel):
     """web_delete_world_book 输入"""
-    book_id: str = Field(..., min_length=1, max_length=128, description="世界书 ID")
+    book_id: str = Field(..., pattern=ID_PATTERN, description="世界书 ID")
 
 
 # ========================
@@ -432,34 +440,34 @@ class WebDeleteWorldBookInput(BaseModel):
 
 class WebListMemoriesInput(BaseModel):
     """web_list_memories 输入"""
-    target_id: str = Field(default="", max_length=128, description="目标 ID 筛选")
+    target_id: str = Field(default="", pattern=ID_PATTERN, description="目标 ID 筛选")
     character_name: str = Field(default="", max_length=100, description="角色名筛选")
-    mem_type: str = Field(default="all", description="记忆类型筛选 (all, long, short)")
+    mem_type: Literal["all", "long", "short"] = Field(default="all", description="记忆类型筛选")
 
 
 class WebAddMemoryInput(BaseModel):
     """web_add_memory 输入"""
     title: str = Field(..., min_length=1, max_length=200, description="记忆标题")
     content: str = Field(..., min_length=1, max_length=5000, description="记忆内容")
-    target_id: str = Field(default="", max_length=128, description="目标 ID")
+    target_id: str = Field(default="", pattern=ID_PATTERN, description="目标 ID")
     character_name: str = Field(default="", max_length=100, description="角色名称")
-    mem_type: str = Field(default="long", description="记忆类型 (long, short)")
+    mem_type: Literal["long", "short"] = Field(default="long", description="记忆类型")
     expire_days: int = Field(default=7, ge=1, le=365, description="过期天数")
 
 
 class WebDeleteMemoryInput(BaseModel):
     """web_delete_memory 输入"""
-    memory_id: str = Field(..., min_length=1, max_length=128, description="记忆 ID")
+    memory_id: str = Field(..., pattern=ID_PATTERN, description="记忆 ID")
 
 
 class WebUpdateMemoryInput(BaseModel):
-    """web_update_memory 输入"""
-    memory_id: str = Field(..., min_length=1, max_length=128, description="记忆 ID")
-    title: str = Field(default="", max_length=200, description="记忆标题")
-    content: str = Field(default="", max_length=5000, description="记忆内容")
-    mem_type: str = Field(default="", description="记忆类型 (long, short)")
-    target_id: str = Field(default="", max_length=128, description="目标 ID")
-    character_name: str = Field(default="", max_length=100, description="角色名称")
+    """web_update_memory 输入 — None 表示不更新，空字符串表示清空"""
+    memory_id: str = Field(..., pattern=ID_PATTERN, description="记忆 ID")
+    title: str | None = Field(default=None, max_length=200, description="记忆标题")
+    content: str | None = Field(default=None, max_length=5000, description="记忆内容")
+    mem_type: Literal["long", "short"] | None = Field(default=None, description="记忆类型")
+    target_id: str | None = Field(default=None, pattern=ID_PATTERN, description="目标 ID")
+    character_name: str | None = Field(default=None, max_length=100, description="角色名称")
 
 
 # ========================
@@ -483,12 +491,12 @@ class WebAddKnowledgeInput(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="文档标题")
     content: str = Field(..., min_length=1, max_length=100000, description="文档内容")
     source: str = Field(default="", max_length=200, description="来源")
-    tags: list[str] = Field(default=[], description="标签列表")
+    tags: list[str] = Field(default_factory=list, description="标签列表")
 
 
 class WebDeleteKnowledgeInput(BaseModel):
     """web_delete_knowledge 输入"""
-    doc_id: str = Field(..., min_length=1, max_length=128, description="文档 ID")
+    doc_id: str = Field(..., pattern=ID_PATTERN, description="文档 ID")
 
 
 # ========================

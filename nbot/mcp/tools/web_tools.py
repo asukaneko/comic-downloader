@@ -14,6 +14,7 @@
 import json
 import logging
 import os
+import tempfile
 import uuid
 from datetime import datetime
 from typing import Any
@@ -122,6 +123,11 @@ def _audit(ctx: MCPContext, tool_name: str, args: dict, result: dict) -> None:
     _log.info("[MCP Audit] %s", json.dumps(entry, ensure_ascii=False))
 
 
+def _save_error(resource: str) -> str:
+    """统一保存失败错误返回"""
+    return _err_json({"ok": False, "error": {"code": "save_failed", "message": f"Failed to save {resource}"}})
+
+
 # ========================
 # 数据访问桥接
 # ========================
@@ -140,24 +146,38 @@ def _get_data_dir(ctx: MCPContext) -> str:
 
 
 def _load_json_file(filepath: str) -> Any:
-    """加载 JSON 文件"""
+    """加载 JSON 文件
+
+    文件不存在返回 None；JSON 格式损坏时抛出 RuntimeError 而非静默吞掉。
+    """
     if not os.path.exists(filepath):
         return None
     try:
         with open(filepath, encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
-        return None
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Corrupted JSON file: {filepath} — {e}") from e
 
 
 def _save_json_file(filepath: str, data: Any) -> bool:
-    """保存 JSON 文件"""
+    """原子写入 JSON 文件
+
+    先写入临时文件，再 os.replace 替换，避免写入中途崩溃导致文件损坏。
+    """
     try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return True
+        dir_name = os.path.dirname(filepath)
+        os.makedirs(dir_name, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, filepath)
+            return True
+        except BaseException:
+            os.unlink(tmp_path)
+            raise
     except Exception:
+        _log.exception("[MCP Web] Failed to save %s", filepath)
         return False
 
 
@@ -221,10 +241,19 @@ def _save_character_profile(ctx: MCPContext, profile: dict) -> bool:
     return _save_json_file(filepath, profile)
 
 
+def _validate_id_path(filepath: str, expected_dir: str) -> bool:
+    """校验拼接后的路径确实在预期目录内，防止路径穿越"""
+    return os.path.normpath(filepath).startswith(os.path.normpath(expected_dir) + os.sep)
+
+
 def _delete_character_profile(ctx: MCPContext, character_id: str) -> bool:
     """删除角色卡"""
     data_dir = _get_data_dir(ctx)
-    filepath = os.path.join(data_dir, "character", "profiles", f"{character_id}.json")
+    profiles_dir = os.path.join(data_dir, "character", "profiles")
+    filepath = os.path.join(profiles_dir, f"{character_id}.json")
+    if not _validate_id_path(filepath, profiles_dir):
+        _log.warning("[MCP Web] Path traversal attempt blocked: %s", character_id)
+        return False
     if os.path.exists(filepath):
         os.remove(filepath)
         return True
@@ -261,7 +290,11 @@ def _save_world_book(ctx: MCPContext, book: dict) -> bool:
 def _delete_world_book(ctx: MCPContext, book_id: str) -> bool:
     """删除世界书"""
     data_dir = _get_data_dir(ctx)
-    filepath = os.path.join(data_dir, "character", "world_books", f"{book_id}.json")
+    books_dir = os.path.join(data_dir, "character", "world_books")
+    filepath = os.path.join(books_dir, f"{book_id}.json")
+    if not _validate_id_path(filepath, books_dir):
+        _log.warning("[MCP Web] Path traversal attempt blocked: %s", book_id)
+        return False
     if os.path.exists(filepath):
         os.remove(filepath)
         return True
@@ -465,7 +498,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             }
 
             sessions[session_id] = session
-            _save_sessions(ctx, sessions)
+            if not _save_sessions(ctx, sessions):
+                return _save_error("sessions")
 
             result = {"ok": True, "session_id": session_id, "name": session["name"]}
             _audit(ctx, "web_create_session", args, result)
@@ -530,7 +564,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             messages.append(message)
             session["messages"] = messages
             sessions[session_id] = session
-            _save_sessions(ctx, sessions)
+            if not _save_sessions(ctx, sessions):
+                return _save_error("sessions")
 
             result = {"ok": True, "message_id": message["id"], "session_id": session_id}
             _audit(ctx, "web_send_message", args, result)
@@ -614,7 +649,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Session not found"}})
 
             del sessions[session_id]
-            _save_sessions(ctx, sessions)
+            if not _save_sessions(ctx, sessions):
+                return _save_error("sessions")
 
             result = {"ok": True, "session_id": session_id}
             _audit(ctx, "web_delete_session", args, result)
@@ -761,7 +797,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 "updated_at": now,
             }
 
-            _save_character_profile(ctx, profile)
+            if not _save_character_profile(ctx, profile):
+                return _save_error("character")
 
             result = {"ok": True, "character_id": character_id, "name": name}
             _audit(ctx, "web_create_character", args, result)
@@ -826,25 +863,27 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             if not profile:
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Character not found"}})
 
-            if name:
+            # None = 不更新，空字符串/空列表 = 清空
+            if name is not None:
                 profile["name"] = name
-            if description:
+            if description is not None:
                 profile["description"] = description
-            if personality:
+            if personality is not None:
                 profile["personality"] = personality
-            if scenario:
+            if scenario is not None:
                 profile["scenario"] = scenario
-            if system_prompt:
+            if system_prompt is not None:
                 profile["system_prompt"] = system_prompt
-            if first_message:
+            if first_message is not None:
                 profile["first_message"] = first_message
-            if rules_list:
+            if rules is not None:
                 profile["rules"] = rules_list
-            if tags_list:
+            if tags is not None:
                 profile["tags"] = tags_list
             profile["updated_at"] = datetime.now().isoformat()
 
-            _save_character_profile(ctx, profile)
+            if not _save_character_profile(ctx, profile):
+                return _save_error("character")
 
             result = {"ok": True, "character_id": character_id, "name": profile["name"]}
             _audit(ctx, "web_update_character", args, result)
@@ -1023,7 +1062,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 "updated_at": now,
             }
 
-            _save_world_book(ctx, book)
+            if not _save_world_book(ctx, book):
+                return _save_error("world_book")
 
             result = {"ok": True, "book_id": book_id, "name": name}
             _audit(ctx, "web_create_world_book", args, result)
@@ -1104,7 +1144,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             book["entries"] = entries
             book["updated_at"] = datetime.now().isoformat()
 
-            _save_world_book(ctx, book)
+            if not _save_world_book(ctx, book):
+                return _save_error("world_book")
 
             result = {"ok": True, "entry_id": entry_id, "book_id": book_id}
             _audit(ctx, "web_add_world_book_entry", args, result)
@@ -1258,7 +1299,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             }
 
             memories.append(memory)
-            _save_memories(ctx, memories)
+            if not _save_memories(ctx, memories):
+                return _save_error("memories")
 
             result = {"ok": True, "memory_id": memory_id}
             _audit(ctx, "web_add_memory", args, result)
@@ -1314,19 +1356,21 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             if not target:
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Memory not found"}})
 
-            if title:
+            # None = 不更新，空字符串 = 清空
+            if title is not None:
                 target["title"] = title
-            if content:
+            if content is not None:
                 target["content"] = content
-            if mem_type:
+            if mem_type is not None:
                 target["type"] = mem_type
-            if target_id:
+            if target_id is not None:
                 target["target_id"] = target_id
-            if character_name:
+            if character_name is not None:
                 target["character_name"] = character_name
             target["updated_at"] = datetime.now().isoformat()
 
-            _save_memories(ctx, memories)
+            if not _save_memories(ctx, memories):
+                return _save_error("memories")
 
             result = {"ok": True, "memory_id": memory_id}
             _audit(ctx, "web_update_memory", args, result)
@@ -1372,7 +1416,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             if len(memories) == original_len:
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Memory not found"}})
 
-            _save_memories(ctx, memories)
+            if not _save_memories(ctx, memories):
+                return _save_error("memories")
 
             result = {"ok": True, "memory_id": memory_id}
             _audit(ctx, "web_delete_memory", args, result)
@@ -1539,7 +1584,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             }
 
             filepath = os.path.join(docs_dir, f"{doc_id}.json")
-            _save_json_file(filepath, doc)
+            if not _save_json_file(filepath, doc):
+                return _save_error("knowledge document")
 
             result = {"ok": True, "doc_id": doc_id, "title": title}
             _audit(ctx, "web_add_knowledge", args, result)
@@ -1579,7 +1625,12 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
 
         try:
             data_dir = _get_data_dir(ctx)
-            filepath = os.path.join(data_dir, "knowledge", "documents", f"{doc_id}.json")
+            docs_dir = os.path.join(data_dir, "knowledge", "documents")
+            filepath = os.path.join(docs_dir, f"{doc_id}.json")
+
+            if not _validate_id_path(filepath, docs_dir):
+                _log.warning("[MCP Web] Path traversal attempt blocked: %s", doc_id)
+                return _err_json({"ok": False, "error": {"code": "invalid_input", "message": "Invalid document ID"}})
 
             if not os.path.exists(filepath):
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Document not found"}})
@@ -1663,10 +1714,12 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
         try:
             models = _get_ai_models(ctx)
 
+            # 按 priority 排序（数值越小优先级越高），每个用途取优先级最高的
+            enabled = [m for m in models if isinstance(m, dict) and m.get("enabled", True)]
+            enabled.sort(key=lambda m: m.get("priority", 0))
+
             purposes = {}
-            for model in models:
-                if not isinstance(model, dict) or not model.get("enabled", True):
-                    continue
+            for model in enabled:
                 purpose = model.get("purpose", "chat")
                 if purpose not in purposes:
                     purposes[purpose] = {
@@ -1675,6 +1728,7 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                         "model": model.get("model", ""),
                         "provider": model.get("provider", ""),
                         "purpose": purpose,
+                        "priority": model.get("priority", 0),
                     }
 
             result = {"ok": True, "active_models": purposes}
