@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 
 # 所有 ID 字段统一校验模式：只允许 UUID 格式或安全字符，防路径穿越
 ID_PATTERN = r"^[a-zA-Z0-9_-]{1,128}$"
+# 可选 ID 字段：允许空字符串或合法 ID
+OPTIONAL_ID_PATTERN = r"^$|^[a-zA-Z0-9_-]{1,128}$"
 
 # ========================
 # Gateway Tools
@@ -326,7 +328,7 @@ class WebCreateSessionInput(BaseModel):
     sender_name: str = Field(default="", max_length=100, description="角色名称")
     system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
     first_message: str = Field(default="", max_length=5000, description="开场白")
-    character_id: str = Field(default="", pattern=ID_PATTERN, description="角色 ID")
+    character_id: str = Field(default="", pattern=OPTIONAL_ID_PATTERN, description="角色 ID")
 
 
 class WebSendMessageInput(BaseModel):
@@ -440,7 +442,7 @@ class WebDeleteWorldBookInput(BaseModel):
 
 class WebListMemoriesInput(BaseModel):
     """web_list_memories 输入"""
-    target_id: str = Field(default="", pattern=ID_PATTERN, description="目标 ID 筛选")
+    target_id: str = Field(default="", pattern=OPTIONAL_ID_PATTERN, description="目标 ID 筛选")
     character_name: str = Field(default="", max_length=100, description="角色名筛选")
     mem_type: Literal["all", "long", "short"] = Field(default="all", description="记忆类型筛选")
 
@@ -449,7 +451,7 @@ class WebAddMemoryInput(BaseModel):
     """web_add_memory 输入"""
     title: str = Field(..., min_length=1, max_length=200, description="记忆标题")
     content: str = Field(..., min_length=1, max_length=5000, description="记忆内容")
-    target_id: str = Field(default="", pattern=ID_PATTERN, description="目标 ID")
+    target_id: str = Field(default="", pattern=OPTIONAL_ID_PATTERN, description="目标 ID")
     character_name: str = Field(default="", max_length=100, description="角色名称")
     mem_type: Literal["long", "short"] = Field(default="long", description="记忆类型")
     expire_days: int = Field(default=7, ge=1, le=365, description="过期天数")
@@ -466,7 +468,7 @@ class WebUpdateMemoryInput(BaseModel):
     title: str | None = Field(default=None, max_length=200, description="记忆标题")
     content: str | None = Field(default=None, max_length=5000, description="记忆内容")
     mem_type: Literal["long", "short"] | None = Field(default=None, description="记忆类型")
-    target_id: str | None = Field(default=None, pattern=ID_PATTERN, description="目标 ID")
+    target_id: str | None = Field(default=None, pattern=OPTIONAL_ID_PATTERN, description="目标 ID")
     character_name: str | None = Field(default=None, max_length=100, description="角色名称")
 
 

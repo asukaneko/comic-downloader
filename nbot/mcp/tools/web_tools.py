@@ -11,10 +11,12 @@
   5. 执行 + 审计
 """
 
+import contextlib
 import json
 import logging
 import os
 import tempfile
+import threading
 import uuid
 from datetime import datetime
 from typing import Any
@@ -50,6 +52,24 @@ from nbot.mcp.schemas import (
 )
 
 _log = logging.getLogger(__name__)
+
+# 进程内线程锁，防止同一进程内多线程并发写同一文件
+_file_locks: dict[str, threading.Lock] = {}
+_file_locks_guard = threading.Lock()
+
+
+@contextlib.contextmanager
+def _file_lock(name: str):
+    """按文件名获取线程锁，保证同进程内串行读写"""
+    with _file_locks_guard:
+        if name not in _file_locks:
+            _file_locks[name] = threading.Lock()
+        lock = _file_locks[name]
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 # ========================
@@ -184,14 +204,16 @@ def _save_json_file(filepath: str, data: Any) -> bool:
 def _get_sessions(ctx: MCPContext) -> dict:
     """获取所有会话"""
     data_dir = _get_data_dir(ctx)
-    sessions = _load_json_file(os.path.join(data_dir, "sessions.json"))
+    with _file_lock("sessions.json"):
+        sessions = _load_json_file(os.path.join(data_dir, "sessions.json"))
     return sessions if isinstance(sessions, dict) else {}
 
 
 def _save_sessions(ctx: MCPContext, sessions: dict) -> bool:
-    """保存所有会话"""
+    """保存所有会话（带线程锁）"""
     data_dir = _get_data_dir(ctx)
-    return _save_json_file(os.path.join(data_dir, "sessions.json"), sessions)
+    with _file_lock("sessions.json"):
+        return _save_json_file(os.path.join(data_dir, "sessions.json"), sessions)
 
 
 def _get_ai_models(ctx: MCPContext) -> list:
@@ -204,14 +226,16 @@ def _get_ai_models(ctx: MCPContext) -> list:
 def _get_memories(ctx: MCPContext) -> list:
     """获取所有记忆"""
     data_dir = _get_data_dir(ctx)
-    memories = _load_json_file(os.path.join(data_dir, "memories.json"))
+    with _file_lock("memories.json"):
+        memories = _load_json_file(os.path.join(data_dir, "memories.json"))
     return memories if isinstance(memories, list) else []
 
 
 def _save_memories(ctx: MCPContext, memories: list) -> bool:
-    """保存所有记忆"""
+    """保存所有记忆（带线程锁）"""
     data_dir = _get_data_dir(ctx)
-    return _save_json_file(os.path.join(data_dir, "memories.json"), memories)
+    with _file_lock("memories.json"):
+        return _save_json_file(os.path.join(data_dir, "memories.json"), memories)
 
 
 def _get_character_profiles(ctx: MCPContext) -> dict:
@@ -231,13 +255,16 @@ def _get_character_profiles(ctx: MCPContext) -> dict:
 
 
 def _save_character_profile(ctx: MCPContext, profile: dict) -> bool:
-    """保存角色卡"""
+    """保存角色卡（带路径校验）"""
     data_dir = _get_data_dir(ctx)
     profile_id = profile.get("id", "")
     if not profile_id:
         return False
     profiles_dir = os.path.join(data_dir, "character", "profiles")
     filepath = os.path.join(profiles_dir, f"{profile_id}.json")
+    if not _validate_id_path(filepath, profiles_dir):
+        _log.warning("[MCP Web] Path traversal attempt blocked in save: %s", profile_id)
+        return False
     return _save_json_file(filepath, profile)
 
 
@@ -277,13 +304,16 @@ def _get_world_books(ctx: MCPContext) -> dict:
 
 
 def _save_world_book(ctx: MCPContext, book: dict) -> bool:
-    """保存世界书"""
+    """保存世界书（带路径校验）"""
     data_dir = _get_data_dir(ctx)
     book_id = book.get("id", "")
     if not book_id:
         return False
     books_dir = os.path.join(data_dir, "character", "world_books")
     filepath = os.path.join(books_dir, f"{book_id}.json")
+    if not _validate_id_path(filepath, books_dir):
+        _log.warning("[MCP Web] Path traversal attempt blocked in save: %s", book_id)
+        return False
     return _save_json_file(filepath, book)
 
 
@@ -813,14 +843,14 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
     @mcp_server.tool()
     async def web_update_character(
         character_id: str,
-        name: str = "",
-        description: str = "",
-        personality: str = "",
-        scenario: str = "",
-        system_prompt: str = "",
-        first_message: str = "",
-        rules: str = "",
-        tags: str = "",
+        name: str | None = None,
+        description: str | None = None,
+        personality: str | None = None,
+        scenario: str | None = None,
+        system_prompt: str | None = None,
+        first_message: str | None = None,
+        rules: str | None = None,
+        tags: str | None = None,
         confirm: bool = False,
     ) -> str:
         """更新角色卡
@@ -844,8 +874,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 mcp_log.denied("web_update_character", code, args)
             return _err_json(err)
 
-        rules_list = [r.strip() for r in rules.split(",") if r.strip()] if rules else []
-        tags_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        rules_list = [r.strip() for r in rules.split(",") if r.strip()] if rules is not None else None
+        tags_list = [t.strip() for t in tags.split(",") if t.strip()] if tags is not None else None
 
         err = _validate_input(
             WebUpdateCharacterInput,
@@ -1315,11 +1345,11 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
     @mcp_server.tool()
     async def web_update_memory(
         memory_id: str,
-        title: str = "",
-        content: str = "",
-        mem_type: str = "",
-        target_id: str = "",
-        character_name: str = "",
+        title: str | None = None,
+        content: str | None = None,
+        mem_type: str | None = None,
+        target_id: str | None = None,
+        character_name: str | None = None,
         confirm: bool = False,
     ) -> str:
         """更新记忆
