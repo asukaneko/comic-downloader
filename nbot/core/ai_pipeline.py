@@ -1289,8 +1289,28 @@ class AIPipeline:
             return result
 
         if ctx.error:
+            error_content = ctx.final_content or ctx.error
+            # 构建并发送错误回复，确保用户能看到反馈
+            if ctx.adapter and hasattr(ctx.adapter, "build_assistant_message"):
+                temp_response = ChatResponse(
+                    final_content=error_content,
+                    tool_trace=ctx.tool_trace,
+                    usage=ctx.usage,
+                )
+                assistant_message = ctx.adapter.build_assistant_message(
+                    temp_response,
+                    conversation_id=ctx.chat_request.conversation_id,
+                )
+            else:
+                assistant_message = {
+                    "role": "assistant",
+                    "content": error_content,
+                }
+            callbacks.save_assistant_message(ctx, assistant_message)
+            callbacks.send_response(ctx, assistant_message)
             result = PipelineResult(
-                final_content=ctx.final_content or ctx.error,
+                final_content=error_content,
+                assistant_message=assistant_message,
                 error=ctx.error,
                 metadata=ctx.metadata,
             )

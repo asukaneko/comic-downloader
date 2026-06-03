@@ -40,6 +40,7 @@ CONFIG_KEYS = (
     "personality",
     "custom_personality_presets",
     "world_books",
+    "mcp_servers",
 )
 SAVE_TYPES = (
     "settings",
@@ -135,6 +136,25 @@ def _write_world_books(server, world_books: Dict[str, Any]) -> None:
         json.dump(world_books if isinstance(world_books, dict) else {}, f, ensure_ascii=False, indent=2)
 
 
+def _read_mcp_servers(server) -> list:
+    path = os.path.join(server.data_dir, "mcp_servers.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except Exception:
+        pass
+    return []
+
+
+def _write_mcp_servers(server, mcp_servers) -> None:
+    path = os.path.join(server.data_dir, "mcp_servers.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(mcp_servers if isinstance(mcp_servers, list) else [], f, ensure_ascii=False, indent=2)
+
+
 def build_plain_bundle(server) -> Dict[str, Any]:
     ai_models = getattr(server, "ai_models", []) or []
     return {
@@ -167,6 +187,7 @@ def build_plain_bundle(server) -> Dict[str, Any]:
                 getattr(server, "custom_personality_presets", []) or []
             ),
             "world_books": _read_world_books(server),
+            "mcp_servers": _read_mcp_servers(server),
         },
     }
 
@@ -305,6 +326,14 @@ def apply_bundle(server, bundle: Dict[str, Any], *, overwrite: bool = True) -> D
             imported.append("world_books")
         else:
             skipped.append("world_books")
+
+    if "mcp_servers" in configs:
+        mcp_servers = configs.get("mcp_servers")
+        if overwrite or not _read_mcp_servers(server):
+            _write_mcp_servers(server, _clean_json(mcp_servers if isinstance(mcp_servers, list) else []))
+            imported.append("mcp_servers")
+        else:
+            skipped.append("mcp_servers")
 
     _save_imported_configs(server, touched)
 

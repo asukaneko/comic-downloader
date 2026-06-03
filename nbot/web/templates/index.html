@@ -199,7 +199,7 @@
                     </div>
                     <div>
                         <div class="sidebar-title">NekoBot</div>
-                        <div class="sidebar-version">v2.0.0</div>
+                        <div class="sidebar-version">v2.7.0</div>
                     </div>
                 </div>
 
@@ -6403,9 +6403,13 @@
                         <div class="card">
                             <div class="card-header">
                                 <span class="card-title"><i class="fas fa-server"></i> {{ $t('nav.mcp_servers') }}</span>
-                                <button class="btn btn-primary" @click="openMCPServerModal()">
-                                    <i class="fas fa-plus"></i> 添加 MCP 服务
-                                </button>
+                                <div style="display:flex;gap:8px;">
+                                    <button class="btn btn-secondary" @click="exportMCPServers()"><i class="fas fa-download"></i> 导出</button>
+                                    <button class="btn btn-secondary" @click="triggerMCPServersImport()"><i class="fas fa-upload"></i> 导入</button>
+                                    <button class="btn btn-primary" @click="openMCPServerModal()">
+                                        <i class="fas fa-plus"></i> 添加 MCP 服务
+                                    </button>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <div v-if="mcpServers.length === 0" class="empty-state">
@@ -6523,6 +6527,8 @@
                             </div>
                         </div>
                     </div>
+
+                    <input type="file" ref="mcpServersImportInput" accept=".json" style="display:none" @change="handleMCPServersImport($event)">
 
                     <!-- Channels -->
                     <div v-if="currentPage === 'channels'" class="fade-in">
@@ -9342,7 +9348,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260602-composer3"></script>
+    <script src="/static/js/nbot-methods.js?v=20260603-mcp-import"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());

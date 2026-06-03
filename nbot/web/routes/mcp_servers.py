@@ -8,6 +8,8 @@ MCP 异步操作通过持久化事件循环执行，避免 asyncio.run() 每次�
 """
 
 import asyncio
+import io
+from datetime import datetime
 import json
 import logging
 import os
@@ -16,7 +18,7 @@ import uuid
 from concurrent.futures import Future
 from datetime import datetime
 
-from flask import jsonify, request
+from flask import jsonify, request, send_file
 
 _log = logging.getLogger(__name__)
 
@@ -274,3 +276,92 @@ def register_mcp_server_routes(app, server):
                 return jsonify({"error": result.get("error", "Connection failed")}), 500
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+
+    # ---- MCP 配置导入/导出 ----
+
+    @app.route("/api/mcp-servers/export", methods=["GET"])
+    def export_mcp_servers():
+        """导出所有 MCP 服务配置为 JSON 文件"""
+        path = _config_path(server)
+        servers = _load_config(server)
+
+        # 移除连接状态字段，导出纯配置
+        export_list = []
+        for s in servers:
+            entry = {k: v for k, v in s.items() if k not in ("connected", "tool_count", "last_connected_at")}
+            export_list.append(entry)
+
+        export = {
+            "version": 1,
+            "type": "mcp_servers_config",
+            "exported_at": datetime.now().isoformat(),
+            "servers": export_list,
+        }
+        blob = json.dumps(export, ensure_ascii=False, indent=2).encode("utf-8")
+        return send_file(
+            io.BytesIO(blob),
+            mimetype="application/json",
+            as_attachment=True,
+            download_name=f"mcp-servers-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json",
+        )
+
+    @app.route("/api/mcp-servers/import", methods=["POST"])
+    def import_mcp_servers():
+        """导入 MCP 服务配置"""
+        raw = request.get_json(silent=True)
+        if raw is None:
+            upload = request.files.get("file")
+            if upload:
+                try:
+                    raw = json.loads(upload.read().decode("utf-8"))
+                except Exception as exc:
+                    return jsonify({"ok": False, "error": f"JSON 解析失败: {exc}"}), 400
+            else:
+                return jsonify({"ok": False, "error": "无数据"}), 400
+
+        if not isinstance(raw, dict) or "servers" not in raw:
+            return jsonify({"ok": False, "error": "格式无效，缺少 servers 字段"}), 400
+
+        incoming = raw["servers"]
+        # 支持 list 或 dict 格式
+        if isinstance(incoming, dict):
+            incoming_list = list(incoming.values())
+        elif isinstance(incoming, list):
+            incoming_list = incoming
+        else:
+            return jsonify({"ok": False, "error": "servers 字段应为列表或对象"}), 400
+
+        # 加载现有配置
+        existing = _load_config(server)
+        existing_by_id = {s["id"]: s for s in existing if "id" in s}
+        imported_ids = []
+        skipped_ids = []
+
+        for entry in incoming_list:
+            if not isinstance(entry, dict) or "id" not in entry:
+                continue
+            sid = entry["id"]
+            # 内置条目不可覆盖
+            if existing_by_id.get(sid, {}).get("_builtin"):
+                skipped_ids.append(sid)
+                continue
+            # 保留现有连接状态
+            if sid in existing_by_id:
+                for k in ("connected", "tool_count", "last_connected_at"):
+                    if k in existing_by_id[sid]:
+                        entry.setdefault(k, existing_by_id[sid][k])
+            existing_by_id[sid] = entry
+            imported_ids.append(sid)
+
+        path = _config_path(server)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(list(existing_by_id.values()), f, ensure_ascii=False, indent=2)
+
+        return jsonify({
+            "ok": True,
+            "imported": imported_ids,
+            "skipped": skipped_ids,
+            "imported_count": len(imported_ids),
+        })

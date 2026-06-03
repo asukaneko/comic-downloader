@@ -550,7 +550,7 @@ const i18nMessages = {
     
     // Mobile sidebar
     'sidebar.back': '返回',
-    'sidebar.version': 'v2.0.0',
+    'sidebar.version': 'v2.7.0',
     
     // Onboarding config transfer
     'onboarding.config_transfer.title': '一键导入已有配置',
@@ -1835,7 +1835,7 @@ const i18nMessages = {
     
     // Mobile sidebar
     'sidebar.back': 'Back',
-    'sidebar.version': 'v2.0.0',
+    'sidebar.version': 'v2.7.0',
     
     // Onboarding config transfer
     'onboarding.config_transfer.title': 'Import Existing Config',

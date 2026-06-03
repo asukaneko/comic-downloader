@@ -3628,6 +3628,44 @@ def main(params):
                     }
                 },
 
+                async exportMCPServers() {
+                    try {
+                        const res = await api.get('/api/mcp-servers/export', { responseType: 'blob' });
+                        const url = URL.createObjectURL(res.data);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `mcp-servers-${new Date().toISOString().slice(0, 10)}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                        this.showToast('MCP 配置已导出', 'success');
+                    } catch (e) {
+                        this.showToast('导出失败', 'error');
+                    }
+                },
+
+                triggerMCPServersImport() {
+                    const ref = this.$refs.mcpServersImportInput;
+                    if (ref) { ref.value = ''; ref.click(); }
+                },
+
+                async handleMCPServersImport(event) {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    try {
+                        const text = await file.text();
+                        const data = JSON.parse(text);
+                        const res = await api.post('/api/mcp-servers/import', data);
+                        if (res.data.ok) {
+                            const count = res.data.imported_count || 0;
+                            this.showToast(`导入完成: ${count} 个服务`, 'success');
+                            await this.loadMCPServers();
+                        } else {
+                            this.showToast(res.data.error || '导入失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('导入失败: ' + (e.message || '未知错误'), 'error');
+                    }
+                },
                 async loadChannels() {
                     try {
                         const res = await api.get('/api/channels');
