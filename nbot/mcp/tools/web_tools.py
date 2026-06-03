@@ -859,9 +859,19 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                     "id": pid,
                     "name": profile.get("name", ""),
                     "description": profile.get("description", ""),
+                    "avatar": profile.get("avatar", ""),
+                    "portrait": profile.get("portrait", ""),
+                    "tags": profile.get("tags", []),
+                    "basicInfo": profile.get("basicInfo", ""),
                     "personality": profile.get("personality", ""),
                     "scenario": profile.get("scenario", ""),
-                    "tags": profile.get("tags", []),
+                    "firstMessage": profile.get("firstMessage", ""),
+                    "rules": profile.get("rules", []),
+                    "state": profile.get("state", {}),
+                    "systemPrompt": profile.get("systemPrompt", ""),
+                    "greeting": profile.get("greeting", ""),
+                    "responseFormat": profile.get("responseFormat", ""),
+                    "exampleDialogues": profile.get("exampleDialogues", ""),
                     "created_at": profile.get("created_at", ""),
                 })
             result = {"ok": True, "count": len(result_list), "characters": result_list}
@@ -1648,7 +1658,7 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 content = doc.get("content", "")
                 result_list.append({
                     "id": doc.get("id", ""),
-                    "title": doc.get("title", ""),
+                    "title": doc.get("title") or doc.get("name", ""),
                     "source": doc.get("source", ""),
                     "tags": doc.get("tags", []),
                     "size": len(content),
@@ -1688,7 +1698,7 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             scored = []
             for doc in docs:
                 content = doc.get("content", "").lower()
-                title = doc.get("title", "").lower()
+                title = (doc.get("title") or doc.get("name", "")).lower()
                 score = 0
                 if query_lower in title:
                     score += 10
@@ -1708,7 +1718,7 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 content = doc.get("content", "")
                 results.append({
                     "doc_id": doc.get("id", ""),
-                    "title": doc.get("title", ""),
+                    "title": doc.get("title") or doc.get("name", ""),
                     "score": score,
                     "preview": content[:300] + "..." if len(content) > 300 else content,
                 })
@@ -1964,39 +1974,77 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             if not stats:
                 stats = {}
 
-            if model_name:
-                model_stats = stats.get(model_name, {})
-                result = {"ok": True, "model_name": model_name, "usage": model_stats}
-            else:
-                summary = {}
-                total_input = 0
-                total_output = 0
-                total_requests = 0
-                for mname, mstats in stats.items():
-                    if isinstance(mstats, dict):
-                        input_tokens = mstats.get("input_tokens", 0)
-                        output_tokens = mstats.get("output_tokens", 0)
-                        requests = mstats.get("requests", 0)
-                        summary[mname] = {
-                            "input_tokens": input_tokens,
-                            "output_tokens": output_tokens,
-                            "total_tokens": input_tokens + output_tokens,
-                            "requests": requests,
-                        }
-                        total_input += input_tokens
-                        total_output += output_tokens
-                        total_requests += requests
+            # 统计文件有两种格式：
+            # 新格式：{"today", "month", "total", "estimated_cost", "history", "models": {name: {input, output, ...}}}
+            # 旧格式：{"model_name": {"input_tokens", "output_tokens", "requests"}}
+            models_dict = stats.get("models", {})
+            is_new_format = isinstance(models_dict, dict) and any(
+                isinstance(v, dict) and "input" in v for v in models_dict.values()
+            )
 
-                result = {
-                    "ok": True,
-                    "total": {
-                        "input_tokens": total_input,
-                        "output_tokens": total_output,
-                        "total_tokens": total_input + total_output,
-                        "requests": total_requests,
-                    },
-                    "by_model": summary,
-                }
+            if model_name:
+                if is_new_format:
+                    mstats = models_dict.get(model_name, {})
+                    result = {"ok": True, "model_name": model_name, "usage": {
+                        "input_tokens": mstats.get("input", 0),
+                        "output_tokens": mstats.get("output", 0),
+                        "total_tokens": mstats.get("total", 0),
+                        "requests": mstats.get("message_count", 0),
+                        "cost": mstats.get("cost", 0),
+                    }}
+                else:
+                    mstats = stats.get(model_name, {})
+                    result = {"ok": True, "model_name": model_name, "usage": mstats}
+            else:
+                if is_new_format:
+                    summary = {}
+                    for mname, mstats in models_dict.items():
+                        if isinstance(mstats, dict):
+                            summary[mname] = {
+                                "input_tokens": mstats.get("input", 0),
+                                "output_tokens": mstats.get("output", 0),
+                                "total_tokens": mstats.get("total", 0),
+                                "requests": mstats.get("message_count", 0),
+                                "cost": mstats.get("cost", 0),
+                            }
+                    result = {
+                        "ok": True,
+                        "today": stats.get("today", 0),
+                        "month": stats.get("month", 0),
+                        "total": stats.get("total", 0),
+                        "estimated_cost": stats.get("estimated_cost", 0),
+                        "history": stats.get("history", []),
+                        "by_model": summary,
+                    }
+                else:
+                    summary = {}
+                    total_input = 0
+                    total_output = 0
+                    total_requests = 0
+                    for mname, mstats in stats.items():
+                        if isinstance(mstats, dict):
+                            input_tokens = mstats.get("input_tokens", 0)
+                            output_tokens = mstats.get("output_tokens", 0)
+                            requests = mstats.get("requests", 0)
+                            summary[mname] = {
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                                "total_tokens": input_tokens + output_tokens,
+                                "requests": requests,
+                            }
+                            total_input += input_tokens
+                            total_output += output_tokens
+                            total_requests += requests
+                    result = {
+                        "ok": True,
+                        "total": {
+                            "input_tokens": total_input,
+                            "output_tokens": total_output,
+                            "total_tokens": total_input + total_output,
+                            "requests": total_requests,
+                        },
+                        "by_model": summary,
+                    }
 
             mcp_log.completed("web_get_token_usage", args, {"ok": True})
             return json.dumps(result, ensure_ascii=False)
