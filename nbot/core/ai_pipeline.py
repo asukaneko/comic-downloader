@@ -1008,9 +1008,15 @@ class AIPipeline:
         except Exception as e:
             error_str = str(e)
             _log.error(f"Tool loop failed: {e}")
-            # 如果是 400 错误（如模型不支持工具调用），回退到普通对话
-            if "400" in error_str:
-                _log.warning("模型返回400错误，跳过工具调用，回退到普通对话")
+            # 仅当首次模型调用就失败（iteration==0，工具从未被调用过）时，
+            # 才回退到无工具的普通对话；否则保留已有的工具调用进度
+            iteration = getattr(e, "iteration", -1)
+            if "400" in error_str and iteration <= 0:
+                _log.warning(
+                    "首次模型调用返回400错误（iteration=%d），"
+                    "回退到无工具对话",
+                    iteration,
+                )
                 progress.on_thinking_start(ctx)
                 self._run_simple(ctx, callbacks)
                 progress.on_done(ctx)

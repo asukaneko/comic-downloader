@@ -21,6 +21,20 @@ class ToolLoopExit(Exception):
         self.final_content = final_content
 
 
+class ToolLoopModelError(Exception):
+    """Wraps a model_call error inside the tool loop with iteration context.
+
+    Attributes:
+        iteration: The iteration index where the error occurred (0-based).
+                   0 means the very first model call failed.
+    """
+
+    def __init__(self, original: Exception, iteration: int):
+        super().__init__(str(original))
+        self.original = original
+        self.iteration = iteration
+
+
 @dataclass
 class ToolLoopHooks:
     on_iteration_start: Optional[Callable[[int, List[Dict[str, Any]]], None]] = None
@@ -418,6 +432,8 @@ def run_tool_call_loop(
                 iterations=iteration + 1,
                 consecutive_errors=consecutive_errors,
             )
+        except Exception as exc:
+            raise ToolLoopModelError(exc, iteration) from exc
 
         # 提取模型追踪信息
         resp_model_id = response.pop("_model_id", None)

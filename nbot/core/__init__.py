@@ -30,6 +30,7 @@ from nbot.core.workspace import (
 from nbot.core.agent_service import (
     AgentService,
     ToolLoopExit,
+    ToolLoopModelError,
     ToolLoopHooks,
     ToolLoopSession,
     PreparedChatContext,
