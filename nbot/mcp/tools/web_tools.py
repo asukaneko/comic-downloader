@@ -19,6 +19,7 @@ import tempfile
 import threading
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -154,15 +155,36 @@ def _save_error(resource: str) -> str:
 
 
 def _get_data_dir(ctx: MCPContext) -> str:
-    """获取 Web 功能的数据目录
+    """获取项目数据根目录 data/
 
-    Web 功能的数据（sessions、ai_models、memories 等）存储在
-    项目根目录下的 data/ 目录，而非 gateway 的 data/web/。
+    memories、characters、world_books 等存储在此。
     """
     base_dir = ctx.config.get("base_dir", "")
     if base_dir:
         return os.path.join(base_dir, "data")
     return "data"
+
+
+def _get_web_data_dir(ctx: MCPContext) -> str:
+    """获取 Web 前端数据目录 data/web/
+
+    sessions.db、ai_models.json 等存储在此。
+    """
+    base_dir = ctx.config.get("base_dir", "")
+    if base_dir:
+        return os.path.join(base_dir, "data", "web")
+    return os.path.join("data", "web")
+
+
+def _get_saved_message_dir(ctx: MCPContext) -> str:
+    """获取 saved_message 目录
+
+    知识库文档存储在 saved_message/knowledge/documents/ 下。
+    """
+    base_dir = ctx.config.get("base_dir", "")
+    if base_dir:
+        return os.path.join(base_dir, "saved_message")
+    return "saved_message"
 
 
 def _load_json_file(filepath: str) -> Any:
@@ -202,20 +224,55 @@ def _save_json_file(filepath: str, data: Any) -> bool:
 
 
 def _get_sessions(ctx: MCPContext) -> dict:
-    """获取所有会话（只读，不加锁，仅用于 list/get）"""
-    data_dir = _get_data_dir(ctx)
-    sessions = _load_json_file(os.path.join(data_dir, "sessions.json"))
+    """获取所有会话
+
+    优先从 SQLite 数据库 (data/web/sessions.db) 读取；
+    若数据库不存在或为空，回退到 JSON 文件 (data/web/sessions.json)。
+    """
+    web_dir = _get_web_data_dir(ctx)
+    try:
+        from nbot.web.sessions_db import load_sessions
+
+        sessions = load_sessions(web_dir)
+        if sessions:
+            return sessions
+    except Exception:
+        _log.debug("[MCP Web] SQLite 读取失败，回退到 JSON", exc_info=True)
+
+    # 回退：legacy JSON 文件
+    json_path = os.path.join(web_dir, "sessions.json")
+    sessions = _load_json_file(json_path)
     return sessions if isinstance(sessions, dict) else {}
 
 
 def _with_sessions(ctx: MCPContext, mutator):
-    """原子读-改-写 sessions.json，mutator(sessions) 在锁内执行
+    """原子读-改-写会话
+
+    优先使用 SQLite (upsert)，回退到 JSON 文件。
+    mutator(sessions) 在锁内执行。
 
     Returns:
         (True, mutator_return) on success, (False, None) on save failure.
     """
-    data_dir = _get_data_dir(ctx)
-    path = os.path.abspath(os.path.join(data_dir, "sessions.json"))
+    web_dir = _get_web_data_dir(ctx)
+
+    # 尝试 SQLite 路径
+    try:
+        from nbot.web.sessions_db import load_sessions, upsert_session
+
+        sessions = load_sessions(web_dir)
+        if not isinstance(sessions, dict):
+            sessions = {}
+        result = mutator(sessions)
+        # 将变更写回 DB
+        for sid, session_data in sessions.items():
+            upsert_session(web_dir, sid, session_data)
+        return True, result
+    except Exception:
+        _log.debug("[MCP Web] SQLite 写入失败，回退到 JSON", exc_info=True)
+
+    # 回退：JSON 文件
+    path = os.path.abspath(os.path.join(web_dir, "sessions.json"))
     with _file_lock(path):
         sessions = _load_json_file(path)
         if not isinstance(sessions, dict):
@@ -227,7 +284,24 @@ def _with_sessions(ctx: MCPContext, mutator):
 
 
 def _get_ai_models(ctx: MCPContext) -> list:
-    """获取所有 AI 模型"""
+    """获取所有 AI 模型
+
+    优先从加密文件 (data/web/ai_models.json) 读取；
+    若解密失败，回退到明文 JSON (data/ai_models.json)。
+    """
+    web_dir = _get_web_data_dir(ctx)
+    filepath = os.path.join(web_dir, "ai_models.json")
+    try:
+        from nbot.web.secure_store import read_secure_json
+
+        payload, _was_plaintext = read_secure_json(filepath, web_dir, None)
+        if isinstance(payload, dict):
+            models = payload.get("models", [])
+            return models if isinstance(models, list) else []
+    except Exception:
+        _log.debug("[MCP Web] 加密读取失败，回退到明文 JSON", exc_info=True)
+
+    # 回退：明文 JSON
     data_dir = _get_data_dir(ctx)
     models = _load_json_file(os.path.join(data_dir, "ai_models.json"))
     return models if isinstance(models, list) else []
@@ -259,33 +333,29 @@ def _with_memories(ctx: MCPContext, mutator):
 
 
 def _get_character_profiles(ctx: MCPContext) -> dict:
-    """获取所有角色卡"""
+    """获取所有角色卡
+
+    读取 data/character/profiles.json（单文件 dict，key 为角色 ID/名称）。
+    """
     data_dir = _get_data_dir(ctx)
-    profiles_dir = os.path.join(data_dir, "character", "profiles")
-    if not os.path.isdir(profiles_dir):
-        return {}
-    profiles = {}
-    for filename in os.listdir(profiles_dir):
-        if filename.endswith(".json"):
-            filepath = os.path.join(profiles_dir, filename)
-            profile = _load_json_file(filepath)
-            if isinstance(profile, dict) and profile.get("id"):
-                profiles[profile["id"]] = profile
-    return profiles
+    filepath = os.path.join(data_dir, "character", "profiles.json")
+    profiles = _load_json_file(filepath)
+    return profiles if isinstance(profiles, dict) else {}
 
 
 def _save_character_profile(ctx: MCPContext, profile: dict) -> bool:
-    """保存角色卡（带路径校验）"""
+    """保存角色卡到 data/character/profiles.json（原子读-改-写）"""
     data_dir = _get_data_dir(ctx)
     profile_id = profile.get("id", "")
     if not profile_id:
         return False
-    profiles_dir = os.path.join(data_dir, "character", "profiles")
-    filepath = os.path.join(profiles_dir, f"{profile_id}.json")
-    if not _validate_id_path(filepath, profiles_dir):
-        _log.warning("[MCP Web] Path traversal attempt blocked in save: %s", profile_id)
-        return False
-    return _save_json_file(filepath, profile)
+    filepath = os.path.abspath(os.path.join(data_dir, "character", "profiles.json"))
+    with _file_lock(filepath):
+        profiles = _load_json_file(filepath)
+        if not isinstance(profiles, dict):
+            profiles = {}
+        profiles[profile_id] = profile
+        return _save_json_file(filepath, profiles)
 
 
 def _validate_id_path(filepath: str, expected_dir: str) -> bool:
@@ -296,77 +366,114 @@ def _validate_id_path(filepath: str, expected_dir: str) -> bool:
 
 
 def _delete_character_profile(ctx: MCPContext, character_id: str) -> bool:
-    """删除角色卡"""
+    """从 data/character/profiles.json 删除角色卡"""
     data_dir = _get_data_dir(ctx)
-    profiles_dir = os.path.join(data_dir, "character", "profiles")
-    filepath = os.path.join(profiles_dir, f"{character_id}.json")
-    if not _validate_id_path(filepath, profiles_dir):
-        _log.warning("[MCP Web] Path traversal attempt blocked: %s", character_id)
-        return False
-    if os.path.exists(filepath):
-        os.remove(filepath)
-        return True
-    return False
+    filepath = os.path.abspath(os.path.join(data_dir, "character", "profiles.json"))
+    with _file_lock(filepath):
+        profiles = _load_json_file(filepath)
+        if not isinstance(profiles, dict):
+            return False
+        if character_id not in profiles:
+            # 也尝试按 name 匹配
+            matched_key = None
+            for key, val in profiles.items():
+                if isinstance(val, dict) and val.get("name") == character_id:
+                    matched_key = key
+                    break
+            if matched_key is None:
+                return False
+            character_id = matched_key
+        del profiles[character_id]
+        return _save_json_file(filepath, profiles)
 
 
 def _get_world_books(ctx: MCPContext) -> dict:
-    """获取所有世界书"""
+    """获取所有世界书
+
+    读取 data/world_books.json，格式为 {"world_books": {book_id: book, ...}}。
+    entries 从 dict 转为 list 以统一 API 返回格式。
+    """
     data_dir = _get_data_dir(ctx)
-    books_dir = os.path.join(data_dir, "character", "world_books")
-    if not os.path.isdir(books_dir):
+    filepath = os.path.join(data_dir, "world_books.json")
+    raw = _load_json_file(filepath)
+    if not isinstance(raw, dict):
         return {}
+    books_raw = raw.get("world_books", {})
+    if not isinstance(books_raw, dict):
+        return {}
+    # 将 entries 从 dict 转为 list
     books = {}
-    for filename in os.listdir(books_dir):
-        if filename.endswith(".json"):
-            filepath = os.path.join(books_dir, filename)
-            book = _load_json_file(filepath)
-            if isinstance(book, dict) and book.get("id"):
-                books[book["id"]] = book
+    for bid, book in books_raw.items():
+        if not isinstance(book, dict):
+            continue
+        book_copy = dict(book)
+        entries = book_copy.get("entries", {})
+        if isinstance(entries, dict):
+            book_copy["entries"] = list(entries.values())
+        books[bid] = book_copy
     return books
 
 
 def _save_world_book(ctx: MCPContext, book: dict) -> bool:
-    """保存世界书（带路径校验）"""
+    """保存世界书到 data/world_books.json（原子读-改-写）"""
     data_dir = _get_data_dir(ctx)
     book_id = book.get("id", "")
     if not book_id:
         return False
-    books_dir = os.path.join(data_dir, "character", "world_books")
-    filepath = os.path.join(books_dir, f"{book_id}.json")
-    if not _validate_id_path(filepath, books_dir):
-        _log.warning("[MCP Web] Path traversal attempt blocked in save: %s", book_id)
-        return False
-    return _save_json_file(filepath, book)
+    filepath = os.path.abspath(os.path.join(data_dir, "world_books.json"))
+    with _file_lock(filepath):
+        raw = _load_json_file(filepath)
+        if not isinstance(raw, dict):
+            raw = {}
+        if "world_books" not in raw or not isinstance(raw["world_books"], dict):
+            raw["world_books"] = {}
+        # 保存时将 entries list 转回 dict
+        book_copy = dict(book)
+        entries = book_copy.get("entries", [])
+        if isinstance(entries, list):
+            book_copy["entries"] = {e.get("id", ""): e for e in entries if isinstance(e, dict)}
+        raw["world_books"][book_id] = book_copy
+        return _save_json_file(filepath, raw)
 
 
 def _delete_world_book(ctx: MCPContext, book_id: str) -> bool:
-    """删除世界书"""
+    """从 data/world_books.json 删除世界书"""
     data_dir = _get_data_dir(ctx)
-    books_dir = os.path.join(data_dir, "character", "world_books")
-    filepath = os.path.join(books_dir, f"{book_id}.json")
-    if not _validate_id_path(filepath, books_dir):
-        _log.warning("[MCP Web] Path traversal attempt blocked: %s", book_id)
-        return False
-    if os.path.exists(filepath):
-        os.remove(filepath)
-        return True
-    return False
+    filepath = os.path.abspath(os.path.join(data_dir, "world_books.json"))
+    with _file_lock(filepath):
+        raw = _load_json_file(filepath)
+        if not isinstance(raw, dict) or "world_books" not in raw:
+            return False
+        if book_id not in raw["world_books"]:
+            return False
+        del raw["world_books"][book_id]
+        return _save_json_file(filepath, raw)
 
 
 def _get_knowledge_docs(ctx: MCPContext) -> list:
-    """获取知识库文档列表"""
-    data_dir = _get_data_dir(ctx)
-    docs_dir = os.path.join(data_dir, "knowledge", "documents")
-    if not os.path.isdir(docs_dir):
-        return []
-    docs = []
-    for filename in os.listdir(docs_dir):
-        if filename.endswith(".json"):
-            filepath = os.path.join(docs_dir, filename)
-            doc = _load_json_file(filepath)
-            if isinstance(doc, dict) and doc.get("id"):
-                docs.append(doc)
-    return docs
+    """获取知识库文档列表
+
+    读取 saved_message/knowledge/documents/ 目录下的 JSON 文件。
+    回退到 data/web/knowledge.json（单文件数组）。
+    """
+    # 优先：per-file 目录
+    sm_dir = _get_saved_message_dir(ctx)
+    docs_dir = os.path.join(sm_dir, "knowledge", "documents")
+    if os.path.isdir(docs_dir):
+        docs = []
+        for filename in os.listdir(docs_dir):
+            if filename.endswith(".json"):
+                filepath = os.path.join(docs_dir, filename)
+                doc = _load_json_file(filepath)
+                if isinstance(doc, dict) and doc.get("id"):
+                    docs.append(doc)
+        if docs:
+            return docs
+
+    # 回退：data/web/knowledge.json 单文件
+    web_dir = _get_web_data_dir(ctx)
+    legacy = _load_json_file(os.path.join(web_dir, "knowledge.json"))
+    return legacy if isinstance(legacy, list) else []
 
 
 # ========================
@@ -786,7 +893,15 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
 
         try:
             profiles = _get_character_profiles(ctx)
+            # 先按 key 查找，再按 profile 内 id/name 字段匹配
             profile = profiles.get(character_id)
+            if not profile:
+                for val in profiles.values():
+                    if isinstance(val, dict) and (
+                        val.get("id") == character_id or val.get("name") == character_id
+                    ):
+                        profile = val
+                        break
             if not profile:
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Character not found"}})
 
@@ -923,7 +1038,17 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
 
         try:
             profiles = _get_character_profiles(ctx)
+            # 先按 key 查找，再按 profile 内 id/name 字段匹配
+            profile_key = character_id
             profile = profiles.get(character_id)
+            if not profile:
+                for key, val in profiles.items():
+                    if isinstance(val, dict) and (
+                        val.get("id") == character_id or val.get("name") == character_id
+                    ):
+                        profile = val
+                        profile_key = key
+                        break
             if not profile:
                 return _err_json({"ok": False, "error": {"code": "not_found", "message": "Character not found"}})
 
@@ -1635,8 +1760,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            data_dir = _get_data_dir(ctx)
-            docs_dir = os.path.join(data_dir, "knowledge", "documents")
+            sm_dir = _get_saved_message_dir(ctx)
+            docs_dir = os.path.join(sm_dir, "knowledge", "documents")
             os.makedirs(docs_dir, exist_ok=True)
 
             doc_id = str(uuid.uuid4())
@@ -1693,8 +1818,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            data_dir = _get_data_dir(ctx)
-            docs_dir = os.path.join(data_dir, "knowledge", "documents")
+            sm_dir = _get_saved_message_dir(ctx)
+            docs_dir = os.path.join(sm_dir, "knowledge", "documents")
             filepath = os.path.join(docs_dir, f"{doc_id}.json")
 
             if not _validate_id_path(filepath, docs_dir):
@@ -1829,9 +1954,12 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             return _err_json(err)
 
         try:
-            data_dir = _get_data_dir(ctx)
-            stats_file = os.path.join(data_dir, "token_stats.json")
-            stats = _load_json_file(stats_file)
+            # 优先 data/web/token_stats.json，回退 data/token_stats.json
+            web_dir = _get_web_data_dir(ctx)
+            stats = _load_json_file(os.path.join(web_dir, "token_stats.json"))
+            if stats is None:
+                data_dir = _get_data_dir(ctx)
+                stats = _load_json_file(os.path.join(data_dir, "token_stats.json"))
 
             if not stats:
                 stats = {}
