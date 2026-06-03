@@ -335,27 +335,43 @@ def _with_memories(ctx: MCPContext, mutator):
 def _get_character_profiles(ctx: MCPContext) -> dict:
     """获取所有角色卡
 
-    读取 data/character/profiles.json（单文件 dict，key 为角色 ID/名称）。
+    优先读取 data/web/custom_personality_presets.json（列表格式，Web 管理的角色卡），
+    回退到 data/character/profiles.json（运行时数据）。
+    返回 dict，key 为角色 ID。
     """
     data_dir = _get_data_dir(ctx)
+    # 优先读 Web 管理的角色卡
+    filepath = os.path.join(data_dir, "web", "custom_personality_presets.json")
+    presets = _load_json_file(filepath)
+    if isinstance(presets, list) and presets:
+        return {p.get("id", ""): p for p in presets if isinstance(p, dict) and p.get("id")}
+    # 回退到运行时 profiles
     filepath = os.path.join(data_dir, "character", "profiles.json")
     profiles = _load_json_file(filepath)
     return profiles if isinstance(profiles, dict) else {}
 
 
 def _save_character_profile(ctx: MCPContext, profile: dict) -> bool:
-    """保存角色卡到 data/character/profiles.json（原子读-改-写）"""
+    """保存角色卡到 data/web/custom_personality_presets.json（原子读-改-写）"""
     data_dir = _get_data_dir(ctx)
     profile_id = profile.get("id", "")
     if not profile_id:
         return False
-    filepath = os.path.abspath(os.path.join(data_dir, "character", "profiles.json"))
+    filepath = os.path.abspath(os.path.join(data_dir, "web", "custom_personality_presets.json"))
     with _file_lock(filepath):
-        profiles = _load_json_file(filepath)
-        if not isinstance(profiles, dict):
-            profiles = {}
-        profiles[profile_id] = profile
-        return _save_json_file(filepath, profiles)
+        presets = _load_json_file(filepath)
+        if not isinstance(presets, list):
+            presets = []
+        # 按 id 查找并替换，或追加
+        found = False
+        for i, p in enumerate(presets):
+            if isinstance(p, dict) and p.get("id") == profile_id:
+                presets[i] = profile
+                found = True
+                break
+        if not found:
+            presets.append(profile)
+        return _save_json_file(filepath, presets)
 
 
 def _validate_id_path(filepath: str, expected_dir: str) -> bool:
@@ -366,25 +382,29 @@ def _validate_id_path(filepath: str, expected_dir: str) -> bool:
 
 
 def _delete_character_profile(ctx: MCPContext, character_id: str) -> bool:
-    """从 data/character/profiles.json 删除角色卡"""
+    """从 data/web/custom_personality_presets.json 删除角色卡"""
     data_dir = _get_data_dir(ctx)
-    filepath = os.path.abspath(os.path.join(data_dir, "character", "profiles.json"))
+    filepath = os.path.abspath(os.path.join(data_dir, "web", "custom_personality_presets.json"))
     with _file_lock(filepath):
-        profiles = _load_json_file(filepath)
-        if not isinstance(profiles, dict):
+        presets = _load_json_file(filepath)
+        if not isinstance(presets, list):
             return False
-        if character_id not in profiles:
+        # 按 id 查找
+        idx = None
+        for i, p in enumerate(presets):
+            if isinstance(p, dict) and p.get("id") == character_id:
+                idx = i
+                break
+        if idx is None:
             # 也尝试按 name 匹配
-            matched_key = None
-            for key, val in profiles.items():
-                if isinstance(val, dict) and val.get("name") == character_id:
-                    matched_key = key
+            for i, p in enumerate(presets):
+                if isinstance(p, dict) and p.get("name") == character_id:
+                    idx = i
                     break
-            if matched_key is None:
-                return False
-            character_id = matched_key
-        del profiles[character_id]
-        return _save_json_file(filepath, profiles)
+        if idx is None:
+            return False
+        presets.pop(idx)
+        return _save_json_file(filepath, presets)
 
 
 def _get_world_books(ctx: MCPContext) -> dict:
@@ -978,8 +998,8 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
                 "description": description,
                 "personality": personality,
                 "scenario": scenario,
-                "system_prompt": system_prompt,
-                "first_message": first_message,
+                "systemPrompt": system_prompt,
+                "firstMessage": first_message,
                 "rules": rules_list,
                 "tags": tags_list,
                 "created_at": now,
@@ -1072,9 +1092,9 @@ def register_web_tools(mcp_server: Any, ctx: MCPContext) -> None:
             if scenario is not None:
                 profile["scenario"] = scenario
             if system_prompt is not None:
-                profile["system_prompt"] = system_prompt
+                profile["systemPrompt"] = system_prompt
             if first_message is not None:
-                profile["first_message"] = first_message
+                profile["firstMessage"] = first_message
             if rules is not None:
                 profile["rules"] = rules_list
             if tags is not None:
