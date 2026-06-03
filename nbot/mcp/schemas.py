@@ -5,7 +5,6 @@
 
 from pydantic import BaseModel, Field
 
-
 # ========================
 # Gateway Tools
 # ========================
@@ -298,3 +297,215 @@ class CapabilityManifest(BaseModel):
     resources: list[str]
     permissions: list[str]
     node_capabilities: list[dict] | None = None
+
+
+# ========================
+# Web Tools — Session
+# ========================
+
+
+class WebListSessionsInput(BaseModel):
+    """web_list_sessions 输入（无参数）"""
+    pass
+
+
+class WebGetSessionInput(BaseModel):
+    """web_get_session 输入"""
+    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+
+
+class WebCreateSessionInput(BaseModel):
+    """web_create_session 输入"""
+    name: str = Field(default="", max_length=100, description="会话名称")
+    session_mode: str = Field(default="character", description="会话模式 (character / agent)")
+    sender_name: str = Field(default="", max_length=100, description="角色名称")
+    system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
+    first_message: str = Field(default="", max_length=5000, description="开场白")
+    character_id: str = Field(default="", max_length=128, description="角色 ID")
+
+
+class WebSendMessageInput(BaseModel):
+    """web_send_message 输入"""
+    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    content: str = Field(..., min_length=1, max_length=10000, description="消息内容")
+    sender: str = Field(default="mcp_user", max_length=64, description="发送者标识")
+
+
+class WebGetMessagesInput(BaseModel):
+    """web_get_messages 输入"""
+    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+    limit: int = Field(default=50, ge=1, le=500, description="返回消息数量上限")
+
+
+class WebDeleteSessionInput(BaseModel):
+    """web_delete_session 输入"""
+    session_id: str = Field(..., min_length=1, max_length=128, description="会话 ID")
+
+
+# ========================
+# Web Tools — Character
+# ========================
+
+
+class WebListCharactersInput(BaseModel):
+    """web_list_characters 输入（无参数）"""
+    pass
+
+
+class WebGetCharacterInput(BaseModel):
+    """web_get_character 输入"""
+    character_id: str = Field(..., min_length=1, max_length=128, description="角色 ID")
+
+
+class WebCreateCharacterInput(BaseModel):
+    """web_create_character 输入"""
+    name: str = Field(..., min_length=1, max_length=100, description="角色名称")
+    description: str = Field(default="", max_length=2000, description="角色描述")
+    personality: str = Field(default="", max_length=2000, description="性格描述")
+    scenario: str = Field(default="", max_length=2000, description="背景设定")
+    system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
+    first_message: str = Field(default="", max_length=5000, description="开场白")
+    rules: list[str] = Field(default=[], description="行为规则列表")
+    tags: list[str] = Field(default=[], description="标签")
+
+
+class WebUpdateCharacterInput(BaseModel):
+    """web_update_character 输入"""
+    character_id: str = Field(..., min_length=1, max_length=128, description="角色 ID")
+    name: str = Field(default="", max_length=100, description="角色名称")
+    description: str = Field(default="", max_length=2000, description="角色描述")
+    personality: str = Field(default="", max_length=2000, description="性格描述")
+    scenario: str = Field(default="", max_length=2000, description="背景设定")
+    system_prompt: str = Field(default="", max_length=10000, description="系统提示词")
+    first_message: str = Field(default="", max_length=5000, description="开场白")
+    rules: list[str] = Field(default=[], description="行为规则列表")
+    tags: list[str] = Field(default=[], description="标签")
+
+
+class WebDeleteCharacterInput(BaseModel):
+    """web_delete_character 输入"""
+    character_id: str = Field(..., min_length=1, max_length=128, description="角色 ID")
+
+
+# ========================
+# Web Tools — World Book
+# ========================
+
+
+class WebListWorldBooksInput(BaseModel):
+    """web_list_world_books 输入（无参数）"""
+    pass
+
+
+class WebGetWorldBookInput(BaseModel):
+    """web_get_world_book 输入"""
+    book_id: str = Field(..., min_length=1, max_length=128, description="世界书 ID")
+
+
+class WebCreateWorldBookInput(BaseModel):
+    """web_create_world_book 输入"""
+    name: str = Field(..., min_length=1, max_length=100, description="世界书名称")
+    description: str = Field(default="", max_length=2000, description="世界书描述")
+    character_ids: list[str] = Field(default=[], description="绑定的角色 ID 列表")
+
+
+class WebAddWorldBookEntryInput(BaseModel):
+    """web_add_world_book_entry 输入"""
+    book_id: str = Field(..., min_length=1, max_length=128, description="世界书 ID")
+    name: str = Field(default="", max_length=100, description="条目名称")
+    keywords: list[str] = Field(default=[], description="关键词列表")
+    content: str = Field(..., min_length=1, max_length=10000, description="注入内容")
+    priority: int = Field(default=50, ge=0, le=100, description="优先级")
+    entry_type: str = Field(default="lore", description="条目类型 (lore, location, npc, faction, rule, etc.)")
+    always_on: bool = Field(default=False, description="是否常驻注入")
+
+
+class WebDeleteWorldBookInput(BaseModel):
+    """web_delete_world_book 输入"""
+    book_id: str = Field(..., min_length=1, max_length=128, description="世界书 ID")
+
+
+# ========================
+# Web Tools — Memory
+# ========================
+
+
+class WebListMemoriesInput(BaseModel):
+    """web_list_memories 输入"""
+    target_id: str = Field(default="", max_length=128, description="目标 ID 筛选")
+    character_name: str = Field(default="", max_length=100, description="角色名筛选")
+    mem_type: str = Field(default="all", description="记忆类型筛选 (all, long, short)")
+
+
+class WebAddMemoryInput(BaseModel):
+    """web_add_memory 输入"""
+    title: str = Field(..., min_length=1, max_length=200, description="记忆标题")
+    content: str = Field(..., min_length=1, max_length=5000, description="记忆内容")
+    target_id: str = Field(default="", max_length=128, description="目标 ID")
+    character_name: str = Field(default="", max_length=100, description="角色名称")
+    mem_type: str = Field(default="long", description="记忆类型 (long, short)")
+    expire_days: int = Field(default=7, ge=1, le=365, description="过期天数")
+
+
+class WebDeleteMemoryInput(BaseModel):
+    """web_delete_memory 输入"""
+    memory_id: str = Field(..., min_length=1, max_length=128, description="记忆 ID")
+
+
+class WebUpdateMemoryInput(BaseModel):
+    """web_update_memory 输入"""
+    memory_id: str = Field(..., min_length=1, max_length=128, description="记忆 ID")
+    title: str = Field(default="", max_length=200, description="记忆标题")
+    content: str = Field(default="", max_length=5000, description="记忆内容")
+    mem_type: str = Field(default="", description="记忆类型 (long, short)")
+    target_id: str = Field(default="", max_length=128, description="目标 ID")
+    character_name: str = Field(default="", max_length=100, description="角色名称")
+
+
+# ========================
+# Web Tools — Knowledge
+# ========================
+
+
+class WebListKnowledgeInput(BaseModel):
+    """web_list_knowledge 输入（无参数）"""
+    pass
+
+
+class WebSearchKnowledgeInput(BaseModel):
+    """web_search_knowledge 输入"""
+    query: str = Field(..., min_length=1, max_length=500, description="搜索查询")
+    top_k: int = Field(default=5, ge=1, le=20, description="返回结果数量")
+
+
+class WebAddKnowledgeInput(BaseModel):
+    """web_add_knowledge 输入"""
+    title: str = Field(..., min_length=1, max_length=200, description="文档标题")
+    content: str = Field(..., min_length=1, max_length=100000, description="文档内容")
+    source: str = Field(default="", max_length=200, description="来源")
+    tags: list[str] = Field(default=[], description="标签列表")
+
+
+class WebDeleteKnowledgeInput(BaseModel):
+    """web_delete_knowledge 输入"""
+    doc_id: str = Field(..., min_length=1, max_length=128, description="文档 ID")
+
+
+# ========================
+# Web Tools — AI Model
+# ========================
+
+
+class WebListAIModelsInput(BaseModel):
+    """web_list_ai_models 输入（无参数）"""
+    pass
+
+
+class WebGetActiveModelsInput(BaseModel):
+    """web_get_active_models 输入（无参数）"""
+    pass
+
+
+class WebGetTokenUsageInput(BaseModel):
+    """web_get_token_usage 输入"""
+    model_name: str = Field(default="", max_length=128, description="模型名称筛选")

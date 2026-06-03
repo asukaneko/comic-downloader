@@ -17,6 +17,7 @@ from nbot.mcp.context import create_mcp_context
 from nbot.mcp.prompts.diagnose_prompt import register_diagnose_prompts
 from nbot.mcp.resources.gateway_resources import register_gateway_resources
 from nbot.mcp.tools.gateway_tools import register_gateway_tools
+from nbot.mcp.tools.web_tools import register_web_tools
 
 _log = logging.getLogger(__name__)
 
@@ -52,7 +53,8 @@ def create_mcp_server(config: dict[str, Any] | None = None) -> Any:
 
     # Register tools
     register_gateway_tools(mcp, ctx)
-    _log.info("[MCP] Tools registered")
+    register_web_tools(mcp, ctx)
+    _log.info("[MCP] Tools registered (gateway + web)")
 
     # Register resources
     register_gateway_resources(mcp, ctx)
