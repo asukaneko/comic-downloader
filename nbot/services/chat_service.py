@@ -231,18 +231,10 @@ def load_canonical_qq_messages(
             if server:
                 session = server.session_store.get_session(session_id)
                 if session and isinstance(session.get("messages"), list):
-                    normalized = []
-                    for msg in session.get("messages", []):
-                        role = str(msg.get("role") or "")
-                        if role not in ("system", "user", "assistant"):
-                            continue
-                        normalized.append(
-                            {
-                                "role": role,
-                                "content": msg.get("content", ""),
-                                "timestamp": msg.get("timestamp", ""),
-                            }
-                        )
+                    normalized = _normalize_canonical_qq_messages(
+                        session.get("messages", []),
+                        session_mode=str(session.get("session_mode") or ""),
+                    )
                     if normalized:
                         return normalized
         except Exception:
@@ -258,6 +250,30 @@ def load_canonical_qq_messages(
             include_memories=include_memories,
         )
     return []
+
+
+def _normalize_canonical_qq_messages(
+    messages: List[Dict[str, Any]],
+    *,
+    session_mode: str = "",
+) -> List[Dict[str, Any]]:
+    normalized = []
+    is_agent = session_mode == "agent"
+    for msg in messages:
+        role = str(msg.get("role") or "")
+        if role not in ("system", "user", "assistant"):
+            continue
+        content = msg.get("content", "")
+        if is_agent and role == "system":
+            content = ""
+        normalized.append(
+            {
+                "role": role,
+                "content": content,
+                "timestamp": msg.get("timestamp", ""),
+            }
+        )
+    return normalized
 
 
 # ============================================================================

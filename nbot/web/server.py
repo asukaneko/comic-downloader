@@ -3811,11 +3811,14 @@ class WebChatServer:
         if not session and not create_if_not_exists:
             return None
 
-        prompt = load_prompt(
-            user_id=str(user_id) if user_id else None,
-            group_id=str(group_id) if group_id else None,
-            include_skills=False,
-        )
+        is_agent_session = bool(session and session.get("session_mode") == "agent")
+        prompt = ""
+        if not is_agent_session:
+            prompt = load_prompt(
+                user_id=str(user_id) if user_id else None,
+                group_id=str(group_id) if group_id else None,
+                include_skills=False,
+            )
         if not session:
             session = {
                 "id": session_id,
@@ -3833,6 +3836,8 @@ class WebChatServer:
             session["qq_id"] = target_id
             if prompt:
                 session["system_prompt"] = prompt
+            elif is_agent_session:
+                session["system_prompt"] = ""
 
         rebuilt_messages = []
         if session.get("system_prompt"):

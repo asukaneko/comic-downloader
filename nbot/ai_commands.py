@@ -189,10 +189,15 @@ def _replace_canonical_qq_session_messages(
             return
 
         session_messages = [dict(message) for message in (messages or []) if isinstance(message, dict)]
-        if system_prompt and not any(m.get("role") == "system" for m in session_messages):
+        if system_prompt is not None and not any(m.get("role") == "system" for m in session_messages):
             session_messages.insert(0, {"role": "system", "content": system_prompt})
         session_store.replace_messages(session_id, session_messages)
-        session["system_prompt"] = system_prompt or session.get("system_prompt", "")
+        if system_prompt is not None:
+            session["system_prompt"] = system_prompt
+        elif session_messages and session_messages[0].get("role") == "system":
+            session["system_prompt"] = session_messages[0].get("content", "")
+        else:
+            session["system_prompt"] = session.get("system_prompt", "")
         if character:
             session["character_id"] = character.get("id") or character.get("name") or ""
             session["sender_name"] = character.get("name") or session.get("sender_name") or "AI"
