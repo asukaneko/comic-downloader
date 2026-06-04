@@ -111,7 +111,10 @@ class QQChannelAdapter(BaseChannelAdapter):
                     text_parts.append("[表情]")
 
         # 检测是否被 @
-        bot_uin = str(getattr(self, "bot_uin", "") or "")
+        bot_uin = (
+            str(getattr(self, "bot_uin", "") or "")
+            or str(raw_event.get("self_id", "") or "")
+        )
         is_mentioned = False
         if message_type == "group":
             for seg in (message_segments if isinstance(message_segments, list) else []):
@@ -210,9 +213,6 @@ class QQChannelAdapter(BaseChannelAdapter):
     def render_result(self, result: Any, context: ChannelRuntimeContext) -> list[dict[str, Any]]:
         """将角色运行结果渲染为 QQ 消息格式"""
         text = getattr(result, "text", "") or ""
-        if not text:
-            metadata = getattr(result, "metadata", {}) or {}
-            text = metadata.get("prompt_text", "")
         if not text:
             return []
         return [{"type": "text", "content": text}]

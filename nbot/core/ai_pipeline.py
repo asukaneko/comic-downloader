@@ -759,7 +759,13 @@ class AIPipeline:
             return
 
         # --- 通过 dispatcher 统一处理 is_enabled / trigger / scope_id ---
-        channel = ctx.metadata.get("channel_type", "")
+        # source = 频道标识 (qq/telegram/feishu/web)
+        # channel_type = 场景标识 (private/group/web/telegram/feishu)
+        channel = (
+            ctx.metadata.get("source", "")
+            or getattr(ctx.chat_request, "channel", "")
+            or ctx.metadata.get("channel_type", "")
+        )
         try:
             from nbot.character.dispatcher import CharacterRuntimeContextDispatcher, build_scope_id
             from nbot.character.channel_context import ChannelRuntimeContext
@@ -768,17 +774,31 @@ class AIPipeline:
             config = get_character_runtime_config()
             dispatcher = CharacterRuntimeContextDispatcher(runtime=runtime, config=config)
 
-            # 构建统一频道上下文
+            # 优先使用 adapter.build_runtime_context()，fallback 手动构造
             req_meta = getattr(ctx.chat_request, "metadata", {}) or {}
-            scene = "private" if not ctx.metadata.get("group_id") else "group"
-            runtime_ctx = ChannelRuntimeContext(
-                channel=channel,
-                conversation_id=getattr(ctx.chat_request, "conversation_id", "") or "",
-                scene=scene,
-                user_id=getattr(ctx.chat_request, "user_id", "") or "",
-                group_id=ctx.metadata.get("group_id", ""),
-                thread_id=ctx.metadata.get("thread_id", ""),
-            )
+            if ctx.adapter and hasattr(ctx.adapter, "build_runtime_context"):
+                try:
+                    runtime_ctx = ctx.adapter.build_runtime_context(ctx.chat_request)
+                except Exception:
+                    runtime_ctx = None
+            else:
+                runtime_ctx = None
+
+            if runtime_ctx is None:
+                # fallback: 手动构造
+                scene_raw = ctx.metadata.get("channel_type", "")
+                if scene_raw in ("private", "group"):
+                    scene = scene_raw
+                else:
+                    scene = "private" if not ctx.metadata.get("group_id") else "group"
+                runtime_ctx = ChannelRuntimeContext(
+                    channel=channel,
+                    conversation_id=getattr(ctx.chat_request, "conversation_id", "") or "",
+                    scene=scene,
+                    user_id=getattr(ctx.chat_request, "user_id", "") or "",
+                    group_id=ctx.metadata.get("group_id", ""),
+                    thread_id=ctx.metadata.get("thread_id", ""),
+                )
 
             # is_enabled 检查
             if not dispatcher.is_enabled(runtime_ctx):

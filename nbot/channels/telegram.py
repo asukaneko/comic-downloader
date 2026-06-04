@@ -128,8 +128,5 @@ class TelegramChannelAdapter(BaseChannelAdapter):
         """将角色运行结果渲染为 Telegram 消息格式"""
         text = getattr(result, "text", "") or ""
         if not text:
-            metadata = getattr(result, "metadata", {}) or {}
-            text = metadata.get("prompt_text", "")
-        if not text:
             return []
         return [{"type": "text", "content": text}]
