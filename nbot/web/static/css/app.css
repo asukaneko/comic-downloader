@@ -641,6 +641,11 @@
             background: #fff;
             color: #1a1a2e;
             border: 1px solid var(--border-color);
+            transition:
+                background 0.35s ease,
+                color 0.35s ease,
+                border-color 0.35s ease,
+                box-shadow 0.35s ease;
         }
 
         .btn-send:hover {
@@ -658,6 +663,11 @@
             color: #fff;
             border: none;
             box-shadow: 0 9px 24px rgba(124, 58, 237, 0.34);
+            transition:
+                background 0.35s ease,
+                color 0.35s ease,
+                border-color 0.35s ease,
+                box-shadow 0.35s ease;
         }
 
         .btn-voice:hover {
@@ -678,6 +688,11 @@
             border: none;
             box-shadow: 0 9px 24px rgba(225, 29, 72, 0.3);
             animation: recording-pulse 1.2s ease-in-out infinite;
+            transition:
+                background 0.35s ease,
+                color 0.35s ease,
+                border-color 0.35s ease,
+                box-shadow 0.35s ease;
         }
 
         @keyframes recording-pulse {
@@ -8376,12 +8391,19 @@
             color: var(--text-secondary);
             background: transparent;
             border-color: transparent;
+            outline: none;
             transition:
                 background 0.24s ease,
                 border-color 0.24s ease,
                 box-shadow 0.24s ease,
                 color 0.24s ease;
             transform-origin: 50% 50%;
+        }
+
+        .chat-input-wrapper .chat-actions .file-upload-trigger:focus,
+        .chat-input-wrapper .chat-actions .file-upload-trigger:focus-visible {
+            outline: none;
+            box-shadow: none;
         }
 
         .chat-input-wrapper.input-focused .chat-actions .file-upload-menu > .file-upload-trigger,
