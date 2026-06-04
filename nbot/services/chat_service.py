@@ -287,10 +287,12 @@ class QQCallbacks(PipelineCallbacks):
         )
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:
+        is_agent = ctx.metadata.get("session_mode") == "agent"
         return load_prompt(
             user_id=self.user_id,
             group_id=self.group_id,
             include_skills=True,
+            include_memories=not is_agent,
         )
 
     def search_knowledge(self, ctx: PipelineContext, query: str) -> str:
@@ -509,12 +511,12 @@ def load_memories(user_id=None, group_id=None):
     return prompt_manager.load_memories(user_id, group_id)
 
 
-def load_prompt(user_id=None, group_id=None, include_skills: bool = True):
+def load_prompt(user_id=None, group_id=None, include_skills: bool = True, include_memories: bool = True):
     """加载提示词（兼容旧接口，使用新模块 + 技能列表）"""
     user_id = str(user_id) if user_id else None
     group_id = str(group_id) if group_id else None
-    
-    prompt = prompt_manager.load_prompt(user_id, group_id, include_memories=True, include_tools=True)
+
+    prompt = prompt_manager.load_prompt(user_id, group_id, include_memories=include_memories, include_tools=True)
     
     if include_skills:
         try:
