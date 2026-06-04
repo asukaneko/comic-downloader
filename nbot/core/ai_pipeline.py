@@ -310,18 +310,21 @@ class PipelineCallbacks(ABC):
         """返回 model_call 函数。
 
         默认实现使用全局 ai_client 和运行时配置。
-        如果提供了 model_configs 且包含多个配置，自动启用故障转移。
+        自动从配置加载 model_configs，多个模型时启用故障转移。
         """
         from nbot.services.ai import ai_client, refresh_runtime_ai_config
         from nbot.core.protocols import get_protocol
         from nbot.core.model_adapter import response_json_utf8
         import requests
 
+        # 自动获取模型配置（当调用方未提供时）
+        model_configs = self._ensure_model_configs(model_configs)
+
         # 如果有多个模型配置，启用故障转移
         if model_configs and len(model_configs) > 1:
             purpose = model_configs[0].get("purpose", "chat")
             ai_pipeline = AIPipeline()
-            return ai_pipeline._wrap_with_failover(model_configs, purpose)
+            return ai_pipeline._wrap_with_failover(model_configs, purpose, tools=tools)
 
         def model_call(messages, stop_event=None):
             if stop_event and stop_event.is_set():
@@ -373,6 +376,19 @@ class PipelineCallbacks(ABC):
     ) -> Optional[Callable]:
         """返回流式 model_call 或 None（不支持流式）。"""
         return None
+
+    def _ensure_model_configs(
+        self,
+        model_configs: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """确保 model_configs 已加载，供子类复用。"""
+        if model_configs is None:
+            from nbot.web.utils.config_loader import get_model_configs_by_purpose
+            from nbot.services.ai import refresh_runtime_ai_config
+            runtime_ai = refresh_runtime_ai_config()
+            purpose = runtime_ai.get("purpose", "chat")
+            model_configs = get_model_configs_by_purpose(purpose)
+        return model_configs
 
     # ---- 输出 / 回复 ----
 
