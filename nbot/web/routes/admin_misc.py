@@ -40,6 +40,35 @@ def register_admin_misc_routes(app, server):
         normalize_log_cleanup_settings(server.settings)
         return server.settings
 
+    def _sync_bot_config_to_ini(data: dict):
+        """将 web 界面修改的 BotConfig 写回 config.ini，重启后生效。"""
+        config_map = {
+            "bot_id": "bot_uin",
+            "master_id": "root",
+            "ws_uri": "ws_uri",
+        }
+        changed = {}
+        for settings_key, ini_key in config_map.items():
+            if settings_key in data:
+                changed[ini_key] = str(data[settings_key] or "")
+
+        if not changed:
+            return
+
+        try:
+            import configparser
+            config = configparser.ConfigParser()
+            config.read("config.ini", encoding="utf-8")
+            if not config.has_section("BotConfig"):
+                config.add_section("BotConfig")
+            for ini_key, value in changed.items():
+                config.set("BotConfig", ini_key, value)
+            with open("config.ini", "w", encoding="utf-8") as f:
+                config.write(f)
+            _log.info(f"已同步设置到 config.ini: {list(changed.keys())}")
+        except Exception as e:
+            _log.error(f"同步设置到 config.ini 失败: {e}")
+
     @app.route("/api/commands")
     def get_commands_catalog():
         try:
@@ -319,6 +348,10 @@ def register_admin_misc_routes(app, server):
         server._save_data("settings")
         if not skip_log_cleanup and server.settings.get("log_cleanup", {}).get("enabled"):
             cleanup_log_files()
+
+        # 将 BotConfig 相关设置写回 config.ini
+        _sync_bot_config_to_ini(data)
+
         return jsonify({"success": True, "settings": server.settings})
 
     @app.route("/api/stats")
@@ -626,13 +659,12 @@ def register_admin_misc_routes(app, server):
     def reload_config():
         """重载系统配置"""
         try:
-            # 重新加载配置
-            server._load_config()
-            server._load_skills()
-            server._load_tools()
+            # 重新加载所有持久化数据（settings、skills、tools、personality 等）
+            server._load_all_data()
             server._load_personality()
-            server._load_heartbeat()
-            
+            server._load_ai_config()
+            server._load_ai_models()
+
             server.log_message("info", "系统配置已重载", important=True)
             return jsonify({"success": True, "message": "配置已重载"})
         except Exception as e:

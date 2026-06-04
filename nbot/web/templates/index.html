@@ -6126,23 +6126,27 @@
                                     <div class="form-group">
                                         <label class="form-label">Web 服务端口</label>
                                         <input v-model.number="settings.web_port" type="number" class="form-input">
+                                        <div class="form-hint">保存后需重启服务生效</div>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">QQ Bot WS 地址</label>
                                         <input v-model="settings.ws_uri" type="text" class="form-input" placeholder="ws://127.0.0.1:3001">
+                                        <div class="form-hint">保存后需重启服务生效</div>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">管理员 QQ 号</label>
                                         <input v-model="settings.master_id" type="text" class="form-input" placeholder="多个用逗号分隔">
+                                        <div class="form-hint">保存后需重启服务生效</div>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">机器人 QQ 号</label>
                                         <input v-model="settings.bot_id" type="text" class="form-input">
+                                        <div class="form-hint">保存后需重启服务生效</div>
                                     </div>
                                     <div class="form-group">
                                         <label class="form-label">公网访问地址</label>
                                         <input v-model="settings.public_base_url" type="text" class="form-input" placeholder="https://example.com">
-                                        <div class="form-hint">用于 QQ/外部客户端访问签名文件链接；本机使用可留空。</div>
+                                        <div class="form-hint">用于 QQ/外部客户端访问签名文件链接；保存后立即生效。</div>
                                     </div>
                                 </div>
                                 <div class="form-group" style="margin-top: 20px;">

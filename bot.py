@@ -386,13 +386,29 @@ if __name__ == "__main__":
     web_host = "0.0.0.0"
 
     mcp_connect_url = ""
+    port_from_cli = False
     for i, arg in enumerate(sys.argv):
         if arg == "--web-port" and i + 1 < len(sys.argv):
             web_port = int(sys.argv[i + 1])
+            port_from_cli = True
         if arg == "--web-host" and i + 1 < len(sys.argv):
             web_host = sys.argv[i + 1]
         if arg == "--mcp-connect" and i + 1 < len(sys.argv):
             mcp_connect_url = sys.argv[i + 1]
+
+    # 如果命令行未指定端口，尝试从 settings.json 读取
+    if not port_from_cli:
+        try:
+            import json as _json
+            _settings_path = os.path.join("data", "web", "settings.json")
+            if os.path.exists(_settings_path):
+                with open(_settings_path, "r", encoding="utf-8") as _f:
+                    _saved_settings = _json.load(_f)
+                    _saved_port = _saved_settings.get("web_port")
+                    if _saved_port and str(_saved_port).isdigit():
+                        web_port = int(_saved_port)
+        except Exception:
+            pass
 
     if mcp_connect:
         # MCP 客户端模式 - 连接远程 MCP Server
