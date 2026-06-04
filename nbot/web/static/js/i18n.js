@@ -551,7 +551,31 @@ const i18nMessages = {
     // Mobile sidebar
     'sidebar.back': '返回',
     'sidebar.version': 'v2.7.0',
-    
+
+    // Update
+    'update.title': '版本更新',
+    'update.current_version': '当前版本',
+    'update.latest_version': '最新版本',
+    'update.check': '检查更新',
+    'update.checking': '检查中...',
+    'update.update_now': '立即更新',
+    'update.up_to_date': '当前已是最新版本',
+    'update.has_update': '发现新版本',
+    'update.restart_hint': '更新后需要重启服务才能生效',
+    'update.restart_required': '请重启服务以应用更新',
+    'update.updating': '更新中...',
+    'update.pull_progress': '正在拉取最新代码...',
+    'update.success': '更新成功',
+    'update.failed': '更新失败',
+    'update.confirm_message': '确定要更新到最新版本吗？将执行 git pull 拉取最新代码。',
+    'update.published_at': '发布时间',
+    'update.restart_title': '重启服务',
+    'update.restart_confirm': '代码已更新完成，是否立即重启服务以应用更新？',
+    'update.restart_now': '立即重启',
+    'update.restart_later': '稍后手动重启',
+    'update.restarting': '服务正在重启...',
+    'update.restart_failed': '重启失败，请手动重启',
+
     // Onboarding config transfer
     'onboarding.config_transfer.title': '一键导入已有配置',
     'onboarding.config_transfer.desc': '支持导入 ZIP（含立绘）或旧版 .nbotcfg 配置包，用于快速切换服务器。',
@@ -1836,7 +1860,31 @@ const i18nMessages = {
     // Mobile sidebar
     'sidebar.back': 'Back',
     'sidebar.version': 'v2.7.0',
-    
+
+    // Update
+    'update.title': 'Version Update',
+    'update.current_version': 'Current Version',
+    'update.latest_version': 'Latest Version',
+    'update.check': 'Check for Updates',
+    'update.checking': 'Checking...',
+    'update.update_now': 'Update Now',
+    'update.up_to_date': 'Already up to date',
+    'update.has_update': 'New version available',
+    'update.restart_hint': 'A restart is required after updating',
+    'update.restart_required': 'Please restart to apply the update',
+    'update.updating': 'Updating...',
+    'update.pull_progress': 'Pulling latest code...',
+    'update.success': 'Update successful',
+    'update.failed': 'Update failed',
+    'update.confirm_message': 'Are you sure you want to update to the latest version? This will run git pull to fetch the latest code.',
+    'update.published_at': 'Published',
+    'update.restart_title': 'Restart Service',
+    'update.restart_confirm': 'Code updated successfully. Restart the service now to apply changes?',
+    'update.restart_now': 'Restart Now',
+    'update.restart_later': 'Restart Later',
+    'update.restarting': 'Service is restarting...',
+    'update.restart_failed': 'Restart failed, please restart manually',
+
     // Onboarding config transfer
     'onboarding.config_transfer.title': 'Import Existing Config',
     'onboarding.config_transfer.desc': 'Supports importing ZIP (with portraits) or old .nbotcfg config packages for quick server switching.',

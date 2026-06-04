@@ -199,7 +199,7 @@
                     </div>
                     <div>
                         <div class="sidebar-title">NekoBot</div>
-                        <div class="sidebar-version">v2.7.0</div>
+                        <div class="sidebar-version">v{{ currentVersion }}</div>
                     </div>
                 </div>
 
@@ -6331,6 +6331,40 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                                    <label class="form-label">{{ $t('update.title') }}</label>
+                                    <div class="config-transfer-panel">
+                                        <div class="config-transfer-title">
+                                            <i class="fas fa-download"></i>
+                                            {{ $t('update.current_version') }}: v{{ currentVersion }}
+                                            <span v-if="updateInfo && updateInfo.has_update" style="margin-left: 12px; color: var(--accent-primary); font-weight: 600;">
+                                                → v{{ updateInfo.latest_version }}
+                                            </span>
+                                        </div>
+                                        <div v-if="updateInfo && updateInfo.has_update && updateInfo.release_notes" class="update-release-notes" style="margin: 12px 0; padding: 12px; background: var(--bg-secondary, rgba(0,0,0,0.05)); border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 13px; line-height: 1.6; white-space: pre-wrap;">{{ updateInfo.release_notes }}</div>
+                                        <div v-if="updateInfo && !updateInfo.has_update && !updateInfo.error" style="margin: 8px 0; color: var(--success, #22c55e); font-size: 13px;">
+                                            <i class="fas fa-check-circle"></i> {{ $t('update.up_to_date') }}
+                                        </div>
+                                        <div v-if="updateInfo && updateInfo.error" style="margin: 8px 0; color: var(--warning, #f59e0b); font-size: 13px;">
+                                            <i class="fas fa-exclamation-triangle"></i> {{ updateInfo.error }}
+                                        </div>
+                                        <div v-if="updateProgress" style="margin: 8px 0; color: var(--text-secondary); font-size: 13px;">
+                                            <i class="fas fa-spinner fa-spin"></i> {{ updateProgress }}
+                                        </div>
+                                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                            <button class="btn btn-secondary" @click="checkForUpdate" :disabled="isCheckingUpdate">
+                                                <i class="fas fa-sync-alt"></i> {{ isCheckingUpdate ? $t('update.checking') : $t('update.check') }}
+                                            </button>
+                                            <button v-if="updateInfo && updateInfo.has_update" class="btn btn-primary" @click="doUpdate" :disabled="isUpdating">
+                                                <i class="fas fa-download"></i> {{ isUpdating ? $t('update.updating') : $t('update.update_now') }}
+                                            </button>
+                                            <span v-if="updateInfo && updateInfo.has_update && updateInfo.published_at" class="form-hint">
+                                                {{ $t('update.published_at') }}: {{ new Date(updateInfo.published_at).toLocaleDateString() }}
+                                            </span>
+                                        </div>
+                                        <div class="form-hint" style="margin-top: 8px;">{{ $t('update.restart_hint') }}</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -10323,7 +10357,14 @@
                     configExportPassword: '',
                     configImportPassword: '',
                     configImportFileName: '',
-                    
+
+                    // Update
+                    currentVersion: '',
+                    updateInfo: null,
+                    isCheckingUpdate: false,
+                    isUpdating: false,
+                    updateProgress: '',
+
                     // UI State
                     toasts: [],
                     notificationInbox: [],
@@ -11407,7 +11448,10 @@
                             this.username = res.data.username || savedUsername;
                             this.isLoggedIn = true;
                             connectSocketWithAuth();
-                            
+
+                            // 加载版本号
+                            this.loadVersion();
+
                             // 只加载首页（仪表盘）需要的数据
                             await this.loadHomeData();
                             // 重新应用聊天背景（此时 session 和 personality 数据已就绪）

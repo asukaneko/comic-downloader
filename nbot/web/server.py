@@ -64,6 +64,7 @@ from nbot.web.routes import (
     register_skills_storage_routes,
     register_task_center_routes,
     register_tool_routes,
+    register_update_routes,
     register_voice_routes,
     register_web_agent_routes,
     register_workflow_routes,
@@ -2810,6 +2811,7 @@ class WebChatServer:
         register_workspace_misc_routes(self.app, self)
         register_config_legacy_routes(self.app, self)
         register_config_transfer_routes(self.app, self)
+        register_update_routes(self.app, self)
 
         # 初始化 Gateway 并注入 AgentService
         self._init_gateway()

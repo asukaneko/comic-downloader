@@ -12414,6 +12414,92 @@ def main(params):
                     });
                 },
 
+                async loadVersion() {
+                    try {
+                        const res = await api.get('/api/system/version');
+                        this.currentVersion = res.data.version || '';
+                    } catch (e) {
+                        console.error('获取版本号失败:', e);
+                    }
+                },
+
+                async checkForUpdate() {
+                    this.isCheckingUpdate = true;
+                    this.updateInfo = null;
+                    try {
+                        const res = await api.get('/api/system/check-update');
+                        this.updateInfo = res.data;
+                        if (res.data.has_update) {
+                            this.showToast(this.$t('update.has_update') + ': v' + res.data.latest_version, 'info');
+                        } else if (!res.data.error) {
+                            this.showToast(this.$t('update.up_to_date'), 'success');
+                        }
+                    } catch (e) {
+                        console.error('检查更新失败:', e);
+                        this.showToast(this.$t('update.failed') + ': ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isCheckingUpdate = false;
+                    }
+                },
+
+                async doUpdate() {
+                    this.showConfirm({
+                        title: this.$t('update.update_now'),
+                        message: this.$t('update.confirm_message'),
+                        impact: this.$t('update.restart_hint'),
+                        confirmText: this.$t('update.update_now'),
+                        icon: 'fa-download',
+                        iconColor: 'var(--accent-primary)',
+                        iconBg: 'rgba(99,102,241,0.12)',
+                        onConfirm: async () => {
+                            this.isUpdating = true;
+                            this.updateProgress = this.$t('update.pull_progress');
+                            try {
+                                const res = await api.post('/api/system/do-update');
+                                if (res.data.success) {
+                                    this.showToast(this.$t('update.success'), 'success');
+                                    this.updateProgress = '';
+                                    // 更新侧边栏版本号
+                                    if (res.data.new_version) {
+                                        this.currentVersion = res.data.new_version;
+                                    }
+                                    // 刷新更新信息
+                                    this.updateInfo = null;
+                                    // 需要重启时弹窗确认
+                                    if (res.data.needs_restart) {
+                                        this.showConfirm({
+                                            title: this.$t('update.restart_title'),
+                                            message: this.$t('update.restart_confirm'),
+                                            confirmText: this.$t('update.restart_now'),
+                                            cancelText: this.$t('update.restart_later'),
+                                            icon: 'fa-redo',
+                                            iconColor: 'var(--warning)',
+                                            iconBg: 'rgba(234,179,8,0.12)',
+                                            onConfirm: async () => {
+                                                try {
+                                                    await api.post('/api/system/restart');
+                                                    this.showToast(this.$t('update.restarting'), 'info');
+                                                } catch (e) {
+                                                    this.showToast(this.$t('update.restart_failed'), 'error');
+                                                }
+                                            }
+                                        });
+                                    }
+                                } else {
+                                    this.showToast(this.$t('update.failed') + ': ' + (res.data.error || ''), 'error');
+                                    this.updateProgress = '';
+                                }
+                            } catch (e) {
+                                console.error('更新失败:', e);
+                                this.showToast(this.$t('update.failed') + ': ' + (e.response?.data?.error || e.message), 'error');
+                                this.updateProgress = '';
+                            } finally {
+                                this.isUpdating = false;
+                            }
+                        }
+                    });
+                },
+
                 async testWebSocket() {
                     this.showConfirm({
                         title: 'WebSocket 连接测试',
