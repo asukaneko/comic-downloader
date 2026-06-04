@@ -240,37 +240,59 @@ def _analyze_signals(self, chat_request, state, relationship):
 
 ## 与 Pipeline 集成
 
+Pipeline 通过 `CharacterRuntimeContextDispatcher` 统一处理频道配置，然后调用 `CharacterRuntime`：
+
 ```python
 class AIPipeline:
     def _phase_character_runtime_before_turn(self, ctx, callbacks):
+        # 1. 获取运行时和身份（由 callbacks 提供）
         runtime = callbacks.get_character_runtime(ctx)
         identity = callbacks.get_character_context(ctx)
-
         if not runtime or not identity:
             return
 
+        # 2. 通过 dispatcher 检查配置
+        from nbot.character.dispatcher import CharacterRuntimeContextDispatcher, build_scope_id
+        config = get_character_runtime_config()
+        dispatcher = CharacterRuntimeContextDispatcher(runtime=runtime, config=config)
+
+        # 3. 优先使用 adapter 构建频道上下文
+        if ctx.adapter and hasattr(ctx.adapter, "build_runtime_context"):
+            runtime_ctx = ctx.adapter.build_runtime_context(ctx.chat_request)
+        else:
+            runtime_ctx = ChannelRuntimeContext(...)  # fallback
+
+        # 4. is_enabled / trigger / scope_id 检查
+        if not dispatcher.is_enabled(runtime_ctx):
+            return
+        trigger = dispatcher.get_trigger_strategy(runtime_ctx)
+        if not dispatcher._should_trigger(trigger, runtime_ctx, ctx.chat_request):
+            return
+        memory_scope = dispatcher.get_memory_scope(runtime_ctx)
+        identity.scope_id = build_scope_id(runtime_ctx, memory_scope)
+
+        # 5. 执行 before_turn
         turn = runtime.before_turn(ctx.chat_request, identity)
         ctx.character_turn = turn
 
-        ctx.prompt_stack.add(
-            "character.runtime",
-            turn.prompt_text,
-            priority=30,
-        )
+        # 6. 注入 PromptStack
+        build_character_injections(ctx.prompt_stack, ...)
 
     def _phase_character_runtime_after_turn(self, ctx, callbacks, result):
         runtime = callbacks.get_character_runtime(ctx)
         identity = callbacks.get_character_context(ctx)
-
         if not runtime or not identity or not ctx.character_turn:
             return
-
         runtime.after_turn(
             chat_request=ctx.chat_request,
             result=result,
             turn_context=ctx.character_turn,
         )
 ```
+
+> ⚠️ channel 与 scene 的区别：`channel` 是频道标识（qq/telegram/feishu/web），`scene` 是场景类型（private/group）。
+> Pipeline 通过 `ctx.metadata["source"]` 获取 channel，`ctx.metadata["channel_type"]` 获取 scene。
+> 详见 [channel-runtime.md](./channel-runtime.md)。
 
 ## 性能考虑
 

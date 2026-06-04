@@ -96,32 +96,46 @@ CharacterRuntime 是角色模拟的编排中心，协调各个模块完成角色
 
 关键词匹配的世界观设定注入系统。为角色绑定世界观设定，当用户消息命中关键词时自动注入到提示词栈中。
 
+### 10. 多频道角色运行时 ([channel-runtime.md](./channel-runtime.md))
+
+跨频道角色运行时接入层，让 QQ、飞书、Telegram 等频道都能使用角色系统。
+
+- **CharacterChannelAdapter** - 频道适配器协议，定义频道接入所需的最小接口
+- **CharacterRuntimeContextDispatcher** - 统一调度器，负责 is_enabled / 触发策略 / 记忆作用域 / scope_id 构建
+- **ChannelRuntimeContext** - 统一频道运行上下文
+- **ChannelRenderPolicy** - 频道输出渲染策略
+- **build_scope_id()** - 根据记忆作用域配置构建隔离 key
+
 ## 目录结构
 
 ```
 nbot/character/
-├── __init__.py          # 模块入口
-├── models.py            # 数据模型
-├── compiler.py          # 角色提示词编译器
-├── prompt_stack.py      # 动态提示词栈
-├── prompt_builder.py    # 提示词构建器
-├── runtime.py           # 运行时引擎
-├── auto_state.py        # 6 回合 AI 状态评估
-├── planner.py           # 反应计划生成器
-├── state_machine.py     # 状态机
-├── policies.py          # 信号分析器
-├── memory.py            # 角色记忆服务
-├── repository.py        # 数据仓库接口
-├── events.py            # 事件系统与调试快照
-├── world_book_matcher.py  # 世界书关键词匹配器
-├── world_book_injector.py # 世界书 PromptStack 注入器
-├── storage/             # 存储实现
+├── __init__.py              # 模块入口
+├── models.py                # 数据模型
+├── compiler.py              # 角色提示词编译器
+├── prompt_stack.py          # 动态提示词栈
+├── prompt_builder.py        # 提示词构建器
+├── runtime.py               # 运行时引擎
+├── auto_state.py            # 6 回合 AI 状态评估
+├── planner.py               # 反应计划生成器
+├── state_machine.py         # 状态机
+├── policies.py              # 信号分析器
+├── memory.py                # 角色记忆服务
+├── repository.py            # 数据仓库接口
+├── events.py                # 事件系统与调试快照
+├── world_book_matcher.py    # 世界书关键词匹配器
+├── world_book_injector.py   # 世界书 PromptStack 注入器
+├── channel_adapter.py       # CharacterChannelAdapter 协议定义
+├── channel_context.py       # ChannelRuntimeContext / ChannelRenderPolicy
+├── dispatcher.py            # CharacterRuntimeContextDispatcher 调度器
+├── runtime_request.py       # CharacterRuntimeRequest / CharacterRuntimeResult
+├── storage/                 # 存储实现
 │   ├── __init__.py
-│   ├── json_store.py    # JSON 文件存储
-│   └── world_book_store.py # 世界书存储层
-└── adapters/            # 适配器
+│   ├── json_store.py        # JSON 文件存储
+│   └── world_book_store.py  # 世界书存储层
+└── adapters/                # 适配器
     ├── __init__.py
-    └── nekobot.py       # NekoBot 桥接适配器
+    └── nekobot.py           # NekoBot 桥接适配器
 ```
 
 ## 数据存储
