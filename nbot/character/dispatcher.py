@@ -30,15 +30,13 @@ def build_scope_id(context: ChannelRuntimeContext, memory_scope: str) -> str:
     Returns:
         scope_id 字符串
     """
-    channel = context.channel
+    channel = context.channel or "unknown"
     user_id = context.user_id or "anonymous"
     group_id = context.group_id or ""
-    conversation_id = context.conversation_id or ""
+    conversation_id = context.conversation_id or "unknown_conversation"
     thread_id = context.thread_id or ""
 
     # 空值兜底
-    if not conversation_id:
-        conversation_id = f"{channel}:unknown_conversation"
     if memory_scope in ("group", "group_user") and not group_id:
         logger.warning(
             "%s scope requested but group_id is empty, falling back to conversation_id",
@@ -168,10 +166,12 @@ class CharacterRuntimeContextDispatcher:
         Returns:
             记忆作用域
         """
-        # 配置优先
-        configured_scope = self.get_memory_scope(context)
-        if configured_scope and configured_scope != "conversation":
-            return configured_scope
+        runtime_config = self._get_channel_config(context.channel).get("character_runtime", {})
+
+        # 只要配置文件显式提供 memory_scope，就以配置为准；conversation 也是有效配置值。
+        if "memory_scope" in runtime_config:
+            configured_scope = str(runtime_config.get("memory_scope") or "").strip()
+            return configured_scope or "conversation"
 
         # adapter 兜底
         adapter_scope = adapter.resolve_memory_scope(context)
@@ -229,8 +229,12 @@ class CharacterRuntimeContextDispatcher:
         request = CharacterRuntimeRequest(
             context=context,
             content=getattr(chat_request, "content", ""),
-            sender=getattr(chat_request, "sender", ""),
-            user_id=getattr(chat_request, "user_id", ""),
+            sender=(
+                getattr(chat_request, "sender", "")
+                or context.user_display_name
+                or ""
+            ),
+            user_id=getattr(chat_request, "user_id", "") or context.user_id,
             attachments=getattr(chat_request, "attachments", []),
             character_id=character_id or None,
             parent_message_id=getattr(chat_request, "parent_message_id", None),
