@@ -8,6 +8,8 @@ NekoBot 适配器
 import logging
 from typing import Any, Dict, Optional
 
+from nbot.character.channel_context import ChannelRuntimeContext
+from nbot.character.dispatcher import build_scope_id
 from nbot.character.models import CharacterIdentity
 from nbot.character.repository import ProfileRepository
 
@@ -24,6 +26,61 @@ def _get_base_dir(server) -> str:
     return os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "..")
     )
+
+
+def _load_character_runtime_config() -> dict[str, Any]:
+    try:
+        from nbot.web.utils.config_loader import get_character_runtime_config
+
+        return get_character_runtime_config() or {}
+    except Exception as exc:
+        _log.debug("[CharacterRuntime] failed to load runtime config: %s", exc)
+        return {}
+
+
+def _get_channel_runtime_config(channel: str) -> dict[str, Any]:
+    config = _load_character_runtime_config()
+    return config.get("channels", {}).get(channel, {}).get("character_runtime", {})
+
+
+def _get_global_runtime_config() -> dict[str, Any]:
+    config = _load_character_runtime_config()
+    return config.get("character_runtime", {})
+
+
+def _is_channel_runtime_enabled(channel: str) -> bool:
+    runtime_config = _get_channel_runtime_config(channel)
+    if "enabled" in runtime_config:
+        return bool(runtime_config["enabled"])
+    return bool(_get_global_runtime_config().get("default_enabled", True))
+
+
+def _resolve_configured_memory_scope(channel: str, default_scope: str) -> str:
+    runtime_config = _get_channel_runtime_config(channel)
+    if "memory_scope" in runtime_config:
+        return str(runtime_config.get("memory_scope") or "").strip() or "conversation"
+    return default_scope
+
+
+def _make_scope_id(
+    *,
+    channel: str,
+    default_scope: str,
+    conversation_id: str,
+    user_id: str = "",
+    group_id: str = "",
+    thread_id: str = "",
+) -> str:
+    memory_scope = _resolve_configured_memory_scope(channel, default_scope)
+    context = ChannelRuntimeContext(
+        channel=channel,
+        conversation_id=conversation_id,
+        scene="group" if group_id else "private",
+        user_id=user_id,
+        group_id=group_id,
+        thread_id=thread_id,
+    )
+    return build_scope_id(context, memory_scope)
 
 
 def _resolve_web_character_id(
@@ -89,16 +146,10 @@ def get_web_character_context(
     session_store,
     session_id: str,
 ) -> Optional[CharacterIdentity]:
-    """从 Web 会话中解析角色身份
+    """从 Web 会话中解析角色身份"""
+    if not _is_channel_runtime_enabled("web"):
+        return None
 
-    Args:
-        server: NBotWebServer 实例
-        session_store: Web 会话存储
-        session_id: 会话 ID
-
-    Returns:
-        CharacterIdentity 或 None
-    """
     session = session_store.get_session(session_id) if session_store else {}
     if not session:
         session = {}
@@ -121,27 +172,26 @@ def get_qq_character_context(
     user_id: str,
     group_id: Optional[str] = None,
     personality_name: str = "default",
-) -> CharacterIdentity:
-    """从 QQ 消息中解析角色身份
+) -> Optional[CharacterIdentity]:
+    """从 QQ 消息中解析角色身份"""
+    if not _is_channel_runtime_enabled("qq"):
+        return None
 
-    Args:
-        user_id: QQ 用户 ID
-        group_id: 群组 ID（私聊为 None）
-        personality_name: 当前角色名称
-
-    Returns:
-        CharacterIdentity
-    """
-    if group_id:
-        # 群聊：每个用户独立关系
-        scope_id = f"qq_group:{group_id}:{user_id}"
-    else:
-        # 私聊
-        scope_id = f"qq_private:{user_id}"
+    user_id = str(user_id or "anonymous")
+    group_id = str(group_id or "")
+    conversation_id = f"qq:group:{group_id}" if group_id else f"qq:private:{user_id}"
+    default_scope = "group_user" if group_id else "user"
+    scope_id = _make_scope_id(
+        channel="qq",
+        default_scope=default_scope,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        group_id=group_id,
+    )
 
     return CharacterIdentity(
         character_id=personality_name,
-        target_id=str(user_id),
+        target_id=user_id,
         scope_id=scope_id,
         channel="qq",
     )
@@ -152,28 +202,24 @@ def get_feishu_character_context(
     chat_id: Optional[str] = None,
     open_id: Optional[str] = None,
     personality_name: str = "default",
-) -> CharacterIdentity:
-    """从飞书消息中解析角色身份
+) -> Optional[CharacterIdentity]:
+    """从飞书消息中解析角色身份"""
+    if not _is_channel_runtime_enabled("feishu"):
+        return None
 
-    Args:
-        user_id: 用户 ID
-        chat_id: 会话 ID（群聊或私聊）
-        open_id: 用户 open_id
-        personality_name: 当前角色名称
-
-    Returns:
-        CharacterIdentity
-    """
-    if chat_id:
-        # 群聊或私聊会话
-        scope_id = f"feishu_chat:{chat_id}:{user_id}"
-    else:
-        # 仅用户维度
-        scope_id = f"feishu_user:{user_id}"
+    target_id = str(user_id or open_id or "anonymous")
+    chat_id = str(chat_id or "")
+    conversation_id = f"feishu:{chat_id or target_id}"
+    scope_id = _make_scope_id(
+        channel="feishu",
+        default_scope="chat_user" if chat_id else "user",
+        conversation_id=conversation_id,
+        user_id=target_id,
+    )
 
     return CharacterIdentity(
         character_id=personality_name,
-        target_id=str(user_id),
+        target_id=target_id,
         scope_id=scope_id,
         channel="feishu",
     )
@@ -184,31 +230,26 @@ def get_telegram_character_context(
     chat_id: Optional[str] = None,
     thread_id: Optional[str] = None,
     personality_name: str = "default",
-) -> CharacterIdentity:
-    """从 Telegram 消息中解析角色身份
+) -> Optional[CharacterIdentity]:
+    """从 Telegram 消息中解析角色身份"""
+    if not _is_channel_runtime_enabled("telegram"):
+        return None
 
-    Args:
-        user_id: 用户 ID
-        chat_id: 会话 ID（群组或私聊）
-        thread_id: 话题 ID
-        personality_name: 当前角色名称
-
-    Returns:
-        CharacterIdentity
-    """
-    if chat_id and thread_id:
-        # 话题模式
-        scope_id = f"tg_thread:{chat_id}:{thread_id}:{user_id}"
-    elif chat_id:
-        # 群组或私聊
-        scope_id = f"tg_chat:{chat_id}:{user_id}"
-    else:
-        # 仅用户维度
-        scope_id = f"tg_user:{user_id}"
+    user_id = str(user_id or "anonymous")
+    chat_id = str(chat_id or "")
+    thread_id = str(thread_id or "")
+    conversation_id = f"telegram:{chat_id or user_id}"
+    scope_id = _make_scope_id(
+        channel="telegram",
+        default_scope="thread" if thread_id else ("chat_user" if chat_id else "user"),
+        conversation_id=conversation_id,
+        user_id=user_id,
+        thread_id=thread_id,
+    )
 
     return CharacterIdentity(
         character_id=personality_name,
-        target_id=str(user_id),
+        target_id=user_id,
         scope_id=scope_id,
         channel="telegram",
     )
