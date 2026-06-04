@@ -187,6 +187,10 @@ class CharacterStateJsonStore:
         prefix = f"{character_id}::"
         return [v for k, v in all_data.items() if k.startswith(prefix)]
 
+    def list_all(self) -> List[Dict[str, Any]]:
+        """列出所有状态"""
+        return list(self._store.list_all().values())
+
 
 class RelationshipJsonStore:
     """关系状态的 JSON 存储"""

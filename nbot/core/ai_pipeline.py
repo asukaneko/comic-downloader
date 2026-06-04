@@ -813,6 +813,9 @@ class AIPipeline:
 
             # scope_id 修正
             memory_scope = dispatcher.get_memory_scope(runtime_ctx)
+            # 私聊场景下 group/group_user scope 无意义，强制降级为 user
+            if memory_scope in ("group", "group_user") and runtime_ctx.scene == "private":
+                memory_scope = "user"
             if memory_scope:
                 corrected_scope_id = build_scope_id(runtime_ctx, memory_scope)
                 if corrected_scope_id and corrected_scope_id != identity.scope_id:

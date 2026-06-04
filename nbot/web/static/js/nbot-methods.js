@@ -1066,6 +1066,21 @@ const NbotMethods = {
                     }
                 },
 
+                async loadChannelStates(event) {
+                    if (!event?.target?.open) return;
+                    if (this.channelStatesData) return;
+                    this.channelStatesLoading = true;
+                    try {
+                        const res = await api.get('/api/channel_states');
+                        this.channelStatesData = res.data || { states: {}, relationships: [], channels: [] };
+                    } catch (e) {
+                        console.error('Failed to load channel states:', e);
+                        this.channelStatesData = { states: {}, relationships: [], channels: [], error: (e.response?.data?.error || e.message || '加载失败') };
+                    } finally {
+                        this.channelStatesLoading = false;
+                    }
+                },
+
                 async togglePromptStackKey(key) {
                     if (!this.currentSession?.id) return;
                     await this.togglePromptStackKeyFor(this.currentSession, key);

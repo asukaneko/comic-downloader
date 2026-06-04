@@ -171,7 +171,11 @@ class CharacterRuntimeContextDispatcher:
         # 只要配置文件显式提供 memory_scope，就以配置为准；conversation 也是有效配置值。
         if "memory_scope" in runtime_config:
             configured_scope = str(runtime_config.get("memory_scope") or "").strip()
-            return configured_scope or "conversation"
+            result = configured_scope or "conversation"
+            # 私聊场景下 group/group_user scope 无意义，降级为 user
+            if result in ("group", "group_user") and context.scene == "private":
+                return "user"
+            return result
 
         # adapter 兜底
         adapter_scope = adapter.resolve_memory_scope(context)

@@ -245,6 +245,119 @@ def register_character_routes(app, server):
         return jsonify({"success": False, "error": "删除失败"}), 500
 
     # ================================================================
+    # 多频道数据查看
+    # ================================================================
+
+    def _build_channel_states(character_id: str, channel_filter: str = "") -> Dict[str, Any]:
+        """构建频道状态数据的公共逻辑"""
+        from nbot.character.repository import CharacterStateRepository, RelationshipRepository
+
+        base_dir = _get_base_dir(server)
+        state_repo = CharacterStateRepository(base_dir)
+        rel_repo = RelationshipRepository(base_dir)
+
+        states = state_repo.list_by_character(character_id)
+        relationships = rel_repo.list_by_character(character_id)
+
+        grouped: Dict[str, list] = {}
+        for s in states:
+            sid = s.scope_id or ""
+            channel = sid.split(":")[0] if ":" in sid else "unknown"
+            if channel_filter and channel != channel_filter:
+                continue
+            entry = {
+                "scope_id": sid,
+                "character_id": s.character_id,
+                "mood": s.mood,
+                "mood_intensity": s.mood_intensity,
+                "energy": s.energy,
+            }
+            grouped.setdefault(channel, []).append(entry)
+
+        rel_list = []
+        for r in relationships:
+            rel_list.append({
+                "target_id": r.target_id,
+                "character_id": r.character_id,
+                "affection": r.affection,
+                "trust": r.trust,
+                "familiarity": r.familiarity,
+                "dependency": r.dependency,
+                "security": r.security,
+                "jealousy": r.jealousy,
+            })
+
+        return {
+            "states": grouped,
+            "relationships": rel_list,
+            "channels": sorted(grouped.keys()),
+        }
+
+    @app.route("/api/channel_states", methods=["GET"])
+    def list_all_channel_states():
+        """列出所有角色在各频道的状态数据（直接遍历存储，不依赖 profile 匹配）"""
+        from nbot.character.storage.json_store import CharacterStateJsonStore, RelationshipJsonStore
+
+        channel_filter = request.args.get("channel", "").strip().lower()
+        base_dir = _get_base_dir(server)
+
+        state_store = CharacterStateJsonStore(base_dir)
+        rel_store = RelationshipJsonStore(base_dir)
+
+        all_states: Dict[str, list] = {}
+        all_channels = set()
+
+        for item in state_store.list_all():
+            sid = item.get("scope_id", "")
+            channel = sid.split(":")[0] if ":" in sid else "unknown"
+            if channel_filter and channel != channel_filter:
+                continue
+            entry = {
+                "scope_id": sid,
+                "character_id": item.get("character_id", ""),
+                "mood": item.get("mood", ""),
+                "mood_intensity": item.get("mood_intensity", 0),
+                "energy": item.get("energy", 0),
+            }
+            all_states.setdefault(channel, []).append(entry)
+            all_channels.add(channel)
+
+        all_relationships = []
+        for item in rel_store.list_all():
+            all_relationships.append({
+                "target_id": item.get("target_id", ""),
+                "character_id": item.get("character_id", ""),
+                "affection": item.get("affection", 50),
+                "trust": item.get("trust", 50),
+                "familiarity": item.get("familiarity", 30),
+                "dependency": item.get("dependency", 30),
+                "security": item.get("security", 50),
+                "jealousy": item.get("jealousy", 0),
+            })
+
+        return jsonify({
+            "states": all_states,
+            "relationships": all_relationships,
+            "channels": sorted(all_channels),
+        })
+
+    @app.route("/api/characters/<character_id>/channel_states", methods=["GET"])
+    def list_character_channel_states(character_id):
+        """列出指定角色在各频道的状态数据，按频道分组
+
+        可选参数：
+        - channel: 只返回指定频道的数据（如 ?channel=qq）
+        """
+        channel_filter = request.args.get("channel", "").strip().lower()
+        return jsonify(_build_channel_states(character_id, channel_filter))
+
+        return jsonify({
+            "states": grouped,
+            "relationships": rel_list,
+            "channels": sorted(grouped.keys()),
+        })
+
+    # ================================================================
     # 调试接口
     # ================================================================
 

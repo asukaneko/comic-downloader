@@ -80,6 +80,9 @@ def _make_scope_id(
         group_id=group_id,
         thread_id=thread_id,
     )
+    # 私聊场景下 group/group_user scope 无意义，降级为 user
+    if memory_scope in ("group", "group_user") and context.scene == "private":
+        memory_scope = "user"
     return build_scope_id(context, memory_scope)
 
 
@@ -180,14 +183,27 @@ def get_qq_character_context(
     user_id = str(user_id or "anonymous")
     group_id = str(group_id or "")
     conversation_id = f"qq:group:{group_id}" if group_id else f"qq:private:{user_id}"
-    default_scope = "group_user" if group_id else "user"
-    scope_id = _make_scope_id(
-        channel="qq",
-        default_scope=default_scope,
-        conversation_id=conversation_id,
-        user_id=user_id,
-        group_id=group_id,
-    )
+
+    if group_id:
+        # 群聊：允许配置覆盖 memory_scope
+        scope_id = _make_scope_id(
+            channel="qq",
+            default_scope="group_user",
+            conversation_id=conversation_id,
+            user_id=user_id,
+            group_id=group_id,
+        )
+    else:
+        # 私聊：固定 user scope，不走配置覆盖，避免 group_user 导致 scope_id 畸形
+        from nbot.character.dispatcher import build_scope_id as _build_scope_id
+        from nbot.character.channel_context import ChannelRuntimeContext
+        scope_id = _build_scope_id(
+            ChannelRuntimeContext(
+                channel="qq", conversation_id=conversation_id,
+                scene="private", user_id=user_id,
+            ),
+            "user",
+        )
 
     return CharacterIdentity(
         character_id=personality_name,

@@ -1297,6 +1297,35 @@
                                         <summary>查看本轮系统提示词</summary>
                                         <pre>{{ currentSession.system_prompt }}</pre>
                                     </details>
+                                    <!-- 各频道角色状态 -->
+                                    <details class="runtime-system-prompt">
+                                        <summary @click="loadChannelStates">各频道角色状态</summary>
+                                        <div v-if="channelStatesLoading" style="padding:8px;color:var(--text-secondary);">加载中...</div>
+                                        <div v-else-if="channelStatesData && channelStatesData.error" style="padding:8px;color:#e74c3c;">{{ channelStatesData.error }}</div>
+                                        <div v-else-if="channelStatesData">
+                                            <div v-if="!channelStatesData.channels.length" style="padding:8px;color:var(--text-secondary);">暂无频道数据</div>
+                                            <div v-for="ch in channelStatesData.channels" :key="ch" style="margin-bottom:10px;">
+                                                <div style="font-weight:600;margin:4px 0;text-transform:uppercase;font-size:12px;color:var(--text-secondary);">
+                                                    <i class="fas fa-globe"></i> {{ ch }}
+                                                </div>
+                                                <div v-for="st in channelStatesData.states[ch]" :key="st.scope_id" class="runtime-stat" style="flex-wrap:wrap;gap:4px;">
+                                                    <code style="font-size:11px;opacity:0.7;">{{ st.scope_id }}</code>
+                                                    <span>心情: {{ st.mood || '-' }}</span>
+                                                    <span>情绪强度: {{ Math.round((st.mood_intensity || 0) * 100) }}%</span>
+                                                    <span>能量: {{ st.energy ?? '-' }}</span>
+                                                </div>
+                                            </div>
+                                            <div v-if="channelStatesData.relationships.length" style="margin-top:8px;border-top:1px solid var(--border-color);padding-top:8px;">
+                                                <div style="font-weight:600;font-size:12px;color:var(--text-secondary);margin-bottom:4px;">关系数据</div>
+                                                <div v-for="r in channelStatesData.relationships" :key="r.target_id" class="runtime-stat" style="flex-wrap:wrap;gap:4px;">
+                                                    <code style="font-size:11px;opacity:0.7;">{{ r.target_id }}</code>
+                                                    <span>好感: {{ r.affection }}</span>
+                                                    <span>信任: {{ r.trust }}</span>
+                                                    <span>熟悉: {{ r.familiarity }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </details>
                                 </div>
 
                                 <div class="messages-container" ref="messagesContainer" :class="{ 'session-switching': sessionSwitching }" @scroll="handleMessagesScroll">
@@ -9615,6 +9644,8 @@
                     messageSearchQuery: '',
                     highlightedSearchMessageId: null,
                     showCharacterRuntimePanel: false,
+                    channelStatesLoading: false,
+                    channelStatesData: null,
                     chatHorizontalMargin: Math.min(300, Math.max(0, parseInt(localStorage.getItem('nbot_chat_horizontal_margin') || '0', 10) || 0)),
                     sessionSwitching: false,
                     sessionSearch: '',
