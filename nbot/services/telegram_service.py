@@ -112,6 +112,26 @@ class TelegramCallbacks(PipelineCallbacks):
             "session_type": "telegram",
         }
 
+    def get_character_context(self, ctx: PipelineContext):
+        """返回 Telegram 频道的角色身份标识"""
+        from nbot.character.adapters.nekobot import get_telegram_character_context
+
+        personality_name = str(
+            getattr(self.server, "personality", {}).get("name") or "default"
+        )
+        return get_telegram_character_context(
+            user_id=self.parsed.get("user_id", ""),
+            chat_id=self.parsed.get("chat_id"),
+            thread_id=self.parsed.get("thread_id"),
+            personality_name=personality_name,
+        )
+
+    def get_character_runtime(self, ctx: PipelineContext):
+        """返回角色运行时实例"""
+        from nbot.character.adapters.nekobot import get_character_runtime_from_server
+
+        return get_character_runtime_from_server(self.server)
+
     def send_response(self, ctx: PipelineContext, message: Dict[str, Any]) -> None:
         send_telegram_message(
             self.token,

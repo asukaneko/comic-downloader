@@ -147,6 +147,73 @@ def get_qq_character_context(
     )
 
 
+def get_feishu_character_context(
+    user_id: str,
+    chat_id: Optional[str] = None,
+    open_id: Optional[str] = None,
+    personality_name: str = "default",
+) -> CharacterIdentity:
+    """从飞书消息中解析角色身份
+
+    Args:
+        user_id: 用户 ID
+        chat_id: 会话 ID（群聊或私聊）
+        open_id: 用户 open_id
+        personality_name: 当前角色名称
+
+    Returns:
+        CharacterIdentity
+    """
+    if chat_id:
+        # 群聊或私聊会话
+        scope_id = f"feishu_chat:{chat_id}:{user_id}"
+    else:
+        # 仅用户维度
+        scope_id = f"feishu_user:{user_id}"
+
+    return CharacterIdentity(
+        character_id=personality_name,
+        target_id=str(user_id),
+        scope_id=scope_id,
+        channel="feishu",
+    )
+
+
+def get_telegram_character_context(
+    user_id: str,
+    chat_id: Optional[str] = None,
+    thread_id: Optional[str] = None,
+    personality_name: str = "default",
+) -> CharacterIdentity:
+    """从 Telegram 消息中解析角色身份
+
+    Args:
+        user_id: 用户 ID
+        chat_id: 会话 ID（群组或私聊）
+        thread_id: 话题 ID
+        personality_name: 当前角色名称
+
+    Returns:
+        CharacterIdentity
+    """
+    if chat_id and thread_id:
+        # 话题模式
+        scope_id = f"tg_thread:{chat_id}:{thread_id}:{user_id}"
+    elif chat_id:
+        # 群组或私聊
+        scope_id = f"tg_chat:{chat_id}:{user_id}"
+    else:
+        # 仅用户维度
+        scope_id = f"tg_user:{user_id}"
+
+    return CharacterIdentity(
+        character_id=personality_name,
+        target_id=str(user_id),
+        scope_id=scope_id,
+        channel="telegram",
+    )
+
+
 def get_character_runtime_from_server(server):
     """从 NBotWebServer 获取 CharacterRuntime 实例
 

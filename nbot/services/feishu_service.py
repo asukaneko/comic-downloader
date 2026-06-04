@@ -228,6 +228,25 @@ class FeishuCallbacks(PipelineCallbacks):
             "session_type": "feishu",
         }
 
+    def get_character_context(self, ctx: PipelineContext):
+        """返回飞书频道的角色身份标识"""
+        from nbot.character.adapters.nekobot import get_feishu_character_context
+
+        personality_name = str(
+            getattr(self.server, "personality", {}).get("name") or "default"
+        )
+        return get_feishu_character_context(
+            user_id=self.parsed.get("user_id", ""),
+            chat_id=self.parsed.get("chat_id"),
+            personality_name=personality_name,
+        )
+
+    def get_character_runtime(self, ctx: PipelineContext):
+        """返回角色运行时实例"""
+        from nbot.character.adapters.nekobot import get_character_runtime_from_server
+
+        return get_character_runtime_from_server(self.server)
+
     def send_response(self, ctx: PipelineContext, message: Dict[str, Any]) -> None:
         send_feishu_message(
             self.token,

@@ -8,6 +8,8 @@ NekoBot 角色运行时引擎
 - 角色运行时 (CharacterRuntime)
 - 状态机与反应规划 (StateMachine, ReactionPlanner)
 - 角色记忆服务 (CharacterMemoryService)
+- 频道适配层 (CharacterChannelAdapter, ChannelRuntimeContext, ChannelRenderPolicy)
+- 统一调度器 (CharacterRuntimeDispatcher)
 
 本模块不依赖 Flask / Socket.IO / QQ，仅依赖统一请求对象和抽象存储接口。
 """

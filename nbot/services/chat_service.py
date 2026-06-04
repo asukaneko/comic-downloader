@@ -264,6 +264,9 @@ def load_canonical_qq_messages(
 # QQ 管道回调
 # ============================================================================
 
+# QQ 频道角色运行时缓存
+_qq_character_runtime = None
+
 
 class QQCallbacks(PipelineCallbacks):
     """QQ 频道的管道回调实现。"""
@@ -292,6 +295,21 @@ class QQCallbacks(PipelineCallbacks):
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:
         is_agent = ctx.metadata.get("session_mode") == "agent"
+
+        # 检查是否启用新的角色运行时
+        # 如果启用，返回空字符串，让角色运行时的 prompt stack 处理
+        try:
+            from nbot.web.utils.config_loader import get_character_runtime_config
+            config = get_character_runtime_config()
+            qq_config = config.get("channels", {}).get("qq", {})
+            if qq_config.get("enabled", False) and not qq_config.get("legacy_prompt_enabled", False):
+                # 新角色运行时已启用，旧 prompt 已禁用
+                # 返回空字符串，让 Pipeline 使用角色运行时的 prompt
+                return ""
+        except Exception:
+            pass
+
+        # 兼容旧版：加载旧的 prompt
         return load_prompt(
             user_id=self.user_id,
             group_id=self.group_id,
@@ -312,6 +330,77 @@ class QQCallbacks(PipelineCallbacks):
         # 从系统获取当前角色名
         character_name = _resolve_qq_character_name(self.user_id, self.group_id)
         return get_workspace_context(self.user_id, self.group_id, self.group_user_id, character_name)
+
+    def get_character_context(self, ctx: PipelineContext):
+        """返回 QQ 频道的角色身份标识"""
+        from nbot.character.adapters.nekobot import get_qq_character_context
+
+        personality_name = _resolve_qq_character_name(self.user_id, self.group_id)
+        return get_qq_character_context(
+            user_id=self.user_id or self.group_user_id or "",
+            group_id=self.group_id,
+            personality_name=personality_name,
+        )
+
+    def get_character_runtime(self, ctx: PipelineContext):
+        """返回角色运行时实例"""
+        global _qq_character_runtime
+        if _qq_character_runtime is not None:
+            return _qq_character_runtime
+
+        try:
+            from nbot.character.adapters.nekobot import get_character_runtime_from_server
+            from nbot.web.server import WebChatServer
+
+            server = WebChatServer.get_instance()
+            if server:
+                _qq_character_runtime = get_character_runtime_from_server(server)
+                return _qq_character_runtime
+        except Exception:
+            pass
+
+        # 如果没有 server，直接创建 runtime
+        try:
+            from nbot.character.memory import PromptManagerMemoryAdapter
+            from nbot.character.planner import ReactionPlanner
+            from nbot.character.policies import SignalAnalyzer
+            from nbot.character.repository import (
+                CharacterStateRepository,
+                ProfileRepository,
+                RelationshipRepository,
+            )
+            from nbot.character.runtime import CharacterRuntime
+            from nbot.character.state_machine import StateMachine
+            from nbot.character.storage.world_book_store import WorldBookStore
+
+            base_dir = _get_project_root()
+            profile_repo = ProfileRepository(base_dir)
+
+            # 同步 personality.json 到 profiles.json
+            from nbot.character.models import CharacterProfile
+            personality = _load_json_file(
+                os.path.join(base_dir, "resources", "prompts", "personality.json"), {}
+            )
+            if personality:
+                profile = CharacterProfile.from_personality_dict(personality)
+                if not profile.id:
+                    profile.id = profile.name or "default"
+                profile_repo.save(profile)
+
+            _qq_character_runtime = CharacterRuntime(
+                profile_repo=profile_repo,
+                state_repo=CharacterStateRepository(base_dir),
+                relationship_repo=RelationshipRepository(base_dir),
+                memory_service=PromptManagerMemoryAdapter(),
+                signal_analyzer=SignalAnalyzer(),
+                planner=ReactionPlanner(),
+                state_machine=StateMachine(),
+                world_book_store=WorldBookStore(base_dir),
+            )
+            return _qq_character_runtime
+        except Exception as exc:
+            print(f"[QQCharacterRuntime] failed to create runtime: {exc}")
+        return None
 
     def check_confirmation(
         self, ctx: PipelineContext, user_input: str
@@ -511,17 +600,37 @@ def remove_brackets_content(text: str) -> str:
 
 
 def load_memories(user_id=None, group_id=None):
-    """加载长期和短期记忆（兼容旧接口，使用新模块）"""
+    """加载长期和短期记忆（兼容旧接口，使用新模块）
+
+    .. deprecated::
+        建议使用角色运行时的记忆系统，此函数仅为兼容保留。
+    """
+    import warnings
+    warnings.warn(
+        "load_memories() 已弃用，请使用角色运行时的记忆系统",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return prompt_manager.load_memories(user_id, group_id)
 
 
 def load_prompt(user_id=None, group_id=None, include_skills: bool = True, include_memories: bool = True):
-    """加载提示词（兼容旧接口，使用新模块 + 技能列表）"""
+    """加载提示词（兼容旧接口，使用新模块 + 技能列表）
+
+    .. deprecated::
+        建议使用角色运行时的 PromptStack 系统，此函数仅为兼容保留。
+    """
+    import warnings
+    warnings.warn(
+        "load_prompt() 已弃用，请使用角色运行时的 PromptStack 系统",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     user_id = str(user_id) if user_id else None
     group_id = str(group_id) if group_id else None
 
     prompt = prompt_manager.load_prompt(user_id, group_id, include_memories=include_memories, include_tools=True)
-    
+
     if include_skills:
         try:
             from nbot.plugins import get_plugin_manager

@@ -92,6 +92,25 @@ class FeishuChatCallbacks(PipelineCallbacks):
         """提供工作区上下文给工具调用。"""
         return {"session_id": self.session_id, "session_type": "feishu"}
 
+    def get_character_context(self, ctx: PipelineContext):
+        """返回飞书频道的角色身份标识"""
+        from nbot.character.adapters.nekobot import get_feishu_character_context
+
+        personality_name = str(
+            getattr(self.server, "personality", {}).get("name") or "default"
+        )
+        return get_feishu_character_context(
+            user_id=self.session_id.split("_")[-1] if "_" in self.session_id else "",
+            chat_id=self.chat_id,
+            personality_name=personality_name,
+        )
+
+    def get_character_runtime(self, ctx: PipelineContext):
+        """返回角色运行时实例"""
+        from nbot.character.adapters.nekobot import get_character_runtime_from_server
+
+        return get_character_runtime_from_server(self.server)
+
     def search_knowledge(self, ctx: PipelineContext, query: str) -> str:
         """搜索知识库。"""
         try:

@@ -474,3 +474,102 @@ def get_embedding_model_config() -> dict:
         "dimensions": 1536,
         "provider_type": api_config.get("provider_type", "openai_compatible"),
     }
+
+
+def get_character_runtime_config() -> dict:
+    """获取角色运行时配置
+
+    从 config.ini 的 [character_runtime] 和各频道配置中读取。
+
+    Returns:
+        配置字典
+    """
+    config_parser = _read_config()
+
+    # 全局配置
+    default_enabled = config_parser.getboolean(
+        "character_runtime", "default_enabled", fallback=True
+    )
+    default_character_id = config_parser.get(
+        "character_runtime", "default_character_id", fallback=""
+    )
+
+    # 频道配置
+    channels = {}
+
+    # QQ 频道
+    qq_enabled = config_parser.getboolean(
+        "character_runtime_qq", "enabled", fallback=True
+    )
+    qq_trigger = config_parser.get(
+        "character_runtime_qq", "trigger", fallback="mention_or_private"
+    )
+    qq_memory_scope = config_parser.get(
+        "character_runtime_qq", "memory_scope", fallback="group_user"
+    )
+    channels["qq"] = {
+        "enabled": qq_enabled,
+        "trigger": qq_trigger,
+        "memory_scope": qq_memory_scope,
+        "character_runtime": {
+            "enabled": qq_enabled,
+            "trigger": qq_trigger,
+            "memory_scope": qq_memory_scope,
+        },
+    }
+
+    # 飞书频道
+    feishu_enabled = config_parser.getboolean(
+        "character_runtime_feishu", "enabled", fallback=True
+    )
+    feishu_trigger = config_parser.get(
+        "character_runtime_feishu", "trigger", fallback="mention_or_private"
+    )
+    feishu_memory_scope = config_parser.get(
+        "character_runtime_feishu", "memory_scope", fallback="chat_user"
+    )
+    channels["feishu"] = {
+        "enabled": feishu_enabled,
+        "trigger": feishu_trigger,
+        "memory_scope": feishu_memory_scope,
+        "character_runtime": {
+            "enabled": feishu_enabled,
+            "trigger": feishu_trigger,
+            "memory_scope": feishu_memory_scope,
+        },
+    }
+
+    # Telegram 频道
+    telegram_enabled = config_parser.getboolean(
+        "character_runtime_telegram", "enabled", fallback=True
+    )
+    telegram_trigger = config_parser.get(
+        "character_runtime_telegram", "trigger", fallback="private_or_reply"
+    )
+    telegram_memory_scope = config_parser.get(
+        "character_runtime_telegram", "memory_scope", fallback="chat_user"
+    )
+    channels["telegram"] = {
+        "enabled": telegram_enabled,
+        "trigger": telegram_trigger,
+        "memory_scope": telegram_memory_scope,
+        "character_runtime": {
+            "enabled": telegram_enabled,
+            "trigger": telegram_trigger,
+            "memory_scope": telegram_memory_scope,
+        },
+    }
+
+    # Web 频道（默认启用）
+    channels["web"] = {
+        "enabled": True,
+        "character_runtime": {
+            "enabled": True,
+        },
+    }
+
+    return {
+        "default_enabled": default_enabled,
+        "default_character_id": default_character_id,
+        "channels": channels,
+    }
