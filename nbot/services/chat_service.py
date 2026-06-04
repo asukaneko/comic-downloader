@@ -301,8 +301,11 @@ class QQCallbacks(PipelineCallbacks):
         try:
             from nbot.web.utils.config_loader import get_character_runtime_config
             config = get_character_runtime_config()
-            qq_config = config.get("channels", {}).get("qq", {})
-            if qq_config.get("enabled", False) and not qq_config.get("legacy_prompt_enabled", False):
+            qq_runtime_config = config.get("channels", {}).get("qq", {}).get("character_runtime", {})
+            qq_enabled = qq_runtime_config.get("enabled", False)
+            qq_legacy_enabled = qq_runtime_config.get("legacy_prompt_enabled", False)
+
+            if qq_enabled and not qq_legacy_enabled:
                 # 新角色运行时已启用，旧 prompt 已禁用
                 # 返回空字符串，让 Pipeline 使用角色运行时的 prompt
                 return ""

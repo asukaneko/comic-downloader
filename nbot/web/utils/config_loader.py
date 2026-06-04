@@ -482,7 +482,24 @@ def get_character_runtime_config() -> dict:
     从 config.ini 的 [character_runtime] 和各频道配置中读取。
 
     Returns:
-        配置字典
+        配置字典，结构如下：
+        {
+            "character_runtime": {
+                "default_enabled": bool,
+                "default_character_id": str,
+            },
+            "channels": {
+                "qq": {
+                    "character_runtime": {
+                        "enabled": bool,
+                        "trigger": str,
+                        "memory_scope": str,
+                        "legacy_prompt_enabled": bool,
+                    }
+                },
+                ...
+            }
+        }
     """
     config_parser = _read_config()
 
@@ -507,14 +524,15 @@ def get_character_runtime_config() -> dict:
     qq_memory_scope = config_parser.get(
         "character_runtime_qq", "memory_scope", fallback="group_user"
     )
+    qq_legacy_prompt_enabled = config_parser.getboolean(
+        "character_runtime_qq", "legacy_prompt_enabled", fallback=False
+    )
     channels["qq"] = {
-        "enabled": qq_enabled,
-        "trigger": qq_trigger,
-        "memory_scope": qq_memory_scope,
         "character_runtime": {
             "enabled": qq_enabled,
             "trigger": qq_trigger,
             "memory_scope": qq_memory_scope,
+            "legacy_prompt_enabled": qq_legacy_prompt_enabled,
         },
     }
 
@@ -529,9 +547,6 @@ def get_character_runtime_config() -> dict:
         "character_runtime_feishu", "memory_scope", fallback="chat_user"
     )
     channels["feishu"] = {
-        "enabled": feishu_enabled,
-        "trigger": feishu_trigger,
-        "memory_scope": feishu_memory_scope,
         "character_runtime": {
             "enabled": feishu_enabled,
             "trigger": feishu_trigger,
@@ -550,9 +565,6 @@ def get_character_runtime_config() -> dict:
         "character_runtime_telegram", "memory_scope", fallback="chat_user"
     )
     channels["telegram"] = {
-        "enabled": telegram_enabled,
-        "trigger": telegram_trigger,
-        "memory_scope": telegram_memory_scope,
         "character_runtime": {
             "enabled": telegram_enabled,
             "trigger": telegram_trigger,
@@ -562,14 +574,15 @@ def get_character_runtime_config() -> dict:
 
     # Web 频道（默认启用）
     channels["web"] = {
-        "enabled": True,
         "character_runtime": {
             "enabled": True,
         },
     }
 
     return {
-        "default_enabled": default_enabled,
-        "default_character_id": default_character_id,
+        "character_runtime": {
+            "default_enabled": default_enabled,
+            "default_character_id": default_character_id,
+        },
         "channels": channels,
     }
