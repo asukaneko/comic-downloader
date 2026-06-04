@@ -8401,9 +8401,16 @@
         }
 
         .chat-input-wrapper .chat-actions .file-upload-trigger:focus,
-        .chat-input-wrapper .chat-actions .file-upload-trigger:focus-visible {
+        .chat-input-wrapper .chat-actions .file-upload-trigger:focus-visible,
+        .chat-input-wrapper .chat-actions .file-upload-trigger:active {
             outline: none;
             box-shadow: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .file-upload-trigger {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-appearance: none;
         }
 
         .chat-input-wrapper.input-focused .chat-actions .file-upload-menu > .file-upload-trigger,
