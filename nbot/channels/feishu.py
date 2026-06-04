@@ -1,10 +1,14 @@
 from typing import Any
 
 from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelEnvelope
+from nbot.character.channel_context import ChannelRenderPolicy, ChannelRuntimeContext
 
 
 class FeishuChannelAdapter(BaseChannelAdapter):
-    """飞书频道适配器"""
+    """飞书频道适配器
+
+    同时实现 CharacterChannelAdapter 协议，接入角色运行时。
+    """
 
     channel_name = "feishu"
 
@@ -126,3 +130,56 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         if challenge:
             return str(challenge)
         return None
+
+    # ------------------------------------------------------------------
+    # CharacterChannelAdapter 协议方法
+    # ------------------------------------------------------------------
+
+    def build_runtime_context(self, chat_request: Any) -> ChannelRuntimeContext:
+        """从 ChatRequest 构建飞书频道运行上下文"""
+        meta = getattr(chat_request, "metadata", {}) or {}
+        chat_type = meta.get("feishu_chat_type", "")
+        scene = "private" if chat_type == "p2p" else "group"
+
+        return ChannelRuntimeContext(
+            channel=self.channel_name,
+            conversation_id=getattr(chat_request, "conversation_id", "") or "",
+            scene=scene,
+            user_id=getattr(chat_request, "user_id", "") or "",
+            user_display_name=getattr(chat_request, "sender", "") or "",
+            group_id="" if scene == "private" else meta.get("feishu_chat_id", ""),
+            metadata=meta,
+        )
+
+    def get_render_policy(self, context: ChannelRuntimeContext) -> ChannelRenderPolicy:
+        """飞书频道渲染策略"""
+        return ChannelRenderPolicy(
+            supports_stream=False,
+            supports_markdown=True,
+            supports_image=True,
+            supports_file=True,
+            supports_quote_reply=True,
+            supports_at=True,
+            max_text_length=4000,
+            split_strategy="paragraph",
+        )
+
+    def select_character_id(self, context: ChannelRuntimeContext) -> str | None:
+        """飞书频道角色选择（使用默认）"""
+        return None
+
+    def resolve_memory_scope(self, context: ChannelRuntimeContext) -> str:
+        """飞书频道默认记忆作用域"""
+        if context.scene == "private":
+            return "user"
+        return "group"
+
+    def render_result(self, result: Any, context: ChannelRuntimeContext) -> list[dict[str, Any]]:
+        """将角色运行结果渲染为飞书消息格式"""
+        text = getattr(result, "text", "") or ""
+        if not text:
+            metadata = getattr(result, "metadata", {}) or {}
+            text = metadata.get("prompt_text", "")
+        if not text:
+            return []
+        return [{"type": "text", "content": text}]

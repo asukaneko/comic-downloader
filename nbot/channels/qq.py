@@ -1,10 +1,14 @@
 from typing import Any
 
 from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelEnvelope
+from nbot.character.channel_context import ChannelRenderPolicy, ChannelRuntimeContext
 
 
 class QQChannelAdapter(BaseChannelAdapter):
-    """QQ 频道适配器（OneBot v11 协议）"""
+    """QQ 频道适配器（OneBot v11 协议）
+
+    同时实现 CharacterChannelAdapter 协议，接入角色运行时。
+    """
 
     channel_name = "qq"
 
@@ -106,6 +110,17 @@ class QQChannelAdapter(BaseChannelAdapter):
                 elif seg_type == "face":
                     text_parts.append("[表情]")
 
+        # 检测是否被 @
+        bot_uin = str(getattr(self, "bot_uin", "") or "")
+        is_mentioned = False
+        if message_type == "group":
+            for seg in (message_segments if isinstance(message_segments, list) else []):
+                if isinstance(seg, dict) and seg.get("type") == "at":
+                    at_qq = str(seg.get("data", {}).get("qq", ""))
+                    if at_qq == bot_uin or at_qq == "all":
+                        is_mentioned = True
+                        break
+
         # 如果 CQ 码解析无文本，使用 raw_message 兜底
         content = "".join(text_parts).strip() or raw_message
 
@@ -135,6 +150,7 @@ class QQChannelAdapter(BaseChannelAdapter):
             "content": content,
             "message_id": message_id,
             "attachments": attachments,
+            "is_mentioned": is_mentioned,
             "metadata": {
                 "post_type": post_type,
                 "message_type": message_type,
@@ -143,5 +159,60 @@ class QQChannelAdapter(BaseChannelAdapter):
                 "sender_nickname": nickname,
                 "sender_role": sender.get("role", ""),
                 "raw_message": raw_message,
+                "is_mentioned": is_mentioned,
             },
         }
+
+    # ------------------------------------------------------------------
+    # CharacterChannelAdapter 协议方法
+    # ------------------------------------------------------------------
+
+    def build_runtime_context(self, chat_request: Any) -> ChannelRuntimeContext:
+        """从 ChatRequest 构建 QQ 频道运行上下文"""
+        meta = getattr(chat_request, "metadata", {}) or {}
+        group_id = meta.get("group_id", "")
+        user_id = getattr(chat_request, "user_id", "") or ""
+        scene = "group" if group_id else "private"
+
+        return ChannelRuntimeContext(
+            channel=self.channel_name,
+            conversation_id=getattr(chat_request, "conversation_id", "") or "",
+            scene=scene,
+            user_id=user_id,
+            user_display_name=getattr(chat_request, "sender", "") or "",
+            group_id=group_id,
+            metadata=meta,
+        )
+
+    def get_render_policy(self, context: ChannelRuntimeContext) -> ChannelRenderPolicy:
+        """QQ 频道渲染策略"""
+        return ChannelRenderPolicy(
+            supports_stream=False,
+            supports_markdown=False,
+            supports_image=True,
+            supports_file=True,
+            supports_quote_reply=True,
+            supports_at=True,
+            max_text_length=4500,
+            split_strategy="paragraph",
+        )
+
+    def select_character_id(self, context: ChannelRuntimeContext) -> str | None:
+        """QQ 频道角色选择（使用默认）"""
+        return None
+
+    def resolve_memory_scope(self, context: ChannelRuntimeContext) -> str:
+        """QQ 频道默认记忆作用域"""
+        if context.scene == "group":
+            return "group"
+        return "user"
+
+    def render_result(self, result: Any, context: ChannelRuntimeContext) -> list[dict[str, Any]]:
+        """将角色运行结果渲染为 QQ 消息格式"""
+        text = getattr(result, "text", "") or ""
+        if not text:
+            metadata = getattr(result, "metadata", {}) or {}
+            text = metadata.get("prompt_text", "")
+        if not text:
+            return []
+        return [{"type": "text", "content": text}]

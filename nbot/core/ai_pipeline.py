@@ -758,6 +758,53 @@ class AIPipeline:
             _log.debug("[CharacterRuntime] before_turn skipped: identity is None")
             return
 
+        # --- 通过 dispatcher 统一处理 is_enabled / trigger / scope_id ---
+        channel = ctx.metadata.get("channel_type", "")
+        try:
+            from nbot.character.dispatcher import CharacterRuntimeContextDispatcher, build_scope_id
+            from nbot.character.channel_context import ChannelRuntimeContext
+            from nbot.web.utils.config_loader import get_character_runtime_config
+
+            config = get_character_runtime_config()
+            dispatcher = CharacterRuntimeContextDispatcher(runtime=runtime, config=config)
+
+            # 构建统一频道上下文
+            req_meta = getattr(ctx.chat_request, "metadata", {}) or {}
+            scene = "private" if not ctx.metadata.get("group_id") else "group"
+            runtime_ctx = ChannelRuntimeContext(
+                channel=channel,
+                conversation_id=getattr(ctx.chat_request, "conversation_id", "") or "",
+                scene=scene,
+                user_id=getattr(ctx.chat_request, "user_id", "") or "",
+                group_id=ctx.metadata.get("group_id", ""),
+                thread_id=ctx.metadata.get("thread_id", ""),
+            )
+
+            # is_enabled 检查
+            if not dispatcher.is_enabled(runtime_ctx):
+                _log.debug("[CharacterRuntime] before_turn skipped: channel %s disabled", channel)
+                return
+
+            # trigger 检查
+            trigger = dispatcher.get_trigger_strategy(runtime_ctx)
+            if not dispatcher._should_trigger(trigger, runtime_ctx, ctx.chat_request):
+                _log.debug("[CharacterRuntime] before_turn skipped: trigger %s not met", trigger)
+                return
+
+            # scope_id 修正
+            memory_scope = dispatcher.get_memory_scope(runtime_ctx)
+            if memory_scope:
+                corrected_scope_id = build_scope_id(runtime_ctx, memory_scope)
+                if corrected_scope_id and corrected_scope_id != identity.scope_id:
+                    _log.debug(
+                        "[CharacterRuntime] scope_id corrected: %s -> %s",
+                        identity.scope_id, corrected_scope_id,
+                    )
+                    identity.scope_id = corrected_scope_id
+        except Exception as cfg_exc:
+            _log.debug("[CharacterRuntime] config check failed, proceeding without: %s", cfg_exc)
+        # --- dispatcher 集成结束 ---
+
         try:
             # 加载最近消息用于世界书多源召回
             recent_messages = []
@@ -786,10 +833,11 @@ class AIPipeline:
                 inject_world_book(ctx.prompt_stack, turn.world_book_entries)
 
             _log.debug(
-                "[CharacterRuntime] before_turn executed: character=%s target=%s "
+                "[CharacterRuntime] before_turn executed: character=%s target=%s scope=%s "
                 "rel(affection=%s trust=%s familiarity=%s dependency=%s security=%s)",
                 identity.character_id,
                 identity.target_id,
+                identity.scope_id,
                 turn.relationship.affection if turn.relationship else "N/A",
                 turn.relationship.trust if turn.relationship else "N/A",
                 turn.relationship.familiarity if turn.relationship else "N/A",

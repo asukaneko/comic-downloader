@@ -311,6 +311,19 @@ class CharacterRuntimeContextDispatcher:
             },
         )
 
+    @staticmethod
+    def _get_meta_field(chat_request: Any, key: str, default: Any = None) -> Any:
+        """从 chat_request 属性或 metadata 字典中获取字段
+
+        Adapter 通常将 is_mentioned / is_reply_to_bot 写入 metadata 字典，
+        但也可能直接设置为 chat_request 属性。此方法同时检查两处。
+        """
+        direct = getattr(chat_request, key, None)
+        if direct is not None:
+            return direct
+        meta = getattr(chat_request, "metadata", None) or {}
+        return meta.get(key, default)
+
     def _should_trigger(
         self,
         trigger: str,
@@ -325,18 +338,18 @@ class CharacterRuntimeContextDispatcher:
             return context.scene == "private"
 
         if trigger == "mention_only":
-            return getattr(chat_request, "is_mentioned", False)
+            return bool(self._get_meta_field(chat_request, "is_mentioned", False))
 
         if trigger == "mention_or_private":
             if context.scene == "private":
                 return True
-            return getattr(chat_request, "is_mentioned", False)
+            return bool(self._get_meta_field(chat_request, "is_mentioned", False))
 
         if trigger == "private_or_reply":
             # Telegram 常用策略：私聊总是触发，回复时触发
             if context.scene == "private":
                 return True
-            return getattr(chat_request, "is_reply_to_bot", False)
+            return bool(self._get_meta_field(chat_request, "is_reply_to_bot", False))
 
         if trigger == "keyword":
             keywords = self._get_channel_config(context.channel).get(
