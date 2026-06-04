@@ -569,7 +569,8 @@ class AIPipeline:
         # Phase 5.5: 角色运行时 after_turn
         self._phase_character_runtime_after_turn(ctx, callbacks, result)
 
-        self._phase_auto_memory(ctx, callbacks, result)
+        if ctx.metadata.get("session_mode") != "agent":
+            self._phase_auto_memory(ctx, callbacks, result)
         callbacks.on_response_complete(ctx, result)
 
         return result
@@ -676,26 +677,27 @@ class AIPipeline:
                 priority=70,
             )
 
-        # 跨会话角色记忆注入 → PromptStack
-        try:
-            from nbot.core.auto_memory import (
-                build_memory_context,
-                load_character_memories,
-            )
-
-            memory_context = build_memory_context(ctx, callbacks)
-            memory_text = load_character_memories(
-                memory_context.get("character_name", ""),
-                memory_context.get("target_id", ""),
-            )
-            if memory_text:
-                ctx.prompt_stack.add(
-                    "character.memories_legacy",
-                    memory_text,
-                    priority=60,
+        # 跨会话角色记忆注入 → PromptStack（agent 模式跳过）
+        if ctx.metadata.get("session_mode") != "agent":
+            try:
+                from nbot.core.auto_memory import (
+                    build_memory_context,
+                    load_character_memories,
                 )
-        except Exception:
-            pass
+
+                memory_context = build_memory_context(ctx, callbacks)
+                memory_text = load_character_memories(
+                    memory_context.get("character_name", ""),
+                    memory_context.get("target_id", ""),
+                )
+                if memory_text:
+                    ctx.prompt_stack.add(
+                        "character.memories_legacy",
+                        memory_text,
+                        priority=60,
+                    )
+            except Exception:
+                pass
 
         # 角色运行时 before_turn hook
         self._phase_character_runtime_before_turn(ctx, callbacks)

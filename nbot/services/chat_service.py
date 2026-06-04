@@ -694,6 +694,20 @@ def _run_qq_chat_request(
     ctx = PipelineContext(chat_request=chat_request, adapter=adapter)
     ctx.metadata["channel_type"] = "private" if user_id else "group"
     ctx.metadata["source"] = "qq"
+
+    # 传递 session_mode 供管道判断是否跳过角色运行时 / 自动记忆
+    try:
+        from nbot.web.server import WebChatServer as _WCS
+
+        _wcs = _WCS.get_instance()
+        if _wcs:
+            _sid = get_qq_session_id(user_id, group_id, group_user_id)
+            _sess = _wcs.session_store.get_session(_sid) if _sid else {}
+            if (_sess or {}).get("session_mode"):
+                ctx.metadata["session_mode"] = _sess["session_mode"]
+    except Exception:
+        pass
+
     callbacks = QQCallbacks(qq_store, user_id, group_id, group_user_id)
 
     pipeline = AIPipeline()
