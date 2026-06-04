@@ -49,6 +49,8 @@
 | `/character` | 查看/切换角色 (admin) |
 | `/character list` | 列出角色 (admin) |
 | `/character <编号\|id\|名称>` | 切换角色 (admin) |
+| `/new_agent` | 创建新的 Agent 对话并切换到当前频道 (admin) |
+| `/new_character` | 退出 Agent 模式并恢复为新的角色对话 (admin) |
 | `/resume [编号\|会话ID\|名称]` | 从 Web 会话载入到当前频道 (admin) |
 | `/push` | 将当前频道会话上传到 Web 会话 (admin) |
 
@@ -101,6 +103,19 @@
 | `/hotnovel <day\|month> [数量]` | 获取今日/本月热门轻小说（支持翻页） |
 | `/novel_res <res值>` | 根据 res 编号下载轻小说 |
 | `/set_wenku_cookie <Cookie>` | 更新文库 8 的 Cookie (admin) |
+
+## MCP 服务管理
+
+| 命令 | 说明 |
+|------|------|
+| `/mcp` | 查看 MCP 连接状态 (admin) |
+| `/mcp list` | 列出 MCP 服务 (admin) |
+| `/mcp tools <名称\|ID>` | 查看服务工具 (admin) |
+| `/mcp add_http <名称> <URL>` | 添加 HTTP MCP 服务 (admin) |
+| `/mcp add_stdio <名称> <command> [args_json]` | 添加 stdio MCP 服务 (admin) |
+| `/mcp del <名称\|ID>` | 删除 MCP 服务 (admin) |
+| `/mcp_connect <名称\|ID\|URL>` | 连接 MCP 服务 (admin) |
+| `/mcp_disconnect <名称\|ID>` | 断开 MCP 服务 (admin) |
 
 ## 工作区
 
