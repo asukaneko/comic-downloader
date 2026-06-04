@@ -95,6 +95,42 @@ def _load_json_file(path: str, default=None):
     return default
 
 
+def _load_resume_bindings() -> dict:
+    path = os.path.join(_get_project_root(), "data", "web", "qq_web_session_bindings.json")
+    data = _load_json_file(path, {})
+    return data if isinstance(data, dict) else {}
+
+
+def _sync_bound_web_session(server, qq_session_id: str) -> None:
+    if not server or not qq_session_id:
+        return
+
+    bindings = _load_resume_bindings()
+    binding = bindings.get(qq_session_id)
+    if not isinstance(binding, dict):
+        return
+
+    web_session_id = str(binding.get("web_session_id") or "").strip()
+    if not web_session_id:
+        return
+
+    qq_session = server.session_store.get_session(qq_session_id)
+    web_session = server.session_store.get_session(web_session_id)
+    if not qq_session or not web_session:
+        return
+
+    qq_messages = [
+        dict(message)
+        for message in (qq_session.get("messages") or [])
+        if isinstance(message, dict)
+    ]
+    web_session["messages"] = qq_messages
+    web_session["system_prompt"] = str(qq_session.get("system_prompt") or "")
+    web_session["last_message"] = str(qq_session.get("last_message") or "")
+    web_session["updated_at"] = datetime.datetime.now().isoformat()
+    server.session_store.set_session(web_session_id, web_session)
+
+
 def _load_session_prompt_text(user_id: str = None, group_id: str = None) -> str:
     base_dir = _get_project_root()
     if user_id:
@@ -716,12 +752,16 @@ def _sync_to_web_session(role, content, user_id=None, group_id=None, group_user_
     if not server:
         return
 
-    server.sync_qq_messages(
+    qq_session_id = server.sync_qq_messages(
         user_id=str(user_id) if user_id else None,
         group_id=str(group_id) if group_id else None,
         group_user_id=str(group_user_id) if group_user_id else None,
         create_if_not_exists=True,
     )
+    try:
+        _sync_bound_web_session(server, qq_session_id)
+    except Exception as e:
+        print(f"[QQ Binding] failed to sync bound web session: {e}")
 
 
 def _record_message(role, content, user_id=None, group_id=None, group_user_id=None):

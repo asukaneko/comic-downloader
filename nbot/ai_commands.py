@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+import uuid
 from datetime import datetime
 
 from nbot.services.chat_service import (
@@ -589,6 +590,200 @@ def register_ai_commands(
 
         save_sessions_to_db(web_data_dir(), sessions)
 
+    def mcp_config_path():
+        return os.path.join(web_data_dir(), "mcp_servers.json")
+
+    def load_mcp_servers():
+        path = mcp_config_path()
+        try:
+            if not os.path.exists(path):
+                return []
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except Exception as e:
+            log.warning(f"Load MCP servers failed: {e}")
+            return []
+
+    def save_mcp_servers(configs):
+        path = mcp_config_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(configs, f, ensure_ascii=False, indent=2)
+
+    def create_web_agent_session(owner_user_id="", name="Agent 对话"):
+        session_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
+        session = {
+            "id": session_id,
+            "name": name,
+            "type": "web",
+            "user_id": str(owner_user_id or ""),
+            "created_at": now,
+            "updated_at": now,
+            "archived": False,
+            "archived_at": None,
+            "messages": [{"role": "system", "content": ""}],
+            "system_prompt": "",
+            "character_id": "",
+            "sender_name": "Agent",
+            "sender_avatar": "",
+            "sender_portrait": "",
+            "tags": [],
+            "favorite": False,
+            "message_favorites": [],
+            "pinned": False,
+            "is_public": False,
+            "proactive_chat": {},
+            "character_runtime_timeline": [],
+            "session_mode": "agent",
+            "last_message": "",
+        }
+
+        try:
+            from nbot.web.server import WebChatServer
+
+            server = WebChatServer.get_instance()
+            if server and hasattr(server, "sessions"):
+                from nbot.core.session_store import WebSessionStore
+
+                session_store = WebSessionStore(
+                    server.sessions,
+                    save_callback=lambda: server._save_data("sessions"),
+                )
+                session_store.set_session(session_id, session)
+                if workspace_available:
+                    try:
+                        from nbot.core.workspace import workspace_manager
+
+                        workspace_manager.get_or_create(session_id, "web", name)
+                    except Exception as exc:
+                        log.debug(f"Create agent workspace skipped: {exc}")
+                return session
+        except Exception as e:
+            log.warning(f"Create agent session in runtime store failed: {e}")
+
+        sessions = load_web_sessions()
+        sessions[session_id] = session
+        save_web_sessions(sessions)
+        if workspace_available:
+            try:
+                from nbot.core.workspace import workspace_manager
+
+                workspace_manager.get_or_create(session_id, "web", name)
+            except Exception as exc:
+                log.debug(f"Create agent workspace skipped: {exc}")
+        return session
+
+    def set_current_session_prompt(msg, is_group, prompt):
+        id_str = str(msg.group_id if is_group else msg.user_id)
+        prefix = "group" if is_group else "user"
+        os.makedirs(f"resources/prompts/{prefix}", exist_ok=True)
+        with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
+            file.write(prompt)
+
+        try:
+            from nbot.core.prompt import prompt_manager
+
+            prompt_manager._prompt_cache = {}
+        except Exception:
+            pass
+
+    def update_current_qq_session_metadata(info, **fields):
+        session_id = str(info.get("session_id") or "")
+        if not session_id:
+            return
+        try:
+            from nbot.web.server import WebChatServer
+            from nbot.core.session_store import WebSessionStore
+
+            server = WebChatServer.get_instance()
+            if not server or not hasattr(server, "sessions"):
+                return
+            session_store = WebSessionStore(
+                server.sessions,
+                save_callback=lambda: server._save_data("sessions"),
+            )
+            session = session_store.get_session(session_id)
+            if not session:
+                return
+            session.update(fields)
+            session["updated_at"] = datetime.now().isoformat()
+            session_store.set_session(session_id, session)
+        except Exception as e:
+            log.debug(f"Update QQ session metadata skipped: {e}")
+
+    def find_mcp_server(configs, needle):
+        needle = str(needle or "").strip()
+        if not needle:
+            return None
+
+        lowered = needle.casefold()
+        for cfg in configs:
+            if not isinstance(cfg, dict):
+                continue
+            server_id = str(cfg.get("id") or "")
+            name = str(cfg.get("name") or "")
+            if lowered in {server_id.casefold(), name.casefold()}:
+                return cfg
+
+        partial_matches = []
+        for cfg in configs:
+            if not isinstance(cfg, dict):
+                continue
+            server_id = str(cfg.get("id") or "")
+            name = str(cfg.get("name") or "")
+            if lowered in server_id.casefold() or lowered in name.casefold():
+                partial_matches.append(cfg)
+        return partial_matches[0] if len(partial_matches) == 1 else None
+
+    def format_mcp_server_summary(cfg, connected=None, tool_count=None):
+        server_id = str(cfg.get("id") or "")
+        name = str(cfg.get("name") or server_id[:8] or "未命名")
+        transport = str(cfg.get("transport") or "streamable-http")
+        target = cfg.get("url") or cfg.get("command") or ""
+        enabled = "on" if cfg.get("enabled", True) else "off"
+        if connected is None:
+            connected = bool(cfg.get("connected"))
+        if tool_count is None:
+            tool_count = int(cfg.get("tool_count") or 0)
+        state = "已连接" if connected else "未连接"
+        suffix = f" -> {target}" if target else ""
+        return f"- {name} [{server_id[:8]}] {transport} {state} 工具:{tool_count} enabled:{enabled}{suffix}"
+
+    def refresh_mcp_runtime_status(configs):
+        try:
+            from nbot.services.mcp_bridge import get_mcp_bridge
+
+            bridge = get_mcp_bridge()
+            for cfg in configs:
+                if not isinstance(cfg, dict):
+                    continue
+                server_id = str(cfg.get("id") or "")
+                connected = bridge.is_connected(server_id)
+                cfg["connected"] = connected
+                cfg["tool_count"] = len(bridge.get_server_tools(server_id)) if connected else 0
+        except Exception as e:
+            log.warning(f"Refresh MCP runtime status failed: {e}")
+        return configs
+
+    def build_quick_mcp_entry(url):
+        host_part = url.split("://", 1)[-1].split("/", 1)[0] or "server"
+        safe_host = "".join(ch if ch.isalnum() else "-" for ch in host_part).strip("-") or "server"
+        return {
+            "id": str(uuid.uuid4()),
+            "name": f"quick-{safe_host}",
+            "transport": "streamable-http",
+            "description": "通过聊天命令快速添加",
+            "enabled": True,
+            "auto_connect": False,
+            "connected": False,
+            "tool_count": 0,
+            "created_at": datetime.now().isoformat(),
+            "last_connected_at": None,
+            "url": url,
+        }
+
     def current_character(msg, is_group):
         characters = load_character_options()
         scope, target_id = resolve_character_session(msg, is_group)
@@ -1163,7 +1358,12 @@ def register_ai_commands(
             prompt = "没有找到提示词喔~"
         await reply_current_channel(msg, is_group, prompt)
 
-    @register_command("/new", help_text="/new -> 创建新的对话会话 (清空当前对话历史)(admin)", category="2", admin_show=True)
+    @register_command(
+        "/new",
+        help_text="/new -> 创建新的对话会话 (清空当前对话历史)(admin)",
+        category="2",
+        admin_show=True,
+    )
     async def handle_new_session(msg, is_group=True):
         # 权限检查：仅管理员可使用
         if (str(msg.user_id) not in admin) and is_group:
@@ -1220,6 +1420,107 @@ def register_ai_commands(
         _reset_canonical_qq_session_messages(user_id=user_id)
         delete_session_workspace(user_id=user_id)
         await bot.api.post_private_msg(msg.user_id, text="已创建新会话喔，之前的对话历史已清空")
+
+    @register_command(
+        "/new_agent",
+        help_text="/new_agent -> 像 Web 一样创建一个新的 Agent 对话并切换到当前频道(admin)",
+        category="2",
+        admin_show=True,
+    )
+    async def handle_new_agent_session(msg, is_group=True):
+        if (str(msg.user_id) not in admin) and is_group:
+            await msg.reply(text="你没有权限喔~")
+            return
+
+        info = current_qq_session_info(msg, is_group)
+        agent_session = create_web_agent_session(owner_user_id=str(getattr(msg, "user_id", "") or ""))
+        agent_messages = [{"role": "system", "content": ""}]
+
+        replace_current_qq_session_messages(
+            info,
+            agent_messages,
+            system_prompt="",
+        )
+        set_current_session_prompt(msg, is_group, "")
+        update_current_qq_session_metadata(
+            info,
+            system_prompt="",
+            character_id="",
+            sender_name="Agent",
+            sender_avatar="",
+            sender_portrait="",
+            session_mode="agent",
+            last_message="",
+        )
+
+        bindings = load_resume_bindings()
+        bindings[info["session_id"]] = {
+            "web_session_id": agent_session["id"],
+            "web_session_name": agent_session.get("name") or "",
+            "loaded_at": datetime.now().isoformat(),
+            "channel": info["label"],
+            "character_id": "",
+        }
+        save_resume_bindings(bindings)
+
+        try:
+            delete_session_workspace(
+                user_id=info["user_id"],
+                group_id=info["group_id"],
+                group_user_id=info["group_user_id"],
+            )
+        except Exception:
+            pass
+
+        await reply_current_channel(
+            msg,
+            is_group,
+            f"已创建新的 Agent 对话「{agent_session.get('name') or agent_session['id'][:8]}」，并切换到当前频道。",
+        )
+
+    @register_command(
+        "/new_character",
+        help_text="/new_character -> 退出 Agent 模式并恢复为新的角色对话(admin)",
+        category="2",
+        admin_show=True,
+    )
+    async def handle_new_character_session(msg, is_group=True):
+        if (str(msg.user_id) not in admin) and is_group:
+            await msg.reply(text="你没有权限喔~")
+            return
+
+        characters = load_character_options()
+        session_scope, session_target_id = resolve_character_session(msg, is_group)
+        target = find_session_character(characters, session_scope, session_target_id, msg)
+
+        if not target:
+            await reply_current_channel(msg, is_group, "没有找到可恢复的角色配置。请先在 Web 角色卡里设置当前角色。")
+            return
+
+        info = current_qq_session_info(msg, is_group)
+        bindings = load_resume_bindings()
+        if info["session_id"] in bindings:
+            bindings.pop(info["session_id"], None)
+            save_resume_bindings(bindings)
+
+        try:
+            set_current_session_character(msg, is_group, target)
+            update_current_qq_session_metadata(
+                info,
+                session_mode="character",
+                last_message="",
+            )
+        except Exception as e:
+            log.error(f"Restore character session failed: {e}", exc_info=True)
+            await reply_current_channel(msg, is_group, f"恢复角色对话失败：{e}")
+            return
+
+        name = target.get("name") or target.get("id") or "当前角色"
+        await reply_current_channel(
+            msg,
+            is_group,
+            f"已退出 Agent 模式，并恢复为新的角色对话：{name}",
+        )
 
     @register_command(
         "/character",
@@ -1509,3 +1810,286 @@ def register_ai_commands(
             is_group,
             f"已上传当前频道的 {len(current_messages)} 条消息到 Web 会话「{web_session.get('name') or web_session_id[:8]}」。",
         )
+
+
+    @register_command(
+        "/mcp",
+        help_text=(
+            "/mcp -> 查看 MCP 连接状态(admin)\n"
+            "/mcp list -> 列出 MCP 服务\n"
+            "/mcp tools <名称|ID> -> 查看服务工具\n"
+            "/mcp add_http <名称> <URL> -> 添加 HTTP MCP 服务\n"
+            "/mcp add_stdio <名称> <command> [args_json] -> 添加 stdio MCP 服务\n"
+            "/mcp del <名称|ID> -> 删除 MCP 服务"
+        ),
+        category="2",
+        admin_show=True,
+    )
+    async def handle_mcp_command(msg, is_group=True):
+        if str(msg.user_id) not in admin:
+            await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
+            return
+
+        raw = (getattr(msg, "raw_message", "") or "").strip()
+        parts = raw.split(maxsplit=3)
+        action = parts[1].strip().lower() if len(parts) > 1 else "status"
+        configs = refresh_mcp_runtime_status(load_mcp_servers())
+
+        if action in {"status", "list"}:
+            lines = ["MCP 服务列表："]
+            if not configs:
+                lines.append("还没有 MCP 服务配置。")
+            else:
+                for cfg in configs:
+                    lines.append(format_mcp_server_summary(cfg))
+            lines.append("")
+            lines.append("用法：/mcp tools <名称|ID> | /mcp_connect <名称|ID|URL>")
+            await reply_current_channel(msg, is_group, "\n".join(lines))
+            return
+
+        if action == "tools":
+            target = parts[2].strip() if len(parts) > 2 else ""
+            if not target:
+                await reply_current_channel(msg, is_group, "用法：/mcp tools <名称|ID>")
+                return
+            cfg = find_mcp_server(configs, target)
+            if not cfg:
+                await reply_current_channel(msg, is_group, f"没有找到 MCP 服务：{target}")
+                return
+
+            try:
+                from nbot.services.mcp_bridge import get_mcp_bridge
+
+                bridge = get_mcp_bridge()
+                tools = bridge.get_server_tools(str(cfg.get("id") or ""))
+            except Exception as e:
+                await reply_current_channel(msg, is_group, f"读取 MCP 工具失败：{e}")
+                return
+
+            if not tools:
+                await reply_current_channel(
+                    msg,
+                    is_group,
+                    f"MCP 服务「{cfg.get('name') or cfg.get('id')}」当前没有已缓存工具。\n请先发送 /mcp_connect {cfg.get('name') or cfg.get('id')}",
+                )
+                return
+
+            lines = [f"MCP 工具列表：{cfg.get('name') or cfg.get('id')}"]
+            for tool in tools[:50]:
+                name = str(tool.get("name") or "unknown")
+                desc = str(tool.get("description") or "").strip()
+                lines.append(f"- {name}" + (f" -> {desc[:60]}" if desc else ""))
+            if len(tools) > 50:
+                lines.append(f"... 共 {len(tools)} 个工具")
+            await reply_current_channel(msg, is_group, "\n".join(lines))
+            return
+
+        if action == "add_http":
+            if len(parts) < 4:
+                await reply_current_channel(msg, is_group, "用法：/mcp add_http <名称> <URL>")
+                return
+            name = parts[2].strip()
+            url = parts[3].strip()
+            if not name or not url.startswith(("http://", "https://")):
+                await reply_current_channel(msg, is_group, "参数无效。URL 需要以 http:// 或 https:// 开头。")
+                return
+
+            entry = {
+                "id": str(uuid.uuid4()),
+                "name": name,
+                "transport": "streamable-http",
+                "description": "通过聊天命令添加",
+                "enabled": True,
+                "auto_connect": False,
+                "connected": False,
+                "tool_count": 0,
+                "created_at": datetime.now().isoformat(),
+                "last_connected_at": None,
+                "url": url,
+            }
+            configs.append(entry)
+            save_mcp_servers(configs)
+            await reply_current_channel(msg, is_group, f"已添加 MCP 服务：{name}\n发送 /mcp_connect {name} 进行连接。")
+            return
+
+        if action == "add_stdio":
+            if len(parts) < 4:
+                await reply_current_channel(
+                    msg,
+                    is_group,
+                    "用法：/mcp add_stdio <名称> <command> [args_json]",
+                )
+                return
+
+            name = parts[2].strip()
+            command_part = parts[3].strip()
+            command = command_part
+            args = []
+            if " " in command_part:
+                command, raw_args = command_part.split(" ", 1)
+                raw_args = raw_args.strip()
+                if raw_args:
+                    try:
+                        parsed_args = json.loads(raw_args)
+                        if isinstance(parsed_args, list):
+                            args = [str(item) for item in parsed_args]
+                        else:
+                            await reply_current_channel(msg, is_group, "args_json 必须是 JSON 数组。")
+                            return
+                    except json.JSONDecodeError:
+                        args = raw_args.split()
+
+            entry = {
+                "id": str(uuid.uuid4()),
+                "name": name,
+                "transport": "stdio",
+                "description": "通过聊天命令添加",
+                "enabled": True,
+                "auto_connect": False,
+                "connected": False,
+                "tool_count": 0,
+                "created_at": datetime.now().isoformat(),
+                "last_connected_at": None,
+                "command": command,
+                "args": args,
+            }
+            configs.append(entry)
+            save_mcp_servers(configs)
+            await reply_current_channel(msg, is_group, f"已添加 stdio MCP 服务：{name}\n发送 /mcp_connect {name} 进行连接。")
+            return
+
+        if action == "del":
+            target = parts[2].strip() if len(parts) > 2 else ""
+            if not target:
+                await reply_current_channel(msg, is_group, "用法：/mcp del <名称|ID>")
+                return
+            cfg = find_mcp_server(configs, target)
+            if not cfg:
+                await reply_current_channel(msg, is_group, f"没有找到 MCP 服务：{target}")
+                return
+            if cfg.get("_builtin"):
+                await reply_current_channel(msg, is_group, "内置 MCP 服务不允许删除。")
+                return
+
+            server_id = str(cfg.get("id") or "")
+            try:
+                from nbot.services.mcp_bridge import get_mcp_bridge
+
+                bridge = get_mcp_bridge()
+                bridge.run_async(bridge.disconnect_server(server_id))
+            except Exception:
+                pass
+
+            new_configs = [item for item in configs if str(item.get("id") or "") != server_id]
+            save_mcp_servers(new_configs)
+            await reply_current_channel(msg, is_group, f"已删除 MCP 服务：{cfg.get('name') or server_id[:8]}")
+            return
+
+        await reply_current_channel(
+            msg,
+            is_group,
+            "未知子命令。可用：list、tools、add_http、add_stdio、del",
+        )
+
+    @register_command(
+        "/mcp_connect",
+        help_text="/mcp_connect <名称|ID|URL> -> 连接 MCP 服务(admin)",
+        category="2",
+        admin_show=True,
+    )
+    async def handle_mcp_connect(msg, is_group=True):
+        if str(msg.user_id) not in admin:
+            await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
+            return
+
+        raw = (getattr(msg, "raw_message", "") or "").strip()
+        target = raw[len("/mcp_connect"):].strip()
+        if not target:
+            await reply_current_channel(msg, is_group, "用法：/mcp_connect <名称|ID|URL>")
+            return
+
+        configs = load_mcp_servers()
+        cfg = None
+        if target.startswith(("http://", "https://")):
+            cfg = next(
+                (item for item in configs if str(item.get("url") or "").strip() == target),
+                None,
+            )
+            if cfg is None:
+                cfg = build_quick_mcp_entry(target)
+                configs.append(cfg)
+                save_mcp_servers(configs)
+        else:
+            cfg = find_mcp_server(configs, target)
+
+        if not cfg:
+            await reply_current_channel(msg, is_group, f"没有找到 MCP 服务：{target}")
+            return
+
+        server_id = str(cfg.get("id") or "")
+        try:
+            from nbot.services.mcp_bridge import get_mcp_bridge
+
+            bridge = get_mcp_bridge()
+            result = bridge.run_async(bridge.connect_server(server_id, cfg))
+        except Exception as e:
+            await reply_current_channel(msg, is_group, f"MCP 连接失败：{e}")
+            return
+
+        if not result.get("ok"):
+            await reply_current_channel(msg, is_group, f"MCP 连接失败：{result.get('error', 'unknown error')}")
+            return
+
+        for item in configs:
+            if str(item.get("id") or "") == server_id:
+                item["connected"] = True
+                item["tool_count"] = int(result.get("tool_count") or 0)
+                item["last_connected_at"] = datetime.now().isoformat()
+                break
+        save_mcp_servers(configs)
+        await reply_current_channel(
+            msg,
+            is_group,
+            f"已连接 MCP 服务：{cfg.get('name') or server_id[:8]}\n工具数量：{int(result.get('tool_count') or 0)}",
+        )
+
+    @register_command(
+        "/mcp_disconnect",
+        help_text="/mcp_disconnect <名称|ID> -> 断开 MCP 服务(admin)",
+        category="2",
+        admin_show=True,
+    )
+    async def handle_mcp_disconnect(msg, is_group=True):
+        if str(msg.user_id) not in admin:
+            await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
+            return
+
+        raw = (getattr(msg, "raw_message", "") or "").strip()
+        target = raw[len("/mcp_disconnect"):].strip()
+        if not target:
+            await reply_current_channel(msg, is_group, "用法：/mcp_disconnect <名称|ID>")
+            return
+
+        configs = load_mcp_servers()
+        cfg = find_mcp_server(configs, target)
+        if not cfg:
+            await reply_current_channel(msg, is_group, f"没有找到 MCP 服务：{target}")
+            return
+
+        server_id = str(cfg.get("id") or "")
+        try:
+            from nbot.services.mcp_bridge import get_mcp_bridge
+
+            bridge = get_mcp_bridge()
+            bridge.run_async(bridge.disconnect_server(server_id))
+        except Exception as e:
+            await reply_current_channel(msg, is_group, f"MCP 断开失败：{e}")
+            return
+
+        for item in configs:
+            if str(item.get("id") or "") == server_id:
+                item["connected"] = False
+                item["tool_count"] = 0
+                break
+        save_mcp_servers(configs)
+        await reply_current_channel(msg, is_group, f"已断开 MCP 服务：{cfg.get('name') or server_id[:8]}")
