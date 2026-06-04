@@ -5,12 +5,11 @@
 保留旧 /api/personality 接口不变，新增 /api/characters 系列接口。
 """
 
-import json
 import logging
 import os
-from typing import Any, Dict
+from typing import Any
 
-from flask import g, jsonify, request
+from flask import jsonify, request
 
 _log = logging.getLogger(__name__)
 
@@ -25,11 +24,59 @@ def _get_base_dir(server):
     return getattr(server, "base_dir", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
-def _get_profile_initial_state(server, character_id: str) -> Dict[str, Any]:
+def _get_profile_initial_state(server, character_id: str) -> dict[str, Any]:
     from nbot.character.repository import ProfileRepository
 
     profile = ProfileRepository(_get_base_dir(server)).get(character_id)
     return profile.initial_state if profile else {}
+
+
+def _channel_from_scope_id(scope_id: str) -> str:
+    scope_id = str(scope_id or "").strip()
+    return scope_id.split(":", 1)[0] if ":" in scope_id else "unknown"
+
+
+def _target_candidates_from_scope_id(scope_id: str) -> list[str]:
+    scope_id = str(scope_id or "").strip()
+    candidates = [scope_id] if scope_id else []
+    parts = scope_id.split(":")
+
+    if len(parts) >= 3 and parts[0] == "qq" and parts[1] == "user":
+        candidates.append(parts[2])
+    if parts and parts[0] == "qq" and "user" in parts:
+        user_index = len(parts) - 1 - list(reversed(parts)).index("user")
+        if user_index + 1 < len(parts):
+            candidates.append(parts[user_index + 1])
+    if len(parts) >= 2 and parts[0] == "web":
+        candidates.append(scope_id)
+
+    seen = set()
+    result = []
+    for candidate in candidates:
+        candidate = str(candidate or "").strip()
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            result.append(candidate)
+    return result
+
+
+def _channel_session_name(
+    channel: str,
+    scope_id: str,
+    target_id: str,
+    character_id: str,
+) -> str:
+    label = {
+        "qq": "QQ",
+        "telegram": "Telegram",
+        "feishu": "Feishu",
+        "web": "Web",
+    }.get(channel, channel or "unknown")
+    if channel == "qq" and scope_id.startswith("qq:user:"):
+        label = f"{label} 私聊 {target_id or scope_id.rsplit(':', 1)[-1]}"
+    else:
+        label = f"{label} {target_id or scope_id}"
+    return f"{label} · {character_id or '角色'}"
 
 
 def register_character_routes(app, server):
@@ -61,9 +108,9 @@ def register_character_routes(app, server):
     def create_character():
         """创建角色卡"""
         data = request.json or {}
+        from nbot.character.compiler import compile_profile_prompt
         from nbot.character.models import CharacterProfile
         from nbot.character.repository import ProfileRepository
-        from nbot.character.compiler import compile_profile_prompt
 
         profile = CharacterProfile.from_personality_dict(data)
         if not profile.id:
@@ -80,9 +127,9 @@ def register_character_routes(app, server):
     def update_character(character_id):
         """更新角色卡"""
         data = request.json or {}
+        from nbot.character.compiler import compile_profile_prompt
         from nbot.character.models import CharacterProfile
         from nbot.character.repository import ProfileRepository
-        from nbot.character.compiler import compile_profile_prompt
 
         repo = ProfileRepository(_get_base_dir(server))
         existing = repo.get(character_id)
@@ -180,7 +227,6 @@ def register_character_routes(app, server):
             return jsonify({"success": False, "error": "缺少 target_id 参数"}), 400
 
         data = request.json or {}
-        from nbot.character.models import RelationshipState
         from nbot.character.repository import RelationshipRepository
 
         repo = RelationshipRepository(_get_base_dir(server))
@@ -248,7 +294,7 @@ def register_character_routes(app, server):
     # 多频道数据查看
     # ================================================================
 
-    def _build_channel_states(character_id: str, channel_filter: str = "") -> Dict[str, Any]:
+    def _build_channel_states(character_id: str, channel_filter: str = "") -> dict[str, Any]:
         """构建频道状态数据的公共逻辑"""
         from nbot.character.repository import CharacterStateRepository, RelationshipRepository
 
@@ -259,7 +305,7 @@ def register_character_routes(app, server):
         states = state_repo.list_by_character(character_id)
         relationships = rel_repo.list_by_character(character_id)
 
-        grouped: Dict[str, list] = {}
+        grouped: dict[str, list] = {}
         for s in states:
             sid = s.scope_id or ""
             channel = sid.split(":")[0] if ":" in sid else "unknown"
@@ -304,7 +350,7 @@ def register_character_routes(app, server):
         state_store = CharacterStateJsonStore(base_dir)
         rel_store = RelationshipJsonStore(base_dir)
 
-        all_states: Dict[str, list] = {}
+        all_states: dict[str, list] = {}
         all_channels = set()
 
         for item in state_store.list_all():
@@ -341,6 +387,107 @@ def register_character_routes(app, server):
             "channels": sorted(all_channels),
         })
 
+    @app.route("/api/channel_runtime_timeline", methods=["GET"])
+    def list_channel_runtime_timeline():
+        """Return non-Web channel runtime states as synthetic timeline sessions."""
+        from nbot.character.storage.json_store import (
+            CharacterStateJsonStore,
+            RelationshipJsonStore,
+        )
+
+        channel_filter = request.args.get("channel", "").strip().lower()
+        character_filter = request.args.get("character_id", "").strip()
+        base_dir = _get_base_dir(server)
+
+        state_store = CharacterStateJsonStore(base_dir)
+        rel_store = RelationshipJsonStore(base_dir)
+
+        rel_index = {}
+        for rel in rel_store.list_all():
+            if not isinstance(rel, dict):
+                continue
+            rel_index[
+                (
+                    str(rel.get("character_id") or "").strip(),
+                    str(rel.get("target_id") or "").strip(),
+                )
+            ] = rel
+
+        sessions = []
+        channels = set()
+        for state in state_store.list_all():
+            if not isinstance(state, dict):
+                continue
+
+            scope_id = str(state.get("scope_id") or "").strip()
+            character_id = str(state.get("character_id") or "").strip()
+            if not scope_id or not character_id:
+                continue
+
+            channel = _channel_from_scope_id(scope_id)
+            if channel == "web":
+                continue
+            if channel_filter and channel != channel_filter:
+                continue
+            if character_filter and character_id != character_filter:
+                continue
+
+            channels.add(channel)
+            target_candidates = _target_candidates_from_scope_id(scope_id)
+            relationship = {}
+            target_id = target_candidates[0] if target_candidates else scope_id
+            for candidate in target_candidates:
+                found = rel_index.get((character_id, candidate))
+                if found:
+                    relationship = found
+                    target_id = candidate
+                    break
+
+            timestamp = (
+                state.get("updated_at")
+                or state.get("last_active_at")
+                or relationship.get("updated_at")
+                or ""
+            )
+            snapshot = {
+                "character_id": character_id,
+                "channel": channel,
+                "scope_id": scope_id,
+                "target_id": target_id,
+                "mood": state.get("mood", ""),
+                "mood_intensity": state.get("mood_intensity", 0),
+                "energy": state.get("energy", 0),
+                "affection": relationship.get("affection", 50),
+                "trust": relationship.get("trust", 50),
+                "familiarity": relationship.get("familiarity", 30),
+                "dependency": relationship.get("dependency", 30),
+                "security": relationship.get("security", 50),
+                "jealousy": relationship.get("jealousy", 0),
+                "timestamp": timestamp,
+            }
+            sessions.append({
+                "id": f"channel:{channel}:{character_id}:{scope_id}",
+                "type": "channel",
+                "channel": channel,
+                "name": _channel_session_name(channel, scope_id, target_id, character_id),
+                "character_id": character_id,
+                "sender_name": character_id,
+                "scope_id": scope_id,
+                "target_id": target_id,
+                "updated_at": timestamp,
+                "created_at": timestamp,
+                "archived": False,
+                "character_runtime_snapshot": snapshot,
+                "character_runtime_timeline": [snapshot],
+            })
+
+        sessions.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+        return jsonify({
+            "success": True,
+            "sessions": sessions,
+            "channels": sorted(channels),
+        })
+
     @app.route("/api/characters/<character_id>/channel_states", methods=["GET"])
     def list_character_channel_states(character_id):
         """列出指定角色在各频道的状态数据，按频道分组
@@ -350,12 +497,6 @@ def register_character_routes(app, server):
         """
         channel_filter = request.args.get("channel", "").strip().lower()
         return jsonify(_build_channel_states(character_id, channel_filter))
-
-        return jsonify({
-            "states": grouped,
-            "relationships": rel_list,
-            "channels": sorted(grouped.keys()),
-        })
 
     # ================================================================
     # 调试接口
@@ -383,15 +524,15 @@ def register_character_routes(app, server):
     def initialize_character_runtime():
         """初始化角色运行时引擎"""
         try:
-            from nbot.character.runtime import CharacterRuntime
+            from nbot.character.memory import PromptManagerMemoryAdapter
+            from nbot.character.planner import ReactionPlanner
+            from nbot.character.policies import SignalAnalyzer
             from nbot.character.repository import (
-                ProfileRepository,
                 CharacterStateRepository,
+                ProfileRepository,
                 RelationshipRepository,
             )
-            from nbot.character.memory import PromptManagerMemoryAdapter
-            from nbot.character.policies import SignalAnalyzer
-            from nbot.character.planner import ReactionPlanner
+            from nbot.character.runtime import CharacterRuntime
             from nbot.character.state_machine import StateMachine
 
             base_dir = _get_base_dir(server)

@@ -2382,6 +2382,7 @@ const NbotMethods = {
                 ensurePersonalityTimelineState() {
                     if (!Array.isArray(this.personalityTimelineCharacters)) this.personalityTimelineCharacters = [];
                     if (!Array.isArray(this.personalityTimelineSessions)) this.personalityTimelineSessions = [];
+                    if (!Array.isArray(this.personalityTimelineChannelSessions)) this.personalityTimelineChannelSessions = [];
                     if (!Array.isArray(this.personalityTimelineData)) this.personalityTimelineData = [];
                     if (typeof this.personalityTimelineSelectedCharacter !== 'string') this.personalityTimelineSelectedCharacter = '';
                     if (typeof this.personalityTimelineTrendMetric !== 'string') this.personalityTimelineTrendMetric = 'affection';
@@ -2403,16 +2404,28 @@ const NbotMethods = {
                     ).trim();
                 },
 
-                refreshPersonalityTimelineSessions(forceSelect = false) {
+                async refreshPersonalityTimelineSessions(forceSelect = false) {
                     this.ensurePersonalityTimelineState();
                     const currentSession = this.currentSession && !this.currentSession._isTemp && !this.currentSession.archived
                         ? this.currentSession
                         : null;
-                    let allSessions = (this.sessions || [])
+                    let webSessions = (this.sessions || [])
                         .filter(session => session && !session._isTemp && !session.archived);
-                    if (currentSession && !allSessions.some(session => session.id === currentSession.id)) {
-                        allSessions = [currentSession, ...allSessions];
+                    if (currentSession && !webSessions.some(session => session.id === currentSession.id)) {
+                        webSessions = [currentSession, ...webSessions];
                     }
+
+                    let channelSessions = [];
+                    try {
+                        const channelRes = await api.get('/api/channel_runtime_timeline');
+                        channelSessions = Array.isArray(channelRes.data?.sessions)
+                            ? channelRes.data.sessions
+                            : [];
+                    } catch (channelError) {
+                        console.warn('Failed to load channel runtime timeline:', channelError);
+                    }
+                    this.personalityTimelineChannelSessions = channelSessions;
+                    const allSessions = [...webSessions, ...channelSessions];
 
                     const characters = Array.from(new Set([
                         ...allSessions
@@ -2473,11 +2486,25 @@ const NbotMethods = {
 
                     this.personalityTimelineLoading = true;
                     try {
-                        const res = await api.get(`/api/sessions/${this.personalityTimelineSelectedSessionId}/runtime-timeline`);
-                        const timeline = Array.isArray(res.data?.timeline) ? res.data.timeline : [];
                         const selectedSession = this.personalityTimelineSessions.find(
                             session => session.id === this.personalityTimelineSelectedSessionId
                         );
+                        if (selectedSession?.type === 'channel') {
+                            const timeline = Array.isArray(selectedSession.character_runtime_timeline)
+                                ? selectedSession.character_runtime_timeline
+                                : [];
+                            const snapshotFallback = selectedSession.character_runtime_snapshot || null;
+                            const sessionTimeline = timeline.length
+                                ? timeline
+                                : (snapshotFallback ? [snapshotFallback] : []);
+                            this.personalityTimelineData = sessionTimeline.map(item => this.normalizePersonalityTimelinePoint(item));
+                            this.personalityTimelineIndex = Math.max(0, this.personalityTimelineData.length - 1);
+                            this.$nextTick(() => this.updatePersonalityTimelineChart());
+                            return;
+                        }
+
+                        const res = await api.get(`/api/sessions/${this.personalityTimelineSelectedSessionId}/runtime-timeline`);
+                        const timeline = Array.isArray(res.data?.timeline) ? res.data.timeline : [];
                         let snapshotFallback = selectedSession?.character_runtime_snapshot
                             || (this.currentSession?.id === this.personalityTimelineSelectedSessionId
                                 ? this.currentSession?.character_runtime_snapshot
