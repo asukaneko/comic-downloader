@@ -216,6 +216,7 @@ def load_canonical_qq_messages(
     user_id: str = None,
     group_id: str = None,
     group_user_id: str = None,
+    include_memories: bool = True,
 ) -> List[Dict[str, Any]]:
     session_id = get_qq_session_id(
         user_id=str(user_id) if user_id else None,
@@ -249,11 +250,12 @@ def load_canonical_qq_messages(
 
     qq_store = _get_qq_store()
     if user_id:
-        return qq_store.ensure_history(user_id=str(user_id))
+        return qq_store.ensure_history(user_id=str(user_id), include_memories=include_memories)
     if group_id:
         return qq_store.ensure_history(
             group_id=str(group_id),
             group_user_id=str(group_user_id) if group_user_id else None,
+            include_memories=include_memories,
         )
     return []
 
@@ -280,10 +282,12 @@ class QQCallbacks(PipelineCallbacks):
 
     def load_messages(self, ctx: PipelineContext) -> List[Dict[str, Any]]:
         """从 QQSessionStore 加载历史消息。"""
+        is_agent = ctx.metadata.get("session_mode") == "agent"
         return load_canonical_qq_messages(
             user_id=self.user_id,
             group_id=self.group_id,
             group_user_id=self.group_user_id,
+            include_memories=not is_agent,
         )
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:

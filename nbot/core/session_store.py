@@ -87,15 +87,16 @@ class QQSessionStore:
         user_id: Optional[str] = None,
         group_id: Optional[str] = None,
         group_user_id: Optional[str] = None,
+        include_memories: bool = True,
     ) -> List[Dict[str, Any]]:
         if user_id:
             user_id = str(user_id)
-            prompt = self.prompt_loader(user_id=user_id)
+            prompt = self.prompt_loader(user_id=user_id, include_memories=include_memories)
             return self._ensure_bucket(self.user_messages, user_id, prompt)
 
         if group_id:
             group_id = str(group_id)
-            prompt = self.prompt_loader(group_id=group_id)
+            prompt = self.prompt_loader(group_id=group_id, include_memories=include_memories)
             history_key = build_qq_history_key(
                 group_id=group_id, group_user_id=group_user_id
             )
