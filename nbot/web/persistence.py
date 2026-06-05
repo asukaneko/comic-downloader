@@ -267,14 +267,6 @@ def init_default_data(server):
             "trigger": "cron",
             "config": {"time": "09:00"},
         },
-        {
-            "id": "4",
-            "name": "自动回复",
-            "description": "基于关键词的自动回复",
-            "enabled": True,
-            "trigger": "message",
-            "config": {"keywords": ["帮助", "help"]},
-        },
     ]
 
     # 默认 AI 配置
@@ -341,52 +333,7 @@ def init_default_data(server):
 
 def init_default_skills(server):
     """初始化默认 Skills 配置（支持HTTP请求模板）"""
-    server.skills_config = [
-        {
-            "id": "search",
-            "name": "search",
-            "description": "搜索互联网获取最新信息，适用于询问天气、新闻、实时数据等需要最新信息的问题",
-            "aliases": ["搜索", "查找", "联网搜索"],
-            "enabled": True,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "搜索关键词"}
-                },
-                "required": ["query"],
-            },
-            "implementation": {
-                "type": "http",
-                "method": "POST",
-                "url": "{{search_api_url}}",
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer {{search_api_key}}",
-                },
-                "body": {"query": "{{query}}", "query_rewrite": True, "top_k": 6},
-                "response_path": "result.search_result",
-                "error_message": "搜索服务未配置",
-            },
-        },
-        {
-            "id": "image_search",
-            "name": "image_search",
-            "description": "搜索相关图片，适用于需要展示图片的场景",
-            "aliases": ["搜图", "找图"],
-            "enabled": True,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "keyword": {"type": "string", "description": "图片关键词"}
-                },
-                "required": ["keyword"],
-            },
-            "implementation": {
-                "type": "static",
-                "response": "[图片搜索] 关键词: {{keyword}}",
-            },
-        },
-    ]
+    server.skills_config = []
     server._save_data("skills")
 
 
