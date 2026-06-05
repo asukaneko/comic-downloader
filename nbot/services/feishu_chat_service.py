@@ -351,9 +351,10 @@ class FeishuChatService:
 
                 # 处理命令或触发 AI 响应
                 if matched_handler:
+                    chat_type = message_data.get("chat_type", "")
                     self._handle_command(
                         session_id, content, user_id, chat_id,
-                        credentials, matched_handler
+                        credentials, matched_handler, chat_type
                     )
                 else:
                     self._trigger_ai_response(
@@ -379,15 +380,17 @@ class FeishuChatService:
         user_id: str,
         chat_id: str,
         credentials: Dict[str, str],
-        handler: Any
+        handler: Any,
+        chat_type: str = "",
     ):
         """处理命令"""
         print(f"[FeishuChat] 执行命令: {content}")
 
         # 创建消息适配器
         msg_adapter = FeishuMessageAdapter(
-            content, user_id, chat_id, credentials, self.server, session_id
+            content, user_id, chat_id, credentials, self.server, session_id, chat_type
         )
+        is_group = chat_type != "p2p"
 
         def run_command():
             original_bot = None
@@ -398,7 +401,7 @@ class FeishuChatService:
                 cmd_module.bot = msg_adapter.bot
 
                 # 执行命令
-                asyncio.run(handler(msg_adapter, is_group=True))
+                asyncio.run(handler(msg_adapter, is_group=is_group))
 
             except Exception as e:
                 print(f"[FeishuChat] 命令执行失败: {e}")
@@ -569,7 +572,8 @@ class FeishuMessageAdapter:
         chat_id: str,
         credentials: Dict[str, str],
         server: Any,
-        session_id: str = None
+        session_id: str = None,
+        chat_type: str = "",
     ):
         self.content = content
         self.raw_message = content  # 兼容命令系统
@@ -579,6 +583,9 @@ class FeishuMessageAdapter:
         self.server = server
         self.session_id = session_id
         self.bot = FeishuBotMock(self)
+        # 兼容 QQ 命令系统：群聊用 chat_id 作为 group_id，私聊留空
+        self.group_id = chat_id if chat_type != "p2p" else ""
+        self.message_id = ""
 
     async def reply(self, text: str, **kwargs):
         """回复消息 - 兼容命令系统"""
