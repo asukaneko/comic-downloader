@@ -53,6 +53,60 @@ def _apply_runtime_ncatbot_config():
 _apply_runtime_ncatbot_config()
 
 _log = get_log()
+
+
+def print_startup_banner(version: str, mode: str):
+    """Rich 启动横幅，失败时回退到纯文本。"""
+    try:
+        import colorama
+        colorama.just_fix_windows_console()
+
+        import shutil
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.align import Align
+        from rich.text import Text
+        from rich import box
+        import pyfiglet
+        import platform
+
+        console = Console()
+        terminal_width = shutil.get_terminal_size((100, 30)).columns
+        panel_width = min(terminal_width - 4, 88)
+
+        # ASCII Logo
+        logo = pyfiglet.figlet_format("NekoBot", font="slant")
+        console.print(Align.center(Text(logo, style="bold cyan")))
+
+        # 信息表格
+        table = Table.grid(expand=True, padding=(0, 1))
+        table.add_column(style="bold white", width=10)
+        table.add_column(style="bold green", width=18)
+        table.add_column(style="bold white", width=10)
+        table.add_column(style="bold cyan", width=22)
+
+        table.add_row("Version", f"v{version}", "Python", platform.python_version())
+        table.add_row("OS", platform.system(), "Mode", mode)
+        table.add_row("Status", "[bold green]Ready[/]", "Bot", "[dim]Waiting...[/]")
+
+        panel = Panel(
+            table,
+            title="[bold white]NekoBot Startup[/bold white]",
+            border_style="magenta",
+            box=box.ROUNDED,
+            padding=(1, 3),
+            width=panel_width,
+        )
+        console.print(Align.center(panel))
+        console.print()
+    except Exception:
+        _log.info("=" * 52)
+        _log.info(f"  NekoBot v{version}")
+        _log.info(f"  Mode: {mode}")
+        _log.info("=" * 52)
+
+
 _commands_module = None
 web_server_instance = None
 _pending_qq_bot = None
@@ -409,6 +463,28 @@ if __name__ == "__main__":
                         web_port = int(_saved_port)
         except Exception:
             pass
+
+    # ── 启动横幅 ──
+    from nbot.version import __version__
+
+    if mcp_connect:
+        _mode = "MCP Client"
+    elif mcp_only:
+        _mode = "MCP Server Only"
+    elif mcp_mode:
+        _mode = "QQ Bot + MCP Server" + (" + Web" if not web_disabled else "")
+    elif cli_and_web:
+        _mode = "CLI + Web Dashboard"
+    elif cli_mode:
+        _mode = "CLI Only"
+    elif web_disabled:
+        _mode = "QQ Bot Only"
+    elif only_web:
+        _mode = "Web Dashboard Only"
+    else:
+        _mode = "QQ Bot + Web Dashboard"
+
+    print_startup_banner(version=__version__, mode=_mode)
 
     if mcp_connect:
         # MCP 客户端模式 - 连接远程 MCP Server
