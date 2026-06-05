@@ -273,7 +273,12 @@ def register_ai_commands(
         if is_group:
             await msg.reply(text=text)
         else:
-            await bot.api.post_private_msg(msg.user_id, text=text)
+            # 用 _bot_instance 而非闭包 bot，确保外部 patch 生效（如飞书命令适配）
+            _api = getattr(_bot_instance, "api", None)
+            if _api:
+                await _api.post_private_msg(msg.user_id, text=text)
+            else:
+                await msg.reply(text=text)
 
     def resolve_current_session_id(msg, is_group):
         session_id = str(getattr(msg, "session_id", "") or "").strip()

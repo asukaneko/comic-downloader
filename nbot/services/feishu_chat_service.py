@@ -394,11 +394,17 @@ class FeishuChatService:
 
         def run_command():
             original_bot = None
+            original_ai_bot = None
             try:
                 import nbot.commands as cmd_module
+                import nbot.ai_commands as ai_module
 
+                # 同时替换 nbot.commands.bot 和 nbot.ai_commands._bot_instance
+                # 避免命令 handler 闭包里的 bot 引用指向 QQ 实例
                 original_bot = getattr(cmd_module, "bot", None)
+                original_ai_bot = getattr(ai_module, "_bot_instance", None)
                 cmd_module.bot = msg_adapter.bot
+                ai_module._bot_instance = msg_adapter.bot
 
                 # 执行命令
                 asyncio.run(handler(msg_adapter, is_group=is_group))
@@ -410,6 +416,8 @@ class FeishuChatService:
             finally:
                 if original_bot:
                     cmd_module.bot = original_bot
+                if original_ai_bot:
+                    ai_module._bot_instance = original_ai_bot
 
         # 在后台线程执行命令
         threading.Thread(target=run_command, daemon=True).start()
