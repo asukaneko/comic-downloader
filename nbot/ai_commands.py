@@ -217,6 +217,43 @@ def _replace_canonical_qq_session_messages(
         return
 
 
+def _replace_direct_session_messages(session_id, messages, system_prompt=None, character=None):
+    """直接按 session_id 更新 session store（用于飞书/Web 等非 QQ 渠道）"""
+    try:
+        from nbot.core.session_store import WebSessionStore
+        from nbot.web.server import WebChatServer
+
+        server = WebChatServer.get_instance()
+        if not server or not hasattr(server, "sessions"):
+            return
+
+        session_store = WebSessionStore(
+            server.sessions,
+            save_callback=lambda: server._save_data("sessions"),
+        )
+        session = session_store.get_session(session_id)
+        if not session:
+            return
+
+        session_messages = [dict(m) for m in (messages or []) if isinstance(m, dict)]
+        if system_prompt is not None and not any(m.get("role") == "system" for m in session_messages):
+            session_messages.insert(0, {"role": "system", "content": system_prompt})
+        session_store.replace_messages(session_id, session_messages)
+        if system_prompt is not None:
+            session["system_prompt"] = system_prompt
+        elif session_messages and session_messages[0].get("role") == "system":
+            session["system_prompt"] = session_messages[0].get("content", "")
+        if character:
+            session["character_id"] = character.get("id") or character.get("name") or ""
+            session["sender_name"] = character.get("name") or session.get("sender_name") or "AI"
+            session["sender_avatar"] = character.get("avatar", "")
+            session["sender_portrait"] = character.get("portrait", "")
+        session["updated_at"] = datetime.now().isoformat()
+        session_store.set_session(session_id, session)
+    except Exception as e:
+        log.debug(f"Replace direct session messages skipped: {e}")
+
+
 def register_ai_commands(
     *,
     register_command,
@@ -514,6 +551,21 @@ def register_ai_commands(
             pass
 
     def current_qq_session_info(msg, is_group):
+        # 飞书/Web 适配器自带 session_id，直接使用
+        direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
+        if direct_session_id:
+            user_id = str(getattr(msg, "user_id", "") or "")
+            group_id = str(getattr(msg, "group_id", "") or "") if is_group else ""
+            return {
+                "store": None,
+                "history_key": direct_session_id,
+                "session_id": direct_session_id,
+                "user_id": "" if is_group else user_id,
+                "group_id": group_id if is_group else "",
+                "group_user_id": user_id if is_group else "",
+                "label": f"channel {direct_session_id}",
+            }
+
         if is_group:
             group_id = str(getattr(msg, "group_id", "") or "")
             user_id = str(getattr(msg, "user_id", "") or "")
@@ -556,6 +608,13 @@ def register_ai_commands(
         if store is not None and history_key:
             store[history_key] = copy_chat_messages(messages)
             save_qq_histories()
+
+        session_id = str(info.get("session_id") or "")
+        # 飞书/Web 直接 session_id（非 qq_ 前缀），直接更新 session store
+        if session_id and not session_id.startswith("qq_"):
+            _replace_direct_session_messages(session_id, messages, system_prompt, character)
+            return
+
         _replace_canonical_qq_session_messages(
             user_id=info.get("user_id"),
             group_id=info.get("group_id"),
@@ -686,8 +745,14 @@ def register_ai_commands(
         return session
 
     def set_current_session_prompt(msg, is_group, prompt):
-        id_str = str(msg.group_id if is_group else msg.user_id)
-        prefix = "group" if is_group else "user"
+        # 飞书/Web 适配器：使用 channel 作用域
+        direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
+        if direct_session_id:
+            prefix = "channel"
+            id_str = direct_session_id
+        else:
+            id_str = str(msg.group_id if is_group else msg.user_id)
+            prefix = "group" if is_group else "user"
         os.makedirs(f"resources/prompts/{prefix}", exist_ok=True)
         with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
             file.write(prompt)
@@ -1288,21 +1353,34 @@ def register_ai_commands(
         else:
             prompt_content = raw[len("/sp"):].strip()
 
-        id_str = str(msg.group_id if is_group else msg.user_id)
-        prefix = "group" if is_group else "user"
+        direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
+        if direct_session_id:
+            id_str = direct_session_id
+            prefix = "channel"
+        else:
+            id_str = str(msg.group_id if is_group else msg.user_id)
+            prefix = "group" if is_group else "user"
         os.makedirs(f"resources/prompts/{prefix}", exist_ok=True)
         with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
             file.write(prompt_content)
 
-        messages = group_messages if is_group else user_messages
-        messages[id_str] = [{"role": "system", "content": prompt_content}]
-        save_qq_histories()
-        _replace_canonical_qq_session_messages(
-            group_id=id_str if is_group else None,
-            user_id=id_str if not is_group else None,
-            messages=[{"role": "system", "content": prompt_content}],
-            system_prompt=prompt_content,
-        )
+        if direct_session_id:
+            # 飞书/Web：直接更新 session store
+            _replace_direct_session_messages(
+                direct_session_id,
+                [{"role": "system", "content": prompt_content}],
+                system_prompt=prompt_content,
+            )
+        else:
+            messages = group_messages if is_group else user_messages
+            messages[id_str] = [{"role": "system", "content": prompt_content}]
+            save_qq_histories()
+            _replace_canonical_qq_session_messages(
+                group_id=id_str if is_group else None,
+                user_id=id_str if not is_group else None,
+                messages=[{"role": "system", "content": prompt_content}],
+                system_prompt=prompt_content,
+            )
 
         reply_text = "群组提示词已更新，对话记录已清除喔~" if is_group else "个人提示词已更新，对话记录已清除喔~"
         await reply_current_channel(msg, is_group, reply_text)
@@ -1318,12 +1396,18 @@ def register_ai_commands(
             await msg.reply(text="你没有权限喔~")
             return
 
-        id_str = str(msg.group_id if is_group else msg.user_id)
-        prefix = "group" if is_group else "user"
+        direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
+        if direct_session_id:
+            id_str = direct_session_id
+            prefix = "channel"
+        else:
+            id_str = str(msg.group_id if is_group else msg.user_id)
+            prefix = "group" if is_group else "user"
         messages = group_messages if is_group else user_messages
         prompt_path = f"resources/prompts/{prefix}/{prefix}_{id_str}.txt"
 
-        messages.pop(id_str, None)
+        if not direct_session_id:
+            messages.pop(id_str, None)
         try:
             os.remove(prompt_path)
         except FileNotFoundError:
@@ -1333,15 +1417,23 @@ def register_ai_commands(
         try:
             from nbot.core.prompt import prompt_manager
 
-            kwargs = {"group_id": id_str} if is_group else {"user_id": id_str}
-            prompt = prompt_manager.load_base_prompt(**kwargs)
-            messages[id_str] = [{"role": "system", "content": prompt}]
-            save_qq_histories()
-            _replace_canonical_qq_session_messages(
-                group_id=id_str if is_group else None,
-                user_id=id_str if not is_group else None,
-                messages=[{"role": "system", "content": prompt}],
-                system_prompt=prompt,
+            if direct_session_id:
+                prompt = prompt_manager.load_base_prompt()
+                _replace_direct_session_messages(
+                    direct_session_id,
+                    [{"role": "system", "content": prompt}],
+                    system_prompt=prompt,
+                )
+            else:
+                kwargs = {"group_id": id_str} if is_group else {"user_id": id_str}
+                prompt = prompt_manager.load_base_prompt(**kwargs)
+                messages[id_str] = [{"role": "system", "content": prompt}]
+                save_qq_histories()
+                _replace_canonical_qq_session_messages(
+                    group_id=id_str if is_group else None,
+                    user_id=id_str if not is_group else None,
+                    messages=[{"role": "system", "content": prompt}],
+                    system_prompt=prompt,
             )
         except Exception as e:
             log.warning(f"Reload base prompt failed: {e}")
@@ -1359,8 +1451,13 @@ def register_ai_commands(
             await msg.reply(text="你没有权限喔~")
             return
 
-        id_str = str(msg.group_id if is_group else msg.user_id)
-        prefix = "group" if is_group else "user"
+        direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
+        if direct_session_id:
+            id_str = direct_session_id
+            prefix = "channel"
+        else:
+            id_str = str(msg.group_id if is_group else msg.user_id)
+            prefix = "group" if is_group else "user"
         try:
             with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "r", encoding="utf-8") as file:
                 prompt = file.read()
@@ -1383,23 +1480,11 @@ def register_ai_commands(
         if is_group:
             group_id = getattr(msg, "group_id", None)
             chat_id = getattr(msg, "chat_id", None)
-            if group_id:
-                info = current_qq_session_info(msg, True)
-                gid = str(group_id)
-                history_key = str(info.get("history_key") or gid)
-                group_messages.pop(history_key, None)
-                if history_key != gid:
-                    group_messages.pop(gid, None)
-                save_qq_histories()
-                _reset_canonical_qq_session_messages(
-                    group_id=gid,
-                    group_user_id=info.get("group_user_id"),
-                )
-                delete_session_workspace(group_id=gid, group_user_id=str(msg.user_id))
-            elif chat_id:
-                session_id = getattr(msg, "session_id", None)
-                server = getattr(msg, "server", None)
-                if session_id and server and hasattr(server, "sessions"):
+            session_id = getattr(msg, "session_id", None)
+            # 飞书/Web 适配器：优先使用 session_id 直接操作 session store
+            if session_id and hasattr(msg, "server"):
+                server = msg.server
+                if hasattr(server, "sessions"):
                     from nbot.core.session_store import WebSessionStore
 
                     session_store = WebSessionStore(
@@ -1418,6 +1503,19 @@ def register_ai_commands(
                 else:
                     await msg.reply(text="当前平台不支持会话重置喔~")
                     return
+            elif group_id:
+                info = current_qq_session_info(msg, True)
+                gid = str(group_id)
+                history_key = str(info.get("history_key") or gid)
+                group_messages.pop(history_key, None)
+                if history_key != gid:
+                    group_messages.pop(gid, None)
+                save_qq_histories()
+                _reset_canonical_qq_session_messages(
+                    group_id=gid,
+                    group_user_id=info.get("group_user_id"),
+                )
+                delete_session_workspace(group_id=gid, group_user_id=str(msg.user_id))
             else:
                 await msg.reply(text="当前平台不支持会话重置喔~")
                 return
