@@ -1046,7 +1046,7 @@ def register_ai_commands(
     )
     async def handle_summary_recent(msg, is_group=True):
         if not is_group:
-            await bot.api.post_private_msg(msg.user_id, text="请在群聊中使用该命令喔~")
+            await reply_current_channel(msg, is_group, "请在群聊中使用该命令喔~")
             return
 
         raw = getattr(msg, "raw_message", "") or ""
@@ -1081,7 +1081,7 @@ def register_ai_commands(
                 await msg.reply(text=summary)
         else:
             summary = generate_today_summary(user_id=msg.user_id)
-            await bot.api.post_private_msg(msg.user_id, text=summary)
+            await reply_current_channel(msg, is_group, summary)
 
     @register_command(
         "/summary_auto",
@@ -1091,7 +1091,7 @@ def register_ai_commands(
     )
     async def handle_summary_auto(msg, is_group=True):
         if not is_group:
-            await bot.api.post_private_msg(msg.user_id, text="请在群聊中使用该命令喔~")
+            await reply_current_channel(msg, is_group, "请在群聊中使用该命令喔~")
             return
         if str(msg.user_id) not in admin:
             await msg.reply(text="你没有权限开启自动总结喔~")
@@ -1191,7 +1191,7 @@ def register_ai_commands(
     )
     async def handle_auto_reply(msg, is_group=True):
         if not is_group:
-            await bot.api.post_private_msg(msg.user_id, text="请在群聊中使用该命令喔~")
+            await reply_current_channel(msg, is_group, "请在群聊中使用该命令喔~")
             return
         if str(msg.user_id) not in admin:
             await msg.reply(text="你没有权限开启智能自动回复喔~")
@@ -1280,12 +1280,14 @@ def register_ai_commands(
 
             if active:
                 try:
-                    recent = await bot.api.get_recent_contact(100)
-                    for contact in recent.get("data", []):
-                        latest = contact.get("lastestMsg", {})
-                        if str(latest.get("user_id")) == user_id:
-                            running[user_id]["last_time"] = normalize_timestamp(latest.get("time", 0))
-                            break
+                    _api = getattr(_bot_instance, "api", None)
+                    if _api and hasattr(_api, "get_recent_contact"):
+                        recent = await _api.get_recent_contact(100)
+                        for contact in recent.get("data", []):
+                            latest = contact.get("lastestMsg", {})
+                            if str(latest.get("user_id")) == user_id:
+                                running[user_id]["last_time"] = normalize_timestamp(latest.get("time", 0))
+                                break
                     running[user_id].setdefault("last_time", time.time())
                 except Exception as e:
                     log.error(f"获取最近联系人失败: {e}")
@@ -1293,9 +1295,9 @@ def register_ai_commands(
 
             write_running()
             reply = f"设置成功喔，{'AI现在会自行决定什么时候找你聊天喔~' if active else '已关闭主动聊天喔~'}"
-            await bot.api.post_private_msg(user_id, text=reply)
+            await reply_current_channel(msg, is_group, reply)
         except ValueError:
-            await bot.api.post_private_msg(msg.user_id, text="格式错误喔，请输入 /主动聊天 [1/0]")
+            await reply_current_channel(msg, is_group, "格式错误喔，请输入 /主动聊天 [1/0]")
 
     @register_command(
         "/show_chat",
@@ -1318,7 +1320,11 @@ def register_ai_commands(
                 text = "该群没有聊天记录喔~"
             with open(cache_dir, "w", encoding="utf-8") as f:
                 f.write(text)
-            await bot.api.post_group_file(msg.group_id, file=cache_dir)
+            _api = getattr(_bot_instance, "api", None)
+            if _api and hasattr(_api, "post_group_file"):
+                await _api.post_group_file(msg.group_id, file=cache_dir)
+            else:
+                await msg.reply(text=text[:2000] if len(text) > 2000 else text)
         else:
             try:
                 text = str(load_current_qq_session_messages(current_qq_session_info(msg, False)))
@@ -1328,8 +1334,14 @@ def register_ai_commands(
                 f.write(text)
             if is_web and hasattr(msg, "send_file"):
                 await msg.send_file(cache_dir, "聊天记录.txt")
+            elif hasattr(msg, "send_file"):
+                await msg.send_file(cache_dir, "聊天记录.txt")
             else:
-                await bot.api.upload_private_file(msg.user_id, file=cache_dir, name="聊天记录.txt")
+                _api = getattr(_bot_instance, "api", None)
+                if _api and hasattr(_api, "upload_private_file"):
+                    await _api.upload_private_file(msg.user_id, file=cache_dir, name="聊天记录.txt")
+                else:
+                    await msg.reply(text=text[:2000] if len(text) > 2000 else text)
 
         try:
             os.remove(cache_dir)
@@ -1527,7 +1539,7 @@ def register_ai_commands(
         save_qq_histories()
         _reset_canonical_qq_session_messages(user_id=user_id)
         delete_session_workspace(user_id=user_id)
-        await bot.api.post_private_msg(msg.user_id, text="已创建新会话喔，之前的对话历史已清空")
+        await reply_current_channel(msg, is_group, "已创建新会话喔，之前的对话历史已清空")
 
     @register_command(
         "/new_agent",
