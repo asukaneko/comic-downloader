@@ -1019,11 +1019,7 @@ class WebChatServer:
                     "api_url": config.get("search", "api_url", fallback=""),
                 }
                 video_config = {"api_key": config.get("video", "api_key", fallback="")}
-                api_config = {
-                    "silicon_api_key": config.get(
-                        "ApiKey", "silicon_api_key", fallback=""
-                    )
-                }
+                api_config = {}
 
             from nbot.services.ai import AIClient
 
@@ -1056,7 +1052,6 @@ class WebChatServer:
                 search_api_key=search_config.get("api_key", ""),
                 search_api_url=search_config.get("api_url", ""),
                 video_api=video_config.get("api_key", ""),
-                silicon_api_key=api_config.get("silicon_api_key", ""),
                 provider_type=resolved_provider_type,
                 stream_enabled=resolved_stream_enabled,
                 supports_tools=resolved_supports_tools,
@@ -1120,7 +1115,6 @@ class WebChatServer:
                         search_api_key=search_config.get("api_key", ""),
                         search_api_url=search_config.get("api_url", ""),
                         video_api=video_config.get("api_key", ""),
-                        silicon_api_key=api_config.get("silicon_api_key", ""),
                         provider_type=self.ai_config.get("provider_type", self.ai_config.get("provider", "openai_compatible")),
                         supports_tools=self.ai_config.get("supports_tools", True),
                         supports_reasoning=self.ai_config.get("supports_reasoning", True),
@@ -1603,9 +1597,6 @@ class WebChatServer:
                         search_api_key=config.get("search", "api_key", fallback=""),
                         search_api_url=config.get("search", "api_url", fallback=""),
                         video_api=config.get("video", "api_key", fallback=""),
-                        silicon_api_key=config.get(
-                            "ApiKey", "silicon_api_key", fallback=""
-                        ),
                         provider_type=model.get("provider_type", model.get("provider", "openai_compatible")),
                         stream_enabled=model.get("stream", True),
                         supports_tools=model.get("supports_tools", True),
@@ -2723,14 +2714,12 @@ class WebChatServer:
         self,
         messages: list[dict],
         tools: list[dict],
-        use_silicon: bool = False,
         stop_event=None,
     ) -> dict:
         return get_ai_response_with_tools(
             self,
             messages,
             tools,
-            use_silicon,
             stop_event,
         )
 

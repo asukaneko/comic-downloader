@@ -31,7 +31,6 @@ pic_model = config_parser.get('pic', 'model', fallback="")
 search_api_key = config_parser.get('search', 'api_key', fallback="")
 search_api_url = config_parser.get('search', 'api_url', fallback="")
 video_api = config_parser.get('video', 'api_key', fallback="")
-silicon_api_key = config_parser.get('ApiKey', 'silicon_api_key', fallback="")
 provider_type = config_parser.get('ApiKey', 'provider_type', fallback="openai_compatible")
 supports_tools = config_parser.getboolean('ApiKey', 'supports_tools', fallback=True)
 supports_reasoning = config_parser.getboolean('ApiKey', 'supports_reasoning', fallback=True)
@@ -45,12 +44,6 @@ def resolve_runtime_api_key(configured_api_key: str = "", provider: str = "") ->
             os.getenv("MINIMAX_API_KEY")
             or os.getenv("API_KEY")
             or configured_api_key
-        )
-    if provider_name in {"siliconflow", "silicon"}:
-        return (
-            os.getenv("SILICON_API_KEY")
-            or configured_api_key
-            or os.getenv("API_KEY")
         )
     if provider_name in {"anthropic", "claude"}:
         return (
@@ -201,7 +194,7 @@ except FileNotFoundError:
 
 class AIClient:
     def __init__(self, api_key: str, base_url: str, model: str, pic_model: str,
-                 search_api_key: str, search_api_url: str, video_api: str, silicon_api_key: str,
+                 search_api_key: str, search_api_url: str, video_api: str,
                  provider_type: str = "openai_compatible",
                  append_base_url_path: bool = True,
                  stream_enabled: bool = True,
@@ -215,7 +208,6 @@ class AIClient:
         self.search_api_key = search_api_key
         self.search_api_url = search_api_url
         self.video_api = video_api
-        self.silicon_api_key = silicon_api_key
         self.provider_type = provider_type or "openai_compatible"
         self.append_base_url_path = bool(append_base_url_path)
         self.stream_enabled = bool(stream_enabled)
@@ -238,6 +230,37 @@ class AIClient:
             if content.endswith("```"):
                 content = content[:-3]
         return content.strip()
+
+    def _build_completion_response(self, data, protocol, model_name, base_url, provider_type):
+        """Parse API response and build the mock response object."""
+        normalized = protocol.parse_response(
+            data,
+            model=model_name or "",
+            base_url=base_url or "",
+            provider_type=provider_type,
+        )
+        content = normalized.content
+        usage = normalized.usage or {}
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+
+        Message = type("Message", (), {})
+        Choice = type("Choice", (), {})
+        Usage = type("Usage", (), {})
+        Resp = type("Resp", (), {})
+        msg_obj = Message()
+        msg_obj.content = content
+        choice_obj = Choice()
+        choice_obj.message = msg_obj
+        usage_obj = Usage()
+        usage_obj.prompt_tokens = prompt_tokens
+        usage_obj.completion_tokens = completion_tokens
+        usage_obj.total_tokens = total_tokens
+        resp_obj = Resp()
+        resp_obj.choices = [choice_obj]
+        resp_obj.usage = usage_obj
+        return resp_obj
 
     def chat_completion(self, messages, model: str = None, stream: bool = False):
         stream = bool(stream and self.supports_stream and self.stream_enabled)
@@ -266,40 +289,87 @@ class AIClient:
             resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=300)
             resp.raise_for_status()
             return self._stream_response_generic(resp, protocol)
-        else:
+
+        # ---- 非流式调用：支持故障转移 ----
+        # 有显式 model 参数时跳过 failover（调用方明确选择了模型）
+        if model is not None:
             resp = requests.post(url, json=payload, headers=headers, timeout=120)
             resp.raise_for_status()
             data = response_json_utf8(resp)
-
-            normalized = protocol.parse_response(
-                data,
-                model=model_name or "",
-                base_url=self.base_url or "",
-                provider_type=self.provider_type,
+            return self._build_completion_response(
+                data, protocol, model_name, self.base_url, self.provider_type,
             )
-            content = normalized.content
 
-            usage = normalized.usage or {}
-            prompt_tokens = usage.get("prompt_tokens", 0)
-            completion_tokens = usage.get("completion_tokens", 0)
-            total_tokens = usage.get("total_tokens", prompt_tokens + completion_tokens)
+        # 无显式 model：尝试故障转移
+        from nbot.core.failover import (
+            get_failover_state, classify_http_error, _extract_status_code,
+        )
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
 
-            Message = type("Message", (), {})
-            Choice = type("Choice", (), {})
-            Usage = type("Usage", (), {})
-            Resp = type("Resp", (), {})
-            msg_obj = Message()
-            msg_obj.content = content
-            choice_obj = Choice()
-            choice_obj.message = msg_obj
-            usage_obj = Usage()
-            usage_obj.prompt_tokens = prompt_tokens
-            usage_obj.completion_tokens = completion_tokens
-            usage_obj.total_tokens = total_tokens
-            resp_obj = Resp()
-            resp_obj.choices = [choice_obj]
-            resp_obj.usage = usage_obj
-            return resp_obj
+        failover = get_failover_state()
+        model_configs = get_model_configs_by_purpose("chat")
+
+        if not model_configs or len(model_configs) <= 1:
+            # 单模型或无配置：原逻辑 + 健康追踪
+            _mid = model_configs[0].get("model_id", "") if model_configs else ""
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                resp.raise_for_status()
+                data = response_json_utf8(resp)
+                if _mid:
+                    failover.record_success(_mid)
+                return self._build_completion_response(
+                    data, protocol, model_name, self.base_url, self.provider_type,
+                )
+            except Exception as e:
+                if _mid:
+                    failover.record_failure(_mid, _extract_status_code(e))
+                raise
+
+        # 多模型：按优先级遍历
+        attempted = set()
+        last_error = None
+        for _ in range(len(model_configs)):
+            cfg = failover.select_model(model_configs, exclude_ids=attempted)
+            if cfg is None:
+                break
+            mid = cfg.get("model_id", "")
+            mname = cfg.get("model", "")
+            attempted.add(mid)
+
+            cfg_pt = cfg.get("provider_type", "openai_compatible")
+            cfg_protocol = get_protocol(cfg_pt)
+            cfg_url = cfg_protocol.resolve_url(
+                cfg.get("base_url", ""),
+                model=mname or "",
+                append_base_url_path=cfg.get("append_base_url_path", True),
+            )
+            cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=False)
+            cfg_payload = cfg_protocol.build_payload(
+                mname,
+                messages,
+                stream=False,
+                base_url=cfg.get("base_url", ""),
+                provider_type=cfg_pt,
+            )
+            try:
+                resp = requests.post(cfg_url, json=cfg_payload, headers=cfg_headers, timeout=120)
+                resp.raise_for_status()
+                data = response_json_utf8(resp)
+                failover.record_success(mid)
+                return self._build_completion_response(
+                    data, cfg_protocol, mname, cfg.get("base_url", ""), cfg_pt,
+                )
+            except Exception as e:
+                status = _extract_status_code(e)
+                category = classify_http_error(status)
+                if category == "config":
+                    raise
+                failover.record_failure(mid, status)
+                last_error = e
+                continue
+
+        raise last_error or RuntimeError("All chat models failed")
 
     def _stream_response_generic(self, resp, protocol):
         """处理流式响应，使用协议适配器解析chunk，返回一个生成器"""
@@ -340,20 +410,6 @@ class AIClient:
             stream=False,
         )
         return self.clean_response(response.choices[0].message.content)
-
-    def silicon_chat(self, model_name: str, messages):
-        url = "https://api.siliconflow.cn/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.silicon_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": model_name,
-            "messages": messages
-        }
-        response = requests.post(url, json=payload, headers=headers)
-        response.encoding = "utf-8"
-        return response
 
     def describe_image(self, image_url: str, text: str = None) -> str:
         print(f"[图片识别] 开始识别图片, URL: {image_url[:80]}{'...(base64已省略)' if image_url.startswith('data:') and len(image_url) > 80 else ''}")
@@ -410,7 +466,7 @@ class AIClient:
             except Exception as e:
                 print(f"[图片识别] 使用配置模型失败, 回退到默认模型: {e}")
         
-        # 回退到默认的silicon_chat
+        # 回退到主 API
         messages = [
             {
                 "role": "user",
@@ -420,9 +476,9 @@ class AIClient:
                 ]
             }
         ]
-        response = self.silicon_chat(self.pic_model, messages)
+        response = self.chat_completion(messages=messages, model=self.pic_model, stream=False)
         try:
-            result = self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
+            result = self.clean_response(response.choices[0].message.content)
             print(f"[图片识别] 识别成功, 结果: {result[:100]}...")
             return result
         except Exception as e:
@@ -499,9 +555,9 @@ class AIClient:
                 }
             ]
 
-            response = self.silicon_chat(self.pic_model, messages)
+            response = self.chat_completion(messages=messages, model=self.pic_model, stream=False)
             try:
-                return self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
+                return self.clean_response(response.choices[0].message.content)
             except Exception:
                 return "解析失败"
         except Exception:
@@ -527,9 +583,9 @@ class AIClient:
                 ]
             }
         ]
-        response = self.silicon_chat(self.model, messages)
+        response = self.chat_completion(messages=messages, stream=False)
         try:
-            return self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
+            return self.clean_response(response.choices[0].message.content)
         except Exception:
             return "链接失效"
 
@@ -545,9 +601,9 @@ class AIClient:
                 ]
             }
         ]
-        response = self.silicon_chat(self.model, messages)
+        response = self.chat_completion(messages=messages, stream=False)
         try:
-            return self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
+            return self.clean_response(response.choices[0].message.content)
         except Exception:
             return ""
 
@@ -564,10 +620,10 @@ class AIClient:
             }
         ]
         try:
-            response = self.silicon_chat("Qwen/Qwen2.5-7B-Instruct", messages)
-            result = response_json_utf8(response)
-            print(f"[DEBUG] should_search API响应: {result}")
-            return int(self.clean_response(result["choices"][0]["message"]["content"])) == 1
+            response = self.chat_completion(messages=messages, stream=False)
+            content = self.clean_response(response.choices[0].message.content)
+            print(f"[DEBUG] should_search API响应: {content}")
+            return int(content) == 1
         except Exception as e:
             print(f"[DEBUG] should_search 错误: {e}")
             return False
@@ -673,7 +729,6 @@ ai_client = AIClient(
     search_api_key=search_api_key,
     search_api_url=search_api_url,
     video_api=video_api,
-    silicon_api_key=silicon_api_key,
     provider_type=provider_type,
     append_base_url_path=True,
     stream_enabled=True,

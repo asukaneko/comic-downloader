@@ -35,12 +35,6 @@ def resolve_runtime_api_key(configured_api_key: str = "", provider_type: str = "
     provider = (provider_type or "").strip().lower()
     if provider == "minimax":
         return os.getenv("MINIMAX_API_KEY") or os.getenv("API_KEY") or configured_api_key
-    if provider in {"siliconflow", "silicon"}:
-        return (
-            os.getenv("SILICON_API_KEY")
-            or configured_api_key
-            or os.getenv("API_KEY")
-        )
     if provider in {"anthropic", "claude"}:
         return (
             os.getenv("ANTHROPIC_API_KEY")
@@ -92,16 +86,11 @@ def get_api_config():
     model = os.getenv("MODEL") or config_parser.get(
         "ApiKey", "model", fallback="MiniMax-M2.7"
     )
-    silicon_api_key = os.getenv("SILICON_API_KEY") or config_parser.get(
-        "ApiKey", "silicon_api_key", fallback=""
-    )
-
     return {
         "api_key": api_key,
         "base_url": base_url,
         "model": model,
         "provider_type": provider_type,
-        "silicon_api_key": silicon_api_key,
     }
 
 
@@ -429,7 +418,7 @@ def get_tts_model_config() -> dict:
     voice = voice_config.get("voice", "fnlp/MOSS-TTSD-v0.5:diana")
     voice_parts = voice.split(":") if ":" in voice else [voice, "default"]
     return {
-        "api_key": api_config.get("silicon_api_key") or api_config.get("api_key", ""),
+        "api_key": api_config.get("api_key", ""),
         "base_url": "https://api.siliconflow.cn/v1",
         "model": voice_parts[0],
         "voice": voice_parts[1] if len(voice_parts) > 1 else "default",

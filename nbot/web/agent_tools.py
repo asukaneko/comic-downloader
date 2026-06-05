@@ -322,7 +322,7 @@ def execute_web_agent_tool(server, name, arguments=None, confirm=False):
 
     if name == "ai.config.summary":
         config = dict(getattr(server, "ai_config", {}) or {})
-        for key in ("api_key", "search_api_key", "silicon_api_key"):
+        for key in ("api_key", "search_api_key"):
             if config.get(key):
                 config[key] = "********"
         config["model"] = getattr(server, "ai_model", None) or config.get("model")

@@ -1709,14 +1709,13 @@ def get_ai_response_with_images(
             append_base_url_path = getattr(server.ai_client, "append_base_url_path", True)
             system_prompt = "请详细描述这张图片的内容。"
 
-            # 尝试从config.ini获取silicon_api_key
+            # 尝试从config.ini获取api_key
             if not api_key:
                 try:
                     import configparser
                     config = configparser.ConfigParser()
                     config.read("config.ini", encoding="utf-8")
-                    api_key = config.get("ApiKey", "silicon_api_key", fallback="") or config.get("ApiKey", "api_key", fallback="")
-                    base_url = "https://api.siliconflow.cn/v1"
+                    api_key = config.get("ApiKey", "api_key", fallback="")
                     model = config.get("pic", "model", fallback="zai-org/GLM-4.6V")
                 except Exception:
                     pass
@@ -1756,14 +1755,11 @@ def get_ai_response_with_images(
         # 构建请求URL
         from nbot.core.protocols import get_protocol as _gp
         _img_protocol = _gp(provider_type)
-        if provider_type == "siliconflow" or "siliconflow" in base_url:
-            url = "https://api.siliconflow.cn/v1/chat/completions"
-        else:
-            url = _img_protocol.resolve_url(
-                base_url,
-                model=model,
-                append_base_url_path=append_base_url_path,
-            )
+        url = _img_protocol.resolve_url(
+            base_url,
+            model=model,
+            append_base_url_path=append_base_url_path,
+        )
 
         headers = _img_protocol.build_headers(api_key)
         payload = _img_protocol.build_payload(
@@ -1797,7 +1793,6 @@ def get_ai_response_with_tools(
 server,
     messages: List[Dict],
     tools: List[Dict],
-    use_silicon: bool = False,
     stop_event=None,
 ) -> Dict:
     """调用 AI 并支持工具
@@ -1805,7 +1800,6 @@ server,
     Args:
         messages: 消息列表
         tools: 工具定义列表
-        use_silicon: 是否使用 Silicon API（默认 False，使用主 API）
         stop_event: 可选的停止事件，用于立即停止
     """
     # 如果传入了 stop_event 且已设置，立即返回
@@ -1833,301 +1827,198 @@ server,
         else:
             api_timeout = max(timeout, 30)  # 无工具调用时至少 30 秒
 
-        # 检查是否应该使用 Silicon API
-        # 只有在明确指定 use_silicon=True 且有 Silicon API key 时才使用
-        if use_silicon:
-            silicon_api_key = getattr(server.ai_client, "silicon_api_key", None)
-            if not silicon_api_key:
-                try:
-                    import configparser
+        # 故障转移：获取同用途模型列表
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
+        from nbot.core.failover import (
+            get_failover_state,
+            classify_http_error,
+            _extract_status_code,
+        )
+        from nbot.services.ai import apply_model_config
 
-                    config = configparser.ConfigParser()
-                    config.read("config.ini", encoding="utf-8")
-                    silicon_api_key = config.get(
-                        "ApiKey", "silicon_api_key", fallback=""
-                    )
-                except:
-                    silicon_api_key = ""
+        failover = get_failover_state()
+        model_configs = get_model_configs_by_purpose("chat")
 
-            if not silicon_api_key:
-                _log.info("[AI] Silicon API key 未配置，使用主 API")
-                use_silicon = False
+        # 使用主 API（支持故障转移）
+        from nbot.core.protocols import get_protocol as _get_proto
 
-        if use_silicon:
-            # Silicon API 调用
-            url = "https://api.siliconflow.cn/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {silicon_api_key}",
-                "Content-Type": "application/json",
-            }
-            # Silicon 支持的工具调用模型
-            model = "Qwen/Qwen2.5-72B-Instruct"
-
-            # 检查消息总长度，必要时截断工具结果
-            MAX_CONTENT_LENGTH = 12000  # 每个消息内容的最大长度
-            processed_messages = []
-            for msg in messages:
-                msg_copy = msg.copy()
-                if "content" in msg_copy and isinstance(msg_copy["content"], str):
-                    content_len = len(msg_copy["content"])
-                    if content_len > MAX_CONTENT_LENGTH:
-                        # 尝试保留 JSON 的完整性
-                        truncated = msg_copy["content"][:MAX_CONTENT_LENGTH]
-                        # 如果看起来像 JSON，尝试找到最后一个完整的括号
-                        if truncated.strip().startswith(
-                            "{"
-                        ) or truncated.strip().startswith("["):
-                            # 找到最后一个完整的 JSON 对象/数组
-                            last_brace = max(
-                                truncated.rfind("}"), truncated.rfind("]")
-                            )
-                            if (
-                                last_brace > MAX_CONTENT_LENGTH - 500
-                            ):  # 如果最后一个括号位置还合理
-                                truncated = truncated[: last_brace + 1]
-                        msg_copy["content"] = (
-                            truncated
-                            + f"\n... [内容过长，已截断，原始长度: {content_len} 字符]"
+        # 预处理消息（截断过长内容）—— 与模型无关，只做一次
+        MAX_CONTENT_LENGTH = 12000
+        MAX_ARGUMENTS_LENGTH = 50000
+        processed_messages = []
+        for msg in messages:
+            msg_copy = msg.copy()
+            if "content" in msg_copy and isinstance(msg_copy["content"], str):
+                content_len = len(msg_copy["content"])
+                if content_len > MAX_CONTENT_LENGTH:
+                    truncated = msg_copy["content"][:MAX_CONTENT_LENGTH]
+                    if truncated.strip().startswith(
+                        "{"
+                    ) or truncated.strip().startswith("["):
+                        last_brace = max(
+                            truncated.rfind("}"), truncated.rfind("]")
                         )
-                processed_messages.append(msg_copy)
-
-            payload = {
-                "model": model,
-                "messages": processed_messages,
-                "tools": tools,
-                "tool_choice": "auto",
-            }
-
-            # 重试机制
-            last_error = None
-            for attempt in range(max_retries):
-                check_stop()  # 检查是否停止
-                try:
-                    _log.info(
-                        f"[AI] Silicon API 调用 (尝试 {attempt + 1}/{max_retries})"
+                        if last_brace > MAX_CONTENT_LENGTH - 500:
+                            truncated = truncated[: last_brace + 1]
+                    msg_copy["content"] = (
+                        truncated
+                        + f"\n... [内容过长，已截断，原始长度: {content_len} 字符]"
                     )
 
-                    # 使用线程来执行请求，以便能够响应停止事件
-                    import threading
-
-                    result_container = {"data": None, "error": None}
-
-                    def make_request():
-                        try:
-                            resp = requests.post(
-                                url,
-                                json=payload,
-                                headers=headers,
-                                timeout=api_timeout,
+            if "tool_calls" in msg_copy and msg_copy["tool_calls"]:
+                for tc in msg_copy["tool_calls"]:
+                    if "function" in tc and "arguments" in tc["function"]:
+                        args_str = tc["function"]["arguments"]
+                        if (
+                            isinstance(args_str, str)
+                            and len(args_str) > MAX_ARGUMENTS_LENGTH
+                        ):
+                            tc["function"]["arguments"] = (
+                                args_str[:MAX_ARGUMENTS_LENGTH]
+                                + f"\n... [参数过长已截断，原始长度: {len(args_str)}]"
                             )
-                            if not resp.ok:
-                                _log.error(
-                                    "[AI] API error %d: %s",
-                                    resp.status_code,
-                                    resp.text[:500],
-                                )
-                            resp.raise_for_status()
-                            result_container["data"] = response_json_utf8(resp)
-                        except Exception as e:
-                            result_container["error"] = e
+                            _log.warning(
+                                f"[AI] 工具 {tc.get('function', {}).get('name')} 的 arguments 过长，已截断"
+                            )
 
-                    request_thread = threading.Thread(target=make_request)
-                    request_thread.daemon = True
-                    request_thread.start()
+            processed_messages.append(msg_copy)
 
-                    # 等待请求完成，同时检查停止事件（每0.5秒检查一次）
-                    while request_thread.is_alive():
-                        check_stop()  # 如果停止事件被设置，这里会抛出 StopIteration
-                        request_thread.join(timeout=0.5)
-
-                    # 检查请求结果
-                    if result_container["error"]:
-                        raise result_container["error"]
-
-                    data = result_container["data"]
-                    if data is None:
-                        raise Exception("请求未返回数据")
-
-                    break
-                except StopIteration:
-                    # 用户停止生成，立即抛出
-                    _log.info("[AI] 检测到停止信号，中断 Silicon API 请求")
-                    raise
-                except requests.exceptions.Timeout as e:
-                    last_error = e
-                    _log.warning(
-                        f"[AI] Silicon API 超时 (尝试 {attempt + 1}/{max_retries}): {e}"
-                    )
-                    if attempt < max_retries - 1:
-                        time.sleep(min(2**attempt, 2))  # 限制最大等待2秒
-                    continue
-                except requests.exceptions.RequestException as e:
-                    last_error = e
-                    _log.error(
-                        f"[AI] Silicon API 错误 (尝试 {attempt + 1}/{max_retries}): {e}"
-                    )
-                    if attempt < max_retries - 1:
-                        time.sleep(min(2**attempt, 2))
-                    continue
-            else:
-                # 所有重试都失败
-                raise last_error or Exception("API 调用失败")
-        else:
-            # 使用主 API
-            from nbot.core.protocols import get_protocol as _get_proto
-            _srv_pt = server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible"))
+        def _attempt_api_call(config, proc_msgs, api_tools, timeout_sec, retries, stop_evt):
+            """单模型 API 调用（含重试），返回 (data, protocol)。"""
+            _srv_pt = config.get("provider_type", "openai_compatible")
             _srv_protocol = _get_proto(_srv_pt)
-            url = _srv_protocol.resolve_url(
-                server.ai_base_url,
-                model=server.ai_model or "",
-                append_base_url_path=server.ai_config.get("append_base_url_path", True),
+            _url = _srv_protocol.resolve_url(
+                config.get("base_url", ""),
+                model=config.get("model", ""),
+                append_base_url_path=config.get("append_base_url_path", True),
             )
-
-            headers = _srv_protocol.build_headers(server.ai_api_key)
-
-            # 检查消息总长度，必要时截断工具结果
-            MAX_CONTENT_LENGTH = 12000  # 每个消息内容的最大长度
-            MAX_ARGUMENTS_LENGTH = 50000  # tool_calls arguments 的最大长度
-            processed_messages = []
-            for msg in messages:
-                msg_copy = msg.copy()
-                if "content" in msg_copy and isinstance(msg_copy["content"], str):
-                    content_len = len(msg_copy["content"])
-                    if content_len > MAX_CONTENT_LENGTH:
-                        # 尝试保留 JSON 的完整性
-                        truncated = msg_copy["content"][:MAX_CONTENT_LENGTH]
-                        # 如果看起来像 JSON，尝试找到最后一个完整的括号
-                        if truncated.strip().startswith(
-                            "{"
-                        ) or truncated.strip().startswith("["):
-                            # 找到最后一个完整的 JSON 对象/数组
-                            last_brace = max(
-                                truncated.rfind("}"), truncated.rfind("]")
-                            )
-                            if (
-                                last_brace > MAX_CONTENT_LENGTH - 500
-                            ):  # 如果最后一个括号位置还合理
-                                truncated = truncated[: last_brace + 1]
-                        msg_copy["content"] = (
-                            truncated
-                            + f"\n... [内容过长，已截断，原始长度: {content_len} 字符]"
-                        )
-
-                # 检查 tool_calls arguments 长度
-                if "tool_calls" in msg_copy and msg_copy["tool_calls"]:
-                    for tc in msg_copy["tool_calls"]:
-                        if "function" in tc and "arguments" in tc["function"]:
-                            args_str = tc["function"]["arguments"]
-                            if (
-                                isinstance(args_str, str)
-                                and len(args_str) > MAX_ARGUMENTS_LENGTH
-                            ):
-                                tc["function"]["arguments"] = (
-                                    args_str[:MAX_ARGUMENTS_LENGTH]
-                                    + f"\n... [参数过长已截断，原始长度: {len(args_str)}]"
-                                )
-                                _log.warning(
-                                    f"[AI] 工具 {tc.get('function', {}).get('name')} 的 arguments 过长，已截断"
-                                )
-
-                processed_messages.append(msg_copy)
-
-            payload = _srv_protocol.build_payload(
-                server.ai_model,
-                processed_messages,
-                tools=tools,
+            _headers = _srv_protocol.build_headers(config.get("api_key", ""))
+            _payload = _srv_protocol.build_payload(
+                config.get("model", ""),
+                proc_msgs,
+                tools=api_tools,
                 tool_choice="auto",
                 stream=False,
-                base_url=server.ai_base_url,
+                base_url=config.get("base_url", ""),
                 provider_type=_srv_pt,
             )
 
-            # 记录 payload 大小
-            import json
-
-            payload_size = len(json.dumps(payload, ensure_ascii=False))
+            _payload_size = len(json.dumps(_payload, ensure_ascii=False))
             _log.info(
-                f"[AI] 发送请求到 {url}, 模型={server.ai_model}, 工具数={len(tools) if tools else 0}, payload大小={payload_size} bytes"
+                "[AI] 发送请求到 %s, 模型=%s, 工具数=%d, payload大小=%d bytes",
+                _url, config.get("model", ""), len(api_tools) if api_tools else 0, _payload_size,
             )
+            if _payload_size > 500000:
+                _log.warning("[AI] Payload 过大 (%d bytes)，可能导致 API 拒绝", _payload_size)
 
-            if payload_size > 500000:  # 超过 500KB
-                _log.warning(
-                    f"[AI] Payload 过大 ({payload_size} bytes)，可能导致 API 拒绝"
-                )
-
-            # 重试机制
-            last_error = None
-            for attempt in range(max_retries):
-                check_stop()  # 检查是否停止
+            _last_err = None
+            for _attempt in range(retries):
+                if stop_evt and stop_evt.is_set():
+                    raise StopIteration("用户停止生成")
                 try:
-                    _log.info(
-                        f"[AI] 主 API 调用 (尝试 {attempt + 1}/{max_retries})"
-                    )
+                    _log.info("[AI] 主 API 调用 (尝试 %d/%d)", _attempt + 1, retries)
+                    _container = {"data": None, "error": None}
 
-                    # 使用线程来执行请求，以便能够响应停止事件
-                    import threading
-
-                    result_container = {"data": None, "error": None}
-
-                    def make_request():
+                    def _do_req():
                         try:
-                            resp = requests.post(
-                                url,
-                                json=payload,
-                                headers=headers,
-                                timeout=api_timeout,
+                            _resp = requests.post(
+                                _url, json=_payload, headers=_headers, timeout=timeout_sec,
                             )
-                            if not resp.ok:
-                                _log.error(
-                                    "[AI] API error %d: %s",
-                                    resp.status_code,
-                                    resp.text[:500],
-                                )
-                            resp.raise_for_status()
-                            result_container["data"] = response_json_utf8(resp)
-                        except Exception as e:
-                            result_container["error"] = e
+                            if not _resp.ok:
+                                _log.error("[AI] API error %d: %s", _resp.status_code, _resp.text[:500])
+                            _resp.raise_for_status()
+                            _container["data"] = response_json_utf8(_resp)
+                        except Exception as _e:
+                            _container["error"] = _e
 
-                    request_thread = threading.Thread(target=make_request)
-                    request_thread.daemon = True
-                    request_thread.start()
+                    _t = threading.Thread(target=_do_req, daemon=True)
+                    _t.start()
+                    while _t.is_alive():
+                        if stop_evt and stop_evt.is_set():
+                            raise StopIteration("用户停止生成")
+                        _t.join(timeout=0.5)
 
-                    # 等待请求完成，同时检查停止事件（每0.5秒检查一次）
-                    while request_thread.is_alive():
-                        check_stop()  # 如果停止事件被设置，这里会抛出 StopIteration
-                        request_thread.join(timeout=0.5)
-
-                    # 检查请求结果
-                    if result_container["error"]:
-                        raise result_container["error"]
-
-                    data = result_container["data"]
-                    if data is None:
+                    if _container["error"]:
+                        raise _container["error"]
+                    if _container["data"] is None:
                         raise Exception("请求未返回数据")
+                    return _container["data"], _srv_protocol, _srv_pt
+                except StopIteration:
+                    raise
+                except requests.exceptions.Timeout as _e:
+                    _last_err = _e
+                    _log.warning("[AI] 主 API 超时 (尝试 %d/%d): %s", _attempt + 1, retries, _e)
+                    if _attempt < retries - 1:
+                        time.sleep(min(2 ** _attempt, 2))
+                except requests.exceptions.RequestException as _e:
+                    _last_err = _e
+                    _log.error("[AI] 主 API 错误 (尝试 %d/%d): %s", _attempt + 1, retries, _e)
+                    if _attempt < retries - 1:
+                        time.sleep(min(2 ** _attempt, 2))
+            raise _last_err or Exception("API 调用失败")
 
+        # ---- 故障转移循环 ----
+        if model_configs and len(model_configs) > 1:
+            attempted = set()
+            failover_last_error = None
+            for _ in range(len(model_configs)):
+                cfg = failover.select_model(model_configs, exclude_ids=attempted)
+                if cfg is None:
+                    break
+                mid = cfg.get("model_id", "")
+                mname = cfg.get("model", "")
+                attempted.add(mid)
+                apply_model_config(cfg)
+                try:
+                    data, resp_protocol, resp_pt = _attempt_api_call(
+                        cfg, processed_messages, tools, api_timeout, max_retries, stop_event,
+                    )
+                    failover.record_success(mid)
+                    _log.info("[Failover] workflow model=%s succeeded", mname)
+                    # 更新 server 状态供后续响应解析使用
+                    server.ai_model = mname
+                    server.ai_base_url = cfg.get("base_url", "")
+                    server.ai_config["provider_type"] = resp_pt
                     break
                 except StopIteration:
-                    # 用户停止生成，立即抛出
-                    _log.info("[AI] 检测到停止信号，中断 API 请求")
                     raise
-                except requests.exceptions.Timeout as e:
-                    last_error = e
-                    _log.warning(
-                        f"[AI] 主 API 超时 (尝试 {attempt + 1}/{max_retries}): {e}"
-                    )
-                    if attempt < max_retries - 1:
-                        time.sleep(min(2**attempt, 2))  # 限制最大等待2秒
-                    continue
-                except requests.exceptions.RequestException as e:
-                    last_error = e
-                    _log.error(
-                        f"[AI] 主 API 错误 (尝试 {attempt + 1}/{max_retries}): {e}"
-                    )
-                    if attempt < max_retries - 1:
-                        time.sleep(min(2**attempt, 2))
+                except Exception as e:
+                    status = _extract_status_code(e)
+                    category = classify_http_error(status)
+                    if category == "config":
+                        _log.warning("[Failover] workflow model=%s config error %d, not failing over", mname, status)
+                        raise
+                    failover.record_failure(mid, status)
+                    failover_last_error = e
+                    _log.warning("[Failover] workflow model=%s failed (%s %d), trying next", mname, category, status)
                     continue
             else:
-                raise last_error or Exception("API 调用失败")
+                raise failover_last_error or RuntimeError("All workflow models failed")
+        else:
+            # 单模型：直接调用，但仍接入健康追踪
+            _single_cfg = (model_configs[0] if model_configs else {
+                "model": server.ai_model,
+                "base_url": server.ai_base_url,
+                "api_key": server.ai_api_key,
+                "provider_type": server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible")),
+                "append_base_url_path": server.ai_config.get("append_base_url_path", True),
+            })
+            if model_configs:
+                apply_model_config(_single_cfg)
+            _single_mid = _single_cfg.get("model_id", "")
+            try:
+                data, resp_protocol, resp_pt = _attempt_api_call(
+                    _single_cfg, processed_messages, tools, api_timeout, max_retries, stop_event,
+                )
+                if _single_mid:
+                    failover.record_success(_single_mid)
+            except StopIteration:
+                raise
+            except Exception as e:
+                if _single_mid:
+                    status = _extract_status_code(e)
+                    failover.record_failure(_single_mid, status)
+                raise
 
         from nbot.core.protocols import get_protocol as _gp2
         _resp_pt = server.ai_config.get("provider_type", server.ai_config.get("provider", "openai_compatible"))

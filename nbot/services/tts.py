@@ -26,7 +26,7 @@ def _get_tts_config():
         }
     # 回退到传统配置
     return {
-        "api_key": config_parser.get('ApiKey', 'silicon_api_key', fallback=""),
+        "api_key": config_parser.get('ApiKey', 'api_key', fallback=""),
         "base_url": "https://api.siliconflow.cn/v1",
         "model": "fnlp/MOSS-TTSD-v0.5",
         "voice": config_parser.get('voice', 'voice', fallback="fnlp/MOSS-TTSD-v0.5:diana").split(":")[-1],
