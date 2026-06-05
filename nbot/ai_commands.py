@@ -1505,12 +1505,20 @@ def register_ai_commands(
                     )
                     session = session_store.get_session(session_id)
                     if session:
+                        msg_count_before = len(session.get("messages", []))
                         system_msg = next(
                             (m for m in session.get("messages", []) if m.get("role") == "system"),
                             None,
                         )
-                        session_store.replace_messages(session_id, [system_msg] if system_msg else [])
+                        new_msgs = [system_msg] if system_msg else []
+                        session_store.replace_messages(session_id, new_msgs)
                         session["updated_at"] = datetime.now().isoformat()
+                        # 再次验证是否真的清除了
+                        verify_session = session_store.get_session(session_id)
+                        msg_count_after = len(verify_session.get("messages", [])) if verify_session else -1
+                        print(f"[FeishuChat] /new 清除会话 {session_id}: {msg_count_before} -> {msg_count_after} 条消息")
+                    else:
+                        print(f"[FeishuChat] /new 找不到会话: {session_id}")
                     delete_session_workspace(user_id=str(msg.user_id))
                 else:
                     await msg.reply(text="当前平台不支持会话重置喔~")

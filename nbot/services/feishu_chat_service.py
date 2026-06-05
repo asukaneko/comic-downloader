@@ -263,6 +263,8 @@ class FeishuChatService:
             else:
                 print(f"[FeishuChat] 绑定的会话 {bound_session_id} 不存在，回退到原会话")
 
+        print(f"[FeishuChat] 使用原始会话: {session_id}")
+
         # 检查 session metadata 中的绑定（/new_agent 写入的）
         session = session_store.get_session(session_id)
         if session:
