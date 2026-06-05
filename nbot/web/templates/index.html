@@ -1627,6 +1627,39 @@
                                 <button class="scroll-to-bottom-btn" :class="{ visible: showScrollToBottom }" @click="scrollToBottom(true, false)" title="滚动到底部">
                                     <i class="fas fa-arrow-down"></i>
                                 </button>
+
+                                <!-- 用户消息定位按钮 -->
+                                <div class="user-msg-jumper" :class="{ 'shifted-up': showScrollToBottom }" v-click-outside="closeUserMsgJumper">
+                                    <button
+                                        class="user-msg-jumper-btn"
+                                        :class="{ active: showUserMsgJumper }"
+                                        @click="toggleUserMsgJumper"
+                                        title="消息定位"
+                                    >
+                                        <i class="fas fa-list-ul"></i>
+                                    </button>
+                                    <div class="user-msg-jumper-popover" v-show="showUserMsgJumper">
+                                        <div class="user-msg-jumper-header">
+                                            <span>我的消息</span>
+                                            <span class="user-msg-jumper-count">{{ getUserMessages().length }} 条</span>
+                                        </div>
+                                        <div class="user-msg-jumper-list">
+                                            <div
+                                                v-for="(msg, idx) in getUserMessages()"
+                                                :key="msg.id || idx"
+                                                class="user-msg-jumper-item"
+                                                @click="jumpToUserMessage(msg)"
+                                            >
+                                                <span class="user-msg-jumper-index">#{{ idx + 1 }}</span>
+                                                <span class="user-msg-jumper-text">{{ getMessagePreview(msg) }}</span>
+                                                <span class="user-msg-jumper-time">{{ formatShortTime(msg.timestamp) }}</span>
+                                            </div>
+                                            <div v-if="!getUserMessages().length" class="user-msg-jumper-empty">
+                                                暂无消息
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             
                             <div class="chat-input-area">
@@ -1814,7 +1847,7 @@
                                                 <button class="btn btn-icon file-upload-trigger" @click="toggleFileMenu" :disabled="isLoading" title="上传文件">
                                                     <i class="fas fa-paperclip"></i>
                                                 </button>
-                                                <div class="file-menu-dropdown" v-show="showFileMenu">
+                                                <div class="file-menu-dropdown">
                                                     <div v-if="currentSession && !currentSession.read_only" class="file-menu-context-panel">
                                                         <div class="file-menu-context-head">
                                                             <div class="file-menu-context-ring">
@@ -9667,6 +9700,7 @@
                     orphanCards: {},  // 找不到父消息的孤儿卡片（按 parentMsgId 分组）
                     isUserScrolling: false,
                     showScrollToBottom: false,
+                    showUserMsgJumper: false,
                     isChatListCollapsed: localStorage.getItem('nbot_chat_list_collapsed') === 'true',
                     isChatHeaderHidden: localStorage.getItem('nbot_chat_header_hidden') === 'true',
                     showChatViewMenu: false,

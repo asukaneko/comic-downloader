@@ -975,6 +975,172 @@
             font-size: 18px;
         }
 
+        /* 用户消息定位按钮 */
+        .user-msg-jumper {
+            position: absolute;
+            bottom: 100px;
+            right: 30px;
+            z-index: 100;
+            transition: bottom 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .user-msg-jumper.shifted-up {
+            bottom: 148px;
+        }
+
+        .user-msg-jumper-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            transition: background 0.2s, box-shadow 0.2s, color 0.2s, transform 0.15s;
+        }
+
+        .user-msg-jumper-btn:hover {
+            background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent);
+            color: var(--accent-primary);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+        }
+
+        .user-msg-jumper-btn:active {
+            transform: scale(0.92);
+        }
+
+        .user-msg-jumper-btn.active {
+            color: var(--accent-primary);
+            background: color-mix(in srgb, var(--bg-tertiary) 92%, transparent);
+        }
+
+        /* 消息列表弹窗 */
+        .user-msg-jumper-popover {
+            position: absolute;
+            bottom: 48px;
+            right: 0;
+            width: min(320px, calc(100vw - 32px));
+            max-height: 360px;
+            background: color-mix(in srgb, var(--bg-secondary) 94%, transparent);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            animation: jumperPopoverIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes jumperPopoverIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .user-msg-jumper-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex-shrink: 0;
+        }
+
+        .user-msg-jumper-count {
+            font-size: 11px;
+            font-weight: 400;
+            color: var(--text-secondary);
+            background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+
+        .user-msg-jumper-list {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .user-msg-jumper-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-bottom: 1px solid color-mix(in srgb, var(--border-color) 40%, transparent);
+        }
+
+        .user-msg-jumper-item:last-child {
+            border-bottom: none;
+        }
+
+        .user-msg-jumper-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .user-msg-jumper-index {
+            font-size: 11px;
+            color: var(--accent-primary);
+            font-weight: 600;
+            flex-shrink: 0;
+            min-width: 24px;
+        }
+
+        .user-msg-jumper-text {
+            flex: 1;
+            font-size: 12px;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            min-width: 0;
+        }
+
+        .user-msg-jumper-time {
+            font-size: 10px;
+            color: var(--text-tertiary, var(--text-secondary));
+            flex-shrink: 0;
+            opacity: 0.7;
+        }
+
+        .user-msg-jumper-empty {
+            padding: 24px 16px;
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        /* 消息高亮效果 - 圆角框 */
+        .message.user.scroll-target-highlight .message-content {
+            animation: messageHighlight 1.6s ease-in-out forwards;
+        }
+
+        @keyframes messageHighlight {
+            0% { outline: 2px solid transparent; outline-offset: 3px; box-shadow: none; }
+            20% { outline: 2px solid var(--accent-primary); outline-offset: 3px; box-shadow: 0 0 14px rgba(236, 72, 153, 0.35); }
+            70% { outline: 2px solid var(--accent-primary); outline-offset: 3px; box-shadow: 0 0 14px rgba(236, 72, 153, 0.35); }
+            100% { outline: 2px solid transparent; outline-offset: 3px; box-shadow: none; }
+        }
+
         .thinking-cards-container {
             padding: 10px 20px;
             position: relative;
@@ -7009,6 +7175,29 @@
                 bottom: 80px;
             }
 
+            /* 用户消息定位按钮移动端优化 */
+            .user-msg-jumper {
+                right: 16px;
+                bottom: 80px;
+            }
+
+            .user-msg-jumper.shifted-up {
+                bottom: 128px;
+            }
+
+            .user-msg-jumper-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 15px;
+            }
+
+            .user-msg-jumper-popover {
+                width: min(280px, calc(100vw - 24px));
+                max-height: 300px;
+                right: -4px;
+                bottom: 44px;
+            }
+
             /* 空状态优化 */
             .empty-state {
                 padding: 40px 20px;
@@ -8670,6 +8859,56 @@
             overflow: hidden;
             backdrop-filter: blur(18px);
             -webkit-backdrop-filter: blur(18px);
+            /* Animation */
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(8px) scale(0.95);
+            pointer-events: none;
+            transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.25s;
+            transform-origin: bottom left;
+        }
+
+        .chat-input-wrapper .file-upload-menu.active .file-menu-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+            transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0s;
+        }
+
+        .chat-input-wrapper .file-upload-menu.active .file-menu-dropdown .file-menu-item {
+            animation: fileMenuItemIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        /* context-panel 是第1个子元素，所以 file-menu-item 从 nth-child(2) 开始 */
+        .chat-input-wrapper .file-upload-menu.active .file-menu-dropdown .file-menu-item:nth-child(2) { animation-delay: 0.04s; }
+        .chat-input-wrapper .file-upload-menu.active .file-menu-dropdown .file-menu-item:nth-child(3) { animation-delay: 0.08s; }
+        .chat-input-wrapper .file-upload-menu.active .file-menu-dropdown .file-menu-item:nth-child(4) { animation-delay: 0.12s; }
+
+        .chat-input-wrapper .file-upload-menu.active .file-menu-dropdown .file-menu-context-panel {
+            animation: fileMenuContextIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        @keyframes fileMenuItemIn {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fileMenuContextIn {
+            from {
+                opacity: 0;
+                transform: translateY(-4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .file-menu-item {
@@ -18947,6 +19186,34 @@
                 box-shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
                 backdrop-filter: blur(18px);
                 -webkit-backdrop-filter: blur(18px);
+                /* Animation */
+                opacity: 0;
+                visibility: hidden;
+                transform: translateY(8px) scale(0.95);
+                pointer-events: none;
+                transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0.25s;
+                transform-origin: bottom left;
+            }
+
+            .chat-input-wrapper .chat-actions .file-upload-menu.active .file-menu-dropdown {
+                opacity: 1;
+                visibility: visible;
+                transform: translateY(0) scale(1);
+                pointer-events: auto;
+                transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0s linear 0s;
+            }
+
+            .chat-input-wrapper .chat-actions .file-upload-menu.active .file-menu-dropdown .file-menu-item {
+                animation: fileMenuItemIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+            }
+
+            /* context-panel 是第1个子元素，所以 file-menu-item 从 nth-child(2) 开始 */
+            .chat-input-wrapper .chat-actions .file-upload-menu.active .file-menu-dropdown .file-menu-item:nth-child(2) { animation-delay: 0.04s; }
+            .chat-input-wrapper .chat-actions .file-upload-menu.active .file-menu-dropdown .file-menu-item:nth-child(3) { animation-delay: 0.08s; }
+            .chat-input-wrapper .chat-actions .file-upload-menu.active .file-menu-dropdown .file-menu-item:nth-child(4) { animation-delay: 0.12s; }
+
+            .chat-input-wrapper .chat-actions .file-upload-menu.active .file-menu-dropdown .file-menu-context-panel {
+                animation: fileMenuContextIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
             }
 
             .chat-input-wrapper .chat-actions .file-upload-menu .file-menu-item {
@@ -19322,6 +19589,28 @@
             .scroll-to-bottom-btn {
                 right: 14px;
                 bottom: 96px;
+            }
+
+            .user-msg-jumper {
+                right: 14px;
+                bottom: 96px;
+            }
+
+            .user-msg-jumper.shifted-up {
+                bottom: 144px;
+            }
+
+            .user-msg-jumper-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 15px;
+            }
+
+            .user-msg-jumper-popover {
+                width: min(280px, calc(100vw - 24px));
+                max-height: 300px;
+                right: -4px;
+                bottom: 44px;
             }
 
             .content-area > .fade-in:not(.chat-layout) {

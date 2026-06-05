@@ -13343,6 +13343,67 @@ def main(params):
                         }
                     }
                 },
+
+                // 用户消息定位器：切换弹窗
+                toggleUserMsgJumper() {
+                    this.showUserMsgJumper = !this.showUserMsgJumper;
+                },
+
+                // 关闭弹窗
+                closeUserMsgJumper() {
+                    this.showUserMsgJumper = false;
+                },
+
+                // 获取当前会话的用户消息列表
+                getUserMessages() {
+                    if (!this.currentMessages) return [];
+                    return this.currentMessages.filter(m => m.role === 'user' && !m.hide_in_web);
+                },
+
+                // 获取消息预览文本
+                getMessagePreview(msg) {
+                    if (!msg || !msg.content) return '[空消息]';
+                    // 去除 markdown 标记，取纯文本
+                    const text = msg.content.replace(/[#*`~\[\]()!>_\-|]/g, '').replace(/\n/g, ' ').trim();
+                    return text.length > 40 ? text.substring(0, 40) + '...' : text || '[空消息]';
+                },
+
+                // 跳转到指定用户消息
+                jumpToUserMessage(msg) {
+                    const container = this.$refs.messagesContainer;
+                    if (!container || !msg || !msg.id) return;
+
+                    const msgEl = container.querySelector(`.message[data-message-id="${msg.id}"]`);
+                    if (!msgEl) return;
+
+                    this.showUserMsgJumper = false;
+
+                    let highlighted = false;
+                    const applyHighlight = () => {
+                        if (highlighted) return;
+                        highlighted = true;
+                        msgEl.classList.remove('scroll-target-highlight');
+                        void msgEl.offsetWidth;
+                        msgEl.classList.add('scroll-target-highlight');
+                        setTimeout(() => msgEl.classList.remove('scroll-target-highlight'), 1700);
+                    };
+
+                    msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    if ('onscrollend' in container) {
+                        const onEnd = () => {
+                            container.removeEventListener('scrollend', onEnd);
+                            applyHighlight();
+                        };
+                        container.addEventListener('scrollend', onEnd);
+                        setTimeout(() => {
+                            container.removeEventListener('scrollend', onEnd);
+                            applyHighlight();
+                        }, 1500);
+                    } else {
+                        setTimeout(applyHighlight, 600);
+                    }
+                },
                 
                 handleMessagesScroll() {
                     const container = this.$refs.messagesContainer;
