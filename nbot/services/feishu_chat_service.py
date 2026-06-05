@@ -253,7 +253,26 @@ class FeishuChatService:
             save_callback=lambda: self.server._save_data("sessions")
         )
 
+        # 检查是否有绑定的 web session（/new_agent 创建的）
+        bound_session_id = self._check_session_binding(session_id)
+        if bound_session_id:
+            bound_session = session_store.get_session(bound_session_id)
+            if bound_session:
+                print(f"[FeishuChat] 使用绑定的 Agent 会话: {bound_session_id}")
+                return bound_session_id, bound_session
+            else:
+                print(f"[FeishuChat] 绑定的会话 {bound_session_id} 不存在，回退到原会话")
+
+        # 检查 session metadata 中的绑定（/new_agent 写入的）
         session = session_store.get_session(session_id)
+        if session:
+            bound_id = (session.get("metadata") or {}).get("bound_web_session_id")
+            if bound_id:
+                bound_session = session_store.get_session(bound_id)
+                if bound_session:
+                    print(f"[FeishuChat] 使用绑定的 Agent 会话: {bound_id}")
+                    return bound_id, bound_session
+
         if not session:
             # 创建新会话
             from datetime import datetime
@@ -282,6 +301,62 @@ class FeishuChatService:
             print(f"[FeishuChat] 使用现有会话: {session_id}")
 
         return session_id, session
+
+    @staticmethod
+    def _check_session_binding(session_id: str) -> str:
+        """检查会话是否有绑定的 web session
+
+        Returns:
+            绑定的 web session ID，无绑定返回空字符串
+        """
+        try:
+            import json
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            bindings_path = os.path.join(base_dir, "data", "web", "qq_web_session_bindings.json")
+            if not os.path.exists(bindings_path):
+                return ""
+            with open(bindings_path, "r", encoding="utf-8") as f:
+                bindings = json.load(f)
+            binding = bindings.get(session_id)
+            if isinstance(binding, dict):
+                return str(binding.get("web_session_id") or "")
+        except Exception:
+            pass
+        return ""
+
+    def _sync_agent_binding(self, feishu_session_id: str):
+        """/new_agent 执行后，将最新绑定同步到飞书 session metadata"""
+        try:
+            import json
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            bindings_path = os.path.join(base_dir, "data", "web", "qq_web_session_bindings.json")
+            if not os.path.exists(bindings_path):
+                return
+            with open(bindings_path, "r", encoding="utf-8") as f:
+                bindings = json.load(f)
+
+            # 找最后一个绑定（/new_agent 刚写入的）
+            latest_web_id = ""
+            for v in bindings.values():
+                wid = v.get("web_session_id") if isinstance(v, dict) else ""
+                if wid:
+                    latest_web_id = wid
+
+            if not latest_web_id:
+                return
+
+            from nbot.core.session_store import WebSessionStore
+            session_store = WebSessionStore(
+                self.server.sessions,
+                save_callback=lambda: self.server._save_data("sessions"),
+            )
+            session = session_store.get_session(feishu_session_id)
+            if session:
+                session.setdefault("metadata", {})["bound_web_session_id"] = latest_web_id
+                session_store.set_session(feishu_session_id, session)
+                print(f"[FeishuChat] 已绑定 Agent 会话: {feishu_session_id} -> {latest_web_id}")
+        except Exception as e:
+            print(f"[FeishuChat] 同步 Agent 绑定失败: {e}")
 
     def handle_message(
         self,
@@ -408,6 +483,10 @@ class FeishuChatService:
 
                 # 执行命令
                 asyncio.run(handler(msg_adapter, is_group=is_group))
+
+                # 如果是 /new_agent 命令，同步绑定到飞书 session
+                if content.strip().startswith("/new_agent"):
+                    self._sync_agent_binding(session_id)
 
             except Exception as e:
                 print(f"[FeishuChat] 命令执行失败: {e}")
