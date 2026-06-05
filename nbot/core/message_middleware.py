@@ -149,6 +149,50 @@ class MessagePreprocessor:
 # 内置频道解析器
 # ---------------------------------------------------------------------------
 
+TELEGRAM_API_BASE = "https://api.telegram.org"
+
+
+def _resolve_telegram_attachment(attachment: Dict[str, Any]) -> Optional[str]:
+    """Telegram：通过 getFile API 获取文件路径，下载后返回 base64 data URL。"""
+    file_id = attachment.get("source_ref") or attachment.get("file_id")
+    bot_token = attachment.get("bot_token")
+
+    if not file_id or not bot_token:
+        return None
+
+    try:
+        # 1. 获取文件路径
+        resp = requests.get(
+            f"{TELEGRAM_API_BASE}/bot{bot_token}/getFile",
+            params={"file_id": file_id},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            _log.warning("Telegram getFile failed: HTTP %d — %s", resp.status_code, resp.text[:200])
+            return None
+
+        result = resp.json().get("result", {})
+        file_path = result.get("file_path")
+        if not file_path:
+            return None
+
+        # 2. 下载文件内容
+        dl_resp = requests.get(
+            f"{TELEGRAM_API_BASE}/file/bot{bot_token}/{file_path}",
+            timeout=120,
+        )
+        if dl_resp.status_code != 200:
+            _log.warning("Telegram file download failed: HTTP %d", dl_resp.status_code)
+            return None
+
+        mime = attachment.get("mime_type") or dl_resp.headers.get("Content-Type", "application/octet-stream")
+        b64 = base64.b64encode(dl_resp.content).decode("utf-8")
+        return f"data:{mime};base64,{b64}"
+    except Exception as e:
+        _log.warning("Failed to resolve Telegram attachment %s: %s", file_id, e)
+        return None
+
+
 def _resolve_feishu_attachment(attachment: Dict[str, Any]) -> Optional[str]:
     """飞书：通过 API 下载消息中的附件，返回 base64 data URL。"""
     ref = attachment.get("source_ref") or attachment.get("image_key") or attachment.get("file_key")
@@ -246,5 +290,6 @@ AttachmentResolver.register("web", _resolve_web_attachment)
 AttachmentResolver.register("qq", _resolve_direct_attachment)
 AttachmentResolver.register("qq_private", _resolve_direct_attachment)
 AttachmentResolver.register("qq_group", _resolve_direct_attachment)
+AttachmentResolver.register("telegram", _resolve_telegram_attachment)
 AttachmentResolver.register("feishu", _resolve_feishu_attachment)
 AttachmentResolver.register("feishu_ws", _resolve_feishu_attachment)

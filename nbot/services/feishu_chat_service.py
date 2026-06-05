@@ -146,15 +146,74 @@ class FeishuChatCallbacks(PipelineCallbacks):
     def send_response(
         self, ctx: PipelineContext, message: Dict[str, Any]
     ) -> None:
-        """发送回复到飞书。"""
-        from nbot.services.feishu_ws_service import send_feishu_reply
-
-        send_feishu_reply(
-            self.credentials["app_id"],
-            self.credentials["app_secret"],
-            self.chat_id,
-            message.get("content", ""),
+        """发送回复到飞书，支持文本和附件。"""
+        from nbot.services.feishu_ws_service import (
+            send_feishu_reply,
+            send_feishu_image,
+            send_feishu_file,
         )
+        import os
+        import logging
+
+        _log = logging.getLogger(__name__)
+
+        content = message.get("content", "")
+        attachments = message.get("attachments") or []
+        app_id = self.credentials["app_id"]
+        app_secret = self.credentials["app_secret"]
+        chat_id = self.chat_id
+
+        # 先发送附件
+        for att in attachments:
+            att_type = att.get("type", "")
+            url = att.get("url") or att.get("data") or att.get("path") or ""
+            if not url:
+                continue
+
+            # data URL 或 HTTP URL 需要先下载到本地
+            local_path = url
+            if url.startswith("data:") or url.startswith("http"):
+                try:
+                    import tempfile
+                    import base64
+                    if url.startswith("data:"):
+                        header, b64_data = url.split(",", 1)
+                        ext = "png"
+                        if "jpeg" in header or "jpg" in header:
+                            ext = "jpg"
+                        elif "gif" in header:
+                            ext = "gif"
+                        elif "webp" in header:
+                            ext = "webp"
+                        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
+                        tmp.write(base64.b64decode(b64_data))
+                        tmp.close()
+                        local_path = tmp.name
+                    else:
+                        import requests as req
+                        resp = req.get(url, timeout=60)
+                        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".bin")
+                        tmp.write(resp.content)
+                        tmp.close()
+                        local_path = tmp.name
+                except Exception as e:
+                    _log.warning("Failed to download attachment for Feishu: %s", e)
+                    continue
+
+            if not os.path.isfile(local_path):
+                continue
+
+            try:
+                if att_type == "image":
+                    send_feishu_image(app_id, app_secret, chat_id, local_path)
+                else:
+                    send_feishu_file(app_id, app_secret, chat_id, local_path)
+            except Exception as e:
+                _log.warning("Failed to send Feishu attachment (type=%s): %s", att_type, e)
+
+        # 发送文本回复
+        if content:
+            send_feishu_reply(app_id, app_secret, chat_id, content)
 
 
 class FeishuChatService:

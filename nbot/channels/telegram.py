@@ -53,7 +53,12 @@ class TelegramChannelAdapter(BaseChannelAdapter):
 
         text = message.get("text") or message.get("caption") or ""
         text = self.normalize_inbound_message(text)
-        if not text:
+
+        # 解析附件
+        attachments = self._extract_attachments(message)
+
+        # 允许有附件但无文本的消息通过
+        if not text and not attachments:
             return None
 
         username = sender.get("username") or sender.get("first_name") or "telegram_user"
@@ -70,7 +75,7 @@ class TelegramChannelAdapter(BaseChannelAdapter):
             "sender": username,
             "content": text,
             "message_id": message.get("message_id"),
-            "attachments": [],
+            "attachments": attachments,
             "is_reply_to_bot": is_reply_to_bot,
             "metadata": {
                 "telegram_update_id": update.get("update_id"),
@@ -80,6 +85,81 @@ class TelegramChannelAdapter(BaseChannelAdapter):
                 "is_reply_to_bot": is_reply_to_bot,
             },
         }
+
+    @staticmethod
+    def _extract_attachments(message: dict[str, Any]) -> list[dict[str, Any]]:
+        """从 Telegram 消息中提取所有媒体附件。"""
+        attachments: list[dict[str, Any]] = []
+
+        # 图片：取最大尺寸
+        photos = message.get("photo")
+        if isinstance(photos, list) and photos:
+            largest = max(photos, key=lambda p: p.get("file_size", 0) or 0)
+            attachments.append({
+                "type": "image",
+                "source": "telegram",
+                "source_ref": largest.get("file_id", ""),
+                "mime_type": "image/jpeg",
+                "name": f"{largest.get('file_id', '')}.jpg",
+            })
+
+        # 文档
+        document = message.get("document")
+        if isinstance(document, dict):
+            attachments.append({
+                "type": "file",
+                "source": "telegram",
+                "source_ref": document.get("file_id", ""),
+                "mime_type": document.get("mime_type", ""),
+                "name": document.get("file_name", ""),
+            })
+
+        # 视频
+        video = message.get("video")
+        if isinstance(video, dict):
+            attachments.append({
+                "type": "video",
+                "source": "telegram",
+                "source_ref": video.get("file_id", ""),
+                "mime_type": video.get("mime_type", "video/mp4"),
+                "name": video.get("file_name", ""),
+            })
+
+        # 音频
+        audio = message.get("audio")
+        if isinstance(audio, dict):
+            attachments.append({
+                "type": "audio",
+                "source": "telegram",
+                "source_ref": audio.get("file_id", ""),
+                "mime_type": audio.get("mime_type", "audio/mpeg"),
+                "name": audio.get("file_name", ""),
+            })
+
+        # 语音消息
+        voice = message.get("voice")
+        if isinstance(voice, dict):
+            attachments.append({
+                "type": "audio",
+                "source": "telegram",
+                "source_ref": voice.get("file_id", ""),
+                "mime_type": voice.get("mime_type", "audio/ogg"),
+                "name": "voice.ogg",
+            })
+
+        # 贴纸（作为图片处理）
+        sticker = message.get("sticker")
+        if isinstance(sticker, dict):
+            ext = "webm" if sticker.get("is_video") else "webp"
+            attachments.append({
+                "type": "image",
+                "source": "telegram",
+                "source_ref": sticker.get("file_id", ""),
+                "mime_type": f"video/{ext}" if sticker.get("is_video") else f"image/{ext}",
+                "name": f"sticker.{ext}",
+            })
+
+        return attachments
 
     # ------------------------------------------------------------------
     # CharacterChannelAdapter 协议方法

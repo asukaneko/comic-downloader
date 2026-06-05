@@ -16,7 +16,7 @@ class FeishuChannelAdapter(BaseChannelAdapter):
         return ChannelCapabilities(
             supports_stream=False,
             supports_progress_updates=False,
-            supports_file_send=False,
+            supports_file_send=True,
             supports_stop=False,
         )
 

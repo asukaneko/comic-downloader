@@ -1,7 +1,10 @@
+import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
+
+_log = logging.getLogger(__name__)
 
 from nbot.channels.telegram import TelegramChannelAdapter
 from nbot.core.ai_pipeline import (
@@ -60,6 +63,151 @@ def send_telegram_message(
     )
     response.raise_for_status()
     return response.json()
+
+
+def send_telegram_photo(
+    token: str,
+    chat_id: str,
+    photo: str,
+    caption: str = "",
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """发送图片到 Telegram。photo 支持 file_id、URL 或本地文件路径。"""
+    payload: Dict[str, Any] = {
+        "chat_id": chat_id,
+        "photo": photo,
+    }
+    if caption:
+        payload["caption"] = caption[:1024]
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+
+    response = requests.post(
+        f"{TELEGRAM_API_BASE}/bot{token}/sendPhoto",
+        json=payload,
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def send_telegram_photo_file(
+    token: str,
+    chat_id: str,
+    file_path: str,
+    caption: str = "",
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """通过 multipart 上传本地图片文件到 Telegram。"""
+    payload: Dict[str, Any] = {"chat_id": chat_id}
+    if caption:
+        payload["caption"] = caption[:1024]
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+
+    with open(file_path, "rb") as f:
+        response = requests.post(
+            f"{TELEGRAM_API_BASE}/bot{token}/sendPhoto",
+            data=payload,
+            files={"photo": f},
+            timeout=120,
+        )
+    response.raise_for_status()
+    return response.json()
+
+
+def send_telegram_document(
+    token: str,
+    chat_id: str,
+    document: str,
+    caption: str = "",
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """发送文件到 Telegram。document 支持 file_id、URL 或本地文件路径。"""
+    payload: Dict[str, Any] = {
+        "chat_id": chat_id,
+        "document": document,
+    }
+    if caption:
+        payload["caption"] = caption[:1024]
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+
+    response = requests.post(
+        f"{TELEGRAM_API_BASE}/bot{token}/sendDocument",
+        json=payload,
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def send_telegram_document_file(
+    token: str,
+    chat_id: str,
+    file_path: str,
+    caption: str = "",
+    filename: str = "",
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """通过 multipart 上传本地文件到 Telegram。"""
+    payload: Dict[str, Any] = {"chat_id": chat_id}
+    if caption:
+        payload["caption"] = caption[:1024]
+    if reply_to_message_id:
+        payload["reply_to_message_id"] = reply_to_message_id
+
+    with open(file_path, "rb") as f:
+        files = {"document": (filename or os.path.basename(file_path), f)}
+        response = requests.post(
+            f"{TELEGRAM_API_BASE}/bot{token}/sendDocument",
+            data=payload,
+            files=files,
+            timeout=120,
+        )
+    response.raise_for_status()
+    return response.json()
+
+
+def _send_telegram_attachments(
+    token: str,
+    chat_id: str,
+    attachments: List[Dict[str, Any]],
+    caption: str = "",
+    *,
+    reply_to_message_id: Optional[int] = None,
+) -> None:
+    """发送附件列表到 Telegram，按类型分发到 sendPhoto / sendDocument。"""
+    for i, att in enumerate(attachments):
+        att_type = att.get("type", "")
+        url = att.get("url") or att.get("data") or att.get("path") or att.get("source_ref", "")
+        att_caption = caption if i == 0 else ""
+
+        try:
+            if att_type == "image":
+                if url.startswith("data:") or url.startswith("http"):
+                    send_telegram_photo(token, chat_id, url, att_caption, reply_to_message_id=reply_to_message_id)
+                elif os.path.isfile(url):
+                    send_telegram_photo_file(token, chat_id, url, att_caption, reply_to_message_id=reply_to_message_id)
+                else:
+                    send_telegram_photo(token, chat_id, url, att_caption, reply_to_message_id=reply_to_message_id)
+            elif att_type in ("file", "video", "audio"):
+                if url.startswith("data:") or url.startswith("http"):
+                    send_telegram_document(token, chat_id, url, att_caption, reply_to_message_id=reply_to_message_id)
+                elif os.path.isfile(url):
+                    filename = att.get("name", "")
+                    send_telegram_document_file(token, chat_id, url, att_caption, filename, reply_to_message_id=reply_to_message_id)
+                else:
+                    send_telegram_document(token, chat_id, url, att_caption, reply_to_message_id=reply_to_message_id)
+
+            # 后续附件不再回复原消息
+            reply_to_message_id = None
+        except Exception as e:
+            _log.warning("Failed to send Telegram attachment (type=%s): %s", att_type, e)
 
 
 def set_telegram_webhook(config: Dict[str, Any], webhook_url: str) -> Dict[str, Any]:
@@ -145,12 +293,29 @@ class TelegramCallbacks(PipelineCallbacks):
         return get_character_runtime_from_server(self.server)
 
     def send_response(self, ctx: PipelineContext, message: Dict[str, Any]) -> None:
-        send_telegram_message(
-            self.token,
-            self.parsed["chat_id"],
-            message.get("content", ""),
-            reply_to_message_id=self.parsed.get("message_id"),
-        )
+        content = message.get("content", "")
+        attachments = message.get("attachments") or []
+        chat_id = self.parsed["chat_id"]
+        reply_id = self.parsed.get("message_id")
+
+        # 先发送附件（图片/文件）
+        if attachments:
+            _send_telegram_attachments(
+                self.token, chat_id, attachments,
+                caption=content[:1024] if content else "",
+                reply_to_message_id=reply_id,
+            )
+            # 如果有附件且有文本，文本单独再发一次（因为 caption 有长度限制）
+            if content and len(content) > 1024:
+                send_telegram_message(
+                    self.token, chat_id, content,
+                    reply_to_message_id=None,
+                )
+        elif content:
+            send_telegram_message(
+                self.token, chat_id, content,
+                reply_to_message_id=reply_id,
+            )
 
 
 # ============================================================================
@@ -185,6 +350,11 @@ def answer_telegram_update(
         sender=parsed.get("sender", "telegram_user"),
         metadata=parsed.get("metadata", {}),
     )
+
+    # 注入 bot_token 到附件，供 AttachmentResolver 下载文件使用
+    if chat_request.attachments:
+        for att in chat_request.attachments:
+            att.setdefault("bot_token", token)
 
     ctx = PipelineContext(chat_request=chat_request, adapter=adapter)
     ctx.metadata["channel_type"] = "telegram"

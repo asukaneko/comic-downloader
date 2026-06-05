@@ -107,6 +107,28 @@ class QQChannelAdapter(BaseChannelAdapter):
                         "source": "qq",
                         "id": seg_data.get("id", ""),
                     })
+                elif seg_type == "video":
+                    attachments.append({
+                        "type": "video",
+                        "source": "qq",
+                        "file": seg_data.get("file", ""),
+                        "url": seg_data.get("url", ""),
+                    })
+                elif seg_type == "record":
+                    attachments.append({
+                        "type": "audio",
+                        "source": "qq",
+                        "file": seg_data.get("file", ""),
+                        "url": seg_data.get("url", ""),
+                    })
+                elif seg_type == "file":
+                    attachments.append({
+                        "type": "file",
+                        "source": "qq",
+                        "file": seg_data.get("file", ""),
+                        "url": seg_data.get("url", ""),
+                        "name": seg_data.get("file", ""),
+                    })
                 elif seg_type == "face":
                     text_parts.append("[表情]")
 

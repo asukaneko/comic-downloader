@@ -16,12 +16,15 @@
 """
 
 import json
+import logging
 import os
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import *
+
+_log = logging.getLogger(__name__)
 
 
 class FeishuWebSocketService:
@@ -369,6 +372,147 @@ def send_feishu_reply(
             "success": False,
             "error": str(e),
         }
+
+
+def _upload_feishu_image(client: lark.Client, image_path: str) -> Optional[str]:
+    """上传图片到飞书，返回 image_key。支持本地文件路径。"""
+    try:
+        from lark_oapi.api.im.v1 import CreateImageRequest, CreateImageRequestBody
+        import mimetypes
+
+        if not os.path.isfile(image_path):
+            _log.warning("Feishu image upload: file not found: %s", image_path)
+            return None
+
+        mime_type, _ = mimetypes.guess_type(image_path)
+        if not mime_type or not mime_type.startswith("image/"):
+            mime_type = "image/png"
+
+        with open(image_path, "rb") as f:
+            request_body = CreateImageRequestBody.builder()
+            request_body.image_type("message")
+            request_body.image(f, os.path.basename(image_path))
+            request = CreateImageRequest.builder().request_body(request_body.build()).build()
+            response = client.im.v1.image.create(request)
+
+        if response.success() and response.data:
+            return response.data.image_key
+        _log.warning("Feishu image upload failed: code=%s msg=%s", response.code, response.msg)
+        return None
+    except Exception as e:
+        _log.warning("Feishu image upload error: %s", e)
+        return None
+
+
+def _upload_feishu_file(client: lark.Client, file_path: str, file_type: str = "stream") -> Optional[str]:
+    """上传文件到飞书，返回 file_key。file_type: opus/mp4/pdf/doc/xls/ppt/stream"""
+    try:
+        from lark_oapi.api.im.v1 import CreateFileRequest, CreateFileRequestBody
+
+        if not os.path.isfile(file_path):
+            _log.warning("Feishu file upload: file not found: %s", file_path)
+            return None
+
+        with open(file_path, "rb") as f:
+            request_body = CreateFileRequestBody.builder()
+            request_body.file_type(file_type)
+            request_body.file_name(os.path.basename(file_path))
+            request_body.file(f)
+            request = CreateFileRequest.builder().request_body(request_body.build()).build()
+            response = client.im.v1.file.create(request)
+
+        if response.success() and response.data:
+            return response.data.file_key
+        _log.warning("Feishu file upload failed: code=%s msg=%s", response.code, response.msg)
+        return None
+    except Exception as e:
+        _log.warning("Feishu file upload error: %s", e)
+        return None
+
+
+def send_feishu_image(
+    app_id: str,
+    app_secret: str,
+    chat_id: str,
+    image_path: str,
+    reply_message_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """发送图片到飞书聊天。支持本地文件路径。"""
+    try:
+        client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
+
+        image_key = _upload_feishu_image(client, image_path)
+        if not image_key:
+            return {"success": False, "error": "Failed to upload image"}
+
+        content = json.dumps({"image_key": image_key}, ensure_ascii=False)
+        request_body = CreateMessageRequestBody.builder()
+        request_body.receive_id(chat_id)
+        request_body.msg_type("image")
+        request_body.content(content)
+
+        if reply_message_id:
+            request_body.reply_in_thread(True)
+
+        request = CreateMessageRequest.builder() \
+            .receive_id_type("chat_id") \
+            .request_body(request_body.build()) \
+            .build()
+
+        response = client.im.v1.message.create(request)
+        if response.success():
+            return {"success": True, "code": response.code, "data": response.data}
+        return {"success": False, "code": response.code, "msg": response.msg}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def send_feishu_file(
+    app_id: str,
+    app_secret: str,
+    chat_id: str,
+    file_path: str,
+    reply_message_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """发送文件到飞书聊天。支持本地文件路径。"""
+    try:
+        client = lark.Client.builder().app_id(app_id).app_secret(app_secret).build()
+
+        # 根据扩展名推断 file_type
+        import mimetypes
+        ext = os.path.splitext(file_path)[1].lower()
+        ext_to_type = {
+            ".opus": "opus", ".mp4": "mp4",
+            ".pdf": "pdf", ".doc": "doc", ".docx": "doc",
+            ".xls": "xls", ".xlsx": "xls",
+            ".ppt": "ppt", ".pptx": "ppt",
+        }
+        file_type = ext_to_type.get(ext, "stream")
+
+        file_key = _upload_feishu_file(client, file_path, file_type)
+        if not file_key:
+            return {"success": False, "error": "Failed to upload file"}
+
+        content = json.dumps({"file_key": file_key}, ensure_ascii=False)
+        request_body = CreateMessageRequestBody.builder()
+        request_body.receive_id(chat_id)
+        request_body.msg_type("file")
+        request_body.content(content)
+
+        if reply_message_id:
+            request_body.reply_in_thread(True)
+
+        request = CreateMessageRequest.builder() \
+            .receive_id_type("chat_id") \
+            .request_body(request_body.build()) \
+            .build()
+
+        response = client.im.v1.message.create(request)
+        if response.success():
+            return {"success": True, "code": response.code, "data": response.data}
+        return {"success": False, "code": response.code, "msg": response.msg}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def handle_feishu_message(
