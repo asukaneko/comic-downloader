@@ -116,6 +116,30 @@ if not hasattr(BotAPI, '_nbot_patched'):
 
 command_handlers = {}
 
+
+def match_command(content: str):
+    """频道公有命令匹配函数。
+
+    统一的前缀匹配 + 边界检查，避免 /new 抢先匹配 /new_agent。
+
+    Args:
+        content: 用户输入的原始文本
+
+    Returns:
+        (handler, matched_cmd) 匹配成功时返回处理函数和匹配到的命令字符串，
+        (None, None) 未匹配。
+    """
+    if not content or not content.startswith("/"):
+        return None, None
+    for commands, handler in command_handlers.items():
+        for cmd in commands:
+            if content.startswith(cmd):
+                rest = content[len(cmd):]
+                if rest and not rest.startswith((' ', '\n', '\r')):
+                    continue
+                return handler, cmd
+    return None, None
+
 user_favorites: Dict[str, List[str]] = {}  # 用户收藏夹 {user_id: [comic_ids]}
 group_favorites: Dict[str, Dict[str, List[str]]] = {}  # 群组收藏夹 {group_id: {user_id: [comic_ids]}}
 
@@ -4427,19 +4451,13 @@ async def dispatch_message(msg, is_group: bool):
             _log.warning(f"保存文件到工作区失败: {e}")
 
     # 检查是否是命令
-    for commands, handler in command_handlers.items():
-        for cmd in commands:
-            if raw_msg.startswith(cmd):
-                # 确保是完整命令匹配，而非前缀匹配
-                # 命令后必须是空格、换行、或字符串结尾
-                rest = raw_msg[len(cmd):]
-                if rest and not rest.startswith((' ', '\n', '\r')):
-                    continue
-                try:
-                    await handler(msg, is_group)
-                except Exception as e:
-                    _log.error(f"Error handling command {cmd}: {e}")
-                return
+    handler, matched_cmd = match_command(raw_msg)
+    if handler:
+        try:
+            await handler(msg, is_group)
+        except Exception as e:
+            _log.error(f"Error handling command {matched_cmd}: {e}")
+        return
 
     # AI 聊天回复
     loop = asyncio.get_event_loop()

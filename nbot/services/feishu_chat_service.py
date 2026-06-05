@@ -339,29 +339,18 @@ class FeishuChatService:
                 print(f"[FeishuChat] 用户消息已保存到会话 {session_id}")
 
                 # 检查是否是命令
-                is_command = False
                 matched_handler = None
                 if content and content.startswith("/"):
                     try:
-                        import nbot.commands
-                        from nbot.commands import command_handlers
-
-                        for commands, handler in command_handlers.items():
-                            for cmd in commands:
-                                if content.startswith(cmd):
-                                    is_command = True
-                                    matched_handler = handler
-                                    break
-                            if is_command:
-                                break
-
-                        if not is_command:
+                        from nbot.commands import match_command
+                        matched_handler, matched_cmd = match_command(content)
+                        if not matched_handler:
                             print(f"[FeishuChat] 未知命令: {content}")
                     except Exception as e:
                         print(f"[FeishuChat] 命令匹配失败: {e}")
 
                 # 处理命令或触发 AI 响应
-                if is_command and matched_handler:
+                if matched_handler:
                     self._handle_command(
                         session_id, content, user_id, chat_id,
                         credentials, matched_handler

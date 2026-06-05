@@ -205,28 +205,14 @@ def register_socket_events(server):
                 )
                 return
 
-            is_command = False
             matched_handler = None
             if content and content.startswith("/"):
                 try:
-                    import nbot.commands
-                    from nbot.commands import command_handlers
-
-                    _log.info(
-                        f"Checking command: {content}, registered count: {len(command_handlers)}"
-                    )
-
-                    for commands, handler in command_handlers.items():
-                        for cmd in commands:
-                            if content.startswith(cmd):
-                                _log.info(f"Matched command: {cmd}")
-                                is_command = True
-                                matched_handler = handler
-                                break
-                        if is_command:
-                            break
-
-                    if not is_command:
+                    from nbot.commands import match_command
+                    matched_handler, matched_cmd = match_command(content)
+                    if matched_handler:
+                        _log.info(f"Matched command: {matched_cmd}")
+                    else:
                         _log.warning(f"Unknown command: {content}")
                 except ImportError as e:
                     _log.warning(f"Failed to import command handlers: {e}")
@@ -297,7 +283,7 @@ def register_socket_events(server):
 
                 server.socketio.emit("new_message", message, room=session_id)
 
-            if is_command and matched_handler:
+            if matched_handler:
                 web_user_id = str(int(hashlib.md5(session_id.encode()).hexdigest(), 16))[
                     :10
                 ]
