@@ -7132,7 +7132,7 @@
         </div>
 
         <!-- 绑定角色模态框 -->
-        <div v-if="showBindCharacterModal" class="modal-overlay" @click.self="showBindCharacterModal = false">
+        <div v-if="showBindCharacterModal" class="modal-overlay" :class="{ 'modal-overlay-top': bindingFromEdit }" @click.self="showBindCharacterModal = false">
             <div class="modal" style="max-width: 480px;">
                 <div class="modal-header">
                     <span class="modal-title"><i class="fas fa-user-plus"></i> 绑定角色</span>
@@ -8487,9 +8487,25 @@
                                     <span class="pretty-checkbox-text"><i class="fas fa-thumbtack"></i> 置顶</span>
                                 </label>
                             </div>
-                            <div class="form-group">
+                            <div class="form-group edit-session-system-prompt-group">
                                 <label class="form-label">系统提示词</label>
                                 <textarea v-model="editingSession.system_prompt" class="form-textarea edit-session-system-prompt" rows="6"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">绑定角色</label>
+                                <div class="edit-session-character-card">
+                                    <div class="bind-character-portrait">
+                                        <img v-if="editingSession.sender_portrait" :src="editingSession.sender_portrait">
+                                        <i v-else :class="editingSession.sender_avatar || 'fas fa-user-circle'"></i>
+                                    </div>
+                                    <div class="edit-session-character-info">
+                                        <div class="edit-session-character-name">{{ editingSession.sender_name || '未绑定角色' }}</div>
+                                        <div class="edit-session-character-hint" v-if="!editingSession.sender_name">点击右侧按钮选择角色</div>
+                                    </div>
+                                    <button class="btn btn-outline btn-small" @click="openBindCharacterFromEdit">
+                                        <i class="fas fa-exchange-alt"></i> 更改
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -8497,6 +8513,19 @@
                             <div class="form-section-title">
                                 对话内容
                                 <span class="form-hint">{{ getEditingSessionMessages().length }} 条可编辑对话</span>
+                                <div class="edit-session-batch-bar" v-if="getEditingSessionMessages().length > 0">
+                                    <label class="pretty-checkbox">
+                                        <input type="checkbox" @change="toggleSelectAllEditMessages($event)" :checked="isAllEditMessagesSelected()">
+                                        <span class="pretty-checkbox-box"><i class="fas fa-check"></i></span>
+                                        <span class="pretty-checkbox-text">全选</span>
+                                    </label>
+                                    <button v-if="selectedEditMessages.length > 0"
+                                            class="btn btn-danger btn-small"
+                                            @click="batchDeleteEditMessages"
+                                            :disabled="isLoading">
+                                        <i class="fas fa-trash-alt"></i> 删除选中 ({{ selectedEditMessages.length }})
+                                    </button>
+                                </div>
                             </div>
                             <div class="edit-message-list">
                                 <div v-if="!getEditingSessionMessages().length" class="empty-state" style="padding: 24px;">
@@ -8504,6 +8533,10 @@
                                 </div>
                                 <div v-for="(msg, index) in getEditingSessionMessages()" :key="msg.id" class="edit-message-item" :class="msg.role">
                                     <div class="edit-message-head">
+                                        <label class="pretty-checkbox edit-message-checkbox" v-if="msg.role !== 'system'">
+                                            <input type="checkbox" :value="msg.id" v-model="selectedEditMessages">
+                                            <span class="pretty-checkbox-box"><i class="fas fa-check"></i></span>
+                                        </label>
                                         <div class="edit-message-title">{{ getEditingMessageLabel(msg, index) }}</div>
                                         <div class="edit-message-actions">
                                             <select v-model="msg.role" class="form-select edit-message-role">
@@ -10415,6 +10448,8 @@
                         role: 'user',
                         content: ''
                     },
+                    selectedEditMessages: [],
+                    bindingFromEdit: false,
                     showSessionDetailsModal: false,
                     viewingSession: null,
                     isEditingSessionTitle: false,

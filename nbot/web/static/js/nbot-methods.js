@@ -7119,6 +7119,8 @@ def main(params):
                         insertSide: 'after',
                     };
                     this.showEditSessionModal = true;
+                    this.selectedEditMessages = [];
+                    this.bindingFromEdit = false;
 
                     try {
                         const res = await api.get(`/api/sessions/${baseSession.id}`);
@@ -7293,6 +7295,71 @@ def main(params):
                             } catch (e) {
                                 console.error('删除会话对话失败:', e);
                                 this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
+                            }
+                        }
+                    });
+                },
+
+                openBindCharacterFromEdit() {
+                    this.bindingFromEdit = true;
+                    this.bindCharacterSelectedId = null;
+                    this.showBindCharacterModal = true;
+                },
+
+                toggleSelectAllEditMessages(event) {
+                    const messages = this.getEditingSessionMessages().filter(m => m.role !== 'system');
+                    if (event.target.checked) {
+                        this.selectedEditMessages = messages.map(m => m.id);
+                    } else {
+                        this.selectedEditMessages = [];
+                    }
+                },
+
+                isAllEditMessagesSelected() {
+                    const messages = this.getEditingSessionMessages().filter(m => m.role !== 'system');
+                    if (messages.length === 0) return false;
+                    return messages.every(m => this.selectedEditMessages.includes(m.id));
+                },
+
+                async batchDeleteEditMessages() {
+                    if (!this.editingSession?.id || this.selectedEditMessages.length === 0) return;
+                    const count = this.selectedEditMessages.length;
+                    this.showConfirmDialogFn({
+                        title: '批量删除对话',
+                        message: `确定要删除选中的 ${count} 条对话吗？此操作不可撤销。`,
+                        danger: true,
+                        onConfirm: async () => {
+                            this.isLoading = true;
+                            let deleted = 0;
+                            let failed = 0;
+                            for (const msgId of [...this.selectedEditMessages]) {
+                                try {
+                                    await api.delete(`/api/sessions/${this.editingSession.id}/messages/${msgId}`);
+                                    deleted++;
+                                } catch (e) {
+                                    console.error(`删除消息 ${msgId} 失败:`, e);
+                                    failed++;
+                                }
+                            }
+                            this.editingSession.messages = this.getEditingSessionMessages()
+                                .filter(m => !this.selectedEditMessages.includes(m.id));
+                            if (this.editingSession.originalMessages) {
+                                this.selectedEditMessages.forEach(id => delete this.editingSession.originalMessages[id]);
+                            }
+                            this.editingSession.message_count = Math.max(
+                                0,
+                                (this.editingSession.message_count || deleted) - deleted
+                            );
+                            this.selectedEditMessages = [];
+                            this.syncEditedSessionLocally(this.editingSession);
+                            if (this.currentSession?.id === this.editingSession.id) {
+                                await this.loadMessages(false);
+                            }
+                            this.isLoading = false;
+                            if (failed > 0) {
+                                this.showToast(`已删除 ${deleted} 条，${failed} 条失败`, 'warning');
+                            } else {
+                                this.showToast(`已批量删除 ${deleted} 条对话`, 'success');
                             }
                         }
                     });
@@ -14548,7 +14615,8 @@ def main(params):
                 },
 
                 async bindCharacterToSession() {
-                    if (!this.currentSession || !this.bindCharacterSelectedId) return;
+                    const targetSession = this.bindingFromEdit ? this.editingSession : this.currentSession;
+                    if (!targetSession || !this.bindCharacterSelectedId) return;
                     if (this.isBindingCharacter) return;
                     this.isBindingCharacter = true;
 
@@ -14565,7 +14633,7 @@ def main(params):
                             scenario = scenario.replace(/\{\{char\}\}/g, preset.name || '');
                         }
 
-                        const res = await api.put(`/api/sessions/${this.currentSession.id}/bind-character`, {
+                        const res = await api.put(`/api/sessions/${targetSession.id}/bind-character`, {
                             sender_name: preset.name || '',
                             character_id: preset.id || preset.name || '',
                             sender_avatar: preset.avatar || '',
@@ -14576,35 +14644,39 @@ def main(params):
 
                         if (res.data?.success) {
                             const updatedSession = res.data.session || {};
-                            // 更新前端会话数据
-                            Object.assign(this.currentSession, {
+                            const charFields = {
                                 sender_name: preset.name || '',
                                 character_id: preset.id || preset.name || '',
                                 sender_avatar: preset.avatar || '',
                                 sender_portrait: preset.portrait || '',
                                 scenario: scenario,
                                 system_prompt: preset.systemPrompt || '',
-                                character_runtime_snapshot: updatedSession.character_runtime_snapshot ?? this.currentSession.character_runtime_snapshot,
-                                character_runtime_timeline: updatedSession.character_runtime_timeline ?? this.currentSession.character_runtime_timeline,
-                            });
+                                character_runtime_snapshot: updatedSession.character_runtime_snapshot ?? targetSession.character_runtime_snapshot,
+                                character_runtime_timeline: updatedSession.character_runtime_timeline ?? targetSession.character_runtime_timeline,
+                            };
+
+                            // 更新目标会话数据
+                            Object.assign(targetSession, charFields);
+
+                            // 如果是从编辑上下文绑定，同步更新系统提示词到编辑表单
+                            if (this.bindingFromEdit && preset.systemPrompt) {
+                                this.editingSession.system_prompt = preset.systemPrompt;
+                            }
+
+                            // 更新当前会话（如果是同一个会话）
+                            if (this.currentSession && this.currentSession.id === targetSession.id) {
+                                Object.assign(this.currentSession, charFields);
+                            }
 
                             // 更新会话列表中的对应会话
-                            const sessionInList = this.sessions.find(s => s.id === this.currentSession.id);
+                            const sessionInList = this.sessions.find(s => s.id === targetSession.id);
                             if (sessionInList) {
-                                Object.assign(sessionInList, {
-                                    sender_name: preset.name || '',
-                                    character_id: preset.id || preset.name || '',
-                                    sender_avatar: preset.avatar || '',
-                                    sender_portrait: preset.portrait || '',
-                                    scenario: scenario,
-                                    system_prompt: preset.systemPrompt || '',
-                                    character_runtime_snapshot: updatedSession.character_runtime_snapshot ?? sessionInList.character_runtime_snapshot,
-                                    character_runtime_timeline: updatedSession.character_runtime_timeline ?? sessionInList.character_runtime_timeline,
-                                });
+                                Object.assign(sessionInList, charFields);
                             }
 
                             this.showBindCharacterModal = false;
                             this.bindCharacterSelectedId = null;
+                            this.bindingFromEdit = false;
                             this.showToast(`已绑定角色「${preset.name}」`, 'success');
                         } else {
                             this.showToast(res.data?.error || '绑定失败', 'error');
@@ -14614,6 +14686,7 @@ def main(params):
                         this.showToast(e.response?.data?.error || '绑定角色失败', 'error');
                     } finally {
                         this.isBindingCharacter = false;
+                        this.bindingFromEdit = false;
                     }
                 },
 
