@@ -1676,8 +1676,12 @@ async def handle_restart(msg, is_group=True):
         await msg.reply(text=reply_text)
     else:
         await bot.api.post_private_msg(msg.user_id, text=reply_text)
-    # 重启逻辑
-    os.execv(sys.executable, [sys.executable] + sys.argv)
+    # 重启逻辑：优先通过外部 launcher/supervisor，
+    # 避免 execv 留下未释放的线程和端口。
+    from pathlib import Path
+    from nbot.web.update_service import request_restart
+
+    request_restart(Path(__file__).resolve().parents[1])
 
 @register_command("/shutdown",help_text="/shutdown -> 关闭机器人(admin)",category = "4",admin_show=True)
 async def handle_shutdown(msg, is_group=True):
