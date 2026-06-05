@@ -25,6 +25,13 @@ from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
+try:
+    from nbot.core.workspace import workspace_manager
+    _WORKSPACE_AVAILABLE = True
+except ImportError:
+    workspace_manager = None
+    _WORKSPACE_AVAILABLE = False
+
 _log = logging.getLogger(__name__)
 
 
@@ -100,11 +107,16 @@ class MediaDescriber:
 # ---------------------------------------------------------------------------
 
 class MessagePreprocessor:
-    """消息预处理流水线：解析 → 描述 → 注入内容。"""
+    """消息预处理流水线：工作区保存 → 解析 → 描述 → 注入内容。"""
 
     @staticmethod
-    def process(chat_request: Any) -> None:
-        """处理 ChatRequest.attachments，将媒体描述注入 content。"""
+    def process(chat_request: Any, workspace_context: Optional[Dict[str, Any]] = None) -> None:
+        """处理 ChatRequest.attachments，将媒体描述注入 content。
+
+        Args:
+            chat_request: 聊天请求对象
+            workspace_context: 可选的工作区上下文，提供时会将附件保存到会话工作区
+        """
         attachments = getattr(chat_request, "attachments", None)
         if not attachments:
             return
@@ -122,6 +134,23 @@ class MessagePreprocessor:
             if not url:
                 _log.warning(f"Preprocessor: cannot resolve {att_type} attachment, source={channel}")
                 continue
+
+            # 尝试保存到会话工作区
+            if workspace_context and _WORKSPACE_AVAILABLE:
+                ws_file = MessagePreprocessor._save_to_workspace(
+                    url, att, workspace_context
+                )
+                if ws_file:
+                    att["_workspace_path"] = ws_file
+                    # 用本地文件路径生成 data URL 供视觉模型使用
+                    try:
+                        mime_type, _ = mimetypes.guess_type(ws_file)
+                        mime_type = mime_type or "application/octet-stream"
+                        with open(ws_file, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode("utf-8")
+                        url = f"data:{mime_type};base64,{b64}"
+                    except Exception as e:
+                        _log.warning(f"Preprocessor: failed to read workspace file for AI: {e}")
 
             desc = MediaDescriber.describe(att_type, url)
             if desc:
@@ -143,6 +172,95 @@ class MessagePreprocessor:
             remaining = [a for idx, a in enumerate(attachments) if idx not in processed_indices]
             attachments.clear()
             attachments.extend(remaining)
+
+    @staticmethod
+    def _save_to_workspace(
+        url: str,
+        attachment: Dict[str, Any],
+        workspace_context: Dict[str, Any],
+    ) -> Optional[str]:
+        """尝试将附件保存到会话工作区。
+
+        Args:
+            url: 附件的可访问 URL（http/https 或 data: URL）
+            attachment: 附件元数据字典
+            workspace_context: 工作区上下文（含 session_id, session_type）
+
+        Returns:
+            保存成功返回文件绝对路径，失败返回 None
+        """
+        if not workspace_context or not _WORKSPACE_AVAILABLE or not workspace_manager:
+            return None
+
+        session_id = workspace_context.get("session_id", "")
+        session_type = workspace_context.get("session_type", "unknown")
+        if not session_id:
+            return None
+
+        # 确定文件名
+        filename = (
+            attachment.get("name")
+            or attachment.get("filename")
+            or attachment.get("file", "")
+        )
+        if not filename:
+            # 从 URL 或 mime 推断
+            att_type = _normalize_media_type(attachment.get("type", "file"))
+            ext_map = {"image": ".png", "video": ".mp4", "audio": ".mp3", "file": ".bin"}
+            filename = f"attachment{ext_map.get(att_type, '.bin')}"
+
+        # 检查工作区是否已有同名文件（去重）
+        try:
+            ws_path = workspace_manager.get_or_create(session_id, session_type)
+            safe_name = workspace_manager._safe_filename(filename)
+            existing_path = os.path.join(ws_path, safe_name)
+            if os.path.exists(existing_path):
+                _log.info(f"Preprocessor: file already in workspace, skip download: {safe_name}")
+                return existing_path
+        except Exception:
+            pass
+
+        # 下载文件内容
+        file_data = None
+        try:
+            if url.startswith("data:"):
+                # data: URL，提取 base64 内容
+                _, encoded = url.split(",", 1)
+                file_data = base64.b64decode(encoded)
+            elif url.startswith(("http://", "https://")):
+                # HTTP URL，下载文件
+                resp = requests.get(url, timeout=60, stream=True)
+                if resp.status_code == 200:
+                    file_data = resp.content
+                else:
+                    _log.warning(f"Preprocessor: download failed HTTP {resp.status_code}")
+                    return None
+            elif os.path.isfile(url):
+                # 本地文件路径
+                with open(url, "rb") as f:
+                    file_data = f.read()
+            else:
+                return None
+        except Exception as e:
+            _log.warning(f"Preprocessor: download attachment failed: {e}")
+            return None
+
+        if not file_data:
+            return None
+
+        # 保存到工作区
+        try:
+            result = workspace_manager.save_uploaded_file(
+                session_id, file_data, filename, session_type
+            )
+            if result.get("success"):
+                saved_path = result["path"]
+                _log.info(f"Preprocessor: attachment saved to workspace: {os.path.basename(saved_path)}")
+                return saved_path
+        except Exception as e:
+            _log.warning(f"Preprocessor: save to workspace failed: {e}")
+
+        return None
 
 
 # ---------------------------------------------------------------------------

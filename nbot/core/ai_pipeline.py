@@ -560,10 +560,11 @@ class AIPipeline:
         Returns:
             PipelineResult 可转为 ChatResponse
         """
-        # === 通用消息预处理（附件下载 + 媒体描述） ===
+        # === 通用消息预处理（附件下载 + 媒体描述 + 工作区保存） ===
         self._ensure_middleware_initialized()
         from nbot.core.message_middleware import MessagePreprocessor
-        MessagePreprocessor.process(ctx.chat_request)
+        ws_ctx = callbacks.get_workspace_context(ctx)
+        MessagePreprocessor.process(ctx.chat_request, workspace_context=ws_ctx or None)
 
         progress = callbacks.get_progress_reporter(ctx)
 
@@ -598,12 +599,19 @@ class AIPipeline:
         if not attachments:
             return
 
+        # 获取工作区上下文，用于保存非媒体附件（文件、文档）
+        ws_ctx = callbacks.get_workspace_context(ctx)
+
         progress.on_attachment_start(ctx, len(attachments))
 
         for att in attachments:
             att_type = str(att.get("type", "")).lower()
             att_name = str(att.get("name", att.get("filename", "")))
             resolved = callbacks.resolve_attachment_data(ctx, att)
+
+            # 对于文件/文档类型，尝试保存到工作区并用本地路径解析
+            if not resolved and ws_ctx and att_type not in ("image", "video", "audio"):
+                resolved = self._resolve_via_workspace(att, ws_ctx)
 
             if att_type.startswith("image/") or self._looks_like_image(att):
                 self._handle_image_attachment(ctx, progress, att, resolved)
@@ -613,6 +621,56 @@ class AIPipeline:
                 self._handle_document_attachment(ctx, progress, att, resolved)
 
         progress.on_attachments_done(ctx)
+
+    @staticmethod
+    def _resolve_via_workspace(
+        attachment: Dict[str, Any],
+        workspace_context: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """将非媒体附件保存到工作区并返回 resolved dict。
+
+        用于 QQ/Telegram/Feishu 等频道的文件/文档附件，
+        当 callbacks.resolve_attachment_data() 返回 None 时的回退方案。
+        """
+        try:
+            from nbot.core.message_middleware import MessagePreprocessor
+
+            url = (
+                attachment.get("url")
+                or attachment.get("download_url")
+                or attachment.get("path")
+                or attachment.get("data")
+            )
+            if not url:
+                return None
+
+            ws_file = MessagePreprocessor._save_to_workspace(
+                url, attachment, workspace_context
+            )
+            if not ws_file:
+                return None
+
+            result: Dict[str, Any] = {
+                "type": attachment.get("type", ""),
+                "name": attachment.get("name", "file"),
+                "path": ws_file,
+            }
+
+            # 对文本文件，直接读取内容
+            att_name = str(attachment.get("name", ""))
+            if att_name.endswith((".txt", ".md", ".json", ".csv", ".xml", ".yaml", ".yml",
+                                   ".py", ".js", ".ts", ".html", ".css", ".log", ".ini",
+                                   ".conf", ".cfg", ".sh", ".bat", ".sql", ".toml")):
+                try:
+                    with open(ws_file, "r", encoding="utf-8", errors="replace") as f:
+                        result["text_content"] = f.read(50000)
+                except Exception:
+                    pass
+
+            return result
+        except Exception as e:
+            _log.debug(f"resolve_via_workspace failed: {e}")
+            return None
 
     # ------------------------------------------------------------------
     # Phase 2: 知识库检索
