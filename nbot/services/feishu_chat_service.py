@@ -90,7 +90,20 @@ class FeishuChatCallbacks(PipelineCallbacks):
 
     def get_workspace_context(self, ctx: PipelineContext) -> Dict[str, Any]:
         """提供工作区上下文给工具调用。"""
-        return {"session_id": self.session_id, "session_type": "feishu"}
+        character_name = str(
+            getattr(self.server, "personality", {}).get("name") or ""
+        ).strip()
+        context: Dict[str, Any] = {
+            "session_id": self.session_id,
+            "session_type": "feishu",
+        }
+        if character_name:
+            context["character_name"] = character_name
+        target_id = str(self.chat_id or "").strip()
+        if target_id:
+            context["target_id"] = target_id
+            context["user_id"] = target_id
+        return context
 
     def get_character_context(self, ctx: PipelineContext):
         """返回飞书频道的角色身份标识"""

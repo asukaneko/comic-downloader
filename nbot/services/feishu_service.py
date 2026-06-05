@@ -223,10 +223,22 @@ class FeishuCallbacks(PipelineCallbacks):
         ).strip()
 
     def get_workspace_context(self, ctx: PipelineContext) -> Dict[str, Any]:
-        return {
+        character_name = str(
+            getattr(self.server, "personality", {}).get("name") or ""
+        ).strip()
+        context: Dict[str, Any] = {
             "session_id": f"feishu:{self.parsed['chat_id']}",
             "session_type": "feishu",
         }
+        if character_name:
+            context["character_name"] = character_name
+        target_id = str(
+            self.parsed.get("user_id") or self.parsed.get("chat_id") or ""
+        ).strip()
+        if target_id:
+            context["target_id"] = target_id
+            context["user_id"] = target_id
+        return context
 
     def get_character_context(self, ctx: PipelineContext):
         """返回飞书频道的角色身份标识"""

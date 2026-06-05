@@ -579,15 +579,8 @@ class AIPipeline:
         # Phase 4: AI 响应（工具循环 或 直接补全 或 流式）
         self._phase_ai_response(ctx, callbacks, tools, max_tool_iterations, progress)
 
-        # Phase 5: 结果组装
+        # Phase 5: 结果组装（内部包含角色运行时 after_turn 和自动记忆）
         result = self._phase_assemble_result(ctx, callbacks)
-
-        # Phase 5.5: 角色运行时 after_turn
-        self._phase_character_runtime_after_turn(ctx, callbacks, result)
-
-        if ctx.metadata.get("session_mode") != "agent":
-            self._phase_auto_memory(ctx, callbacks, result)
-        callbacks.on_response_complete(ctx, result)
 
         return result
 
@@ -1346,6 +1339,18 @@ class AIPipeline:
     # Phase 5: 结果组装
     # ------------------------------------------------------------------
 
+    def _post_process_result(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+        result: PipelineResult,
+    ) -> None:
+        """角色运行时 after_turn → 自动记忆 → on_response_complete。"""
+        self._phase_character_runtime_after_turn(ctx, callbacks, result)
+        if ctx.metadata.get("session_mode") != "agent":
+            self._phase_auto_memory(ctx, callbacks, result)
+        callbacks.on_response_complete(ctx, result)
+
     def _phase_assemble_result(
         self,
         ctx: PipelineContext,
@@ -1374,7 +1379,7 @@ class AIPipeline:
                     ctx,
                     ctx.metadata.get("stream_message_id") or ctx.streamed_message.get("id", ""),
                 )
-            callbacks.on_response_complete(ctx, result)
+            self._post_process_result(ctx, callbacks, result)
             return result
 
         if ctx.error:
@@ -1403,6 +1408,7 @@ class AIPipeline:
                 error=ctx.error,
                 metadata=ctx.metadata,
             )
+            self._post_process_result(ctx, callbacks, result)
             return result
 
         # 非流式：通过适配器构建 assistant_message
@@ -1443,6 +1449,7 @@ class AIPipeline:
             error=ctx.error,
             metadata=ctx.metadata,
         )
+        self._post_process_result(ctx, callbacks, result)
         return result
 
     # ------------------------------------------------------------------
