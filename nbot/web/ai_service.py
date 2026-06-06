@@ -609,17 +609,6 @@ class WebCallbacks(PipelineCallbacks):
 
     # ---- 响应完成 ----
 
-    def on_response_complete(self, ctx: PipelineContext, result) -> None:
-        """AI 响应完成后的回调，兜底触发自动命名，并回写实时 system_prompt"""
-        self._try_auto_name_session()
-        self._update_session_system_prompt(ctx)
-        # 主动聊天回复完成后，清除 pending 状态，允许下次定时触发
-        if ctx.metadata.get("is_proactive_chat"):
-            session = self.session_store.get_session(self.session_id)
-            if session and session.get("proactive_chat_pending_since"):
-                session.pop("proactive_chat_pending_since", None)
-                self.session_store.set_session(self.session_id, session)
-
     def _update_session_system_prompt(self, ctx: PipelineContext):
         """将 PromptStack 合成后的实时 system_prompt 回写到 session，供前端 i 按钮查看"""
         try:
@@ -726,6 +715,7 @@ class WebCallbacks(PipelineCallbacks):
                 or name.startswith("Web 会话")
                 or name.startswith("新会话")
                 or name.startswith("新对话")
+                or name.endswith("的对话")
             )
 
             # 首次命名：默认名称 + 至少一轮对话
@@ -848,9 +838,15 @@ class WebCallbacks(PipelineCallbacks):
     # ---- 后处理 ----
 
     def on_response_complete(self, ctx: PipelineContext, result: PipelineResult) -> None:
-        # 自动重命名会话
-        self._auto_rename_session(ctx)
+        # 自动重命名会话（首次命名 + 每5轮更新）
+        self._try_auto_name_session()
         self._update_session_system_prompt(ctx)
+        # 主动聊天回复完成后，清除 pending 状态，允许下次定时触发
+        if ctx.metadata.get("is_proactive_chat"):
+            session = self.session_store.get_session(self.session_id)
+            if session and session.get("proactive_chat_pending_since"):
+                session.pop("proactive_chat_pending_since", None)
+                self.session_store.set_session(self.session_id, session)
         # 文件变更卡片
         if ctx.round_file_changes:
             _emit_change_card(
@@ -860,34 +856,6 @@ class WebCallbacks(PipelineCallbacks):
                 parent_message_id=self.parent_message_id,
                 file_changes=ctx.round_file_changes,
             )
-
-    def _auto_rename_session(self, ctx: PipelineContext) -> None:
-        """自动重命名会话（基于对话内容）。"""
-        try:
-            session = self.session_store.get_session(self.session_id)
-            if not session:
-                return
-            name = session.get("name", "")
-            if name and name != "新对话":
-                return
-            messages = session.get("messages", [])
-            user_count = sum(1 for m in messages if m.get("role") == "user")
-            if user_count < 2:
-                return
-            # 简化：取第一条用户消息的前30字作为会话名
-            first_user_msg = ""
-            for m in messages:
-                if m.get("role") == "user":
-                    content = m.get("content", "").strip()
-                    if content and len(content) > 3:
-                        first_user_msg = content
-                        break
-            if first_user_msg:
-                new_name = first_user_msg[:30] + ("..." if len(first_user_msg) > 30 else "")
-                session["name"] = new_name
-                self.session_store.set_session(self.session_id, session)
-        except Exception:
-            pass
 
 
 # ---- Web 频道的 model_call 辅助函数 ----
