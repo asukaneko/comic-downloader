@@ -11637,6 +11637,7 @@ def main(params):
                     }
                     this.isTesting = true;
                     try {
+                        const startTime = Date.now();
                         const res = await api.post('/api/ai-config/test', {
                             provider: this.aiConfig.provider,
                             provider_type: this.aiConfig.provider_type,
@@ -11645,8 +11646,9 @@ def main(params):
                             model: modelToTest
                         });
                         if (res.data.success) {
+                            const ms = res.data.elapsed_ms || (Date.now() - startTime);
                             this.aiStatus = { text: '连接正常', class: 'badge-success' };
-                            this.showToast('连接测试成功', 'success');
+                            this.showToast(`连接测试成功，用时 ${ms}ms`, 'success');
                         } else {
                             this.aiStatus = { text: '连接失败', class: 'badge-danger' };
                             this.showToast(res.data.message || '连接测试失败', 'error');
@@ -11883,9 +11885,11 @@ def main(params):
                 async testModel(model) {
                     this.isTesting = true;
                     try {
+                        const startTime = Date.now();
                         const res = await api.post(`/api/ai-models/${model.id}/test`);
                         if (res.data.success) {
-                            this.showToast('连接测试成功', 'success');
+                            const ms = res.data.elapsed_ms || (Date.now() - startTime);
+                            this.showToast(`连接测试成功，用时 ${ms}ms`, 'success');
                         } else {
                             this.showToast(res.data.message || '连接测试失败', 'error');
                         }
@@ -12402,10 +12406,12 @@ def main(params):
                 async testAIConnection() {
                     this.isLoading = true;
                     try {
+                        const startTime = Date.now();
                         const res = await api.post('/api/sessions/ai/chat', {
                             messages: [{ role: 'user', content: 'Hello' }]
                         });
-                        this.showToast('AI 连接正常', 'success');
+                        const ms = Date.now() - startTime;
+                        this.showToast(`AI 连接正常，用时 ${ms}ms`, 'success');
                     } catch (e) {
                         this.showToast('AI 连接失败: ' + e.message, 'error');
                     } finally {

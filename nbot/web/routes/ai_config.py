@@ -112,8 +112,11 @@ def register_ai_config_routes(app, server):
             return jsonify({"success": False, "message": "Model is required"})
 
         try:
+            import time
+
             import requests
 
+            start_time = time.time()
             url = resolve_chat_completion_url(
                 base_url,
                 model=model,
@@ -134,7 +137,8 @@ def register_ai_config_routes(app, server):
 
             resp = requests.post(url, json=payload, headers=headers, timeout=30)
             resp.raise_for_status()
-            return jsonify({"success": True, "message": "Connection successful"})
+            elapsed_ms = round((time.time() - start_time) * 1000)
+            return jsonify({"success": True, "message": "Connection successful", "elapsed_ms": elapsed_ms})
         except requests.exceptions.Timeout:
             return jsonify({"success": False, "message": "Connection timed out"})
         except requests.exceptions.ConnectionError:

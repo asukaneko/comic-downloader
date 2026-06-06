@@ -646,8 +646,11 @@ def register_ai_model_routes(app, server):
                 return jsonify({"success": False, "message": "Model is required"})
 
             try:
+                import time
+
                 import requests
 
+                start_time = time.time()
                 # 图片生成模型使用不同的测试方式
                 if purpose == "image_generation":
                     # 直接使用用户输入的完整URL
@@ -665,10 +668,11 @@ def register_ai_model_routes(app, server):
                     }
                     resp = requests.post(base_url, json=payload, headers=headers, timeout=30)
                     # 对于图片生成API，即使返回400（参数错误）也说明连接成功
+                    elapsed_ms = round((time.time() - start_time) * 1000)
                     if resp.status_code in [200, 400, 401]:
-                        return jsonify({"success": True, "message": "Connection successful"})
+                        return jsonify({"success": True, "message": "Connection successful", "elapsed_ms": elapsed_ms})
                     resp.raise_for_status()
-                    return jsonify({"success": True, "message": "Connection successful"})
+                    return jsonify({"success": True, "message": "Connection successful", "elapsed_ms": elapsed_ms})
                 else:
                     # 其他模型使用协议适配器测试
                     from nbot.core.protocols import get_protocol
@@ -690,7 +694,8 @@ def register_ai_model_routes(app, server):
                     )
                     resp = requests.post(url, json=payload, headers=headers, timeout=30)
                     resp.raise_for_status()
-                    return jsonify({"success": True, "message": "Connection successful"})
+                    elapsed_ms = round((time.time() - start_time) * 1000)
+                    return jsonify({"success": True, "message": "Connection successful", "elapsed_ms": elapsed_ms})
             except requests.exceptions.Timeout:
                 return jsonify({"success": False, "message": "Connection timed out"})
             except requests.exceptions.ConnectionError:
