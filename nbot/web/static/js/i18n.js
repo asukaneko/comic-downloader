@@ -1114,6 +1114,34 @@ const i18nMessages = {
     'personality.intensity': '强度',
     'personality.mood_intensity': '情绪强度',
     'personality.relationship_status': '关系状态',
+    // 心情值翻译
+    'mood.happy': '开心',
+    'mood.sad': '难过',
+    'mood.angry': '生气',
+    'mood.shy': '害羞',
+    'mood.excited': '兴奋',
+    'mood.calm': '平静',
+    'mood.nervous': '紧张',
+    'mood.surprised': '惊讶',
+    'mood.sleepy': '困倦',
+    'mood.worried': '担忧',
+    'mood.expectant': '期待',
+    'mood.wronged': '委屈',
+    'mood.hurt': '伤心',
+    'mood.proud': '得意',
+    // 角色运行时
+    'runtime.character_runtime': '角色运行时',
+    'runtime.no_snapshot': '本会话还没有动态快照，聊一轮后会出现。',
+    'runtime.status_timeline': '状态时间线',
+    'runtime.surface_emotion': '表面情绪',
+    'runtime.inner_tendency': '内心倾向',
+    'runtime.status_node': '状态节点',
+    'runtime.unknown': '未知',
+    'runtime.natural': '自然',
+    'runtime.view_system_prompt': '查看本轮系统提示词',
+    'runtime.channel_states': '各频道角色状态',
+    'runtime.no_channel_data': '暂无频道数据',
+    'runtime.relationship_data': '关系数据',
     // 系统设置
     'settings.master_id_placeholder': '多个用逗号分隔',
     'settings.token_placeholder': '未设置令牌时可留空',
@@ -2464,6 +2492,34 @@ const i18nMessages = {
     'personality.intensity': 'Intensity',
     'personality.mood_intensity': 'Mood Intensity',
     'personality.relationship_status': 'Relationship Status',
+    // Mood value translations
+    'mood.happy': 'Happy',
+    'mood.sad': 'Sad',
+    'mood.angry': 'Angry',
+    'mood.shy': 'Shy',
+    'mood.excited': 'Excited',
+    'mood.calm': 'Calm',
+    'mood.nervous': 'Nervous',
+    'mood.surprised': 'Surprised',
+    'mood.sleepy': 'Sleepy',
+    'mood.worried': 'Worried',
+    'mood.expectant': 'Expectant',
+    'mood.wronged': 'Wronged',
+    'mood.hurt': 'Hurt',
+    'mood.proud': 'Proud',
+    // Character runtime
+    'runtime.character_runtime': 'Character Runtime',
+    'runtime.no_snapshot': 'No dynamic snapshot yet, chat once to see it.',
+    'runtime.status_timeline': 'Status Timeline',
+    'runtime.surface_emotion': 'Surface Emotion',
+    'runtime.inner_tendency': 'Inner Tendency',
+    'runtime.status_node': 'Status Node',
+    'runtime.unknown': 'Unknown',
+    'runtime.natural': 'Natural',
+    'runtime.view_system_prompt': 'View System Prompt',
+    'runtime.channel_states': 'Channel Character States',
+    'runtime.no_channel_data': 'No channel data',
+    'runtime.relationship_data': 'Relationship Data',
     // System Settings
     'settings.master_id_placeholder': 'Multiple values separated by commas',
     'settings.token_placeholder': 'Leave empty if not set',
@@ -2687,6 +2743,26 @@ function t(key, params = {}) {
   return text;
 }
 
+// 已知心情值 → i18n key 映射
+const _moodKeyMap = {
+  '开心': 'mood.happy', '难过': 'mood.sad', '生气': 'mood.angry',
+  '害羞': 'mood.shy', '兴奋': 'mood.excited', '平静': 'mood.calm',
+  '紧张': 'mood.nervous', '惊讶': 'mood.surprised', '困倦': 'mood.sleepy',
+  '担忧': 'mood.worried', '期待': 'mood.expectant', '委屈': 'mood.wronged',
+  '伤心': 'mood.hurt', '得意': 'mood.proud',
+};
+
+/**
+ * 翻译心情/情绪值
+ * @param {string} moodValue - 心情值（中文）
+ * @returns {string} 翻译后的文本，无匹配时返回原值
+ */
+function translateMood(moodValue) {
+  if (!moodValue) return '';
+  const key = _moodKeyMap[moodValue];
+  return key ? t(key) : moodValue;
+}
+
 /**
  * 切换语言
  * @param {string} lang - 语言代码 ('zh' 或 'en')
@@ -2725,6 +2801,7 @@ function getSupportedLanguages() {
 const i18nPlugin = {
   install(app) {
     app.config.globalProperties.$t = t;
+    app.config.globalProperties.$translateMood = translateMood;
     app.config.globalProperties.$setLanguage = setLanguage;
     app.config.globalProperties.$getLanguage = getLanguage;
     app.config.globalProperties.$getSupportedLanguages = getSupportedLanguages;
@@ -2742,6 +2819,7 @@ const i18nPlugin = {
 if (typeof window !== 'undefined') {
   window.i18n = {
     t,
+    translateMood,
     setLanguage,
     getLanguage,
     getSupportedLanguages,
