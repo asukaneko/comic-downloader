@@ -299,13 +299,22 @@ const NbotMethods = {
                         }
                     `;
 
+                    // 用户气泡始终保持白色字体（忽略主题切换）
+                    css += `
+                        .message.user .message-content,
+                        .message.user .message-content .markdown-body,
+                        .message.user .message-content .markdown-body p,
+                        .message.user .message-content .markdown-body li {
+                            color: #fff !important;
+                        }
+                    `;
+
                     if (userBubbleColor) {
                         css += `
                             .message.user .message-content,
-                            body.has-bg-image .message.user .message-content,
-                            [data-theme="light"] .message.user .message-content,
-                            [data-theme="light"] body.has-bg-image .message.user .message-content {
+                            body.has-bg-image .message.user .message-content {
                                 background: ${userBubbleColor} !important;
+                                color: #fff !important;
                                 border-color: rgba(255, 255, 255, 0.15) !important;
                                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
                             }

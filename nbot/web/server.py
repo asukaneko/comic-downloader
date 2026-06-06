@@ -17,6 +17,7 @@ from typing import Any
 
 from flask import Flask, g, jsonify, request
 from flask_socketio import SocketIO
+from werkzeug.exceptions import HTTPException
 
 from nbot.core.prompt_format import format_skills_prompt
 from nbot.web.ai_service import (
@@ -47,8 +48,8 @@ from nbot.web.routes import (
     register_config_legacy_routes,
     register_config_transfer_routes,
     register_file_routes,
-    register_gateway_routes,
     register_gateway_log_routes,
+    register_gateway_routes,
     register_heartbeat_routes,
     register_knowledge_routes,
     register_live2d_routes,
@@ -68,10 +69,10 @@ from nbot.web.routes import (
     register_voice_routes,
     register_web_agent_routes,
     register_workflow_routes,
-    register_world_book_routes,
     register_workspace_misc_routes,
     register_workspace_private_routes,
     register_workspace_shared_routes,
+    register_world_book_routes,
 )
 from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.web.socket_events import register_socket_events
@@ -2606,9 +2607,10 @@ class WebChatServer:
             ]
 
             # 使用当前活跃模型的协议发送请求
-            from nbot.core.protocols import get_protocol
-            from nbot.core.model_adapter import response_json_utf8
             import requests as _requests
+
+            from nbot.core.model_adapter import response_json_utf8
+            from nbot.core.protocols import get_protocol
 
             # 获取当前活跃模型的 provider_type
             active_model = None
@@ -3968,6 +3970,9 @@ def create_web_app(config: dict[str, Any] = None) -> tuple[Flask, SocketIO]:
     # 全局错误处理器：防止未捕获异常在 WSGI 层触发 "write() before start_response"
     @app.errorhandler(Exception)
     def _handle_unexpected_error(exc):
+        if isinstance(exc, HTTPException):
+            return exc
+
         import traceback as _tb
         _tb.print_exc()
         return (
