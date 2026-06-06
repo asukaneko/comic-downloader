@@ -250,8 +250,8 @@ def _replace_direct_session_messages(session_id, messages, system_prompt=None, c
             session["sender_portrait"] = character.get("portrait", "")
         session["updated_at"] = datetime.now().isoformat()
         session_store.set_session(session_id, session)
-    except Exception as e:
-        log.debug(f"Replace direct session messages skipped: {e}")
+    except Exception:
+        return
 
 
 def register_ai_commands(
