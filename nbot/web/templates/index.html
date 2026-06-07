@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="/static/vendor/styles/highlight-github-dark.min.css">
     <script src="/static/vendor/highlight.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/styles/font-awesome.min.css">
-    <script src="/static/js/i18n.js?v=20260607"></script>
+    <script src="/static/js/i18n.js?v=20260525"></script>
     <script src="/static/js/push.js"></script>
     <script>
         window.__nbotCoreDepsReady = Promise.resolve();
@@ -4920,25 +4920,47 @@
                                     <!-- TTS特有配置 -->
                                     <template v-if="modelForm.purpose === 'tts'">
                                         <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-                                            <label class="form-label" style="color: var(--primary-color); font-weight: 600;">🔊 TTS特有配置</label>
+                                            <label class="form-label" style="color: var(--primary-color); font-weight: 600;">🔊 TTS 基础配置</label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">TTS 提供商</label>
+                                            <select v-model="modelForm.tts_provider" class="form-select">
+                                                <option value="openai">OpenAI 兼容</option>
+                                                <option value="xiaomi">小米 MiMo</option>
+                                            </select>
+                                            <div class="form-hint">选择 TTS 服务提供商，适配器会自动映射 API 参数</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">TTS 模型名</label>
+                                            <input v-model="modelForm.tts_model" type="text" class="form-input" placeholder="留空则使用上方「模型」字段">
+                                            <div class="form-hint">独立的 TTS 模型名，如 gpt-4o-mini-tts、fnlp/MOSS-TTSD-v0.5 等</div>
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label">音色</label>
-                                            <input v-model="modelForm.voice" type="text" class="form-input" placeholder="default">
+                                            <input v-model="modelForm.tts_voice" type="text" class="form-input" placeholder="alloy">
                                         </div>
                                         <div class="form-row">
                                             <div class="form-group">
                                                 <label class="form-label">语速</label>
-                                                <input v-model.number="modelForm.speed" type="number" min="0.5" max="2" step="0.1" class="form-input">
+                                                <input v-model.number="modelForm.tts_speed" type="number" min="0.25" max="4" step="0.05" class="form-input">
                                             </div>
                                             <div class="form-group">
                                                 <label class="form-label">音调</label>
-                                                <input v-model.number="modelForm.pitch" type="number" min="0.5" max="2" step="0.1" class="form-input">
+                                                <input v-model.number="modelForm.tts_pitch" type="number" min="0.5" max="2" step="0.1" class="form-input">
                                             </div>
                                             <div class="form-group">
                                                 <label class="form-label">音量</label>
-                                                <input v-model.number="modelForm.volume" type="number" min="0" max="2" step="0.1" class="form-input">
+                                                <input v-model.number="modelForm.tts_volume" type="number" min="0" max="2" step="0.1" class="form-input">
                                             </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">输出格式</label>
+                                            <select v-model="modelForm.tts_format" class="form-select">
+                                                <option value="mp3">MP3</option>
+                                                <option value="wav">WAV</option>
+                                                <option value="opus">OPUS</option>
+                                                <option value="flac">FLAC</option>
+                                            </select>
                                         </div>
                                     </template>
 
@@ -6765,6 +6787,280 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- TTS Playground -->
+                    <div v-if="currentPage === 'tts-playground'" class="fade-in">
+                        <!-- Hero Header -->
+                        <div class="ai-config-hero" style="margin-bottom: 24px;">
+                            <div class="ai-config-hero-content">
+                                <div class="ai-config-hero-text">
+                                    <h2 class="ai-config-hero-title">
+                                        <i class="fas fa-headphones" style="color: var(--primary-color);"></i>
+                                        {{ $t('tts_playground.title') }}
+                                    </h2>
+                                    <p class="ai-config-hero-subtitle">{{ $t('tts_playground.subtitle') }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="ttsPlayground.models && ttsPlayground.models.length" class="card" style="margin-bottom: 16px;">
+                            <div class="card-body">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label class="form-label">
+                                        <i class="fas fa-sliders-h"></i> TTS 配置
+                                    </label>
+                                    <select v-model="ttsPlayground.selectedModelId" class="form-select" @change="onTTSModelChange()">
+                                        <option v-for="model in ttsPlayground.models" :key="model.id" :value="model.id">
+                                            {{ model.name }} - {{ model.tts_model || model.model || 'N/A' }} - {{ model.base_url || 'N/A' }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Current TTS Config Info -->
+                        <div v-if="activeModelsByPurpose.tts && activeModelsByPurpose.tts.model" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">配置名称</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.name }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">模型</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.model || 'N/A' }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">提供商</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.provider || 'N/A' }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">{{ $t('ai_config.voice') }}</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ (activeModelsByPurpose.tts.model.voice || 'default').trim() }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">{{ $t('ai_config.speed') }}</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.speed || 1.0 }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Base URL</div>
+                                <div style="font-weight: 600; font-size: 12px; color: var(--text-primary, #111); word-break: break-all;">{{ activeModelsByPurpose.tts.model.base_url || 'N/A' }}</div>
+                            </div>
+                        </div>
+                        <div v-else class="card" style="margin-bottom: 16px;">
+                            <div class="card-body" style="text-align: center; padding: 24px;">
+                                <i class="fas fa-exclamation-triangle" style="color: var(--warning-color); font-size: 24px; margin-bottom: 8px;"></i>
+                                <div style="color: var(--warning-color); margin-bottom: 12px;">{{ $t('tts_playground.no_tts_config') }}</div>
+                                <button class="btn btn-primary" @click="goDashboard('ai-config')">
+                                    <i class="fas fa-cog"></i> {{ $t('chat.configure') }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid-2">
+                            <!-- Left Column: Voice Selection & Parameters -->
+                            <div>
+                                <!-- Voice Selector -->
+                                <div class="card" style="margin-bottom: 16px;">
+                                    <div class="card-header">
+                                        <span class="card-title">
+                                            <i class="fas fa-microphone-alt"></i> {{ $t('tts_playground.voice_select') }}
+                                        </span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="form-group">
+                                            <select v-model="ttsPlayground.selectedVoice" class="form-select">
+                                                <option v-for="voice in ttsPlayground.voices" :key="voice.id" :value="voice.id">
+                                                    {{ voice.name }} - {{ voice.description }}
+                                                </option>
+                                            </select>
+                                        </div>
+                                        <button class="btn btn-secondary" @click="previewTTSVoice()" style="margin-top: 8px;">
+                                            <i class="fas fa-play"></i> {{ $t('tts_playground.voice_preview') }}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Parameter Controls -->
+                                <div class="card" style="margin-bottom: 16px;">
+                                    <div class="card-header">
+                                        <span class="card-title">
+                                            <i class="fas fa-sliders-h"></i> {{ $t('tts_playground.speed') }} / {{ $t('tts_playground.pitch') }} / {{ $t('tts_playground.volume') }}
+                                        </span>
+                                    </div>
+                                    <div class="card-body">
+                                        <!-- Speed -->
+                                        <div class="form-group">
+                                            <label class="form-label">
+                                                {{ $t('tts_playground.speed') }}
+                                                <span class="badge badge-info" style="margin-left: 8px;">{{ ttsPlayground.speed.toFixed(2) }}</span>
+                                            </label>
+                                            <input type="range" min="0.25" max="4.0" step="0.05"
+                                                v-model.number="ttsPlayground.speed"
+                                                class="tts-range-slider">
+                                            <div class="form-hint" style="display: flex; justify-content: space-between;">
+                                                <span>0.25</span><span>4.0</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Pitch -->
+                                        <div class="form-group">
+                                            <label class="form-label">
+                                                {{ $t('tts_playground.pitch') }}
+                                                <span class="badge badge-info" style="margin-left: 8px;">{{ ttsPlayground.pitch.toFixed(1) }}</span>
+                                            </label>
+                                            <input type="range" min="0.5" max="2.0" step="0.1"
+                                                v-model.number="ttsPlayground.pitch"
+                                                class="tts-range-slider">
+                                            <div class="form-hint" style="display: flex; justify-content: space-between;">
+                                                <span>0.5</span><span>2.0</span>
+                                            </div>
+                                            <div class="form-hint" style="color: var(--warning-color);">
+                                                <i class="fas fa-exclamation-triangle"></i> {{ $t('tts_playground.pitch_hint') }}
+                                            </div>
+                                        </div>
+
+                                        <!-- Volume -->
+                                        <div class="form-group">
+                                            <label class="form-label">
+                                                {{ $t('tts_playground.volume') }}
+                                                <span class="badge badge-info" style="margin-left: 8px;">{{ ttsPlayground.volume.toFixed(1) }}</span>
+                                            </label>
+                                            <input type="range" min="0" max="2.0" step="0.1"
+                                                v-model.number="ttsPlayground.volume"
+                                                class="tts-range-slider">
+                                            <div class="form-hint" style="display: flex; justify-content: space-between;">
+                                                <span>0</span><span>2.0</span>
+                                            </div>
+                                            <div class="form-hint" style="color: var(--warning-color);">
+                                                <i class="fas fa-exclamation-triangle"></i> {{ $t('tts_playground.volume_hint') }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Column: Test Text & Audio Player -->
+                            <div>
+                                <!-- Test Text -->
+                                <div class="card" style="margin-bottom: 16px;">
+                                    <div class="card-header">
+                                        <span class="card-title">
+                                            <i class="fas fa-align-left"></i> {{ $t('tts_playground.test_text') }}
+                                        </span>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="form-group">
+                                            <textarea v-model="ttsPlayground.testText" class="form-textarea" rows="5"
+                                                placeholder="输入要合成的文本..."></textarea>
+                                            <div class="form-hint">
+                                                {{ $t('tts_playground.char_count', { count: (ttsPlayground.testText || '').length }) }}
+                                            </div>
+                                        </div>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button class="btn btn-primary" @click="synthesizeTTS()"
+                                                :disabled="ttsPlayground.isGenerating || !ttsPlayground.testText.trim()">
+                                                <i :class="ttsPlayground.isGenerating ? 'fas fa-spinner fa-spin' : 'fas fa-play'"></i>
+                                                {{ ttsPlayground.isGenerating ? $t('tts_playground.generating') : $t('tts_playground.synthesize') }}
+                                            </button>
+                                            <button v-if="ttsPlayground.isPlaying" class="btn btn-secondary" @click="stopTTSAudio()">
+                                                <i class="fas fa-stop"></i> {{ $t('tts_playground.stop') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Audio Player -->
+                                <div v-if="ttsPlayground.currentAudioUrl" class="card" style="margin-bottom: 16px;">
+                                    <div class="card-header">
+                                        <span class="card-title">
+                                            <i class="fas fa-volume-up"></i> Audio Player
+                                        </span>
+                                    </div>
+                                    <div class="card-body">
+                                        <audio ref="ttsAudioPlayer" :src="ttsPlayground.currentAudioUrl" controls
+                                            style="width: 100%;" @play="ttsPlayground.isPlaying = true"
+                                            @pause="ttsPlayground.isPlaying = false"
+                                            @ended="ttsPlayground.isPlaying = false"></audio>
+                                        <div v-if="ttsPlayground.lastGeneratedAt" class="form-hint" style="margin-top: 8px;">
+                                            {{ $t('tts_playground.generated_at', { time: ttsPlayground.lastGeneratedAt }) }}
+                                        </div>
+                                        <a :href="ttsPlayground.currentAudioUrl" download class="btn btn-secondary" style="margin-top: 8px;">
+                                            <i class="fas fa-download"></i> Download
+                                        </a>
+                                    </div>
+                                </div>
+
+                                <!-- Voice Upload -->
+                                <div class="card">
+                                    <div class="card-header" style="cursor: pointer;" @click="ttsPlayground.showUploadSection = !ttsPlayground.showUploadSection">
+                                        <span class="card-title">
+                                            <i class="fas fa-upload"></i> {{ $t('tts_playground.upload_title') }}
+                                        </span>
+                                        <i :class="ttsPlayground.showUploadSection ? 'fas fa-chevron-up' : 'fas fa-chevron-down'"></i>
+                                    </div>
+                                    <div v-if="ttsPlayground.showUploadSection" class="card-body">
+                                        <div class="form-hint" style="margin-bottom: 12px; color: var(--text-secondary);">
+                                            <i class="fas fa-info-circle"></i> {{ $t('tts_playground.upload_hint') }}
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('tts_playground.upload_file') }}</label>
+                                            <input type="file" accept="audio/*" @change="handleVoiceUploadFile($event)"
+                                                class="form-input" style="padding: 8px;">
+                                            <div class="form-hint">
+                                                {{ ttsPlayground.uploadFile ? ttsPlayground.uploadFile.name : $t('tts_playground.no_file_selected') }}
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('tts_playground.upload_name') }}</label>
+                                            <input v-model="ttsPlayground.uploadName" type="text" class="form-input"
+                                                placeholder="My Custom Voice">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('tts_playground.upload_sample_text') }}</label>
+                                            <textarea v-model="ttsPlayground.uploadText" class="form-textarea" rows="2"
+                                                placeholder="输入音频对应的文本内容..."></textarea>
+                                        </div>
+                                        <button class="btn btn-primary" @click="uploadCustomVoice()"
+                                            :disabled="ttsPlayground.isUploading || !ttsPlayground.uploadFile || !ttsPlayground.uploadName.trim()">
+                                            <i :class="ttsPlayground.isUploading ? 'fas fa-spinner fa-spin' : 'fas fa-upload'"></i>
+                                            {{ ttsPlayground.isUploading ? '...' : $t('tts_playground.upload_btn') }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <style>
+                            .tts-range-slider {
+                                width: 100%;
+                                height: 6px;
+                                -webkit-appearance: none;
+                                appearance: none;
+                                background: var(--border-color);
+                                border-radius: 3px;
+                                outline: none;
+                                cursor: pointer;
+                            }
+                            .tts-range-slider::-webkit-slider-thumb {
+                                -webkit-appearance: none;
+                                appearance: none;
+                                width: 18px;
+                                height: 18px;
+                                border-radius: 50%;
+                                background: var(--primary-color);
+                                cursor: pointer;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                            }
+                            .tts-range-slider::-moz-range-thumb {
+                                width: 18px;
+                                height: 18px;
+                                border-radius: 50%;
+                                background: var(--primary-color);
+                                cursor: pointer;
+                                border: none;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                            }
+                        </style>
                     </div>
 
                     <!-- Debug Console -->
@@ -9624,7 +9920,8 @@
                             { id: 'skills', labelKey: 'nav.skills', icon: 'fas fa-magic' },
                             { id: 'tools', labelKey: 'nav.tools', icon: 'fas fa-toolbox' },
                             { id: 'mcp-servers', labelKey: 'nav.mcp_servers', icon: 'fas fa-server' },
-                            { id: 'channels', labelKey: 'nav.channels', icon: 'fas fa-plug' }
+                            { id: 'channels', labelKey: 'nav.channels', icon: 'fas fa-plug' },
+                            { id: 'tts-playground', labelKey: 'nav.tts_playground', icon: 'fas fa-headphones' }
                         ],
                         system: [
                             { id: 'ai-config', labelKey: 'nav.ai_config', icon: 'fas fa-robot' },
@@ -10121,6 +10418,27 @@
                     mediaRecorder: null,
                     audioChunks: [],
                     ttsEnabled: localStorage.getItem('ttsEnabled') === 'true' || false,
+                    // TTS 试验场
+                    ttsPlayground: {
+                        models: [],
+                        selectedModelId: '',
+                        voices: [],
+                        selectedVoice: 'alloy',
+                        speed: 1.0,
+                        pitch: 1.0,
+                        volume: 1.0,
+                        testText: '你好，这是一段TTS测试语音。',
+                        isGenerating: false,
+                        isPlaying: false,
+                        currentAudio: null,
+                        currentAudioUrl: '',
+                        uploadFile: null,
+                        uploadName: '',
+                        uploadText: '',
+                        isUploading: false,
+                        lastGeneratedAt: null,
+                        showUploadSection: false,
+                    },
                     // API Key管理
                     apiKeys: [],
                     showApiKeyManager: false,
@@ -10192,11 +10510,19 @@
                         // 模型价格（人民币 元/百万token，null 表示使用兜底定价）
                         input_price: null,
                         output_price: null,
-                        // TTS/STT/Embedding特有配置
-                        voice: 'default',
-                        speed: 1.0,
-                        pitch: 1.0,
-                        volume: 1.0,
+                        // TTS 统一配置字段
+                        tts_provider: 'openai',
+                        tts_url: '',
+                        tts_model: '',
+                        tts_voice: 'default',
+                        tts_speed: 1.0,
+                        tts_pitch: 1.0,
+                        tts_volume: 1.0,
+                        tts_format: 'mp3',
+                        tts_upload_url: '',
+                        tts_headers: '',
+                        tts_body_template: '',
+                        // STT/Embedding
                         language: 'zh',
                         dimensions: 1536
                     },
@@ -10855,6 +11181,7 @@
                         skills: '技能管理',
                         tools: '工具管理',
                         channels: '频道管理',
+                        'tts-playground': 'TTS 试验场',
                         'ai-config': 'AI 配置',
                         tokens: 'Token 用量',
                         logs: '日志',

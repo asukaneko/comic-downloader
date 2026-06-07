@@ -9,6 +9,8 @@ import time
 from flask import jsonify, request, send_file
 from werkzeug.utils import safe_join
 
+from nbot.services.tts_config import get_tts_config_from_server
+
 _log = logging.getLogger(__name__)
 _STT_MODEL = None
 _STT_MODEL_NAME = None
@@ -178,50 +180,46 @@ def register_voice_routes(app, server):
         try:
             data = request.json
             text = data.get("text", "")
+            request_model_id = data.get("model_id", "")
             request_voice = data.get("voice", "alloy")
             request_speed = data.get("speed", 1.0)
 
             if not text:
                 return jsonify({"error": "Text is required"}), 400
 
-            from nbot.services.tts import _get_tts_config
+            from nbot.services.tts_adapters import get_adapter
+            from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
 
-            tts_config = _get_tts_config()
-            api_key = tts_config.get("api_key")
-            base_url = tts_config.get("base_url")
-            model = tts_config.get("model") or "gpt-4o-mini-tts"
-            config_voice = (tts_config.get("voice") or "").strip()
-            config_speed = tts_config.get("speed")
-
-            if not api_key:
+            tts_config = get_tts_config_from_server(server, request_model_id)
+            if not tts_config.get("api_key"):
                 return jsonify({"error": "TTS API Key not configured"}), 400
 
-            voice_raw = config_voice if config_voice and config_voice not in ("default",) else request_voice
-            voice_to_use = voice_raw.strip().lower() if voice_raw else "alloy"
-            if voice_to_use not in _VALID_VOICES:
-                _log.warning("Invalid TTS voice '%s', falling back to 'alloy'", voice_to_use)
-                voice_to_use = "alloy"
+            provider = tts_config.get("tts_provider") or tts_config.get("provider_type", "")
 
-            speed_to_use = config_speed if config_speed else request_speed
+            voice_to_use = (request_voice or tts_config.get("tts_voice") or "alloy").strip()
+
+            if provider == "xiaomi":
+                xiaomi_voice_ids = frozenset(v["id"] for v in XIAOMI_VOICES)
+                if voice_to_use not in xiaomi_voice_ids:
+                    voice_to_use = "mimo_default"
+            else:
+                voice_to_use = voice_to_use.strip().lower() if voice_to_use else "alloy"
+                if voice_to_use not in _VALID_VOICES:
+                    _log.warning("Invalid TTS voice '%s', falling back to 'alloy'", voice_to_use)
+                    voice_to_use = "alloy"
+
+            tts_config["tts_voice"] = voice_to_use
+            speed_to_use = max(0.25, min(4.0, float(request_speed)))
+            tts_config["tts_speed"] = speed_to_use
 
             temp_dir = os.path.join(server.data_dir, "tts_cache")
             os.makedirs(temp_dir, exist_ok=True)
             output_file = os.path.join(temp_dir, f"tts_{int(time.time())}.mp3")
 
-            from openai import OpenAI
-
-            client = OpenAI(api_key=api_key, base_url=base_url)
-
-            create_params = {
-                "model": model,
-                "voice": voice_to_use,
-                "input": text,
-                "response_format": "mp3",
-                "speed": speed_to_use,
-            }
-
-            with client.audio.speech.with_streaming_response.create(**create_params) as response:
-                response.stream_to_file(output_file)
+            adapter = get_adapter(provider)
+            adapter.synthesize(text, tts_config, output_file)
+            if not os.path.exists(output_file) or os.path.getsize(output_file) <= 0:
+                raise RuntimeError("TTS adapter did not produce an audio file")
 
             audio_url = f"/api/tts/audio/{os.path.basename(output_file)}"
             return jsonify({
@@ -244,7 +242,17 @@ def register_voice_routes(app, server):
             if not file_path or not os.path.exists(file_path):
                 return jsonify({"error": "Audio file not found"}), 404
 
-            return send_file(file_path, mimetype="audio/mpeg")
+            # 根据扩展名选择 mimetype
+            ext = os.path.splitext(filename)[1].lower()
+            mime_map = {
+                ".mp3": "audio/mpeg",
+                ".wav": "audio/wav",
+                ".opus": "audio/opus",
+                ".flac": "audio/flac",
+                ".ogg": "audio/ogg",
+            }
+            mimetype = mime_map.get(ext, "audio/mpeg")
+            return send_file(file_path, mimetype=mimetype)
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500

@@ -1697,6 +1697,11 @@ const NbotMethods = {
                         case 'channels':
                             await this.loadChannels();
                             break;
+                        case 'tts-playground':
+                            await this.loadActiveModelsByPurpose();
+                            await this.loadTTSModels();
+                            await this.loadTTSVoices();
+                            break;
                     }
                 },
                 
@@ -6430,6 +6435,163 @@ def main(params):
                     this.ttsEnabled = !this.ttsEnabled;
                     localStorage.setItem('ttsEnabled', this.ttsEnabled);
                     this.showToast(this.ttsEnabled ? '语音播报已开启' : '语音播报已关闭', 'info');
+                },
+
+                // ========== TTS 试验场 ==========
+                async loadTTSVoices() {
+                    try {
+                        const params = this.ttsPlayground.selectedModelId
+                            ? { model_id: this.ttsPlayground.selectedModelId }
+                            : {};
+                        const res = await api.get('/api/tts/voices', { params });
+                        if (res.data.success) {
+                            this.ttsPlayground.voices = res.data.voices || [];
+                        }
+                    } catch (e) {
+                        console.error('加载TTS音色列表失败:', e);
+                    }
+                },
+
+                async loadTTSModels() {
+                    try {
+                        const res = await api.get('/api/ai-models/by-purpose/tts');
+                        if (res.data.success) {
+                            this.ttsPlayground.models = (res.data.models || []).filter(m => m.enabled !== false);
+                            const activeId = this.activeModelsByPurpose?.tts?.active_model_id || '';
+                            const hasActive = this.ttsPlayground.models.some(m => m.id === activeId);
+                            if (hasActive) {
+                                this.ttsPlayground.selectedModelId = activeId;
+                            } else if (!this.ttsPlayground.selectedModelId && this.ttsPlayground.models.length) {
+                                this.ttsPlayground.selectedModelId = this.ttsPlayground.models[0].id;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to load TTS models:', e);
+                    }
+                },
+
+                onTTSModelChange() {
+                    this.stopTTSAudio();
+                    this.ttsPlayground.currentAudioUrl = '';
+                    this.ttsPlayground.lastGeneratedAt = null;
+                    this.loadTTSVoices();
+                },
+
+                async previewTTSVoice() {
+                    const voice = this.ttsPlayground.selectedVoice;
+                    const sampleText = this.$t('tts_playground.preview_sample') || '这是一段试听语音。';
+                    try {
+                        const res = await api.post('/api/tts/preview', {
+                            model_id: this.ttsPlayground.selectedModelId,
+                            text: sampleText,
+                            voice: voice,
+                            speed: 1.0,
+                            pitch: 1.0,
+                            volume: 1.0,
+                        });
+                        if (res.data.success && res.data.audio_url) {
+                            this.stopTTSAudio();
+                            const audio = new Audio(res.data.audio_url);
+                            this.ttsPlayground.currentAudio = audio;
+                            this.ttsPlayground.isPlaying = true;
+                            audio.onended = () => { this.ttsPlayground.isPlaying = false; };
+                            audio.play();
+                            this.showToast(this.$t('tts_playground.voice_preview') + ': ' + voice, 'success');
+                        } else {
+                            this.showToast(res.data.error || 'Preview failed', 'error');
+                        }
+                    } catch (e) {
+                        console.error('TTS试听失败:', e);
+                        this.showToast(e.response?.data?.error || e.message, 'error');
+                    }
+                },
+
+                async synthesizeTTS() {
+                    if (!this.ttsPlayground.testText.trim()) return;
+                    this.ttsPlayground.isGenerating = true;
+                    try {
+                        const res = await api.post('/api/tts/preview', {
+                            model_id: this.ttsPlayground.selectedModelId,
+                            text: this.ttsPlayground.testText,
+                            voice: this.ttsPlayground.selectedVoice,
+                            speed: this.ttsPlayground.speed,
+                            pitch: this.ttsPlayground.pitch,
+                            volume: this.ttsPlayground.volume,
+                        });
+                        if (res.data.success && res.data.audio_url) {
+                            this.stopTTSAudio();
+                            this.ttsPlayground.currentAudioUrl = res.data.audio_url;
+                            this.ttsPlayground.lastGeneratedAt = new Date().toLocaleTimeString();
+                            this.$nextTick(() => {
+                                const player = this.$refs.ttsAudioPlayer;
+                                if (player) {
+                                    player.play();
+                                    this.ttsPlayground.isPlaying = true;
+                                    player.onended = () => { this.ttsPlayground.isPlaying = false; };
+                                }
+                            });
+                        } else {
+                            this.showToast(res.data.error || 'Synthesis failed', 'error');
+                        }
+                    } catch (e) {
+                        console.error('TTS合成失败:', e);
+                        this.showToast(e.response?.data?.error || e.message, 'error');
+                    } finally {
+                        this.ttsPlayground.isGenerating = false;
+                    }
+                },
+
+                stopTTSAudio() {
+                    if (this.ttsPlayground.currentAudio) {
+                        this.ttsPlayground.currentAudio.pause();
+                        this.ttsPlayground.currentAudio.currentTime = 0;
+                        this.ttsPlayground.currentAudio = null;
+                    }
+                    const player = this.$refs.ttsAudioPlayer;
+                    if (player) {
+                        player.pause();
+                        player.currentTime = 0;
+                    }
+                    this.ttsPlayground.isPlaying = false;
+                },
+
+                handleVoiceUploadFile(event) {
+                    const file = event.target.files[0];
+                    this.ttsPlayground.uploadFile = file || null;
+                },
+
+                async uploadCustomVoice() {
+                    if (!this.ttsPlayground.uploadFile || !this.ttsPlayground.uploadName.trim()) {
+                        this.showToast(this.$t('tts_playground.no_file_selected'), 'error');
+                        return;
+                    }
+                    this.ttsPlayground.isUploading = true;
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', this.ttsPlayground.uploadFile);
+                        formData.append('customName', this.ttsPlayground.uploadName);
+                        formData.append('text', this.ttsPlayground.uploadText || '');
+
+                        const res = await api.post('/api/tts/upload-voice', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' },
+                        });
+                        if (res.data.success) {
+                            this.showToast(this.$t('tts_playground.upload_success'), 'success');
+                            // Reload voices list
+                            await this.loadTTSVoices();
+                            // Reset form
+                            this.ttsPlayground.uploadFile = null;
+                            this.ttsPlayground.uploadName = '';
+                            this.ttsPlayground.uploadText = '';
+                        } else {
+                            this.showToast(res.data.error || this.$t('tts_playground.upload_failed'), 'error');
+                        }
+                    } catch (e) {
+                        console.error('音色上传失败:', e);
+                        this.showToast(e.response?.data?.error || this.$t('tts_playground.upload_failed'), 'error');
+                    } finally {
+                        this.ttsPlayground.isUploading = false;
+                    }
                 },
 
                 toggleThinkingCards() {
@@ -11739,10 +11901,17 @@ def main(params):
                             output_price: matchedPreset ? (matchedPreset.output_price ?? null) : (model.output_price ?? null),
                             temperature: model.temperature ?? 0.7,
                             top_p: model.top_p ?? 0.9,
-                            voice: model.voice || 'default',
-                            speed: model.speed || 1.0,
-                            pitch: model.pitch || 1.0,
-                            volume: model.volume || 1.0,
+                            tts_provider: model.tts_provider || 'openai',
+                            tts_url: model.tts_url || '',
+                            tts_model: model.tts_model || '',
+                            tts_voice: model.tts_voice || model.voice || 'default',
+                            tts_speed: model.tts_speed || model.speed || 1.0,
+                            tts_pitch: model.tts_pitch || model.pitch || 1.0,
+                            tts_volume: model.tts_volume || model.volume || 1.0,
+                            tts_format: model.tts_format || 'mp3',
+                            tts_upload_url: model.tts_upload_url || '',
+                            tts_headers: model.tts_headers || '',
+                            tts_body_template: model.tts_body_template || '',
                             language: model.language || 'zh',
                             dimensions: model.dimensions || 1536,
                             prompt_template: model.prompt_template || '',
@@ -11800,11 +11969,18 @@ def main(params):
                             // 模型价格（人民币 元/百万token，null 表示使用兜底定价）
                             input_price: null,
                             output_price: null,
-                            // TTS/STT/Embedding特有配置
-                            voice: 'default',
-                            speed: 1.0,
-                            pitch: 1.0,
-                            volume: 1.0,
+                            // TTS 统一配置字段
+                            tts_provider: 'openai',
+                            tts_url: '',
+                            tts_model: '',
+                            tts_voice: 'default',
+                            tts_speed: 1.0,
+                            tts_pitch: 1.0,
+                            tts_volume: 1.0,
+                            tts_format: 'mp3',
+                            tts_upload_url: '',
+                            tts_headers: '',
+                            tts_body_template: '',
                             language: 'zh',
                             dimensions: 1536,
                             // 图片生成特有配置

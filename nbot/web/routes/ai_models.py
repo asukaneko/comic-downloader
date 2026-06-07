@@ -1,3 +1,4 @@
+import os
 import uuid
 from datetime import datetime
 
@@ -124,11 +125,18 @@ def register_ai_model_routes(app, server):
             # 模型价格（null 表示使用兜底定价）
             "input_price": raw_input_price if raw_input_price not in (None, "", "null") else None,
             "output_price": raw_output_price if raw_output_price not in (None, "", "null") else None,
-            # TTS/STT特有配置
-            "voice": data.get("voice", default_config.get("voice", "default")),
-            "speed": data.get("speed", default_config.get("speed", 1.0)),
-            "pitch": data.get("pitch", default_config.get("pitch", 1.0)),
-            "volume": data.get("volume", default_config.get("volume", 1.0)),
+            # TTS 统一配置字段
+            "tts_provider": data.get("tts_provider", "openai"),
+            "tts_url": data.get("tts_url", ""),
+            "tts_model": data.get("tts_model", ""),
+            "tts_voice": data.get("tts_voice", default_config.get("tts_voice", "default")),
+            "tts_speed": data.get("tts_speed", default_config.get("tts_speed", 1.0)),
+            "tts_pitch": data.get("tts_pitch", default_config.get("tts_pitch", 1.0)),
+            "tts_volume": data.get("tts_volume", default_config.get("tts_volume", 1.0)),
+            "tts_format": data.get("tts_format", "mp3"),
+            "tts_upload_url": data.get("tts_upload_url", ""),
+            "tts_headers": data.get("tts_headers", ""),
+            "tts_body_template": data.get("tts_body_template", ""),
             "language": data.get("language", default_config.get("language", "zh")),
             "dimensions": data.get("dimensions", default_config.get("dimensions", 1536)),
             # 故障转移优先级（数值越小优先级越高）
@@ -225,11 +233,18 @@ def register_ai_model_routes(app, server):
             if "output_price" in data:
                 raw = data["output_price"]
                 model["output_price"] = None if raw in (None, "", "null") else raw
-            # TTS/STT/Embedding特有配置
-            model["voice"] = data.get("voice", model.get("voice", "default"))
-            model["speed"] = data.get("speed", model.get("speed", 1.0))
-            model["pitch"] = data.get("pitch", model.get("pitch", 1.0))
-            model["volume"] = data.get("volume", model.get("volume", 1.0))
+            # TTS 统一配置字段
+            model["tts_provider"] = data.get("tts_provider", model.get("tts_provider", "openai"))
+            model["tts_url"] = data.get("tts_url", model.get("tts_url", ""))
+            model["tts_model"] = data.get("tts_model", model.get("tts_model", ""))
+            model["tts_voice"] = data.get("tts_voice", model.get("tts_voice", "default"))
+            model["tts_speed"] = data.get("tts_speed", model.get("tts_speed", 1.0))
+            model["tts_pitch"] = data.get("tts_pitch", model.get("tts_pitch", 1.0))
+            model["tts_volume"] = data.get("tts_volume", model.get("tts_volume", 1.0))
+            model["tts_format"] = data.get("tts_format", model.get("tts_format", "mp3"))
+            model["tts_upload_url"] = data.get("tts_upload_url", model.get("tts_upload_url", ""))
+            model["tts_headers"] = data.get("tts_headers", model.get("tts_headers", ""))
+            model["tts_body_template"] = data.get("tts_body_template", model.get("tts_body_template", ""))
             model["language"] = data.get("language", model.get("language", "zh"))
             model["dimensions"] = data.get("dimensions", model.get("dimensions", 1536))
             # 故障转移优先级
@@ -651,8 +666,39 @@ def register_ai_model_routes(app, server):
                 import requests
 
                 start_time = time.time()
+                # TTS 模型使用适配器测试
+                if purpose == "tts":
+                    from nbot.services.tts_adapters import get_adapter
+
+                    tts_provider = model.get("tts_provider", "openai")
+                    adapter = get_adapter(tts_provider)
+
+                    test_config = {
+                        "api_key": api_key,
+                        "base_url": base_url,
+                        "tts_provider": tts_provider,
+                        "tts_url": model.get("tts_url", ""),
+                        "tts_model": model.get("tts_model") or model_name,
+                        "tts_voice": model.get("tts_voice", "alloy"),
+                        "tts_format": model.get("tts_format", "mp3"),
+                    }
+
+                    import tempfile
+                    fd, tmp_path = tempfile.mkstemp(suffix=".mp3")
+                    os.close(fd)
+
+                    try:
+                        adapter.synthesize("Hello", test_config, tmp_path)
+                        elapsed_ms = round((time.time() - start_time) * 1000)
+                        return jsonify({"success": True, "message": "TTS connection successful", "elapsed_ms": elapsed_ms})
+                    finally:
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
+
                 # 图片生成模型使用不同的测试方式
-                if purpose == "image_generation":
+                elif purpose == "image_generation":
                     # 直接使用用户输入的完整URL
                     headers = {
                         "Authorization": f"Bearer {api_key}",

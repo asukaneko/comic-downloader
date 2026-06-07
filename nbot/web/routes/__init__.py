@@ -25,6 +25,7 @@ from nbot.web.routes.skills import register_skill_routes
 from nbot.web.routes.skills_storage import register_skills_storage_routes
 from nbot.web.routes.task_center import register_task_center_routes
 from nbot.web.routes.tools import register_tool_routes
+from nbot.web.routes.tts_playground import register_tts_playground_routes
 from nbot.web.routes.update import register_update_routes
 from nbot.web.routes.voice import register_voice_routes
 from nbot.web.routes.web_agent import register_web_agent_routes
@@ -62,6 +63,7 @@ __all__ = [
     "register_skills_storage_routes",
     "register_task_center_routes",
     "register_tool_routes",
+    "register_tts_playground_routes",
     "register_update_routes",
     "register_voice_routes",
     "register_web_agent_routes",

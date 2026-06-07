@@ -65,6 +65,7 @@ from nbot.web.routes import (
     register_skills_storage_routes,
     register_task_center_routes,
     register_tool_routes,
+    register_tts_playground_routes,
     register_update_routes,
     register_voice_routes,
     register_web_agent_routes,
@@ -3987,6 +3988,8 @@ def create_web_app(config: dict[str, Any] = None) -> tuple[Flask, SocketIO]:
     register_skills_storage_routes(app, server)
 
     register_voice_routes(app, server)
+
+    register_tts_playground_routes(app, server)
 
     register_api_key_routes(app, server)
 

@@ -2,8 +2,8 @@
 import os
 
 from dotenv import load_dotenv
-from nbot.web.secure_store import read_secure_json, write_secure_json
 
+from nbot.web.secure_store import read_secure_json, write_secure_json
 
 _ENV_PATH = os.path.join(
     os.path.dirname(
@@ -274,6 +274,17 @@ def get_model_config_by_purpose(purpose: str) -> dict:
                     "speed": model.get("speed", 1.0),
                     "pitch": model.get("pitch", 1.0),
                     "volume": model.get("volume", 1.0),
+                    "tts_provider": model.get("tts_provider", "openai"),
+                    "tts_url": model.get("tts_url", ""),
+                    "tts_model": model.get("tts_model", ""),
+                    "tts_voice": model.get("tts_voice", model.get("voice", "default")),
+                    "tts_speed": model.get("tts_speed", model.get("speed", 1.0)),
+                    "tts_pitch": model.get("tts_pitch", model.get("pitch", 1.0)),
+                    "tts_volume": model.get("tts_volume", model.get("volume", 1.0)),
+                    "tts_format": model.get("tts_format", "mp3"),
+                    "tts_upload_url": model.get("tts_upload_url", ""),
+                    "tts_headers": model.get("tts_headers", ""),
+                    "tts_body_template": model.get("tts_body_template", ""),
                 })
             elif purpose == "stt":
                 config.update({
@@ -346,6 +357,17 @@ def get_model_configs_by_purpose(purpose: str) -> list:
                 "speed": model.get("speed", 1.0),
                 "pitch": model.get("pitch", 1.0),
                 "volume": model.get("volume", 1.0),
+                "tts_provider": model.get("tts_provider", "openai"),
+                "tts_url": model.get("tts_url", ""),
+                "tts_model": model.get("tts_model", ""),
+                "tts_voice": model.get("tts_voice", model.get("voice", "default")),
+                "tts_speed": model.get("tts_speed", model.get("speed", 1.0)),
+                "tts_pitch": model.get("tts_pitch", model.get("pitch", 1.0)),
+                "tts_volume": model.get("tts_volume", model.get("volume", 1.0)),
+                "tts_format": model.get("tts_format", "mp3"),
+                "tts_upload_url": model.get("tts_upload_url", ""),
+                "tts_headers": model.get("tts_headers", ""),
+                "tts_body_template": model.get("tts_body_template", ""),
             })
         elif purpose == "stt":
             config.update({

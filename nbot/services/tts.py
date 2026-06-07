@@ -1,7 +1,7 @@
+import configparser
 import os
 import time
-import configparser
-from ncatbot.core.element import Record, MessageChain
+
 from nbot.web.utils.config_loader import get_tts_model_config
 
 config_parser = configparser.ConfigParser()
@@ -11,26 +11,40 @@ cache_address = config_parser.get('cache', 'cache_address')
 
 
 def _get_tts_config():
-    """获取TTS配置，优先使用新架构的配置"""
+    """获取TTS配置，返回统一字段格式"""
     tts_config = get_tts_model_config()
     if tts_config and tts_config.get("api_key"):
-        voice = (tts_config.get("voice") or "").strip()
+        voice = (tts_config.get("tts_voice") or tts_config.get("voice") or "").strip()
         if not voice or voice == "default":
             voice = "alloy"
         return {
             "api_key": tts_config.get("api_key"),
-            "base_url": tts_config.get("base_url") or "https://api.siliconflow.cn/v1",
-            "model": tts_config.get("model") or "gpt-4o-mini-tts",
-            "voice": voice,
-            "speed": tts_config.get("speed") or 1.0,
+            "base_url": tts_config.get("base_url") or "https://api.openai.com/v1",
+            "tts_provider": tts_config.get("tts_provider", ""),
+            "provider_type": tts_config.get("provider_type", "openai_compatible"),
+            "tts_url": tts_config.get("tts_url") or "",
+            "tts_model": tts_config.get("tts_model") or tts_config.get("model") or "gpt-4o-mini-tts",
+            "tts_voice": voice,
+            "tts_speed": tts_config.get("tts_speed") or tts_config.get("speed") or 1.0,
+            "tts_pitch": tts_config.get("tts_pitch") or tts_config.get("pitch") or 1.0,
+            "tts_volume": tts_config.get("tts_volume") or tts_config.get("volume") or 1.0,
+            "tts_format": tts_config.get("tts_format") or "mp3",
+            "tts_headers": tts_config.get("tts_headers") or "",
+            "tts_body_template": tts_config.get("tts_body_template") or "",
         }
-    # 回退到传统配置
     return {
         "api_key": config_parser.get('ApiKey', 'api_key', fallback=""),
-        "base_url": "https://api.siliconflow.cn/v1",
-        "model": "fnlp/MOSS-TTSD-v0.5",
-        "voice": config_parser.get('voice', 'voice', fallback="fnlp/MOSS-TTSD-v0.5:diana").split(":")[-1],
-        "speed": 1.0,
+        "base_url": "https://api.openai.com/v1",
+        "provider_type": "openai_compatible",
+        "tts_url": "",
+        "tts_model": "gpt-4o-mini-tts",
+        "tts_voice": "alloy",
+        "tts_speed": 1.0,
+        "tts_pitch": 1.0,
+        "tts_volume": 1.0,
+        "tts_format": "mp3",
+        "tts_headers": "",
+        "tts_body_template": "",
     }
 
 
@@ -45,39 +59,23 @@ def remove_brackets_content(text: str) -> str:
     return text.strip()
 
 
-def tts(content: str) -> MessageChain:
+def tts(content: str):
+    from ncatbot.core.element import MessageChain, Record
+
     file_path = os.path.join(cache_address, "tts/")
     os.makedirs(file_path, exist_ok=True)
-    name = int(time.time())
+    speech_file_path = os.path.join(file_path, f"{int(time.time())}.mp3")
 
-    speech_file_path = os.path.join(file_path, f"{name}.mp3")
-
-    # 获取TTS配置
     tts_config = _get_tts_config()
-    api_key = tts_config["api_key"]
-    base_url = tts_config["base_url"]
-    model = tts_config["model"]
-    voice = tts_config["voice"]
+    clean_text = remove_brackets_content(content)
 
     try:
-        from openai import OpenAI
-        client = OpenAI(
-            api_key=api_key,
-            base_url=base_url
-        )
+        from nbot.services.tts_adapters import get_adapter
+        provider = tts_config.get("tts_provider") or tts_config.get("provider_type", "")
+        adapter = get_adapter(provider)
+        adapter.synthesize(clean_text, tts_config, speech_file_path)
 
-        with client.audio.speech.with_streaming_response.create(
-                model=model,
-                voice=voice,
-                input=remove_brackets_content(content),
-                response_format="mp3"
-        ) as response:
-            response.stream_to_file(speech_file_path)
-
-        message = MessageChain([
-            Record(speech_file_path)
-        ])
-        return message
+        return MessageChain([Record(speech_file_path)])
     except Exception as e:
         print(f"TTS生成失败: {e}")
         return MessageChain([])
