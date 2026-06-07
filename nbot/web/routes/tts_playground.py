@@ -64,6 +64,7 @@ def register_tts_playground_routes(app, server):
         """Return the list of available TTS voices based on provider."""
         try:
             from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
+            from nbot.services.tts_adapters.doubao_adapter import DOUBAO_VOICES
 
             request_model_id = request.args.get("model_id", "")
             tts_config = get_tts_config_from_server(server, request_model_id)
@@ -71,6 +72,8 @@ def register_tts_playground_routes(app, server):
 
             if provider == "xiaomi":
                 voices = list(XIAOMI_VOICES)
+            elif provider in ("doubao", "volcengine"):
+                voices = list(DOUBAO_VOICES)
             else:
                 voices = list(VOICE_CATALOG)
                 custom_voices = _get_custom_voices(server.data_dir)
@@ -96,6 +99,7 @@ def register_tts_playground_routes(app, server):
 
             from nbot.services.tts_adapters import get_adapter
             from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
+            from nbot.services.tts_adapters.doubao_adapter import DOUBAO_VOICES
 
             tts_config = get_tts_config_from_server(server, request_model_id)
             if not tts_config.get("api_key"):
@@ -110,6 +114,10 @@ def register_tts_playground_routes(app, server):
                 xiaomi_voice_ids = frozenset(v["id"] for v in XIAOMI_VOICES)
                 if voice_to_use not in xiaomi_voice_ids:
                     voice_to_use = "mimo_default"
+            elif provider in ("doubao", "volcengine"):
+                doubao_voice_ids = frozenset(v["id"] for v in DOUBAO_VOICES)
+                if voice_to_use not in doubao_voice_ids:
+                    voice_to_use = "zh_female_shuangkuaisisi_moon_bigtts"
             else:
                 voice_to_use = voice_to_use.strip().lower() if voice_to_use else "alloy"
                 custom_voices = _get_custom_voices(server.data_dir)

@@ -34,6 +34,7 @@ def normalize_tts_config(model_config: dict) -> dict:
         "tts_upload_url": model_config.get("tts_upload_url") or "",
         "tts_headers": model_config.get("tts_headers") or "",
         "tts_body_template": model_config.get("tts_body_template") or "",
+        "tts_resource_id": model_config.get("tts_resource_id") or "",
     }
 
 
@@ -78,4 +79,5 @@ def get_tts_config() -> dict:
         "tts_upload_url": "",
         "tts_headers": "",
         "tts_body_template": "",
+        "tts_resource_id": "",
     }
