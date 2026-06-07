@@ -6820,30 +6820,34 @@
                         </div>
 
                         <!-- Current TTS Config Info -->
-                        <div v-if="activeModelsByPurpose.tts && activeModelsByPurpose.tts.model" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
+                        <div v-if="selectedTTSModel" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
                             <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
                                 <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">配置名称</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.name }}</div>
-                            </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">模型</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.model || 'N/A' }}</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.name }}</div>
                             </div>
                             <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
                                 <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">提供商</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.provider || 'N/A' }}</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_provider || 'openai' }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">TTS Model</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_model || selectedTTSModel.model || 'N/A' }}</div>
                             </div>
                             <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
                                 <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">{{ $t('ai_config.voice') }}</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ (activeModelsByPurpose.tts.model.voice || 'default').trim() }}</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ (selectedTTSModel.tts_voice || 'default').trim() }}</div>
                             </div>
                             <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
                                 <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">{{ $t('ai_config.speed') }}</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ activeModelsByPurpose.tts.model.speed || 1.0 }}</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_speed || 1.0 }}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
+                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Format</div>
+                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_format || 'mp3' }}</div>
                             </div>
                             <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
                                 <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Base URL</div>
-                                <div style="font-weight: 600; font-size: 12px; color: var(--text-primary, #111); word-break: break-all;">{{ activeModelsByPurpose.tts.model.base_url || 'N/A' }}</div>
+                                <div style="font-weight: 600; font-size: 12px; color: var(--text-primary, #111); word-break: break-all;">{{ selectedTTSModel.base_url || 'N/A' }}</div>
                             </div>
                         </div>
                         <div v-else class="card" style="margin-bottom: 16px;">
@@ -11189,6 +11193,12 @@
                         debug: '调试台'
                     };
                     return titles[this.currentPage] || 'NekoBot';
+                },
+
+                selectedTTSModel() {
+                    const models = (this.ttsPlayground && this.ttsPlayground.models) || [];
+                    const selId = this.ttsPlayground && this.ttsPlayground.selectedModelId;
+                    return models.find(m => m.id === selId) || models[0] || null;
                 },
 
                 isChatOnlyMode() {

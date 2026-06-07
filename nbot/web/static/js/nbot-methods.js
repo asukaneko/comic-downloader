@@ -6470,11 +6470,11 @@ def main(params):
                     }
                 },
 
-                onTTSModelChange() {
+                async onTTSModelChange() {
                     this.stopTTSAudio();
                     this.ttsPlayground.currentAudioUrl = '';
                     this.ttsPlayground.lastGeneratedAt = null;
-                    this.loadTTSVoices();
+                    await this.loadTTSVoices();
                 },
 
                 async previewTTSVoice() {
