@@ -164,6 +164,39 @@ def _preload_stt_model():
         _log.warning("Failed to preload faster-whisper model: %s", exc)
 
 
+def _get_stt_config_for_adapter(server) -> dict:
+    """Resolve STT config from web server state for adapter calls."""
+    from nbot.services.tts_config import normalize_stt_config
+
+    models = getattr(server, "ai_models", []) or []
+    active_model_id = (
+        (getattr(server, "active_models_by_purpose", {}) or {}).get("stt")
+    )
+
+    if active_model_id:
+        for model in models:
+            if model.get("id") == active_model_id and model.get("enabled", True):
+                return normalize_stt_config(model)
+
+    for model in models:
+        if model.get("purpose", "chat") == "stt" and model.get("enabled", True):
+            return normalize_stt_config(model)
+
+    # 没有云端 STT 配置，回退到本地配置
+    local_cfg = _get_local_stt_config()
+    return {
+        "api_key": "",
+        "base_url": "",
+        "provider_type": "local" if local_cfg["enabled"] else "",
+        "stt_provider": "local" if local_cfg["enabled"] else "",
+        "stt_model": local_cfg["model_name"],
+        "stt_language": local_cfg["language"],
+        "device": local_cfg["device"],
+        "compute_type": local_cfg["compute_type"],
+        "beam_size": local_cfg["beam_size"],
+    }
+
+
 def register_voice_routes(app, server):
     """Register voice-related API routes."""
     _configure_model_root(server.data_dir)
@@ -263,13 +296,8 @@ def register_voice_routes(app, server):
 
     @app.route("/api/stt/transcribe", methods=["POST"])
     def stt_transcribe():
-        """Transcribe recorded audio with a local faster-whisper model."""
+        """Transcribe recorded audio using the configured STT adapter."""
         try:
-            if not _get_local_stt_config()["enabled"]:
-                return jsonify({
-                    "error": "Local STT is disabled. Set [stt] local_enabled = true in config.ini to enable voice transcription."
-                }), 400
-
             if "audio" not in request.files:
                 return jsonify({"error": "No audio file provided"}), 400
 
@@ -282,22 +310,26 @@ def register_voice_routes(app, server):
             audio_file.save(temp_path)
 
             try:
-                model, config = _ensure_stt_model_loaded()
-                language = requested_language or config["language"]
-                beam_size = config["beam_size"]
+                stt_config = _get_stt_config_for_adapter(server)
+                provider = stt_config.get("stt_provider") or stt_config.get("provider_type", "")
 
-                segments, info = model.transcribe(
-                    temp_path,
-                    beam_size=beam_size,
-                    language=language,
-                )
-                text = "".join(segment.text for segment in segments).strip()
+                # 如果没有配置云端 STT，回退到本地 faster-whisper
+                if not provider or provider in ("local", "faster_whisper"):
+                    if not _get_local_stt_config()["enabled"]:
+                        return jsonify({
+                            "error": "STT 未配置。请在 AI 模型中添加 stt 类型的模型，"
+                                     "或在 config.ini 中设置 [stt] local_enabled = true 启用本地识别。"
+                        }), 400
+
+                from nbot.services.stt_adapters import get_adapter
+                adapter = get_adapter(provider)
+                text = adapter.transcribe(temp_path, stt_config, requested_language)
 
                 return jsonify({
                     "success": True,
                     "text": text,
-                    "language": getattr(info, "language", language) or language,
-                    "model": config["model_name"],
+                    "language": requested_language,
+                    "provider": provider or "local",
                 })
             finally:
                 try:

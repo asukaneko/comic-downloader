@@ -5032,15 +5032,32 @@
                                     <!-- STT特有配置 -->
                                     <template v-if="modelForm.purpose === 'stt'">
                                         <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
-                                            <label class="form-label" style="color: var(--primary-color); font-weight: 600;">🎤 STT特有配置</label>
+                                            <label class="form-label" style="color: var(--primary-color); font-weight: 600;">🎤 STT 基础配置</label>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">STT 提供商</label>
+                                            <select v-model="modelForm.stt_provider" class="form-select">
+                                                <option value="">跟随 provider_type</option>
+                                                <option value="openai">OpenAI 兼容</option>
+                                                <option value="xiaomi">小米 MiMo</option>
+                                                <option value="local">本地 faster-whisper</option>
+                                            </select>
+                                            <div class="form-hint">选择 STT 服务提供商，适配器会自动映射 API 参数。
+                                                <template v-if="modelForm.stt_provider === 'openai' || (!modelForm.stt_provider && modelForm.provider_type === 'openai_compatible')">Base URL 后自动补 <code>/v1/audio/transcriptions</code>，需填写 <code>api_key</code></template>
+                                                <template v-else-if="modelForm.stt_provider === 'xiaomi'">请求地址为 Base URL + <code>/chat/completions</code>，需填写 <code>api_key</code>，模型为 <code>mimo-v2.5-asr</code></template>
+                                                <template v-else-if="modelForm.stt_provider === 'local'">使用本地 faster-whisper 模型，无需 API Key</template>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">STT 模型名</label>
+                                            <input v-model="modelForm.stt_model" type="text" class="form-input" placeholder="留空则使用上方「模型」字段">
+                                            <div class="form-hint">独立的 STT 模型名，如 whisper-1、mimo-v2.5-asr 等</div>
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label">识别语言</label>
                                             <select v-model="modelForm.language" class="form-select">
                                                 <option value="zh">中文</option>
                                                 <option value="en">英文</option>
-                                                <option value="ja">日文</option>
-                                                <option value="ko">韩文</option>
                                                 <option value="auto">自动检测</option>
                                             </select>
                                         </div>

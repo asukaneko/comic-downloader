@@ -51,7 +51,11 @@ DEFAULT_PURPOSE_CONFIGS = {
     },
     "stt": {
         "language": "zh",
-        "model": "tiny"
+        "model": "tiny",
+        "stt_provider": "",
+        "stt_model": "",
+        "stt_url": "",
+        "stt_headers": ""
     },
     "embedding": {
         "model": "text-embedding-3-small",
@@ -138,6 +142,12 @@ def register_ai_model_routes(app, server):
             "tts_headers": data.get("tts_headers", ""),
             "tts_body_template": data.get("tts_body_template", ""),
             "language": data.get("language", default_config.get("language", "zh")),
+            # STT 统一配置字段
+            "stt_provider": data.get("stt_provider", ""),
+            "stt_url": data.get("stt_url", ""),
+            "stt_model": data.get("stt_model", ""),
+            "stt_language": data.get("stt_language", data.get("language", default_config.get("language", "zh"))),
+            "stt_headers": data.get("stt_headers", ""),
             "dimensions": data.get("dimensions", default_config.get("dimensions", 1536)),
             # 故障转移优先级（数值越小优先级越高）
             "priority": data.get("priority", 0),
@@ -248,6 +258,12 @@ def register_ai_model_routes(app, server):
             model["tts_headers"] = data.get("tts_headers", model.get("tts_headers", ""))
             model["tts_body_template"] = data.get("tts_body_template", model.get("tts_body_template", ""))
             model["language"] = data.get("language", model.get("language", "zh"))
+            # STT 统一配置字段
+            model["stt_provider"] = data.get("stt_provider", model.get("stt_provider", ""))
+            model["stt_url"] = data.get("stt_url", model.get("stt_url", ""))
+            model["stt_model"] = data.get("stt_model", model.get("stt_model", ""))
+            model["stt_language"] = data.get("stt_language", model.get("stt_language", model.get("language", "zh")))
+            model["stt_headers"] = data.get("stt_headers", model.get("stt_headers", ""))
             model["dimensions"] = data.get("dimensions", model.get("dimensions", 1536))
             # 故障转移优先级
             model["priority"] = data.get("priority", model.get("priority", 0))
@@ -698,6 +714,47 @@ def register_ai_model_routes(app, server):
                         adapter.synthesize("Hello", test_config, tmp_path)
                         elapsed_ms = round((time.time() - start_time) * 1000)
                         return jsonify({"success": True, "message": "TTS connection successful", "elapsed_ms": elapsed_ms})
+                    finally:
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
+
+                # STT 模型使用适配器测试
+                elif purpose == "stt":
+                    from nbot.services.stt_adapters import get_adapter
+                    from nbot.services.tts_config import normalize_stt_config
+
+                    stt_config = normalize_stt_config(model)
+                    stt_provider = stt_config.get("stt_provider") or stt_config.get("provider_type", "")
+                    adapter = get_adapter(stt_provider)
+
+                    # 生成一个最小的静音 WAV 文件用于测试连接
+                    import struct
+                    import tempfile
+
+                    sample_rate = 16000
+                    duration_ms = 100
+                    num_samples = sample_rate * duration_ms // 1000
+                    # WAV header + 16-bit PCM silence
+                    wav_data = b"RIFF"
+                    wav_data += struct.pack("<I", 36 + num_samples * 2)
+                    wav_data += b"WAVE"
+                    wav_data += b"fmt "
+                    wav_data += struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
+                    wav_data += b"data"
+                    wav_data += struct.pack("<I", num_samples * 2)
+                    wav_data += b"\x00" * (num_samples * 2)
+
+                    fd, tmp_path = tempfile.mkstemp(suffix=".wav")
+                    os.close(fd)
+
+                    try:
+                        with open(tmp_path, "wb") as f:
+                            f.write(wav_data)
+                        adapter.transcribe(tmp_path, stt_config, "zh")
+                        elapsed_ms = round((time.time() - start_time) * 1000)
+                        return jsonify({"success": True, "message": "STT connection successful", "elapsed_ms": elapsed_ms})
                     finally:
                         try:
                             os.unlink(tmp_path)

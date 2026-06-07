@@ -1,7 +1,7 @@
-"""TTS configuration helpers shared by QQ and Web code paths."""
+"""TTS/STT configuration helpers shared by QQ and Web code paths."""
 import configparser
 
-from nbot.web.utils.config_loader import get_tts_model_config, resolve_runtime_api_key
+from nbot.web.utils.config_loader import get_tts_model_config, get_stt_model_config, resolve_runtime_api_key
 
 config_parser = configparser.ConfigParser()
 config_parser.read("config.ini", encoding="utf-8")
@@ -80,4 +80,32 @@ def get_tts_config() -> dict:
         "tts_headers": "",
         "tts_body_template": "",
         "tts_resource_id": "",
+    }
+
+
+def normalize_stt_config(model_config: dict) -> dict:
+    """Return normalized STT settings for a raw model or purpose config."""
+    model_config = model_config or {}
+    provider_type = model_config.get("provider_type", "openai_compatible")
+    api_key = resolve_runtime_api_key(model_config.get("api_key", ""), provider_type)
+    return {
+        "api_key": api_key,
+        "base_url": model_config.get("base_url") or "",
+        "provider_type": provider_type,
+        "stt_provider": model_config.get("stt_provider", ""),
+        "stt_url": model_config.get("stt_url") or "",
+        "stt_model": (
+            model_config.get("stt_model")
+            or model_config.get("model")
+            or "whisper-1"
+        ),
+        "stt_language": (
+            model_config.get("stt_language")
+            or model_config.get("language")
+            or "zh"
+        ),
+        "stt_headers": model_config.get("stt_headers") or "",
+        "device": model_config.get("device") or "",
+        "compute_type": model_config.get("compute_type") or "",
+        "beam_size": model_config.get("beam_size") or 5,
     }

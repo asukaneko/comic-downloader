@@ -11690,7 +11690,11 @@ def main(params):
                             supports_tools: false,
                             supports_reasoning: false,
                             supports_stream: false,
-                            language: 'zh'
+                            language: 'zh',
+                            stt_provider: '',
+                            stt_model: '',
+                            stt_url: '',
+                            stt_headers: ''
                         },
                         embedding: {
                             supports_tools: false,
@@ -12151,6 +12155,10 @@ def main(params):
                             tts_body_template: model.tts_body_template || '',
                             tts_resource_id: model.tts_resource_id || '',
                             language: model.language || 'zh',
+                            stt_provider: model.stt_provider || '',
+                            stt_model: model.stt_model || '',
+                            stt_url: model.stt_url || '',
+                            stt_headers: model.stt_headers || '',
                             dimensions: model.dimensions || 1536,
                             prompt_template: model.prompt_template || '',
                             selectedApiKeyId: ''
@@ -12221,6 +12229,10 @@ def main(params):
                             tts_body_template: '',
                             tts_resource_id: '',
                             language: 'zh',
+                            stt_provider: '',
+                            stt_model: '',
+                            stt_url: '',
+                            stt_headers: '',
                             dimensions: 1536,
                             // 图片生成特有配置
                             prompt_template: 'Create an anime-style character portrait of {character_name}.'

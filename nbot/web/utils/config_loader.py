@@ -289,6 +289,11 @@ def get_model_config_by_purpose(purpose: str) -> dict:
             elif purpose == "stt":
                 config.update({
                     "language": model.get("language", "zh"),
+                    "stt_provider": model.get("stt_provider", ""),
+                    "stt_url": model.get("stt_url", ""),
+                    "stt_model": model.get("stt_model", ""),
+                    "stt_language": model.get("stt_language", model.get("language", "zh")),
+                    "stt_headers": model.get("stt_headers", ""),
                 })
             elif purpose == "embedding":
                 config.update({
@@ -469,6 +474,11 @@ def get_stt_model_config() -> dict:
         "device": local_config["device"],
         "compute_type": local_config["compute_type"],
         "beam_size": local_config["beam_size"],
+        "stt_provider": "",
+        "stt_url": "",
+        "stt_model": "",
+        "stt_language": local_config["language"],
+        "stt_headers": "",
     }
 
 
