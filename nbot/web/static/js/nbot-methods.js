@@ -6372,6 +6372,10 @@ def main(params):
 
                 async startRecording() {
                     try {
+                        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                            this.showToast('当前环境不支持麦克风访问（需要 HTTPS 或 localhost）', 'error');
+                            return;
+                        }
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                         this.mediaRecorder = new MediaRecorder(stream);
                         this.audioChunks = [];

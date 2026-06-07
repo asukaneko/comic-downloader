@@ -14119,6 +14119,22 @@
             color: #64748b;
         }
 
+        /* 滑动开关行容器（与 form-input 视觉一致） */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 8px 14px;
+        }
+        .toggle-row-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            user-select: none;
+        }
+
         /* 滑动开关 */
         .toggle-switch {
             position: relative;

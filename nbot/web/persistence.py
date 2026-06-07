@@ -314,6 +314,10 @@ def init_default_data(server):
         "public_base_url": "",
         "role_card_platform_url": "http://127.0.0.1:7861",
         "role_card_platform_token": "",
+        "ssl_enabled": False,
+        "ssl_self_signed": False,
+        "ssl_certfile": "",
+        "ssl_keyfile": "",
         "features": {
             "ai": True,
             "memory": True,

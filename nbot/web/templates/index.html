@@ -6306,6 +6306,40 @@
                                         <div class="form-hint">用于 QQ/外部客户端访问签名文件链接；保存后立即生效。</div>
                                     </div>
                                 </div>
+                                <div class="grid-2" style="margin-top: 16px;">
+                                    <div class="form-group">
+                                        <label class="form-label">启用 HTTPS (SSL)</label>
+                                        <div class="toggle-row">
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" v-model="settings.ssl_enabled">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <span class="toggle-row-label" v-text="settings.ssl_enabled ? '已开启' : '已关闭'"></span>
+                                        </div>
+                                        <div class="form-hint">保存后需重启服务生效</div>
+                                    </div>
+                                    <div class="form-group" v-if="settings.ssl_enabled">
+                                        <label class="form-label">使用自签名证书</label>
+                                        <div class="toggle-row">
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" v-model="settings.ssl_self_signed">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                            <span class="toggle-row-label" v-text="settings.ssl_self_signed ? '已开启' : '已关闭'"></span>
+                                        </div>
+                                        <div class="form-hint">自动生成自签名证书（有效期 10 年），无需手动提供证书文件</div>
+                                    </div>
+                                    <div class="form-group" v-if="settings.ssl_enabled && !settings.ssl_self_signed">
+                                        <label class="form-label">SSL 证书文件路径</label>
+                                        <input v-model="settings.ssl_certfile" type="text" class="form-input" placeholder="/path/to/cert.pem">
+                                        <div class="form-hint">PEM 格式证书文件的绝对路径</div>
+                                    </div>
+                                    <div class="form-group" v-if="settings.ssl_enabled && !settings.ssl_self_signed">
+                                        <label class="form-label">SSL 私钥文件路径</label>
+                                        <input v-model="settings.ssl_keyfile" type="text" class="form-input" placeholder="/path/to/key.pem">
+                                        <div class="form-hint">PEM 格式私钥文件的绝对路径</div>
+                                    </div>
+                                </div>
                                 <div class="form-group" style="margin-top: 20px;">
                                     <label class="form-label">角色卡平台</label>
                                     <div class="grid-2">
@@ -10949,6 +10983,10 @@
                         public_base_url: '',
                         role_card_platform_url: 'http://127.0.0.1:7861',
                         role_card_platform_token: '',
+                        ssl_enabled: false,
+                        ssl_self_signed: false,
+                        ssl_certfile: '',
+                        ssl_keyfile: '',
                         log_cleanup: {
                             enabled: false,
                             include_logs_dir: true,

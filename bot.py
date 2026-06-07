@@ -55,6 +55,100 @@ _apply_runtime_ncatbot_config()
 _log = get_log()
 
 
+def _generate_self_signed_cert(cert_dir: str) -> tuple:
+    """生成自签名 SSL 证书，返回 (cert_path, key_path)。
+
+    如果证书已存在且未过期，则复用。
+    """
+    import datetime
+
+    cert_path = os.path.join(cert_dir, "selfsigned_cert.pem")
+    key_path = os.path.join(cert_dir, "selfsigned_key.pem")
+
+    # 检查已有证书是否有效（未过期）
+    if os.path.isfile(cert_path) and os.path.isfile(key_path):
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives import serialization
+
+            with open(cert_path, "rb") as f:
+                cert = x509.load_pem_x509_certificate(f.read())
+            if cert.not_valid_after_utc > datetime.datetime.now(datetime.timezone.utc):
+                _log.info("Reusing existing self-signed certificate (not expired)")
+                return cert_path, key_path
+            else:
+                _log.info("Existing self-signed certificate expired, regenerating...")
+        except Exception:
+            _log.info("Cannot read existing certificate, regenerating...")
+
+    try:
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        import ipaddress
+
+        # 生成 RSA 私钥
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+        # 构建证书主体
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COMMON_NAME, "NcatBot"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "NcatBot Self-Signed"),
+        ])
+
+        # 构建 SAN（Subject Alternative Names）
+        san_list = [
+            x509.DNSName("localhost"),
+            x509.DNSName("127.0.0.1"),
+            x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+            x509.IPAddress(ipaddress.IPv4Address("0.0.0.0")),
+        ]
+        # 尝试添加主机名
+        try:
+            san_list.append(x509.DNSName(os.uname().nodename))
+        except Exception:
+            pass
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(subject)
+            .issuer_name(issuer)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now)
+            .not_valid_after(now + datetime.timedelta(days=3650))  # 10 年有效期
+            .add_extension(x509.SubjectAlternativeName(san_list), critical=False)
+            .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+            .sign(key, hashes.SHA256())
+        )
+
+        os.makedirs(cert_dir, exist_ok=True)
+
+        # 写入证书
+        with open(cert_path, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+        # 写入私钥
+        with open(key_path, "wb") as f:
+            f.write(key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption(),
+            ))
+
+        _log.info(f"Self-signed certificate generated: {cert_path}")
+        return cert_path, key_path
+
+    except ImportError:
+        _log.error("cryptography library not installed. Run: pip install cryptography")
+        return None, None
+    except Exception as e:
+        _log.error(f"Failed to generate self-signed certificate: {e}")
+        return None, None
+
+
 def print_startup_banner(version: str, mode: str):
     """Rich 启动横幅，失败时回退到纯文本。"""
     try:
@@ -148,10 +242,11 @@ def _prepare_web_server(bot=None):
     return app, socketio, web_server
 
 
-def start_web_server(host="0.0.0.0", port=5000, bot=None, prepared=None):
+def start_web_server(host="0.0.0.0", port=5000, bot=None, prepared=None, ssl_context=None):
     global web_server_instance
     try:
-        _log.info(f"Starting Web Chat Server on {host}:{port}...")
+        proto = "https" if ssl_context else "http"
+        _log.info(f"Starting Web Chat Server on {proto}://{host}:{port}...")
         if prepared is None:
             app, socketio, web_server = _prepare_web_server(bot=bot)
         else:
@@ -169,6 +264,7 @@ def start_web_server(host="0.0.0.0", port=5000, bot=None, prepared=None):
             debug=False,
             allow_unsafe_werkzeug=True,
             log_output=False,
+            ssl_context=ssl_context,
         )
     except ImportError as e:
         _web_server_started.set()
@@ -205,7 +301,7 @@ def run_cli():
         print(f"\nCLI错误: {e}")
 
 
-def run_cli_and_web(host="0.0.0.0", port=5000):
+def run_cli_and_web(host="0.0.0.0", port=5000, ssl_context=None):
     """同时启动 CLI 和 Web"""
     _log.info("Starting NekoBot CLI and Web Dashboard...")
 
@@ -215,7 +311,7 @@ def run_cli_and_web(host="0.0.0.0", port=5000):
     # 启动 Web 服务器线程
     web_thread = threading.Thread(
         target=start_web_server,
-        args=(host, port, None, prepared),
+        args=(host, port, None, prepared, ssl_context),
         name="web-server",
         daemon=True,
     )
@@ -225,7 +321,7 @@ def run_cli_and_web(host="0.0.0.0", port=5000):
     run_cli()
 
 
-def run_bot_with_mcp(host="0.0.0.0", port=5000, no_web=False):
+def run_bot_with_mcp(host="0.0.0.0", port=5000, no_web=False, ssl_context=None):
     """同时启动 Bot + MCP Server
 
     Bot 在后台线程运行，MCP Server 在主线程运行（stdio 模式）。
@@ -251,12 +347,13 @@ def run_bot_with_mcp(host="0.0.0.0", port=5000, no_web=False):
             prepared = _prepare_web_server(bot=None)
             web_thread = threading.Thread(
                 target=start_web_server,
-                args=(host, port, None, prepared),
+                args=(host, port, None, prepared, ssl_context),
                 name="web-server",
                 daemon=True,
             )
             web_thread.start()
-            _log.info(f"Web Dashboard starting on {host}:{port}")
+            proto = "https" if ssl_context else "http"
+            _log.info(f"Web Dashboard starting on {proto}://{host}:{port}")
         except Exception as e:
             _log.warning(f"Web server failed to start: {e}")
 
@@ -441,6 +538,8 @@ if __name__ == "__main__":
 
     mcp_connect_url = ""
     port_from_cli = False
+    ssl_cert_cli = ""
+    ssl_key_cli = ""
     for i, arg in enumerate(sys.argv):
         if arg == "--web-port" and i + 1 < len(sys.argv):
             web_port = int(sys.argv[i + 1])
@@ -449,8 +548,13 @@ if __name__ == "__main__":
             web_host = sys.argv[i + 1]
         if arg == "--mcp-connect" and i + 1 < len(sys.argv):
             mcp_connect_url = sys.argv[i + 1]
+        if arg == "--ssl-cert" and i + 1 < len(sys.argv):
+            ssl_cert_cli = sys.argv[i + 1]
+        if arg == "--ssl-key" and i + 1 < len(sys.argv):
+            ssl_key_cli = sys.argv[i + 1]
 
     # 如果命令行未指定端口，尝试从 settings.json 读取
+    ssl_context = None
     if not port_from_cli:
         try:
             import json as _json
@@ -461,8 +565,68 @@ if __name__ == "__main__":
                     _saved_port = _saved_settings.get("web_port")
                     if _saved_port and str(_saved_port).isdigit():
                         web_port = int(_saved_port)
+                    # 读取 SSL 配置（命令行参数优先）
+                    if not ssl_cert_cli and not ssl_key_cli and _saved_settings.get("ssl_enabled"):
+                        if _saved_settings.get("ssl_self_signed"):
+                            # 自签名模式
+                            _cert, _key = _generate_self_signed_cert(os.path.join("data", "web", "ssl"))
+                            if _cert and _key:
+                                ssl_context = (_cert, _key)
+                        else:
+                            _cert = _saved_settings.get("ssl_certfile", "")
+                            _key = _saved_settings.get("ssl_keyfile", "")
+                            if _cert and _key and os.path.isfile(_cert) and os.path.isfile(_key):
+                                ssl_context = (_cert, _key)
+                                _log.info(f"SSL enabled from settings: cert={_cert}, key={_key}")
+                            elif _cert or _key:
+                                _log.warning("SSL certfile or keyfile not found, falling back to HTTP")
         except Exception:
             pass
+
+    # 从 .env / config.ini 读取 HTTPS 配置（settings.json 未启用时）
+    if not ssl_context and not ssl_cert_cli and not ssl_key_cli:
+        _https_env = os.getenv("HTTPS", "").strip().lower()
+        _cert_env = os.getenv("SSL_CERTFILE", "").strip()
+        _key_env = os.getenv("SSL_KEYFILE", "").strip()
+        _self_signed_env = os.getenv("SSL_SELF_SIGNED", "").strip().lower()
+
+        # 如果 .env 没有，尝试 config.ini
+        if not _https_env and not _cert_env:
+            try:
+                import configparser
+                _cp = configparser.ConfigParser()
+                _cp.read("config.ini", encoding="utf-8")
+                _https_env = _cp.get("HTTPS", "enabled", fallback="").strip().lower()
+                _cert_env = _cp.get("HTTPS", "certfile", fallback="").strip()
+                _key_env = _cp.get("HTTPS", "keyfile", fallback="").strip()
+                _self_signed_env = _cp.get("HTTPS", "self_signed", fallback="").strip().lower()
+            except Exception:
+                pass
+
+        if _https_env in ("true", "1", "yes", "on"):
+            if _self_signed_env in ("true", "1", "yes", "on"):
+                _cert, _key = _generate_self_signed_cert(os.path.join("data", "web", "ssl"))
+                if _cert and _key:
+                    ssl_context = (_cert, _key)
+            elif _cert_env and _key_env:
+                if os.path.isfile(_cert_env) and os.path.isfile(_key_env):
+                    ssl_context = (_cert_env, _key_env)
+                    _log.info(f"SSL enabled from env/config: cert={_cert_env}, key={_key_env}")
+                else:
+                    _log.warning(f"SSL cert/key file not found: {_cert_env}, {_key_env}")
+            else:
+                # HTTPS=true 但没有指定证书，自动使用自签名
+                _cert, _key = _generate_self_signed_cert(os.path.join("data", "web", "ssl"))
+                if _cert and _key:
+                    ssl_context = (_cert, _key)
+
+    # 命令行 SSL 参数（优先级最高）
+    if ssl_cert_cli and ssl_key_cli:
+        if os.path.isfile(ssl_cert_cli) and os.path.isfile(ssl_key_cli):
+            ssl_context = (ssl_cert_cli, ssl_key_cli)
+            _log.info(f"SSL enabled from CLI: cert={ssl_cert_cli}, key={ssl_key_cli}")
+        else:
+            _log.warning(f"CLI SSL cert/key file not found: {ssl_cert_cli}, {ssl_key_cli}")
 
     # ── 启动横幅 ──
     from nbot.version import __version__
@@ -508,10 +672,10 @@ if __name__ == "__main__":
         run_mcp_only()
     elif mcp_mode:
         # Bot + MCP 模式 - Bot 后台运行，MCP Server 主线程 stdio
-        run_bot_with_mcp(host=web_host, port=web_port, no_web=web_disabled)
+        run_bot_with_mcp(host=web_host, port=web_port, no_web=web_disabled, ssl_context=ssl_context)
     elif cli_and_web:
         # CLI + Web 模式 - 同时启动命令行和 Web 界面
-        run_cli_and_web(host=web_host, port=web_port)
+        run_cli_and_web(host=web_host, port=web_port, ssl_context=ssl_context)
     elif cli_mode:
         # CLI模式 - 启动命令行界面
         run_cli()
@@ -521,7 +685,7 @@ if __name__ == "__main__":
     elif only_web:
         _log.info("Starting NekoBot Web Dashboard only (QQ disabled)...")
         prepared = _prepare_web_server(bot=None)
-        start_web_server(host=web_host, port=web_port, bot=None, prepared=prepared)
+        start_web_server(host=web_host, port=web_port, bot=None, prepared=prepared, ssl_context=ssl_context)
     else:
         # 检查是否配置了QQ机器人
         if _has_qq_bot_config():
@@ -533,9 +697,9 @@ if __name__ == "__main__":
                 daemon=True,
             )
             bot_thread.start()
-            start_web_server(host=web_host, port=web_port, bot=None, prepared=prepared)
+            start_web_server(host=web_host, port=web_port, bot=None, prepared=prepared, ssl_context=ssl_context)
         else:
             _log.info("No QQ bot config found, starting Web Dashboard only...")
             _log.info("To enable QQ bot, set BOT_UIN and WS_URI in .env or config.ini")
             prepared = _prepare_web_server(bot=None)
-            start_web_server(host=web_host, port=web_port, bot=None, prepared=prepared)
+            start_web_server(host=web_host, port=web_port, bot=None, prepared=prepared, ssl_context=ssl_context)
