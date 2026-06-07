@@ -1376,7 +1376,7 @@
                                         <div
                                             class="message"
                                             :data-message-id="msg.id || ''"
-                                            :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg), 'favorite-selecting': messageFavoriteMode, 'favorite-selected': isMessageSelectedForFavorite(msg), 'search-highlight': highlightedSearchMessageId === msg.id, 'has-voice-bar': msg.role === 'assistant' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id]) }]"
+                                            :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg), 'favorite-selecting': messageFavoriteMode, 'favorite-selected': isMessageSelectedForFavorite(msg), 'search-highlight': highlightedSearchMessageId === msg.id }]"
                                         >
                                             <button
                                                 v-if="messageFavoriteMode && msg.id"
@@ -1503,6 +1503,55 @@
                                                         </button>
                                                     </div>
                                                 </div>
+                                                <!-- TTS 语音条（内嵌在气泡底部） -->
+                                                <div
+                                                    v-if="msg.role === 'assistant' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id])"
+                                                    class="voice-bar"
+                                                    :class="{
+                                                        'voice-bar-generating': ttsAudioStates[msg.id]?.status === 'generating',
+                                                        'voice-bar-playing': ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying,
+                                                        'voice-bar-error': ttsAudioStates[msg.id]?.status === 'error'
+                                                    }"
+                                                >
+                                                    <button
+                                                        type="button"
+                                                        class="voice-bar-btn"
+                                                        :disabled="ttsAudioStates[msg.id]?.status === 'generating'"
+                                                        @click.stop="toggleMessageAudio(msg)"
+                                                        :title="ttsAudioStates[msg.id]?.status === 'generating' ? '生成中' : (ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying ? '暂停' : '播放')"
+                                                    >
+                                                        <i
+                                                            :class="ttsAudioStates[msg.id]?.status === 'generating'
+                                                                ? 'fas fa-spinner fa-spin'
+                                                                : ((ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying) ? 'fas fa-pause' : 'fas fa-play')"
+                                                            style="font-size: 11px;"
+                                                        ></i>
+                                                    </button>
+                                                    <div class="voice-bar-core" @click.stop="toggleMessageAudio(msg)">
+                                                        <div class="voice-bar-waves">
+                                                            <span class="voice-bar-wave" v-for="i in 7" :key="i" :style="{ animationDelay: (i * 0.08) + 's' }"></span>
+                                                        </div>
+                                                        <span class="voice-bar-label">
+                                                            {{ ttsAudioStates[msg.id]?.status === 'generating'
+                                                                ? '语音生成中...'
+                                                                : (ttsAudioStates[msg.id]?.status === 'error'
+                                                                    ? '生成失败'
+                                                                    : ((ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying) ? '播放中...' : '语音消息')) }}
+                                                        </span>
+                                                    </div>
+                                                    <span v-if="ttsAudioUrls[msg.id] && ttsAudioStates[msg.id]?.duration" class="voice-bar-duration">
+                                                        {{ formatAudioDuration(ttsAudioStates[msg.id].duration) }}
+                                                    </span>
+                                                    <button
+                                                        v-if="ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying"
+                                                        type="button"
+                                                        class="voice-bar-end"
+                                                        @click.stop="stopMessageAudio(msg)"
+                                                        title="结束播放"
+                                                    >
+                                                        <i class="fas fa-stop"></i>
+                                                    </button>
+                                                </div>
                                                 <!-- 消息操作栏（只对 assistant 消息显示） -->
                                                 <div v-if="msg.role === 'assistant'" class="msg-actions" :class="{ 'msg-actions-always': isOpeningMessage(msg) }">
                                                     <button class="msg-action-btn" @click="copyMessage(msg)" title="复制">
@@ -1523,55 +1572,6 @@
                                                     </button>
                                                 </div>
                                             </div>
-                                            <!-- TTS 语音条（气泡外，左对齐） -->
-                                            <div
-                                                v-if="msg.role === 'assistant' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id])"
-                                                class="voice-bar"
-                                                :class="{
-                                                    'voice-bar-generating': ttsAudioStates[msg.id]?.status === 'generating',
-                                                    'voice-bar-playing': ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying,
-                                                    'voice-bar-error': ttsAudioStates[msg.id]?.status === 'error'
-                                                }"
-                                            >
-                                                <button
-                                                    type="button"
-                                                    class="voice-bar-btn"
-                                                    :disabled="ttsAudioStates[msg.id]?.status === 'generating'"
-                                                    @click.stop="toggleMessageAudio(msg)"
-                                                    :title="ttsAudioStates[msg.id]?.status === 'generating' ? '生成中' : (ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying ? '暂停' : '播放')"
-                                                >
-                                                    <i
-                                                        :class="ttsAudioStates[msg.id]?.status === 'generating'
-                                                            ? 'fas fa-spinner fa-spin'
-                                                            : ((ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying) ? 'fas fa-pause' : 'fas fa-play')"
-                                                        style="font-size: 12px;"
-                                                    ></i>
-                                                </button>
-                                                <div class="voice-bar-core" @click.stop="toggleMessageAudio(msg)">
-                                                    <div class="voice-bar-waves">
-                                                        <span class="voice-bar-wave" v-for="i in 7" :key="i" :style="{ animationDelay: (i * 0.08) + 's' }"></span>
-                                                    </div>
-                                                    <span class="voice-bar-label">
-                                                        {{ ttsAudioStates[msg.id]?.status === 'generating'
-                                                            ? '语音生成中...'
-                                                            : (ttsAudioStates[msg.id]?.status === 'error'
-                                                                ? '生成失败'
-                                                                : ((ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying) ? '播放中...' : '语音消息')) }}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    v-if="ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying"
-                                                    type="button"
-                                                    class="voice-bar-end"
-                                                    @click.stop="stopMessageAudio(msg)"
-                                                    title="结束播放"
-                                                >
-                                                    <i class="fas fa-stop"></i>
-                                                    <span>结束</span>
-                                                </button>
-                                                <span class="voice-bar-label">{{ msg._audioPlaying ? '播放中...' : '语音消息' }}</span>
-                                            </div>
-                                        </div>
                                         <!-- 该消息关联的进度卡片（在消息下方独立显示） -->
                                         <div v-if="showThinkingCard && msg.thinking_cards && msg.thinking_cards.length > 0" class="message-thinking-cards-wrapper">
                                             <div class="thinking-cards-container message-thinking-cards">

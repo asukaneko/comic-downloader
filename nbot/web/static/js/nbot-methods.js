@@ -5576,6 +5576,16 @@ def main(params):
                                     ...this.ttsAudioStates,
                                     [m.id]: { status: 'ready', audioUrl: m.audio_url }
                                 };
+                                // 预加载音频时长
+                                const preAudio = new Audio(m.audio_url);
+                                preAudio.addEventListener('loadedmetadata', () => {
+                                    if (preAudio.duration && isFinite(preAudio.duration)) {
+                                        this.ttsAudioStates = {
+                                            ...this.ttsAudioStates,
+                                            [m.id]: { ...(this.ttsAudioStates[m.id] || {}), status: 'ready', audioUrl: m.audio_url, duration: preAudio.duration }
+                                        };
+                                    }
+                                });
                             }
                         });
                         // 同步消息数到会话列表，确保切换后显示正确的消息数
@@ -6676,11 +6686,22 @@ def main(params):
                         ...this.ttsAudioStates,
                         [msg.id]: { status: 'playing', audioUrl }
                     };
+                    // 捕获音频时长
+                    const captureDuration = () => {
+                        if (audio.duration && isFinite(audio.duration)) {
+                            this.ttsAudioStates = {
+                                ...this.ttsAudioStates,
+                                [msg.id]: { ...(this.ttsAudioStates[msg.id] || {}), audioUrl, duration: audio.duration }
+                            };
+                        }
+                    };
+                    audio.addEventListener('loadedmetadata', captureDuration);
+                    if (audio.readyState >= 1) captureDuration();
                     audio.onended = () => {
                         msg._audioPlaying = false;
                         this.ttsAudioStates = {
                             ...this.ttsAudioStates,
-                            [msg.id]: { status: 'ready', audioUrl }
+                            [msg.id]: { status: 'ready', audioUrl, duration: audio.duration }
                         };
                     };
                     audio.onerror = () => {
@@ -6717,6 +6738,14 @@ def main(params):
                             [msg.id]: { status: 'ready', audioUrl }
                         };
                     }
+                },
+
+                // TTS: 格式化音频时长 (秒 → m:ss)
+                formatAudioDuration(seconds) {
+                    if (!seconds || !isFinite(seconds)) return '';
+                    const m = Math.floor(seconds / 60);
+                    const s = Math.floor(seconds % 60);
+                    return m + ':' + (s < 10 ? '0' : '') + s;
                 },
 
                 handleVoiceUploadFile(event) {

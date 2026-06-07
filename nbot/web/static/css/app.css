@@ -23948,58 +23948,66 @@
     color: white;
 }
 
+/* ============================================
+   语音条 - 内嵌在气泡底部的 Footer 样式
+   ============================================ */
+
 .voice-bar {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 8px;
-    min-width: 168px;
-    max-width: min(360px, calc(100vw - 96px));
-    min-height: 38px;
-    margin-top: 8px;
-    margin-left: 60px;
-    padding: 6px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    border-radius: 999px;
-    background: linear-gradient(135deg, #16a085 0%, #2f80ed 100%);
-    box-shadow: 0 10px 24px rgba(47, 128, 237, 0.22);
-    color: #fff;
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+    margin-top: 12px;
+    margin-left: -18px;
+    margin-right: -18px;
+    padding: 10px 18px 10px 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.85);
     user-select: none;
-    order: 99;
-    flex-basis: 100%;
 }
 
-.message.assistant.has-voice-bar {
-    align-items: flex-start;
-    flex-wrap: wrap;
-}
-
-.message.assistant.has-voice-bar .message-avatar {
-    flex: 0 0 auto;
-}
-
-.message.assistant.has-voice-bar .message-content {
-    max-width: calc(100% - 60px);
-}
-
-.message.assistant.has-voice-bar::after {
-    content: "";
-    flex: 0 0 100%;
-    height: 0;
-    order: 98;
-}
-
-.message.assistant.has-voice-bar .voice-bar {
-    flex: 0 1 auto;
-    width: fit-content;
+/* 微妙的发光分隔线 */
+.voice-bar::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 20px;
+    right: 20px;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(88, 166, 255, 0.25) 30%,
+        rgba(88, 166, 255, 0.25) 70%,
+        transparent 100%
+    );
+    pointer-events: none;
 }
 
 .voice-bar-generating {
-    background: linear-gradient(135deg, #64748b 0%, #0f766e 100%);
-    animation: voiceBarPulse 1.3s ease-in-out infinite;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.voice-bar-generating .voice-bar-btn {
+    background: rgba(88, 166, 255, 0.2);
+}
+
+.voice-bar-playing {
+    background: rgba(88, 166, 255, 0.08);
+}
+
+.voice-bar-playing .voice-bar-btn {
+    background: rgba(88, 166, 255, 0.25);
+    box-shadow: 0 0 8px rgba(88, 166, 255, 0.2);
 }
 
 .voice-bar-error {
-    background: linear-gradient(135deg, #991b1b 0%, #dc2626 100%);
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.voice-bar-error .voice-bar-btn {
+    background: rgba(220, 38, 38, 0.2);
 }
 
 .voice-bar-core {
@@ -24007,6 +24015,7 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex: 1;
     cursor: pointer;
 }
 
@@ -24015,75 +24024,107 @@
 }
 
 .voice-bar-btn,
-.voice-bar-end {
-    border: 0;
-    color: #fff;
-    cursor: pointer;
+.voice-bar-end,
+.voice-bar-core {
+    -webkit-tap-highlight-color: transparent;
 }
 
 .voice-bar-btn {
-    width: 28px;
-    height: 28px;
+    border: 0;
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    width: 26px;
+    height: 26px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.24);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.voice-bar-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .voice-bar-btn:disabled {
     cursor: default;
-    opacity: 0.9;
+    opacity: 0.7;
+}
+
+.voice-bar-btn:disabled:hover {
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .voice-bar-end {
+    border: 0;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.18);
-    font-size: 12px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+    transition: background 0.2s;
+}
+
+.voice-bar-end:hover {
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .voice-bar-waves {
     display: inline-flex;
     align-items: center;
     gap: 2px;
-    height: 20px;
+    height: 18px;
 }
 
 .voice-bar-wave {
     display: inline-block;
-    width: 3px;
-    height: 5px;
+    width: 2.5px;
+    height: 4px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.58);
+    background: rgba(88, 166, 255, 0.5);
+    transition: background 0.2s;
 }
 
-.voice-bar-generating .voice-bar-wave,
 .voice-bar-playing .voice-bar-wave {
+    background: rgba(88, 166, 255, 0.85);
+    animation: voiceWave 0.76s ease-in-out infinite alternate;
+}
+
+.voice-bar-generating .voice-bar-wave {
+    background: rgba(255, 255, 255, 0.35);
     animation: voiceWave 0.76s ease-in-out infinite alternate;
 }
 
 .voice-bar-label {
     overflow: hidden;
-    color: rgba(255, 255, 255, 0.9);
+    color: rgba(255, 255, 255, 0.6);
     font-size: 12px;
     line-height: 1;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-@keyframes voiceBarPulse {
-    0%, 100% { box-shadow: 0 10px 24px rgba(15, 118, 110, 0.18); }
-    50% { box-shadow: 0 12px 30px rgba(15, 118, 110, 0.36); }
+.voice-bar-playing .voice-bar-label {
+    color: rgba(88, 166, 255, 0.9);
+}
+
+.voice-bar-duration {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
 }
 
 @keyframes voiceWave {
-    0% { height: 5px; opacity: 0.45; }
-    50% { height: 17px; opacity: 1; }
-    100% { height: 8px; opacity: 0.7; }
+    0% { height: 4px; opacity: 0.4; }
+    50% { height: 14px; opacity: 1; }
+    100% { height: 6px; opacity: 0.65; }
 }
