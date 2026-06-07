@@ -353,7 +353,9 @@ class AIClient:
                 provider_type=cfg_pt,
             )
             try:
-                resp = requests.post(cfg_url, json=cfg_payload, headers=cfg_headers, timeout=120)
+                # failover_timeout: 0 表示使用默认 120s
+                request_timeout = cfg.get("failover_timeout", 0) or 120
+                resp = requests.post(cfg_url, json=cfg_payload, headers=cfg_headers, timeout=request_timeout)
                 resp.raise_for_status()
                 data = response_json_utf8(resp)
                 failover.record_success(mid)

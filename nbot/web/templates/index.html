@@ -5237,6 +5237,12 @@
                                                         <div class="fo-token-bar-value">{{ formatTokenCount(item.token_usage?.weekly_total || 0) }} / {{ formatTokenCount(item.token_limit_weekly) }}</div>
                                                     </div>
                                                 </div>
+                                                <!-- 超时标签 -->
+                                                <div v-if="item.failover_timeout" style="margin-top: 4px;">
+                                                    <span style="font-size: 11px; color: var(--text-muted); background: var(--bg-secondary, #f0f0f0); padding: 1px 6px; border-radius: 4px;">
+                                                        <i class="fas fa-clock" style="margin-right: 3px;"></i>超时 {{ item.failover_timeout }}s
+                                                    </span>
+                                                </div>
                                             </div>
                                             <div class="fo-queue-actions" @click.stop>
                                                 <button class="fo-arrow-btn" :disabled="index === 0" @click="moveQueueItem(index, -1)" title="优先级提高">
@@ -5348,6 +5354,20 @@
                                                 <div style="display: flex; gap: 6px; align-items: center;">
                                                     <input type="number" v-model.number="failoverDetail.token_limit_weekly" min="0" class="form-input" style="flex: 1; font-size: 12px; padding: 4px 8px;" placeholder="0 = 不限制">
                                                 </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- 故障转移超时设置 -->
+                                    <div class="fo-detail-section">
+                                        <div class="fo-detail-title"><i class="fas fa-clock"></i> 超时设置</div>
+                                        <div style="margin-top: 8px;">
+                                            <label style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; display: block;">故障转移超时（秒）</label>
+                                            <div style="display: flex; gap: 6px; align-items: center;">
+                                                <input type="number" v-model.number="failoverDetail.failover_timeout" min="0" class="form-input" style="flex: 1; font-size: 12px; padding: 4px 8px;" placeholder="0 = 使用默认 120s">
+                                                <span style="font-size: 11px; color: var(--text-muted); white-space: nowrap;">秒</span>
+                                            </div>
+                                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+                                                超过此时间未响应将自动切换到下一个模型，0 表示使用默认 120 秒
                                             </div>
                                         </div>
                                     </div>

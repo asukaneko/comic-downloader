@@ -11911,6 +11911,7 @@ def main(params):
                             model_id: this.failoverDetail.model_id,
                             token_limit_daily: this.failoverDetail.token_limit_daily || 0,
                             token_limit_weekly: this.failoverDetail.token_limit_weekly || 0,
+                            failover_timeout: this.failoverDetail.failover_timeout || 0,
                         });
                         this.showToast('Token 限额已保存', 'success');
                         this.showFailoverDetailModal = false;

@@ -346,6 +346,7 @@ def get_model_configs_by_purpose(purpose: str) -> list:
             "supports_stream": model.get("supports_stream", True),
             "token_limit_daily": model.get("token_limit_daily", 0) or 0,
             "token_limit_weekly": model.get("token_limit_weekly", 0) or 0,
+            "failover_timeout": model.get("failover_timeout", 0) or 0,
             "name": model.get("name", ""),
             "_order": idx,
         }

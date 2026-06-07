@@ -1314,8 +1314,10 @@ class AIPipeline:
                     base_url=base_url,
                     provider_type=provider_type,
                 )
+                # 使用模型配置的 failover_timeout，0 表示使用默认 120s
+                request_timeout = config.get("failover_timeout", 0) or 120
                 resp = requests.post(
-                    url, json=payload, headers=headers, timeout=120
+                    url, json=payload, headers=headers, timeout=request_timeout
                 )
                 resp.raise_for_status()
                 normalized = protocol.parse_response(

@@ -141,6 +141,8 @@ def register_ai_model_routes(app, server):
             "dimensions": data.get("dimensions", default_config.get("dimensions", 1536)),
             # 故障转移优先级（数值越小优先级越高）
             "priority": data.get("priority", 0),
+            # 故障转移超时（秒），0 表示使用默认 120s
+            "failover_timeout": data.get("failover_timeout", 0) or 0,
             # 图片生成特有配置
             "size": data.get("size", default_config.get("size", "1024x1024")),
             "prompt_template": data.get("prompt_template", ""),
@@ -249,6 +251,11 @@ def register_ai_model_routes(app, server):
             model["dimensions"] = data.get("dimensions", model.get("dimensions", 1536))
             # 故障转移优先级
             model["priority"] = data.get("priority", model.get("priority", 0))
+            # 故障转移超时（秒）
+            model["failover_timeout"] = data.get(
+                "failover_timeout",
+                model.get("failover_timeout", 0),
+            ) or 0
             # 图片生成特有配置
             model["size"] = data.get("size", model.get("size", "1024x1024"))
             model["prompt_template"] = data.get("prompt_template", model.get("prompt_template", ""))
@@ -817,6 +824,7 @@ def register_ai_model_routes(app, server):
                 "health": health.get(mid, {}),
                 "token_limit_daily": cfg.get("token_limit_daily", 0) or 0,
                 "token_limit_weekly": cfg.get("token_limit_weekly", 0) or 0,
+                "failover_timeout": cfg.get("failover_timeout", 0) or 0,
                 "token_usage": token_usage,
             })
 
@@ -901,6 +909,7 @@ def register_ai_model_routes(app, server):
             "health": health,
             "token_limit_daily": model.get("token_limit_daily", 0) or 0,
             "token_limit_weekly": model.get("token_limit_weekly", 0) or 0,
+            "failover_timeout": model.get("failover_timeout", 0) or 0,
             "token_usage": token_usage,
             "input_price": model.get("input_price"),
             "output_price": model.get("output_price"),
@@ -924,6 +933,8 @@ def register_ai_model_routes(app, server):
             model["token_limit_daily"] = max(0, int(data["token_limit_daily"] or 0))
         if "token_limit_weekly" in data:
             model["token_limit_weekly"] = max(0, int(data["token_limit_weekly"] or 0))
+        if "failover_timeout" in data:
+            model["failover_timeout"] = max(0, int(data["failover_timeout"] or 0))
 
         server._save_data("ai_models")
         return jsonify({"success": True})
