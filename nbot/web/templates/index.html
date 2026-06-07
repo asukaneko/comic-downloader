@@ -1376,7 +1376,7 @@
                                         <div
                                             class="message"
                                             :data-message-id="msg.id || ''"
-                                            :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg), 'favorite-selecting': messageFavoriteMode, 'favorite-selected': isMessageSelectedForFavorite(msg), 'search-highlight': highlightedSearchMessageId === msg.id }]"
+                                            :class="[msg.role, { 'is-progress': isProgressMessage(msg), 'dragon-bone-message': isStreamAwaiting(msg), 'favorite-selecting': messageFavoriteMode, 'favorite-selected': isMessageSelectedForFavorite(msg), 'search-highlight': highlightedSearchMessageId === msg.id, 'has-voice-bar': msg.role === 'assistant' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id]) }]"
                                         >
                                             <button
                                                 v-if="messageFavoriteMode && msg.id"
@@ -1426,11 +1426,6 @@
                                                     :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming }"
                                                     v-html="renderMessageBody(msg)"
                                                 ></div>
-                                                <!-- TTS 音频胶囊 -->
-                                                <div v-if="msg.role === 'assistant' && ttsAudioUrls[msg.id]" class="message-audio-capsule" @click="toggleMessageAudio(msg)">
-                                                    <i :class="msg._audioPlaying ? 'fas fa-pause-circle' : 'fas fa-play-circle'" style="font-size: 18px;"></i>
-                                                    <span>{{ msg._audioPlaying ? '暂停' : '播放语音' }}</span>
-                                                </div>
                                                 <!-- 用户消息编辑态：直接在原位置替换 -->
                                                 <div v-if="msg.role === 'user' && editingMessageId === msg.id" class="user-edit-inline" @click.stop>
                                                     <textarea v-model="editingMessageContent" class="user-edit-textarea" rows="2" @keydown.enter.ctrl="confirmEditMessage(msg)" @keydown.escape="cancelEditMessage()"></textarea>
@@ -1527,6 +1522,54 @@
                                                         <i class="fas fa-play"></i> 继续
                                                     </button>
                                                 </div>
+                                            </div>
+                                            <!-- TTS 语音条（气泡外，左对齐） -->
+                                            <div
+                                                v-if="msg.role === 'assistant' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id])"
+                                                class="voice-bar"
+                                                :class="{
+                                                    'voice-bar-generating': ttsAudioStates[msg.id]?.status === 'generating',
+                                                    'voice-bar-playing': ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying,
+                                                    'voice-bar-error': ttsAudioStates[msg.id]?.status === 'error'
+                                                }"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    class="voice-bar-btn"
+                                                    :disabled="ttsAudioStates[msg.id]?.status === 'generating'"
+                                                    @click.stop="toggleMessageAudio(msg)"
+                                                    :title="ttsAudioStates[msg.id]?.status === 'generating' ? '生成中' : (ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying ? '暂停' : '播放')"
+                                                >
+                                                    <i
+                                                        :class="ttsAudioStates[msg.id]?.status === 'generating'
+                                                            ? 'fas fa-spinner fa-spin'
+                                                            : ((ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying) ? 'fas fa-pause' : 'fas fa-play')"
+                                                        style="font-size: 12px;"
+                                                    ></i>
+                                                </button>
+                                                <div class="voice-bar-core" @click.stop="toggleMessageAudio(msg)">
+                                                    <div class="voice-bar-waves">
+                                                        <span class="voice-bar-wave" v-for="i in 7" :key="i" :style="{ animationDelay: (i * 0.08) + 's' }"></span>
+                                                    </div>
+                                                    <span class="voice-bar-label">
+                                                        {{ ttsAudioStates[msg.id]?.status === 'generating'
+                                                            ? '语音生成中...'
+                                                            : (ttsAudioStates[msg.id]?.status === 'error'
+                                                                ? '生成失败'
+                                                                : ((ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying) ? '播放中...' : '语音消息')) }}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    v-if="ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying"
+                                                    type="button"
+                                                    class="voice-bar-end"
+                                                    @click.stop="stopMessageAudio(msg)"
+                                                    title="结束播放"
+                                                >
+                                                    <i class="fas fa-stop"></i>
+                                                    <span>结束</span>
+                                                </button>
+                                                <span class="voice-bar-label">{{ msg._audioPlaying ? '播放中...' : '语音消息' }}</span>
                                             </div>
                                         </div>
                                         <!-- 该消息关联的进度卡片（在消息下方独立显示） -->
@@ -7069,27 +7112,64 @@
                                 border: none;
                                 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                             }
-                            .message-audio-capsule {
+                            .voice-bar {
                                 display: inline-flex;
                                 align-items: center;
-                                gap: 6px;
+                                gap: 8px;
                                 margin-top: 6px;
-                                padding: 5px 14px;
-                                background: var(--bg-secondary, #f0f0f0);
-                                border: 1px solid var(--border-color, #e5e7eb);
+                                padding: 7px 14px;
+                                background: linear-gradient(135deg, var(--primary-color, #4f46e5) 0%, #7c3aed 100%);
                                 border-radius: 20px;
-                                font-size: 13px;
-                                color: var(--primary-color, #4f46e5);
                                 cursor: pointer;
-                                transition: background 0.2s, transform 0.1s;
                                 user-select: none;
+                                transition: transform 0.15s, box-shadow 0.15s;
+                                box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
+                                min-width: 140px;
+                                flex-basis: 100%;
+                                margin-left: 60px;
+                                order: 99;
                             }
-                            .message-audio-capsule:hover {
-                                background: var(--primary-color-light, #eef2ff);
-                                transform: scale(1.02);
+                            .voice-bar:hover {
+                                transform: translateY(-1px);
+                                box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
                             }
-                            .message-audio-capsule:active {
-                                transform: scale(0.98);
+                            .voice-bar:active { transform: scale(0.97); }
+                            .voice-bar-btn {
+                                width: 28px; height: 28px;
+                                display: flex; align-items: center; justify-content: center;
+                                background: rgba(255,255,255,0.25);
+                                border-radius: 50%;
+                                color: #fff;
+                                flex-shrink: 0;
+                                transition: background 0.2s;
+                            }
+                            .voice-bar:hover .voice-bar-btn { background: rgba(255,255,255,0.35); }
+                            .voice-bar-waves {
+                                display: flex;
+                                align-items: center;
+                                gap: 2px;
+                                height: 20px;
+                            }
+                            .voice-bar-wave {
+                                display: inline-block;
+                                width: 3px;
+                                height: 4px;
+                                background: rgba(255,255,255,0.6);
+                                border-radius: 2px;
+                                transition: height 0.1s;
+                            }
+                            .voice-bar-playing .voice-bar-wave {
+                                animation: voiceWave 0.8s ease-in-out infinite alternate;
+                            }
+                            @keyframes voiceWave {
+                                0% { height: 4px; background: rgba(255,255,255,0.4); }
+                                50% { height: 16px; background: rgba(255,255,255,0.9); }
+                                100% { height: 8px; background: rgba(255,255,255,0.6); }
+                            }
+                            .voice-bar-label {
+                                font-size: 12px;
+                                color: rgba(255,255,255,0.85);
+                                white-space: nowrap;
                             }
                         </style>
                     </div>
@@ -10508,6 +10588,8 @@
                     ttsEnabled: localStorage.getItem('ttsEnabled') === 'true' || false,
                     // TTS 音频 URL 存储（按消息 ID 索引，避免被 Object.assign 覆盖）
                     ttsAudioUrls: {},
+                    ttsAudioStates: {},
+                    ttsAudioPlayers: {},
                     // TTS 音色缓存（按 model_id 索引）
                     ttsVoicesCache: {},
                     // TTS 试验场

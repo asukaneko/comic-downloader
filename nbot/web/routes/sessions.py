@@ -1742,6 +1742,8 @@ def register_session_routes(app, server):
             messages[target_idx]["sender"] = data.get("sender") or ""
         if "timestamp" in data:
             messages[target_idx]["timestamp"] = data.get("timestamp") or datetime.now().isoformat()
+        if "audio_url" in data:
+            messages[target_idx]["audio_url"] = data.get("audio_url") or ""
 
         # 截断该消息之后的所有消息
         if data.get("truncate_after"):

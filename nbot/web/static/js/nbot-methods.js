@@ -5566,6 +5566,18 @@ def main(params):
                             }
                         });
                         this.currentMessages = normalizedMessages;
+                        // 恢复已持久化的 TTS 音频 URL
+                        normalizedMessages.forEach(m => {
+                            if (m.audio_url && !this.ttsAudioUrls[m.id]) {
+                                this.ttsAudioUrls[m.id] = m.audio_url;
+                            }
+                            if (m.audio_url && !this.ttsAudioStates[m.id]) {
+                                this.ttsAudioStates = {
+                                    ...this.ttsAudioStates,
+                                    [m.id]: { status: 'ready', audioUrl: m.audio_url }
+                                };
+                            }
+                        });
                         // 同步消息数到会话列表，确保切换后显示正确的消息数
                         this.syncCurrentSessionMessageCount();
                         this.updateContextStats();
@@ -6559,6 +6571,10 @@ def main(params):
                 async synthesizeMessageTTS(messageId, ttsCfg) {
                     const msg = this.currentMessages.find(m => m.id === messageId);
                     if (!msg || !msg.content) return;
+                    this.ttsAudioStates = {
+                        ...this.ttsAudioStates,
+                        [messageId]: { status: 'generating' }
+                    };
                     // 去除 markdown 格式，保留纯文本
                     let text = msg.content
                         .replace(/```[\s\S]*?```/g, '')
@@ -6566,7 +6582,11 @@ def main(params):
                         .replace(/[#*_~>|\-\[\]()!]/g, '')
                         .replace(/\n{2,}/g, '\n')
                         .trim();
-                    if (!text) return;
+                    if (!text) {
+                        const { [messageId]: _removed, ...nextTtsAudioStates } = this.ttsAudioStates;
+                        this.ttsAudioStates = nextTtsAudioStates;
+                        return;
+                    }
                     // 截断过长文本
                     if (text.length > 2000) text = text.slice(0, 2000);
                     try {
@@ -6578,32 +6598,125 @@ def main(params):
                         if (res.data && res.data.success && res.data.audio_url) {
                             // 存储到独立 Map，避免被 Object.assign 覆盖
                             this.ttsAudioUrls[messageId] = res.data.audio_url;
+                            this.ttsAudioStates = {
+                                ...this.ttsAudioStates,
+                                [messageId]: {
+                                    status: 'ready',
+                                    audioUrl: res.data.audio_url
+                                }
+                            };
+                            // 持久化到后端消息
+                            const sessionId = this.currentSession?.id;
+                            if (sessionId) {
+                                try {
+                                    await api.put(`/api/sessions/${sessionId}/messages/${messageId}`, {
+                                        audio_url: res.data.audio_url
+                                    });
+                                } catch (pe) {
+                                    console.warn('Failed to persist TTS audio_url:', pe);
+                                }
+                            }
+                        } else {
+                            this.ttsAudioStates = {
+                                ...this.ttsAudioStates,
+                                [messageId]: { status: 'error' }
+                            };
                         }
                     } catch (e) {
+                        this.ttsAudioStates = {
+                            ...this.ttsAudioStates,
+                            [messageId]: { status: 'error' }
+                        };
                         console.warn('TTS synthesis failed:', e);
                     }
                 },
 
                 // TTS: 播放/暂停消息音频
                 toggleMessageAudio(msg) {
+                    if (this.ttsAudioStates[msg.id]?.status === 'generating') return;
                     const audioUrl = this.ttsAudioUrls[msg.id];
                     if (!audioUrl) return;
-                    if (msg._audioEl) {
-                        if (msg._audioPlaying) {
-                            msg._audioEl.pause();
+                    let audio = this.ttsAudioPlayers[msg.id] || msg._audioEl;
+                    if (audio) {
+                        const isMarkedPlaying = (
+                            this.ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying
+                        );
+                        if (isMarkedPlaying || (!audio.paused && !audio.ended)) {
+                            audio.pause();
                             msg._audioPlaying = false;
+                            this.ttsAudioStates = {
+                                ...this.ttsAudioStates,
+                                [msg.id]: { status: 'ready', audioUrl }
+                            };
                         } else {
-                            msg._audioEl.play();
                             msg._audioPlaying = true;
+                            this.ttsAudioStates = {
+                                ...this.ttsAudioStates,
+                                [msg.id]: { status: 'playing', audioUrl }
+                            };
+                            const playPromise = audio.play();
+                            if (playPromise && typeof playPromise.catch === 'function') {
+                                playPromise.catch(() => {
+                                    if (this.ttsAudioStates[msg.id]?.status !== 'playing') return;
+                                    msg._audioPlaying = false;
+                                    this.ttsAudioStates = {
+                                        ...this.ttsAudioStates,
+                                        [msg.id]: { status: 'error', audioUrl }
+                                    };
+                                });
+                            }
                         }
                         return;
                     }
-                    const audio = new Audio(audioUrl);
+                    audio = new Audio(audioUrl);
+                    this.ttsAudioPlayers[msg.id] = audio;
                     msg._audioEl = audio;
                     msg._audioPlaying = true;
-                    audio.play();
-                    audio.onended = () => { msg._audioPlaying = false; };
-                    audio.onerror = () => { msg._audioPlaying = false; };
+                    this.ttsAudioStates = {
+                        ...this.ttsAudioStates,
+                        [msg.id]: { status: 'playing', audioUrl }
+                    };
+                    audio.onended = () => {
+                        msg._audioPlaying = false;
+                        this.ttsAudioStates = {
+                            ...this.ttsAudioStates,
+                            [msg.id]: { status: 'ready', audioUrl }
+                        };
+                    };
+                    audio.onerror = () => {
+                        msg._audioPlaying = false;
+                        this.ttsAudioStates = {
+                            ...this.ttsAudioStates,
+                            [msg.id]: { status: 'error', audioUrl }
+                        };
+                    };
+                    const playPromise = audio.play();
+                    if (playPromise && typeof playPromise.catch === 'function') {
+                        playPromise.catch(() => {
+                            if (this.ttsAudioStates[msg.id]?.status !== 'playing') return;
+                            msg._audioPlaying = false;
+                            this.ttsAudioStates = {
+                                ...this.ttsAudioStates,
+                                [msg.id]: { status: 'error', audioUrl }
+                            };
+                        });
+                    }
+                },
+
+                stopMessageAudio(msg) {
+                    const audioUrl = this.ttsAudioUrls[msg.id];
+                    const audio = this.ttsAudioPlayers[msg.id] || msg._audioEl;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    }
+                    msg._audioPlaying = false;
+                    if (audioUrl) {
+                        this.ttsAudioStates = {
+                            ...this.ttsAudioStates,
+                            [msg.id]: { status: 'ready', audioUrl }
+                        };
+                    }
                 },
 
                 handleVoiceUploadFile(event) {
