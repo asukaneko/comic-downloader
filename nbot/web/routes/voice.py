@@ -6,7 +6,7 @@ import os
 import threading
 import time
 
-from flask import jsonify, request, send_file
+from flask import Response, jsonify, request, send_file, send_from_directory
 from werkzeug.utils import safe_join
 
 from nbot.services.tts_config import get_tts_config_from_server
@@ -236,10 +236,11 @@ def register_voice_routes(app, server):
     def tts_audio(filename):
         """Serve generated TTS audio files."""
         try:
-            temp_dir = os.path.join(server.data_dir, "tts_cache")
+            temp_dir = os.path.abspath(os.path.join(server.data_dir, "tts_cache"))
             file_path = _resolve_cached_audio_path(temp_dir, filename)
 
             if not file_path or not os.path.exists(file_path):
+                _log.warning(f"TTS audio not found: dir={temp_dir}, file={filename}, resolved={file_path}")
                 return jsonify({"error": "Audio file not found"}), 404
 
             # 根据扩展名选择 mimetype
@@ -252,7 +253,10 @@ def register_voice_routes(app, server):
                 ".ogg": "audio/ogg",
             }
             mimetype = mime_map.get(ext, "audio/mpeg")
-            return send_file(file_path, mimetype=mimetype)
+            # 直接读取文件返回，兼容 Docker 各种路径配置
+            with open(file_path, "rb") as f:
+                audio_data = f.read()
+            return Response(audio_data, mimetype=mimetype)
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500

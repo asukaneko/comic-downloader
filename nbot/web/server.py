@@ -2860,6 +2860,8 @@ class WebChatServer:
                 return None
             if path.startswith("/api/channels/telegram/") and path.endswith("/webhook"):
                 return None
+            if path.startswith("/api/tts/audio/"):
+                return None
 
             token = self._extract_request_token()
             username = self._validate_login_token(token)
