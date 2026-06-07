@@ -4977,7 +4977,23 @@
                                                 <option value="xiaomi">小米 MiMo</option>
                                                 <option value="doubao">豆包（火山引擎）</option>
                                             </select>
-                                            <div class="form-hint">选择 TTS 服务提供商，适配器会自动映射 API 参数</div>
+                                            <div class="form-hint">选择 TTS 服务提供商，适配器会自动映射 API 参数。
+                                                <template v-if="modelForm.tts_provider === 'openai'">Base URL 后自动补 <code>/v1/audio/speech</code>，需填写 <code>api_key</code></template>
+                                                <template v-else-if="modelForm.tts_provider === 'xiaomi'">请求地址为 Base URL + <code>/chat/completions</code>，需填写 <code>api_key</code></template>
+                                                <template v-else-if="modelForm.tts_provider === 'doubao'">请求地址为 <code>https://openspeech.bytedance.com/api/v3/tts/unidirectional</code>，需填写 <code>api_key</code>（火山引擎控制台获取），可选填 <code>tts_resource_id</code>（默认 <code>seed-tts-2.0</code>）</template>
+                                            </div>
+                                        </div>
+                                        <div class="form-group" v-if="modelForm.tts_provider === 'doubao'">
+                                            <label class="form-label">Resource ID</label>
+                                            <select v-model="modelForm.tts_resource_id" class="form-select">
+                                                <option value="">seed-tts-2.0（默认）</option>
+                                                <option value="seed-tts-2.0">seed-tts-2.0 - TTS 2.0 音色</option>
+                                                <option value="seed-tts-1.0">seed-tts-1.0 - TTS 1.0 音色（按字符计费）</option>
+                                                <option value="seed-tts-1.0-concurr">seed-tts-1.0-concurr - TTS 1.0 音色（按并发计费）</option>
+                                                <option value="seed-icl-2.0">seed-icl-2.0 - 声音复刻 2.0</option>
+                                                <option value="seed-icl-1.0">seed-icl-1.0 - 声音复刻 1.0</option>
+                                            </select>
+                                            <div class="form-hint">选择模型版本，影响可用音色和计费方式</div>
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label">TTS 模型名</label>
@@ -10697,6 +10713,7 @@
                         tts_upload_url: '',
                         tts_headers: '',
                         tts_body_template: '',
+                        tts_resource_id: '',
                         // STT/Embedding
                         language: 'zh',
                         dimensions: 1536

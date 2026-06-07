@@ -12119,6 +12119,7 @@ def main(params):
                             tts_upload_url: model.tts_upload_url || '',
                             tts_headers: model.tts_headers || '',
                             tts_body_template: model.tts_body_template || '',
+                            tts_resource_id: model.tts_resource_id || '',
                             language: model.language || 'zh',
                             dimensions: model.dimensions || 1536,
                             prompt_template: model.prompt_template || '',
@@ -12188,6 +12189,7 @@ def main(params):
                             tts_upload_url: '',
                             tts_headers: '',
                             tts_body_template: '',
+                            tts_resource_id: '',
                             language: 'zh',
                             dimensions: 1536,
                             // 图片生成特有配置
