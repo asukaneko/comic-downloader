@@ -29,6 +29,7 @@ NekoBot 是一个面向角色扮演与长期互动场景的 AI 系统。项目�
 - 模型适配：兼容 OpenAI Chat Completions/Responses , Anthropic , Gemini接口，可接入 Deepseek、GLM、Kimi、Mimo及其他兼容服务。
 - 插件与技能：支持通过插件与技能系统扩展能力，而不破坏核心处理流程。
 - MCP 接口：通过 Model Context Protocol 暴露 Gateway 能力，支持 Claude Code、Cursor、ChatGPT Agent 等 AI 智能体直接调用。
+- 语音能力：内置可插拔 TTS/STT 适配器架构，TTS 支持 OpenAI 兼容、小米 MiMo、豆包（火山引擎）等提供商，STT 支持 OpenAI 兼容、小米 MiMo 及本地 faster-whisper 离线识别。
 
 ## Architecture
 
@@ -222,6 +223,8 @@ CI 主要执行：
 - 快速开始：[docs/docs/guide/quick-start.md](docs/docs/guide/quick-start.md)
 - 命令说明：[docs/docs/guide/commands.md](docs/docs/guide/commands.md)
 - 频道接入：[docs/docs/guide/channels.md](docs/docs/guide/channels.md)
+- 语音合成 (TTS)：[docs/docs/guide/nbot/services/tts.md](docs/docs/guide/nbot/services/tts.md)
+- 语音识别 (STT)：[docs/docs/guide/nbot/services/stt.md](docs/docs/guide/nbot/services/stt.md)
 - 贡献指南：[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - 更新记录：[docs/CHANGELOG.md](docs/CHANGELOG.md)
 

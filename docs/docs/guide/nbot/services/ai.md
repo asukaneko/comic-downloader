@@ -114,10 +114,10 @@ vision_config = get_vision_model_config()
 # 视频理解模型
 video_config = get_video_model_config()
 
-# TTS 模型
+# TTS 模型（详见 tts - 语音合成）
 tts_config = get_tts_model_config()
 
-# STT 模型
+# STT 模型（详见 stt - 语音识别）
 stt_config = get_stt_model_config()
 
 # 嵌入模型
@@ -149,3 +149,9 @@ GEMINI_API_KEY=xxx
 MINIMAX_API_KEY=xxx
 SILICON_API_KEY=xxx
 ```
+
+## 相关页面
+
+- [tts - 语音合成](./tts.md) — TTS 适配器架构与配置
+- [stt - 语音识别](./stt.md) — STT 适配器架构与配置
+- [protocols - 多协议适配](../core/protocols.md) — 底层协议适配层
