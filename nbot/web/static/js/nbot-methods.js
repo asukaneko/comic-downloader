@@ -6555,6 +6555,57 @@ def main(params):
                     this.ttsPlayground.isPlaying = false;
                 },
 
+                // TTS: 合成消息语音
+                async synthesizeMessageTTS(messageId, ttsCfg) {
+                    const msg = this.currentMessages.find(m => m.id === messageId);
+                    if (!msg || !msg.content) return;
+                    // 去除 markdown 格式，保留纯文本
+                    let text = msg.content
+                        .replace(/```[\s\S]*?```/g, '')
+                        .replace(/`[^`]*`/g, '')
+                        .replace(/[#*_~>|\-\[\]()!]/g, '')
+                        .replace(/\n{2,}/g, '\n')
+                        .trim();
+                    if (!text) return;
+                    // 截断过长文本
+                    if (text.length > 2000) text = text.slice(0, 2000);
+                    try {
+                        const res = await api.post('/api/tts/synthesize', {
+                            text: text,
+                            model_id: ttsCfg.model_id || '',
+                            voice: ttsCfg.voice || '',
+                        });
+                        if (res.data && res.data.success && res.data.audio_url) {
+                            // 存储到独立 Map，避免被 Object.assign 覆盖
+                            this.ttsAudioUrls[messageId] = res.data.audio_url;
+                        }
+                    } catch (e) {
+                        console.warn('TTS synthesis failed:', e);
+                    }
+                },
+
+                // TTS: 播放/暂停消息音频
+                toggleMessageAudio(msg) {
+                    const audioUrl = this.ttsAudioUrls[msg.id];
+                    if (!audioUrl) return;
+                    if (msg._audioEl) {
+                        if (msg._audioPlaying) {
+                            msg._audioEl.pause();
+                            msg._audioPlaying = false;
+                        } else {
+                            msg._audioEl.play();
+                            msg._audioPlaying = true;
+                        }
+                        return;
+                    }
+                    const audio = new Audio(audioUrl);
+                    msg._audioEl = audio;
+                    msg._audioPlaying = true;
+                    audio.play();
+                    audio.onended = () => { msg._audioPlaying = false; };
+                    audio.onerror = () => { msg._audioPlaying = false; };
+                },
+
                 handleVoiceUploadFile(event) {
                     const file = event.target.files[0];
                     this.ttsPlayground.uploadFile = file || null;
@@ -7001,6 +7052,7 @@ def main(params):
                                 visible_only: true,
                                 ...(fullSession.proactive_chat || session.proactive_chat || {})
                             },
+                            tts_config: fullSession.tts_config || session.tts_config || { enabled: false, model_id: '', voice: '' },
                             messages: fullSession.messages || []
                         };
                         // 重置公开状态
@@ -7008,11 +7060,49 @@ def main(params):
                         this.sessionShareUrl = '';
                         this.sessionIsPublic = false;
                         this.showSessionDetailsModal = true;
+                        // 预加载当前 TTS 模型的音色列表
+                        const viewTtsModelId = this.viewingSession.tts_config && this.viewingSession.tts_config.model_id;
+                        if (viewTtsModelId) this.fetchTTSVoices(viewTtsModelId);
                         // 查询公开状态
                         this.checkSessionPublicStatus(this.viewingSession.id);
                     } catch (e) {
                         console.error('获取会话详情失败:', e);
                         this.showToast('获取详情失败', 'error');
+                    }
+                },
+
+                // 保存会话详情弹窗中的 TTS 配置
+                async saveViewingSessionTTS() {
+                    if (!this.viewingSession?.id) return;
+                    try {
+                        await api.put(`/api/sessions/${this.viewingSession.id}`, {
+                            tts_config: this.viewingSession.tts_config || { enabled: false, model_id: '', voice: '' }
+                        });
+                        // 同步到 sessions 列表
+                        const s = this.sessions.find(s => s.id === this.viewingSession.id);
+                        if (s) s.tts_config = { ...(this.viewingSession.tts_config) };
+                    } catch (e) {
+                        console.warn('Failed to save TTS config:', e);
+                    }
+                },
+
+                // 获取 TTS 音色列表（根据模型的 provider）
+                getSessionTTSVoices(ttsConfig) {
+                    const cfg = ttsConfig || (this.editingSession && this.editingSession.tts_config);
+                    const modelId = cfg && cfg.model_id;
+                    if (!modelId) return [];
+                    return this.ttsVoicesCache[modelId] || [];
+                },
+
+                async fetchTTSVoices(modelId) {
+                    if (!modelId || this.ttsVoicesCache[modelId]) return;
+                    try {
+                        const res = await api.get('/api/tts/voices', { params: { model_id: modelId } });
+                        if (res.data && res.data.success) {
+                            this.ttsVoicesCache[modelId] = res.data.voices || [];
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch TTS voices:', e);
                     }
                 },
 
@@ -7280,6 +7370,7 @@ def main(params):
                         tagsText: (baseSession.tags || []).join(', '),
                         favorite: !!baseSession.favorite,
                         pinned: !!baseSession.pinned,
+                        tts_config: { ...(baseSession.tts_config || { enabled: false, model_id: '', voice: '' }) },
                         messages: [],
                         originalMessages: {},
                     };
@@ -7292,6 +7383,9 @@ def main(params):
                     this.showEditSessionModal = true;
                     this.selectedEditMessages = [];
                     this.bindingFromEdit = false;
+                    // 预加载当前 TTS 模型的音色列表
+                    const editTtsModelId = this.editingSession.tts_config && this.editingSession.tts_config.model_id;
+                    if (editTtsModelId) this.fetchTTSVoices(editTtsModelId);
 
                     try {
                         const res = await api.get(`/api/sessions/${baseSession.id}`);
@@ -12926,6 +13020,17 @@ def main(params):
                         localStorage.removeItem('nbot_loading_session_id');
                         localStorage.removeItem('nbot_loading_start_time');
                     }
+                    // TTS: 流式输出完成后自动合成语音
+                    const ttsSession = messageSessionId && this.sessions
+                        ? this.sessions.find(s => s.id === messageSessionId) : null;
+                    const ttsCfg = ttsSession?.tts_config || this.currentSession?.tts_config;
+                    if (ttsCfg?.enabled) {
+                        const ttsMsgId = messageId;
+                        const ttsMsg = this.currentMessages.find(m => m.id === ttsMsgId);
+                        if (ttsMsg && ttsMsg.role === 'assistant' && ttsMsg.content && !ttsMsg.audio_url) {
+                            this.synthesizeMessageTTS(ttsMsgId, ttsCfg);
+                        }
+                    }
                     // 流式输出完全结束后，触发待发送队列处理下一条消息
                     const triggerSessionId = messageSessionId || this.currentSession?.id;
                     if (triggerSessionId) {
@@ -12946,6 +13051,7 @@ def main(params):
                     delete this.streamEndPending[messageId];
 
                     const existingMessage = this.currentMessages[msgIdx];
+                    const _savedAudioUrl = existingMessage.audio_url;
                     Object.assign(existingMessage, finalMessage, {
                         id: existingMessage.id,
                         content: finalMessage.content ?? existingMessage.content ?? '',
@@ -12955,6 +13061,9 @@ def main(params):
                         change_cards: finalMessage.change_cards || existingMessage.change_cards || [],
                         attachments: finalMessage.attachments || existingMessage.attachments || []
                     });
+                    if (_savedAudioUrl && !existingMessage.audio_url) {
+                        existingMessage.audio_url = _savedAudioUrl;
+                    }
 
                     const messageSessionId =
                         finalMessage.session_id
@@ -13420,10 +13529,14 @@ def main(params):
                                     existingMessage.change_cards = data.message.change_cards || existingMessage.change_cards || [];
                                     existingMessage.attachments = data.message.attachments || existingMessage.attachments || [];
                                 } else {
+                                    const _savedAudioUrl = existingMessage.audio_url;
                                     Object.assign(existingMessage, data.message, {
                                         thinking_cards: data.message.thinking_cards || existingMessage.thinking_cards || [],
                                         change_cards: data.message.change_cards || existingMessage.change_cards || []
                                     });
+                                    if (_savedAudioUrl && !existingMessage.audio_url) {
+                                        existingMessage.audio_url = _savedAudioUrl;
+                                    }
                                 }
                                 // 只在用户没有手动滚动时才滚动
                                 this.$nextTick(() => this.scrollToBottom(false));

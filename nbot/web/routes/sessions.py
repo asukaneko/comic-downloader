@@ -331,6 +331,15 @@ def _normalize_proactive_chat_config(config):
     return defaults
 
 
+def _normalize_tts_config(data):
+    defaults = {"enabled": False, "model_id": "", "voice": ""}
+    if isinstance(data, dict):
+        defaults["enabled"] = bool(data.get("enabled", False))
+        defaults["model_id"] = str(data.get("model_id", ""))
+        defaults["voice"] = str(data.get("voice", ""))
+    return defaults
+
+
 def _normalize_message_favorite_collections(raw_favorites):
     if not isinstance(raw_favorites, list):
         return []
@@ -642,6 +651,7 @@ def register_session_routes(app, server):
                     "pinned": bool(session.get("pinned")),
                     "is_public": is_public,
                     "proactive_chat": _normalize_proactive_chat_config(session.get("proactive_chat")),
+                    "tts_config": _normalize_tts_config(session.get("tts_config")),
                     "session_mode": session.get("session_mode", "character"),
                     "character_runtime_snapshot": session.get("character_runtime_snapshot"),
                     "character_runtime_timeline": timeline,
@@ -740,6 +750,7 @@ def register_session_routes(app, server):
             "pinned": bool(data.get("pinned")),
             "is_public": bool(data.get("is_public")),
             "proactive_chat": _normalize_proactive_chat_config(data.get("proactive_chat")),
+            "tts_config": _normalize_tts_config(data.get("tts_config")),
             "character_runtime_timeline": [],
             "session_mode": data.get("session_mode", "character"),
         }
@@ -875,6 +886,8 @@ def register_session_routes(app, server):
             )
         if "disabled_prompt_keys" in data:
             session["disabled_prompt_keys"] = data.get("disabled_prompt_keys") or []
+        if "tts_config" in data:
+            session["tts_config"] = _normalize_tts_config(data.get("tts_config"))
 
         new_prompt = data.get("system_prompt", session.get("system_prompt", ""))
         if new_prompt != session.get("system_prompt", ""):

@@ -1426,6 +1426,11 @@
                                                     :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming }"
                                                     v-html="renderMessageBody(msg)"
                                                 ></div>
+                                                <!-- TTS 音频胶囊 -->
+                                                <div v-if="msg.role === 'assistant' && ttsAudioUrls[msg.id]" class="message-audio-capsule" @click="toggleMessageAudio(msg)">
+                                                    <i :class="msg._audioPlaying ? 'fas fa-pause-circle' : 'fas fa-play-circle'" style="font-size: 18px;"></i>
+                                                    <span>{{ msg._audioPlaying ? '暂停' : '播放语音' }}</span>
+                                                </div>
                                                 <!-- 用户消息编辑态：直接在原位置替换 -->
                                                 <div v-if="msg.role === 'user' && editingMessageId === msg.id" class="user-edit-inline" @click.stop>
                                                     <textarea v-model="editingMessageContent" class="user-edit-textarea" rows="2" @keydown.enter.ctrl="confirmEditMessage(msg)" @keydown.escape="cancelEditMessage()"></textarea>
@@ -7064,6 +7069,28 @@
                                 border: none;
                                 box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                             }
+                            .message-audio-capsule {
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 6px;
+                                margin-top: 6px;
+                                padding: 5px 14px;
+                                background: var(--bg-secondary, #f0f0f0);
+                                border: 1px solid var(--border-color, #e5e7eb);
+                                border-radius: 20px;
+                                font-size: 13px;
+                                color: var(--primary-color, #4f46e5);
+                                cursor: pointer;
+                                transition: background 0.2s, transform 0.1s;
+                                user-select: none;
+                            }
+                            .message-audio-capsule:hover {
+                                background: var(--primary-color-light, #eef2ff);
+                                transform: scale(1.02);
+                            }
+                            .message-audio-capsule:active {
+                                transform: scale(0.98);
+                            }
                         </style>
                     </div>
 
@@ -8485,6 +8512,34 @@
                         </div>
                     </div>
 
+                    <!-- TTS 语音合成配置 -->
+                    <div class="form-section">
+                        <div class="form-section-title">
+                            <i class="fas fa-volume-up" style="color: var(--primary-color);"></i> TTS 语音合成
+                        </div>
+                        <label class="pretty-checkbox" style="margin-bottom: 8px;">
+                            <input type="checkbox" v-model="viewingSession.tts_config.enabled" @change="saveViewingSessionTTS()">
+                            <span class="pretty-checkbox-box"><i class="fas fa-check"></i></span>
+                            <span class="pretty-checkbox-text">启用 TTS 自动播放</span>
+                        </label>
+                        <div v-if="viewingSession.tts_config.enabled" style="margin-top: 8px;">
+                            <div class="form-group">
+                                <label class="form-label">TTS 模型</label>
+                                <select v-model="viewingSession.tts_config.model_id" class="form-select" @change="fetchTTSVoices($event.target.value); saveViewingSessionTTS()">
+                                    <option value="">使用默认</option>
+                                    <option v-for="m in ttsModelsForSession" :key="m.id" :value="m.id">{{ m.name }}</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">音色</label>
+                                <select v-model="viewingSession.tts_config.voice" class="form-select" @change="saveViewingSessionTTS()">
+                                    <option value="">使用默认</option>
+                                    <option v-for="v in getSessionTTSVoices(viewingSession.tts_config)" :key="v.id" :value="v.id">{{ v.name }} - {{ v.description }}</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- 系统提示词 -->
                     <div class="form-section" v-if="viewingSession.type === 'web' && !viewingSession.read_only && !viewingSession.is_archive">
                         <div class="form-section-title">
@@ -8805,6 +8860,35 @@
                                     <button class="btn btn-outline btn-small" @click="openBindCharacterFromEdit">
                                         <i class="fas fa-exchange-alt"></i> 更改
                                     </button>
+                                </div>
+                            </div>
+                            <!-- TTS 语音合成设置 -->
+                            <div class="form-section-title" style="margin-top: 16px;">
+                                <i class="fas fa-volume-up"></i> TTS 语音合成
+                            </div>
+                            <label class="pretty-checkbox">
+                                <input type="checkbox" v-model="editingSession.tts_config.enabled">
+                                <span class="pretty-checkbox-box"><i class="fas fa-check"></i></span>
+                                <span class="pretty-checkbox-text">启用 TTS 自动播放</span>
+                            </label>
+                            <div v-if="editingSession.tts_config.enabled" style="margin-top: 8px;">
+                                <div class="form-group">
+                                    <label class="form-label">TTS 模型</label>
+                                    <select v-model="editingSession.tts_config.model_id" class="form-select" @change="fetchTTSVoices($event.target.value)">
+                                        <option value="">使用默认</option>
+                                        <option v-for="m in ttsModelsForSession" :key="m.id" :value="m.id">
+                                            {{ m.name }}
+                                        </option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">音色</label>
+                                    <select v-model="editingSession.tts_config.voice" class="form-select">
+                                        <option value="">使用默认</option>
+                                        <option v-for="v in getSessionTTSVoices(editingSession.tts_config)" :key="v.id" :value="v.id">
+                                            {{ v.name }} - {{ v.description }}
+                                        </option>
+                                    </select>
                                 </div>
                             </div>
                         </div>
@@ -10422,6 +10506,10 @@
                     mediaRecorder: null,
                     audioChunks: [],
                     ttsEnabled: localStorage.getItem('ttsEnabled') === 'true' || false,
+                    // TTS 音频 URL 存储（按消息 ID 索引，避免被 Object.assign 覆盖）
+                    ttsAudioUrls: {},
+                    // TTS 音色缓存（按 model_id 索引）
+                    ttsVoicesCache: {},
                     // TTS 试验场
                     ttsPlayground: {
                         models: [],
@@ -11200,7 +11288,9 @@
                     const selId = this.ttsPlayground && this.ttsPlayground.selectedModelId;
                     return models.find(m => m.id === selId) || models[0] || null;
                 },
-
+                ttsModelsForSession() {
+                    return (this.aiModels || []).filter(m => m.purpose === 'tts' && m.enabled !== false);
+                },
                 isChatOnlyMode() {
                     return this.appMode === 'chat';
                 },

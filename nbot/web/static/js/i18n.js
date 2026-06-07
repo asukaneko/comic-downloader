@@ -2879,6 +2879,7 @@ function getSupportedLanguages() {
 const i18nPlugin = {
   install(app) {
     app.config.globalProperties.$t = t;
+    app.config.globalProperties.$translateMood = translateMood;
     app.config.globalProperties.$setLanguage = setLanguage;
     app.config.globalProperties.$getLanguage = getLanguage;
     app.config.globalProperties.$getSupportedLanguages = getSupportedLanguages;

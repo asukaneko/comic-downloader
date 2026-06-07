@@ -16155,7 +16155,8 @@
         }
 
         .edit-session-basic-section {
-            overflow-y: visible;
+            overflow-y: auto;
+            max-height: 100%;
         }
 
         .edit-session-system-prompt {
