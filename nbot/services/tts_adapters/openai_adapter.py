@@ -62,7 +62,7 @@ class OpenAITTSAdapter(TTSAdapter):
         custom_headers_str = config.get("tts_headers", "")
 
         model = config.get("tts_model") or "gpt-4o-mini-tts"
-        voice = config.get("tts_voice") or "alloy"
+        voice = (config.get("tts_voice") or "alloy").strip()
         speed = config.get("tts_speed", 1.0)
         pitch = config.get("tts_pitch", 1.0)
         volume = config.get("tts_volume", 1.0)

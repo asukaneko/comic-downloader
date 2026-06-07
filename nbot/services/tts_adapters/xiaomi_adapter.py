@@ -36,7 +36,7 @@ class XiaomiTTSAdapter(TTSAdapter):
         custom_url = config.get("tts_url", "")
 
         model = config.get("tts_model") or "mimo-v2.5-tts"
-        voice = config.get("tts_voice") or "mimo_default"
+        voice = (config.get("tts_voice") or "mimo_default").strip()
         fmt = config.get("tts_format") or "mp3"
 
         url = custom_url if custom_url else f"{base_url}/chat/completions"

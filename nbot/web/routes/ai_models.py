@@ -679,7 +679,7 @@ def register_ai_model_routes(app, server):
                         "tts_provider": tts_provider,
                         "tts_url": model.get("tts_url", ""),
                         "tts_model": model.get("tts_model") or model_name,
-                        "tts_voice": model.get("tts_voice", "alloy"),
+                        "tts_voice": (model.get("tts_voice") or "alloy").strip(),
                         "tts_format": model.get("tts_format", "mp3"),
                     }
 
