@@ -6361,6 +6361,13 @@
                 inset 0 1px 0 rgba(255, 255, 255, 0.08);
         }
 
+        /* 移动端聊天气泡增大R角 */
+        @media (max-width: 768px) {
+            .message-content {
+                border-radius: 120px;
+            }
+        }
+
         /* 表格区域允许横向溢出滚动，不受 overflow:hidden 裁剪 */
         .message-content .markdown-body .table-wrapper {
             overflow-x: auto;
