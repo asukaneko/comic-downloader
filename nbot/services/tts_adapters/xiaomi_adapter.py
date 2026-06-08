@@ -25,6 +25,10 @@ class XiaomiTTSAdapter(TTSAdapter):
     API: POST /v1/chat/completions
     认证: api-key 头
     请求体: chat completions 格式，目标文本在 assistant 消息中
+
+    支持音色复刻 (voiceclone):
+      - 当 tts_ref_audio 非空时，audio.voice 设为 base64 data URL
+      - 当 tts_user 非空时，在 messages 中插入 user 消息控制合成风格
     """
 
     def get_supported_params(self) -> list:
@@ -38,17 +42,26 @@ class XiaomiTTSAdapter(TTSAdapter):
         model = config.get("tts_model") or "mimo-v2.5-tts"
         voice = (config.get("tts_voice") or "mimo_default").strip()
         fmt = config.get("tts_format") or "mp3"
+        ref_audio = (config.get("tts_ref_audio") or "").strip()
+        user_instruction = (config.get("tts_user") or "").strip()
 
         url = custom_url if custom_url else f"{base_url}/chat/completions"
 
+        # 音色复刻：将参考音频 base64 data URL 作为 voice 值
+        voice_value = ref_audio if ref_audio else voice
+
+        messages = []
+        # user 消息用于控制合成风格（音色复刻或通用风格指令）
+        if user_instruction:
+            messages.append({"role": "user", "content": user_instruction})
+        messages.append({"role": "assistant", "content": text})
+
         body = {
             "model": model,
-            "messages": [
-                {"role": "assistant", "content": text}
-            ],
+            "messages": messages,
             "audio": {
                 "format": fmt,
-                "voice": voice,
+                "voice": voice_value,
             },
         }
 
@@ -57,7 +70,8 @@ class XiaomiTTSAdapter(TTSAdapter):
             "Content-Type": "application/json",
         }
 
-        _log.info("Xiaomi TTS: url=%s, model=%s, voice=%s", url, model, voice)
+        _log.info("Xiaomi TTS: url=%s, model=%s, voice=%s, has_ref_audio=%s, has_user=%s",
+                  url, model, voice, bool(ref_audio), bool(user_instruction))
         resp = http_requests.post(url, headers=headers, json=body, timeout=60)
 
         if resp.status_code != 200:

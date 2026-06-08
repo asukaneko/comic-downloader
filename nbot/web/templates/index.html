@@ -5028,6 +5028,48 @@
                                                 <option value="flac">FLAC</option>
                                             </select>
                                         </div>
+
+                                        <!-- 小米 MiMo 特有配置 -->
+                                        <template v-if="modelForm.tts_provider === 'xiaomi'">
+                                            <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                                                <label class="form-label" style="color: var(--primary-color); font-weight: 600;">🎙️ 小米 MiMo 高级配置</label>
+                                            </div>
+
+                                            <!-- 音色复刻：参考音频上传（仅 voiceclone 模型） -->
+                                            <template v-if="(modelForm.tts_model || '').includes('voiceclone')">
+                                                <div class="form-group">
+                                                    <label class="form-label">参考音频（音色复刻）</label>
+                                                    <div class="form-hint" style="margin-bottom: 8px;">
+                                                        上传音频样本以复刻目标音色。支持 mp3/wav 格式，base64 编码后不超过 10MB。
+                                                        模型将使用此音频的音色来合成语音。
+                                                    </div>
+                                                    <div v-if="!modelForm.tts_ref_audio" style="display: flex; gap: 8px; align-items: center;">
+                                                        <label class="btn btn-secondary" style="cursor: pointer; margin: 0;">
+                                                            <i class="fas fa-upload"></i> 选择音频文件
+                                                            <input type="file" accept=".mp3,.wav,audio/mpeg,audio/wav" @change="onRefAudioUpload" style="display: none;">
+                                                        </label>
+                                                    </div>
+                                                    <div v-else style="display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;">
+                                                        <i class="fas fa-music" style="color: var(--primary-color);"></i>
+                                                        <span style="flex: 1; font-size: 13px; color: var(--text-secondary);">已加载参考音频 ({{ (modelForm.tts_ref_audio.length / 1024).toFixed(0) }} KB)</span>
+                                                        <label class="btn btn-secondary" style="cursor: pointer; margin: 0; font-size: 12px; padding: 4px 8px;">
+                                                            <i class="fas fa-sync-alt"></i> 更换
+                                                            <input type="file" accept=".mp3,.wav,audio/mpeg,audio/wav" @change="onRefAudioUpload" style="display: none;">
+                                                        </label>
+                                                        <button class="btn btn-secondary" @click="clearRefAudio" style="font-size: 12px; padding: 4px 8px;">
+                                                            <i class="fas fa-times"></i> 移除
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </template>
+
+                                            <!-- 风格控制指令（所有小米模型） -->
+                                            <div class="form-group">
+                                                <label class="form-label">风格控制指令（可选）</label>
+                                                <input v-model="modelForm.tts_user" type="text" class="form-input" placeholder="例如：请用欢快的语气说话">
+                                                <div class="form-hint">通过自然语言指令控制合成语音的风格，会作为 user 消息发送给 API。音色复刻时也可用于指定说话风格。</div>
+                                            </div>
+                                        </template>
                                     </template>
 
                                     <!-- STT特有配置 -->

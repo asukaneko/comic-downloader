@@ -78,6 +78,9 @@ def register_ai_model_routes(app, server):
             model_copy = model.copy()
             if "api_key" in model_copy:
                 model_copy["api_key"] = "********" if model_copy["api_key"] else ""
+            # 音色复刻参考音频体积较大，GET 时脱敏（有数据时标记为占位符）
+            if model_copy.get("tts_ref_audio"):
+                model_copy["tts_ref_audio"] = "__HAS_DATA__"
             models.append(model_copy)
         return jsonify({"models": models, "active_model_id": server.active_model_id})
 
@@ -85,6 +88,11 @@ def register_ai_model_routes(app, server):
     def create_ai_model():
         data = request.json or {}
         now = datetime.now().isoformat()
+
+        # 服务端校验：参考音频 base64 大小上限（~10MB base64 ≈ 7.5MB 原始文件）
+        ref_audio = data.get("tts_ref_audio", "")
+        if ref_audio and len(ref_audio) > 15 * 1024 * 1024:
+            return jsonify({"error": "参考音频过大，base64 编码后不能超过 10MB"}), 400
         
         # 获取模型用途，默认为对话模型
         purpose = data.get("purpose", "chat")
@@ -141,6 +149,8 @@ def register_ai_model_routes(app, server):
             "tts_upload_url": data.get("tts_upload_url", ""),
             "tts_headers": data.get("tts_headers", ""),
             "tts_body_template": data.get("tts_body_template", ""),
+            "tts_ref_audio": data.get("tts_ref_audio", ""),
+            "tts_user": data.get("tts_user", ""),
             "language": data.get("language", default_config.get("language", "zh")),
             # STT 统一配置字段
             "stt_provider": data.get("stt_provider", ""),
@@ -257,6 +267,14 @@ def register_ai_model_routes(app, server):
             model["tts_upload_url"] = data.get("tts_upload_url", model.get("tts_upload_url", ""))
             model["tts_headers"] = data.get("tts_headers", model.get("tts_headers", ""))
             model["tts_body_template"] = data.get("tts_body_template", model.get("tts_body_template", ""))
+            # 参考音频：__HAS_DATA__ 表示保留已有值（GET 时脱敏的占位符）
+            new_ref_audio = data.get("tts_ref_audio", model.get("tts_ref_audio", ""))
+            if new_ref_audio == "__HAS_DATA__":
+                new_ref_audio = model.get("tts_ref_audio", "")
+            elif new_ref_audio and len(new_ref_audio) > 15 * 1024 * 1024:
+                return jsonify({"error": "参考音频过大，base64 编码后不能超过 10MB"}), 400
+            model["tts_ref_audio"] = new_ref_audio
+            model["tts_user"] = data.get("tts_user", model.get("tts_user", ""))
             model["language"] = data.get("language", model.get("language", "zh"))
             # STT 统一配置字段
             model["stt_provider"] = data.get("stt_provider", model.get("stt_provider", ""))
@@ -313,6 +331,8 @@ def register_ai_model_routes(app, server):
                 model_copy = model.copy()
                 if "api_key" in model_copy:
                     model_copy["api_key"] = "********" if model_copy["api_key"] else ""
+                if model_copy.get("tts_ref_audio"):
+                    model_copy["tts_ref_audio"] = "__HAS_DATA__"
                 models.append(model_copy)
         
         return jsonify({
@@ -339,8 +359,10 @@ def register_ai_model_routes(app, server):
                         active_model = model.copy()
                         if "api_key" in active_model:
                             active_model["api_key"] = "********" if active_model["api_key"] else ""
+                        if active_model.get("tts_ref_audio"):
+                            active_model["tts_ref_audio"] = "__HAS_DATA__"
                         break
-            
+
             # 如果没有找到，使用第一个可用的该用途模型
             if not active_model:
                 for model in server.ai_models:
@@ -348,6 +370,8 @@ def register_ai_model_routes(app, server):
                         active_model = model.copy()
                         if "api_key" in active_model:
                             active_model["api_key"] = "********" if active_model["api_key"] else ""
+                        if active_model.get("tts_ref_audio"):
+                            active_model["tts_ref_audio"] = "__HAS_DATA__"
                         # 自动设置该用途的活跃模型
                         server.active_models_by_purpose[purpose] = model.get("id")
                         break
@@ -395,7 +419,9 @@ def register_ai_model_routes(app, server):
             model_copy = model.copy()
             if "api_key" in model_copy:
                 model_copy["api_key"] = "********" if model_copy["api_key"] else ""
-            
+            if model_copy.get("tts_ref_audio"):
+                model_copy["tts_ref_audio"] = "__HAS_DATA__"
+
             return jsonify({
                 "success": True,
                 "message": f"Model purpose changed from {old_purpose} to {new_purpose}",
@@ -492,7 +518,12 @@ def register_ai_model_routes(app, server):
             cloned["updated_at"] = datetime.now().isoformat()
             server.ai_models.append(cloned)
             server._save_data("ai_models")
-            return jsonify({"success": True, "model": cloned})
+            response = cloned.copy()
+            if response.get("api_key"):
+                response["api_key"] = "********"
+            if response.get("tts_ref_audio"):
+                response["tts_ref_audio"] = "__HAS_DATA__"
+            return jsonify({"success": True, "model": response})
         return jsonify({"error": "Model not found"}), 404
 
     @app.route("/api/ai-models/fetch-models", methods=["POST"])
@@ -704,6 +735,8 @@ def register_ai_model_routes(app, server):
                         "tts_model": model.get("tts_model") or model_name,
                         "tts_voice": (model.get("tts_voice") or "alloy").strip(),
                         "tts_format": model.get("tts_format", "mp3"),
+                        "tts_ref_audio": model.get("tts_ref_audio", ""),
+                        "tts_user": model.get("tts_user", ""),
                     }
 
                     import tempfile

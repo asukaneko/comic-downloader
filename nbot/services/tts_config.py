@@ -35,6 +35,8 @@ def normalize_tts_config(model_config: dict) -> dict:
         "tts_headers": model_config.get("tts_headers") or "",
         "tts_body_template": model_config.get("tts_body_template") or "",
         "tts_resource_id": model_config.get("tts_resource_id") or "",
+        "tts_ref_audio": model_config.get("tts_ref_audio") or "",
+        "tts_user": model_config.get("tts_user") or "",
     }
 
 
@@ -80,6 +82,8 @@ def get_tts_config() -> dict:
         "tts_headers": "",
         "tts_body_template": "",
         "tts_resource_id": "",
+        "tts_ref_audio": "",
+        "tts_user": "",
     }
 
 

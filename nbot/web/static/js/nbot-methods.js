@@ -11736,6 +11736,38 @@ def main(params):
                     }
                 },
 
+                // 小米音色复刻：上传参考音频
+                onRefAudioUpload(event) {
+                    const file = event.target.files && event.target.files[0];
+                    if (!file) return;
+                    // 验证格式
+                    const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav'];
+                    if (!validTypes.includes(file.type) && !file.name.match(/\.(mp3|wav)$/i)) {
+                        this.showToast(this.$t('tts.ref_audio_format_error'), 'error');
+                        event.target.value = '';
+                        return;
+                    }
+                    // 验证大小（base64 后不超过 10MB，原始文件约 7.5MB）
+                    if (file.size > 7.5 * 1024 * 1024) {
+                        this.showToast(this.$t('tts.ref_audio_size_error'), 'error');
+                        event.target.value = '';
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        // e.target.result 已经是 data:audio/xxx;base64,... 格式
+                        this.modelForm.tts_ref_audio = e.target.result;
+                        this.showToast(this.$t('tts.ref_audio_loaded_toast'), 'success');
+                    };
+                    reader.onerror = () => {
+                        this.showToast(this.$t('tts.ref_audio_read_error'), 'error');
+                    };
+                    reader.readAsDataURL(file);
+                },
+                clearRefAudio() {
+                    this.modelForm.tts_ref_audio = '';
+                },
+
                 // 打开用途配置
                 openPurposeConfig(purpose) {
                     this.editingPurpose = purpose;
@@ -12158,6 +12190,8 @@ def main(params):
                             tts_headers: model.tts_headers || '',
                             tts_body_template: model.tts_body_template || '',
                             tts_resource_id: model.tts_resource_id || '',
+                            tts_ref_audio: model.tts_ref_audio || '',
+                            tts_user: model.tts_user || '',
                             language: model.language || 'zh',
                             stt_provider: model.stt_provider || '',
                             stt_model: model.stt_model || '',
@@ -12232,6 +12266,8 @@ def main(params):
                             tts_headers: '',
                             tts_body_template: '',
                             tts_resource_id: '',
+                            tts_ref_audio: '',
+                            tts_user: '',
                             language: 'zh',
                             stt_provider: '',
                             stt_model: '',
