@@ -1372,7 +1372,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <template v-for="msg in currentMessages.filter(m => !m.hide_in_web)" :key="msg.id">
+                                    <template v-for="msg in currentMessages.filter(m => !m.hide_in_web && (m.source !== 'sticker' || settings.features.sticker))" :key="msg.id">
                                         <!-- 消息主体 -->
                                         <div
                                             class="message"
