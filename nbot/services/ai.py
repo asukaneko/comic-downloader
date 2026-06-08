@@ -8,18 +8,12 @@ from typing import Optional
 from PIL import Image
 import imageio.v2 as imageio
 from nbot.core import (
-    build_chat_completion_payload,
-    normalize_chat_completion_data,
     repair_mojibake_text,
     resolve_chat_completion_url,
     response_json_utf8,
 )
 from nbot.core.protocols import get_protocol
 from nbot.web.secure_store import read_secure_json, write_secure_json
-from nbot.web.utils.config_loader import (
-    get_vision_model_config,
-    get_video_model_config,
-)
 
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini', encoding='utf-8')
@@ -263,7 +257,17 @@ class AIClient:
         resp_obj.usage = usage_obj
         return resp_obj
 
-    def chat_completion(self, messages, model: str = None, stream: bool = False):
+    def chat_completion(self, messages, model: str = None, stream: bool = False,
+                        purpose: str = "chat"):
+        """发送聊天补全请求，支持按 purpose 隔离故障转移。
+
+        Args:
+            messages: 消息列表
+            model: 指定模型名，为 None 时走故障转移
+            stream: 是否流式
+            purpose: 模型用途 (chat/vision/video/tts/stt/embedding)，
+                    决定故障转移时使用哪个模型队列
+        """
         stream = bool(stream and self.supports_stream and self.stream_enabled)
         url_base = (self.base_url or "").rstrip("/")
         if not url_base:
@@ -301,14 +305,14 @@ class AIClient:
                 data, protocol, model_name, self.base_url, self.provider_type,
             )
 
-        # 无显式 model：尝试故障转移
+        # 无显式 model：尝试故障转移（按 purpose 隔离队列）
         from nbot.core.failover import (
             get_failover_state, classify_http_error, _extract_status_code,
         )
         from nbot.web.utils.config_loader import get_model_configs_by_purpose
 
         failover = get_failover_state()
-        model_configs = get_model_configs_by_purpose("chat")
+        model_configs = get_model_configs_by_purpose(purpose)
 
         if not model_configs or len(model_configs) <= 1:
             # 单模型或无配置：原逻辑 + 健康追踪
@@ -372,7 +376,7 @@ class AIClient:
                 last_error = e
                 continue
 
-        raise last_error or RuntimeError("All chat models failed")
+        raise last_error or RuntimeError(f"All {purpose} models failed")
 
     def _stream_response_generic(self, resp, protocol):
         """处理流式响应，使用协议适配器解析chunk，返回一个生成器"""
@@ -414,79 +418,105 @@ class AIClient:
         )
         return self.clean_response(response.choices[0].message.content)
 
-    def describe_image(self, image_url: str, text: str = None) -> str:
-        print(f"[图片识别] 开始识别图片, URL: {image_url[:80]}{'...(base64已省略)' if image_url.startswith('data:') and len(image_url) > 80 else ''}")
+    def describe_image(self, image_url: str, text: str = None) -> Optional[str]:
+        """图片识别，在 vision 模型队列内完成故障转移，不跨 purpose 回退。"""
+        _url_preview = image_url[:80]
+        _truncated = (
+            "...(base64已省略)"
+            if image_url.startswith("data:") and len(image_url) > 80
+            else ""
+        )
+        print(f"[图片识别] 开始识别图片, URL: {_url_preview}{_truncated}")
 
-        # 获取图片理解模型配置
-        vision_config = get_vision_model_config()
-        if vision_config and vision_config.get("api_key"):
-            # 使用配置的图片理解模型
-            api_key = vision_config.get("api_key")
-            base_url = vision_config.get("base_url", "")
-            model = vision_config.get("model", "zai-org/GLM-4.6V")
-            provider_type = vision_config.get("provider_type", "openai_compatible")
-            append_base_url_path = vision_config.get("append_base_url_path", True)
-            system_prompt = vision_config.get("system_prompt", "请详细描述这张图片的内容。")
-            
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_url}
-                        },
-                        {
-                            "type": "text",
-                            "text": text or system_prompt
-                        }
-                    ]
-                }
-            ]
-            
-            try:
-                url = resolve_chat_completion_url(
-                    base_url,
-                    model=model,
-                    provider_type=provider_type,
-                    append_base_url_path=append_base_url_path,
-                )
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = build_chat_completion_payload(
-                    model,
-                    messages,
-                    base_url=base_url,
-                    provider_type=provider_type,
-                )
-                response = requests.post(url, json=payload, headers=headers, timeout=60)
-                response.raise_for_status()
-                result = self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
-                print(f"[图片识别] 识别成功(使用配置模型), 结果: {result[:100]}...")
-                return result
-            except Exception as e:
-                print(f"[图片识别] 使用配置模型失败, 回退到默认模型: {e}")
-        
-        # 回退到主 API
+        # 构建 vision 请求的消息体
+        system_prompt = "请详细描述这张图片的内容。"
         messages = [
             {
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": image_url}},
-                    {"type": "text", "text": text or "请详细描述这张图片的内容。"}
+                    {"type": "text", "text": text or system_prompt}
                 ]
             }
         ]
-        response = self.chat_completion(messages=messages, model=self.pic_model, stream=False)
-        try:
-            result = self.clean_response(response.choices[0].message.content)
-            print(f"[图片识别] 识别成功, 结果: {result[:100]}...")
-            return result
-        except Exception as e:
-            print(f"[图片识别] 识别失败, 错误: {e}, 响应: {response.text}")
+
+        # 获取 vision 模型队列，按优先级尝试（含 failover）
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
+        from nbot.core.failover import (
+            get_failover_state, classify_http_error, _extract_status_code,
+        )
+        from nbot.core.model_adapter import (
+            resolve_chat_completion_url, build_chat_completion_payload,
+        )
+
+        vision_configs = get_model_configs_by_purpose("vision")
+        failover = get_failover_state()
+
+        if vision_configs:
+            # 有 vision 模型配置：在队列内按优先级遍历
+            attempted = set()
+            last_error = None
+            for _ in range(len(vision_configs)):
+                cfg = failover.select_model(vision_configs, exclude_ids=attempted)
+                if cfg is None:
+                    break
+                mid = cfg.get("model_id", "")
+                mname = cfg.get("model", "")
+                attempted.add(mid)
+
+                try:
+                    url = resolve_chat_completion_url(
+                        cfg.get("base_url", ""),
+                        model=mname,
+                        provider_type=cfg.get("provider_type", "openai_compatible"),
+                        append_base_url_path=cfg.get("append_base_url_path", True),
+                    )
+                    headers = {
+                        "Authorization": f"Bearer {cfg.get('api_key', '')}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = build_chat_completion_payload(
+                        mname, messages,
+                        base_url=cfg.get("base_url", ""),
+                        provider_type=cfg.get("provider_type", "openai_compatible"),
+                    )
+                    request_timeout = cfg.get("failover_timeout", 0) or 60
+                    response = requests.post(
+                        url, json=payload, headers=headers, timeout=request_timeout,
+                    )
+                    response.raise_for_status()
+                    result = self.clean_response(
+                        response_json_utf8(response)["choices"][0]["message"]["content"]
+                    )
+                    failover.record_success(mid)
+                    print(f"[图片识别] 识别成功(vision队列), 结果: {result[:100]}...")
+                    return result
+                except Exception as e:
+                    status = _extract_status_code(e)
+                    category = classify_http_error(status)
+                    if category == "config":
+                        raise
+                    failover.record_failure(mid, status)
+                    last_error = e
+                    continue
+
+            # vision 队列全部失败
+            print(f"[图片识别] vision模型队列全部失败({len(attempted)}个), 错误: {last_error}")
             return None
+
+        # 无 vision 模型配置：使用 legacy 的 pic_model 作为单模型请求（不走 chat 队列）
+        if self.pic_model:
+            try:
+                response = self.chat_completion(
+                    messages=messages, model=self.pic_model, stream=False,
+                )
+                return self.clean_response(response.choices[0].message.content)
+            except Exception as e:
+                print(f"[图片识别] pic_model请求失败: {e}")
+                return None
+
+        print("[图片识别] 无可用模型配置")
+        return None
 
     def gif_to_mp4_data_url(self, image_url: str, fps: int = 10) -> str:
         try:
@@ -515,7 +545,10 @@ class AIClient:
             img = Image.open(io.BytesIO(res.content))
             total = getattr(img, "n_frames", 1)
             if total <= 1:
-                return self.describe_image(image_url, "请描述这个图片的内容，仅作描述，不要分析内容")
+                return self.describe_image(
+                    image_url,
+                    "请描述这个图片的内容，仅作描述，不要分析内容",
+                )
 
             content_list = []
             used = set()
@@ -558,11 +591,79 @@ class AIClient:
                 }
             ]
 
-            response = self.chat_completion(messages=messages, model=self.pic_model, stream=False)
-            try:
-                return self.clean_response(response.choices[0].message.content)
-            except Exception:
+            # 在 vision 模型队列内完成 GIF 帧序列的描述（不回退到 chat 队列）
+            from nbot.web.utils.config_loader import get_model_configs_by_purpose
+            from nbot.core.failover import (
+                get_failover_state, classify_http_error, _extract_status_code,
+            )
+            from nbot.core.model_adapter import (
+                resolve_chat_completion_url, build_chat_completion_payload,
+            )
+
+            vision_configs = get_model_configs_by_purpose("vision")
+            failover = get_failover_state()
+
+            if vision_configs:
+                attempted = set()
+                last_error = None
+                for _ in range(len(vision_configs)):
+                    cfg = failover.select_model(vision_configs, exclude_ids=attempted)
+                    if cfg is None:
+                        break
+                    mid = cfg.get("model_id", "")
+                    mname = cfg.get("model", "")
+                    attempted.add(mid)
+
+                    try:
+                        url = resolve_chat_completion_url(
+                            cfg.get("base_url", ""),
+                            model=mname,
+                            provider_type=cfg.get("provider_type", "openai_compatible"),
+                            append_base_url_path=cfg.get("append_base_url_path", True),
+                        )
+                        headers = {
+                            "Authorization": f"Bearer {cfg.get('api_key', '')}",
+                            "Content-Type": "application/json"
+                        }
+                        payload = build_chat_completion_payload(
+                            mname, messages,
+                            base_url=cfg.get("base_url", ""),
+                            provider_type=cfg.get("provider_type", "openai_compatible"),
+                        )
+                        request_timeout = cfg.get("failover_timeout", 0) or 60
+                        response = requests.post(
+                            url, json=payload, headers=headers, timeout=request_timeout,
+                        )
+                        response.raise_for_status()
+                        result = self.clean_response(
+                            response_json_utf8(response)["choices"][0]["message"]["content"]
+                        )
+                        failover.record_success(mid)
+                        return result
+                    except Exception as e:
+                        status = _extract_status_code(e)
+                        category = classify_http_error(status)
+                        if category == "config":
+                            raise
+                        failover.record_failure(mid, status)
+                        last_error = e
+                        continue
+
+                # vision 队列全部失败
+                print(f"[GIF识别] vision模型队列全部失败({len(attempted)}个), 错误: {last_error}")
                 return None
+
+            # 无 vision 配置：尝试 pic_model 单模型请求
+            if self.pic_model:
+                try:
+                    response = self.chat_completion(
+                        messages=messages, model=self.pic_model, stream=False,
+                    )
+                    return self.clean_response(response.choices[0].message.content)
+                except Exception:
+                    return None
+
+            return None
         except Exception:
             return None
 
@@ -670,57 +771,111 @@ class AIClient:
         except Exception:
             return ""
 
-    def describe_video(self, video_url: str, text: str = None) -> str:
-        print(f"[视频识别] 开始识别视频, URL: {video_url[:80]}{'...(base64已省略)' if video_url.startswith('data:') and len(video_url) > 80 else ''}")
-        
-        # 获取视频理解模型配置
-        video_config = get_video_model_config()
-        if video_config and video_config.get("api_key"):
-            api_key = video_config.get("api_key")
-            base_url = video_config.get("base_url", "")
-            model = video_config.get("model", "zai-org/GLM-4.6V")
-            provider_type = video_config.get("provider_type", "openai_compatible")
-            append_base_url_path = video_config.get("append_base_url_path", True)
-            system_prompt = video_config.get("system_prompt", "请分析这个视频的内容。")
-        else:
-            # 使用默认配置
-            api_key = self.api_key
-            base_url = self.base_url
-            model = "zai-org/GLM-4.6V"
-            provider_type = self.provider_type
-            append_base_url_path = self.append_base_url_path
-            system_prompt = "请分析这个视频的内容。"
-        
-        try:
-            url = resolve_chat_completion_url(
-                base_url,
-                model=model,
-                provider_type=provider_type,
-                append_base_url_path=append_base_url_path,
-            )
-            payload = {
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "video_url", "video_url": {"url": video_url}},
-                            {"type": "text", "text": text or system_prompt}
-                        ]
-                    }
+    def describe_video(self, video_url: str, text: str = None) -> Optional[str]:
+        """视频识别，在 video 模型队列内完成故障转移，不跨 purpose 回退。"""
+        _url_preview = video_url[:80]
+        _truncated = (
+            "...(base64已省略)"
+            if video_url.startswith("data:") and len(video_url) > 80
+            else ""
+        )
+        print(f"[视频识别] 开始识别视频, URL: {_url_preview}{_truncated}")
+
+        system_prompt = "请分析这个视频的内容。"
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video_url", "video_url": {"url": video_url}},
+                    {"type": "text", "text": text or system_prompt}
                 ]
             }
+        ]
+
+        # 获取 video 模型队列，按优先级尝试（含 failover）
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
+        from nbot.core.failover import (
+            get_failover_state, classify_http_error, _extract_status_code,
+        )
+
+        video_configs = get_model_configs_by_purpose("video")
+        failover = get_failover_state()
+
+        if video_configs:
+            attempted = set()
+            last_error = None
+            for _ in range(len(video_configs)):
+                cfg = failover.select_model(video_configs, exclude_ids=attempted)
+                if cfg is None:
+                    break
+                mid = cfg.get("model_id", "")
+                mname = cfg.get("model", "")
+                attempted.add(mid)
+
+                try:
+                    url = resolve_chat_completion_url(
+                        cfg.get("base_url", ""),
+                        model=mname,
+                        provider_type=cfg.get("provider_type", "openai_compatible"),
+                        append_base_url_path=cfg.get("append_base_url_path", True),
+                    )
+                    payload = {
+                        "model": mname,
+                        "messages": messages
+                    }
+                    headers = {
+                        "Authorization": f"Bearer {cfg.get('api_key', '')}",
+                        "Content-Type": "application/json"
+                    }
+                    request_timeout = cfg.get("failover_timeout", 0) or 120
+                    response = requests.post(
+                        url, json=payload, headers=headers, timeout=request_timeout,
+                    )
+                    response.raise_for_status()
+                    result = self.clean_response(
+                        response_json_utf8(response)["choices"][0]["message"]["content"]
+                    )
+                    failover.record_success(mid)
+                    print(f"[视频识别] 识别成功(video队列), 结果: {result[:100]}...")
+                    return result
+                except Exception as e:
+                    status = _extract_status_code(e)
+                    category = classify_http_error(status)
+                    if category == "config":
+                        raise
+                    failover.record_failure(mid, status)
+                    last_error = e
+                    continue
+
+            # video 队列全部失败
+            print(f"[视频识别] video模型队列全部失败({len(attempted)}个), 错误: {last_error}")
+            return None
+
+        # 无 video 模型配置：使用 AIClient 自身属性作为单模型请求
+        try:
+            url = resolve_chat_completion_url(
+                self.base_url,
+                model="zai-org/GLM-4.6V",
+                provider_type=self.provider_type,
+                append_base_url_path=self.append_base_url_path,
+            )
+            payload = {
+                "model": "zai-org/GLM-4.6V",
+                "messages": messages
+            }
             headers = {
-                "Authorization": f"Bearer {api_key}",
+                "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             response.raise_for_status()
-            result = self.clean_response(response_json_utf8(response)["choices"][0]["message"]["content"])
-            print(f"[视频识别] 识别成功, 结果: {result[:100]}...")
+            result = self.clean_response(
+                response_json_utf8(response)["choices"][0]["message"]["content"]
+            )
+            print(f"[视频识别] 识别成功(默认配置), 结果: {result[:100]}...")
             return result
         except Exception as e:
-            print(f"[视频识别] 识别失败: {e}")
+            print(f"[视频识别] 默认配置请求失败: {e}")
             return None
 
 

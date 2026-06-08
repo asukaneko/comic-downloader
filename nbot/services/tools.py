@@ -759,77 +759,38 @@ class ToolExecutor:
     @staticmethod
     def understand_image(prompt: str, image_source: str) -> Dict[str, Any]:
         """
-        图片理解（使用 MiniMax VLM API）
-        
+        图片理解工具（统一走 vision 模型队列，含 failover）
+
         Args:
             prompt: 询问图片的问题
             image_source: 图片URL或本地文件路径
         """
         try:
-            # 检查配置
-            api_key = get_minimax_api_key()
-            if not api_key:
-                _log.error("MiniMax API密钥未配置")
+            from nbot.services.ai import ai_client
+
+            # 处理图片源：本地文件转 base64 data URL，HTTP URL 直接使用
+            processed_url = process_image_url(image_source)
+
+            # 调用统一的 vision 模型队列（含 failover）
+            result = ai_client.describe_image(processed_url, prompt)
+
+            if result:
                 return {
-                    "success": False,
-                    "error": "MiniMax API密钥未配置"
+                    "success": True,
+                    "content": result,
+                    "image_source": image_source,
+                    "prompt": prompt,
                 }
-            
-            # 处理图片源
-            processed_image_url = process_image_url(image_source)
-            
-            # 构建请求
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
-            }
-            
-            payload = {
-                "prompt": prompt,
-                "image_url": processed_image_url
-            }
-            
-            _log.info("[VLM] 发送图片理解请求")
-            _log.info(f"[VLM] Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
-            _log.info(f"[VLM] Image: {image_source[:100]}{'...' if len(image_source) > 100 else ''}")
-            
-            # 发送请求
-            import requests
-            response = requests.post(MINIMAX_VLM_URL, headers=headers, json=payload, timeout=60)
-            response.raise_for_status()
-            
-            # 解析响应
-            result = response.json()
-            
-            _log.info(f"[VLM] API响应: {json.dumps(result, ensure_ascii=False)[:300]}")
-            
-            # 提取理解结果
-            content = result.get("content", "")
-            
-            if not content:
-                return {
-                    "success": False,
-                    "error": "图片理解返回结果为空"
-                }
-            
-            return {
-                "success": True,
-                "content": content,
-                "image_source": image_source,
-                "prompt": prompt
-            }
-            
-        except requests.exceptions.RequestException as e:
-            _log.error(f"[VLM] 请求错误: {e}")
+
             return {
                 "success": False,
-                "error": f"图片理解请求失败: {str(e)}"
+                "error": "图片识别失败，vision模型队列无可用模型",
             }
         except Exception as e:
-            _log.error(f"[VLM] 图片理解错误: {e}")
+            _log.error(f"[understand_image] 图片理解错误: {e}")
             return {
                 "success": False,
-                "error": str(e)
+                "error": str(e),
             }
 
     @staticmethod
