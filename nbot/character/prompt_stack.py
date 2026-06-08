@@ -115,6 +115,7 @@ class PromptStack:
 
     # 推荐优先级常量
     PRIORITY_SAFETY = 10
+    PRIORITY_BUBBLE_SPLIT = 15  # 气泡分隔提示词（高优先级，紧随安全规则）
     PRIORITY_BEHAVIOR = 20
     PRIORITY_CHARACTER_PROFILE = 30
     PRIORITY_CHARACTER_STATE = 40

@@ -13134,6 +13134,7 @@ def main(params):
                     if (!isStreaming) {
                         currentMessage.stream_complete = true;
                     }
+
                 },
 
                 normalizeStreamChunk(messageId, text = '') {
@@ -14157,6 +14158,112 @@ def main(params):
                         return this.renderStreamingHtml(content);
                     }
                     return this.renderMarkdown(content, { disableStrikethrough: true });
+                },
+
+                bubbleDelimiterRegex() {
+                    return /<\|\s*\|>/g;
+                },
+
+                splitMessageBubbles(content) {
+                    return String(content || '').split(this.bubbleDelimiterRegex());
+                },
+
+                hasBubbleDelimiter(content) {
+                    return this.bubbleDelimiterRegex().test(String(content || ''));
+                },
+
+                getMessageBubbles(msg) {
+                    if (!msg || msg.source === 'sticker') {
+                        return [];
+                    }
+                    const parsedContent = this.parseMessageContent(msg.content || '', msg);
+                    const hasDelimiter = this.hasBubbleDelimiter(parsedContent);
+                    if (!hasDelimiter) {
+                        return [];
+                    }
+
+                    const rawParts = this.splitMessageBubbles(parsedContent);
+                    const lastIndex = rawParts.length - 1;
+                    return rawParts
+                        .map((part, index) => ({
+                            text: part,
+                            html: msg.is_streaming && index === lastIndex
+                                ? this.renderStreamingHtml(part)
+                                : this.renderMarkdown(part, { disableStrikethrough: true }),
+                            isStreaming: !!msg.is_streaming && index === lastIndex,
+                        }))
+                        .filter((bubble, index) => {
+                            if (bubble.text) return true;
+                            return !!msg.is_streaming && index === lastIndex;
+                        });
+                },
+
+                hasMessageBubbles(msg) {
+                    return this.getMessageBubbles(msg).length > 0;
+                },
+
+                getMultiBubbleMobileWidth() {
+                    const width = this.viewportWidth || window.innerWidth || 1200;
+                    if (width <= 768) {
+                        return 'var(--mobile-chat-bubble-max)';
+                    }
+                    return '';
+                },
+
+                getMultiBubbleContentStyle(msg) {
+                    if (!this.hasMessageBubbles(msg)) {
+                        return null;
+                    }
+                    const mobileWidth = this.getMultiBubbleMobileWidth();
+                    const style = {
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: msg?.role === 'user' ? 'flex-end' : 'flex-start',
+                        gap: '14px',
+                        padding: '0',
+                        border: '0',
+                        borderRadius: '0',
+                        background: 'transparent',
+                        boxShadow: 'none',
+                        overflow: 'visible',
+                    };
+                    if (mobileWidth) {
+                        style.width = mobileWidth;
+                        style.maxWidth = mobileWidth;
+                    }
+                    return style;
+                },
+
+                getMultiBubbleItemStyle(msg) {
+                    if (!this.hasMessageBubbles(msg)) {
+                        return null;
+                    }
+                    const mobileWidth = this.getMultiBubbleMobileWidth();
+                    if (!mobileWidth) {
+                        return null;
+                    }
+                    return {
+                        boxSizing: 'border-box',
+                        width: '100%',
+                        maxWidth: '100%',
+                    };
+                },
+
+                getMultiBubbleVoiceBarStyle(msg) {
+                    if (!this.hasMessageBubbles(msg)) {
+                        return null;
+                    }
+                    const mobileWidth = this.getMultiBubbleMobileWidth();
+                    if (!mobileWidth) {
+                        return null;
+                    }
+                    return {
+                        boxSizing: 'border-box',
+                        width: '100%',
+                        maxWidth: '100%',
+                        marginLeft: '0',
+                        marginRight: '0',
+                    };
                 },
 
                 // 表情包图片加载失败时的处理

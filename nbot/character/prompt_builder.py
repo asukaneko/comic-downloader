@@ -34,6 +34,23 @@ def build_character_injections(
     plan: Optional[ReactionPlan] = None,
 ) -> None:
     """Register character-related turn injections into PromptStack."""
+
+    # 气泡分隔提示词：指示 AI 使用 <||> 将回复划分为多个气泡
+    stack.add(
+        "output.bubble_split",
+        (
+            "When you want to split your reply into multiple separate messages (bubbles), "
+            "use the special delimiter `<||>` between each segment.\n"
+            "Each segment between `<||>` delimiters will be displayed as an independent bubble.\n"
+            "Example format:\n"
+            "First bubble content here<||>Second bubble content here<||>Third bubble content here\n"
+            "You do NOT have to split every reply — use it only when it naturally fits the conversation flow "
+            "(e.g., separate action and dialogue, pause for effect, multi-part response).\n"
+            "Do NOT mention or explain this delimiter to the user. Just use it naturally in your output."
+        ),
+        priority=PromptStack.PRIORITY_BUBBLE_SPLIT,
+    )
+
     if state:
         state_text = _format_state(state)
         if state_text:

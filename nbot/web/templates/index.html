@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260602-composer3';
+        window.__nbotAssetVersion = '20260609-bubbles14';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260602-composer3">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260609-bubbles14">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         if ('serviceWorker' in navigator) {
@@ -1407,7 +1407,7 @@
                                                 </template>
                                                 <i v-else class="fas fa-user"></i>
                                             </div>
-                                            <div class="message-content">
+                                            <div class="message-content" :class="{ 'multi-bubble-content': getMessageBubbles(msg).length > 0 }" :style="getMultiBubbleContentStyle(msg)">
                                                 <div v-if="isStreamAwaiting(msg)" class="stream-waiting-body dragon-bone-loading">
                                                     <div class="bone-row">
                                                         <div class="bone-avatar"></div>
@@ -1421,8 +1421,18 @@
                                                         <div class="bone-dot"></div>
                                                     </div>
                                                 </div>
+                                                <!-- 多气泡模式：一条消息包含多个气泡（由 <||> 或 <|  |> 分隔符产生） -->
+                                                <template v-if="getMessageBubbles(msg).length > 0">
+                                                    <div v-for="(bubble, bi) in getMessageBubbles(msg)" :key="'bb-'+msg.id+'-'+bi"
+                                                        class="message-body multi-bubble"
+                                                        :class="{ 'streaming-text': bubble.isStreaming, 'markdown-body': !bubble.isStreaming }"
+                                                        :style="getMultiBubbleItemStyle(msg)"
+                                                        v-html="bubble.html"
+                                                    ></div>
+                                                </template>
+                                                <!-- 单气泡模式（默认，向后兼容） -->
                                                 <div
-                                                    v-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming || msg.source === 'sticker')"
+                                                    v-else-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming || msg.source === 'sticker')"
                                                     class="message-body"
                                                     :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming, 'sticker-body': msg.source === 'sticker' }"
                                                     v-html="renderMessageBody(msg)"
@@ -1512,6 +1522,7 @@
                                                 <div
                                                     v-if="msg.role === 'assistant' && msg.source !== 'sticker' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id])"
                                                     class="voice-bar"
+                                                    :style="getMultiBubbleVoiceBarStyle(msg)"
                                                     :class="{
                                                         'voice-bar-generating': ttsAudioStates[msg.id]?.status === 'generating',
                                                         'voice-bar-playing': ttsAudioStates[msg.id]?.status === 'playing' || msg._audioPlaying,
@@ -10088,7 +10099,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260603-mcp-import"></script>
+    <script src="/static/js/nbot-methods.js?v=20260609-bubbles14"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
