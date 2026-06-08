@@ -24099,6 +24099,27 @@
     background: rgba(255, 255, 255, 0.15);
 }
 
+.voice-bar-regen {
+    border: 0;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border-radius: 12px;
+    background: transparent;
+    font-size: 11px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.voice-bar-regen:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+}
+
 .voice-bar-waves {
     display: inline-flex;
     align-items: center;
@@ -24216,6 +24237,16 @@
 
 [data-theme="light"] .voice-bar-end:hover {
     background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .voice-bar-regen {
+    color: rgba(30, 30, 60, 0.4);
+    background: transparent;
+}
+
+[data-theme="light"] .voice-bar-regen:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: rgba(30, 30, 60, 0.7);
 }
 
 [data-theme="light"] .voice-bar-wave {

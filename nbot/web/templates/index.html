@@ -1552,6 +1552,15 @@
                                                     >
                                                         <i class="fas fa-stop"></i>
                                                     </button>
+                                                    <button
+                                                        v-if="ttsAudioStates[msg.id]?.status !== 'generating'"
+                                                        type="button"
+                                                        class="voice-bar-regen"
+                                                        @click.stop="regenerateMessageTTS(msg)"
+                                                        title="重新生成语音"
+                                                    >
+                                                        <i class="fas fa-redo"></i>
+                                                    </button>
                                                 </div>
                                                 <!-- 消息操作栏（只对 assistant 消息显示） -->
                                                 <div v-if="msg.role === 'assistant'" class="msg-actions" :class="{ 'msg-actions-always': isOpeningMessage(msg) }">

@@ -6744,6 +6744,26 @@ def main(params):
                     }
                 },
 
+                // TTS: 重新生成消息语音
+                regenerateMessageTTS(msg) {
+                    // 停止当前播放
+                    const audio = this.ttsAudioPlayers[msg.id] || msg._audioEl;
+                    if (audio) {
+                        audio.pause();
+                        audio.currentTime = 0;
+                    }
+                    msg._audioPlaying = false;
+                    // 清除旧音频
+                    delete this.ttsAudioUrls[msg.id];
+                    const { [msg.id]: _removed, ...nextStates } = this.ttsAudioStates;
+                    this.ttsAudioStates = nextStates;
+                    // 获取 TTS 配置并重新合成
+                    const ttsCfg = this.currentSession?.tts_config;
+                    if (ttsCfg?.enabled) {
+                        this.synthesizeMessageTTS(msg.id, ttsCfg);
+                    }
+                },
+
                 // TTS: 格式化音频时长 (秒 → m:ss)
                 formatAudioDuration(seconds) {
                     if (!seconds || !isFinite(seconds)) return '';
