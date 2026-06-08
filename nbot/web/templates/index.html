@@ -32,6 +32,7 @@
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
     <link rel="stylesheet" href="/static/css/app.css?v=20260602-composer3">
+    <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -6940,13 +6941,13 @@
                             </div>
                         </div>
 
-                        <div v-if="ttsPlayground.models && ttsPlayground.models.length" class="card" style="margin-bottom: 16px;">
+                        <div v-if="ttsPlayground.models && ttsPlayground.models.length" class="card tts-glass-card" style="margin-bottom: 16px;">
                             <div class="card-body">
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label class="form-label">
                                         <i class="fas fa-sliders-h"></i> TTS 配置
                                     </label>
-                                    <select v-model="ttsPlayground.selectedModelId" class="form-select" @change="onTTSModelChange()">
+                                    <select v-model="ttsPlayground.selectedModelId" class="form-select tts-select" @change="onTTSModelChange()">
                                         <option v-for="model in ttsPlayground.models" :key="model.id" :value="model.id">
                                             {{ model.name }} - {{ model.tts_model || model.model || 'N/A' }} - {{ model.base_url || 'N/A' }}
                                         </option>
@@ -6956,34 +6957,34 @@
                         </div>
 
                         <!-- Current TTS Config Info -->
-                        <div v-if="selectedTTSModel" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">配置名称</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.name }}</div>
+                        <div v-if="selectedTTSModel" class="tts-config-grid" style="margin-bottom: 20px;">
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">配置名称</div>
+                                <div class="tts-config-chip-value">{{ selectedTTSModel.name }}</div>
                             </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">提供商</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_provider || 'openai' }}</div>
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">提供商</div>
+                                <div class="tts-config-chip-value">{{ selectedTTSModel.tts_provider || 'openai' }}</div>
                             </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">TTS Model</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_model || selectedTTSModel.model || 'N/A' }}</div>
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">TTS Model</div>
+                                <div class="tts-config-chip-value">{{ selectedTTSModel.tts_model || selectedTTSModel.model || 'N/A' }}</div>
                             </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">{{ $t('ai_config.voice') }}</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ (selectedTTSModel.tts_voice || 'default').trim() }}</div>
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">{{ $t('ai_config.voice') }}</div>
+                                <div class="tts-config-chip-value">{{ (selectedTTSModel.tts_voice || 'default').trim() }}</div>
                             </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">{{ $t('ai_config.speed') }}</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_speed || 1.0 }}</div>
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">{{ $t('ai_config.speed') }}</div>
+                                <div class="tts-config-chip-value">{{ selectedTTSModel.tts_speed || 1.0 }}</div>
                             </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Format</div>
-                                <div style="font-weight: 600; font-size: 14px; color: var(--text-primary, #111);">{{ selectedTTSModel.tts_format || 'mp3' }}</div>
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">Format</div>
+                                <div class="tts-config-chip-value">{{ selectedTTSModel.tts_format || 'mp3' }}</div>
                             </div>
-                            <div style="background: var(--bg-secondary, #f8f9fa); border: 1px solid var(--border-color, #e5e7eb); border-radius: 10px; padding: 14px 16px;">
-                                <div style="font-size: 11px; color: var(--text-muted, #9ca3af); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Base URL</div>
-                                <div style="font-weight: 600; font-size: 12px; color: var(--text-primary, #111); word-break: break-all;">{{ selectedTTSModel.base_url || 'N/A' }}</div>
+                            <div class="tts-config-chip">
+                                <div class="tts-config-chip-label">Base URL</div>
+                                <div class="tts-config-chip-value" style="font-size: 12px; word-break: break-all;">{{ selectedTTSModel.base_url || 'N/A' }}</div>
                             </div>
                         </div>
                         <div v-else class="card" style="margin-bottom: 16px;">
@@ -7000,29 +7001,29 @@
                             <!-- Left Column: Voice Selection & Parameters -->
                             <div>
                                 <!-- Voice Selector -->
-                                <div class="card" style="margin-bottom: 16px;">
-                                    <div class="card-header">
+                                <div class="card tts-glass-card" style="margin-bottom: 16px;">
+                                    <div class="card-header tts-card-header">
                                         <span class="card-title">
                                             <i class="fas fa-microphone-alt"></i> {{ $t('tts_playground.voice_select') }}
                                         </span>
                                     </div>
                                     <div class="card-body">
                                         <div class="form-group">
-                                            <select v-model="ttsPlayground.selectedVoice" class="form-select">
+                                            <select v-model="ttsPlayground.selectedVoice" class="form-select tts-select">
                                                 <option v-for="voice in ttsPlayground.voices" :key="voice.id" :value="voice.id">
                                                     {{ voice.name }} - {{ voice.description }}
                                                 </option>
                                             </select>
                                         </div>
-                                        <button class="btn btn-secondary" @click="previewTTSVoice()" style="margin-top: 8px;">
+                                        <button class="btn tts-glow-btn" @click="previewTTSVoice()" style="margin-top: 8px;">
                                             <i class="fas fa-play"></i> {{ $t('tts_playground.voice_preview') }}
                                         </button>
                                     </div>
                                 </div>
 
                                 <!-- Parameter Controls -->
-                                <div class="card" style="margin-bottom: 16px;">
-                                    <div class="card-header">
+                                <div class="card tts-glass-card" style="margin-bottom: 16px;">
+                                    <div class="card-header tts-card-header">
                                         <span class="card-title">
                                             <i class="fas fa-sliders-h"></i> {{ $t('tts_playground.speed') }} / {{ $t('tts_playground.pitch') }} / {{ $t('tts_playground.volume') }}
                                         </span>
@@ -7082,27 +7083,27 @@
                             <!-- Right Column: Test Text & Audio Player -->
                             <div>
                                 <!-- Test Text -->
-                                <div class="card" style="margin-bottom: 16px;">
-                                    <div class="card-header">
+                                <div class="card tts-glass-card" style="margin-bottom: 16px;">
+                                    <div class="card-header tts-card-header">
                                         <span class="card-title">
                                             <i class="fas fa-align-left"></i> {{ $t('tts_playground.test_text') }}
                                         </span>
                                     </div>
                                     <div class="card-body">
                                         <div class="form-group">
-                                            <textarea v-model="ttsPlayground.testText" class="form-textarea" rows="5"
+                                            <textarea v-model="ttsPlayground.testText" class="form-textarea tts-textarea" rows="5"
                                                 placeholder="输入要合成的文本..."></textarea>
                                             <div class="form-hint">
                                                 {{ $t('tts_playground.char_count', { count: (ttsPlayground.testText || '').length }) }}
                                             </div>
                                         </div>
                                         <div style="display: flex; gap: 8px;">
-                                            <button class="btn btn-primary" @click="synthesizeTTS()"
+                                            <button class="btn tts-synth-btn" @click="synthesizeTTS()"
                                                 :disabled="ttsPlayground.isGenerating || !ttsPlayground.testText.trim()">
                                                 <i :class="ttsPlayground.isGenerating ? 'fas fa-spinner fa-spin' : 'fas fa-play'"></i>
                                                 {{ ttsPlayground.isGenerating ? $t('tts_playground.generating') : $t('tts_playground.synthesize') }}
                                             </button>
-                                            <button v-if="ttsPlayground.isPlaying" class="btn btn-secondary" @click="stopTTSAudio()">
+                                            <button v-if="ttsPlayground.isPlaying" class="btn tts-stop-btn" @click="stopTTSAudio()">
                                                 <i class="fas fa-stop"></i> {{ $t('tts_playground.stop') }}
                                             </button>
                                         </div>
@@ -7110,8 +7111,8 @@
                                 </div>
 
                                 <!-- Audio Player -->
-                                <div v-if="ttsPlayground.currentAudioUrl" class="card" style="margin-bottom: 16px;">
-                                    <div class="card-header">
+                                <div v-if="ttsPlayground.currentAudioUrl" class="card tts-glass-card" style="margin-bottom: 16px;">
+                                    <div class="card-header tts-card-header">
                                         <span class="card-title">
                                             <i class="fas fa-volume-up"></i> Audio Player
                                         </span>
@@ -7124,15 +7125,15 @@
                                         <div v-if="ttsPlayground.lastGeneratedAt" class="form-hint" style="margin-top: 8px;">
                                             {{ $t('tts_playground.generated_at', { time: ttsPlayground.lastGeneratedAt }) }}
                                         </div>
-                                        <a :href="ttsPlayground.currentAudioUrl" download class="btn btn-secondary" style="margin-top: 8px;">
+                                        <a :href="ttsPlayground.currentAudioUrl" download class="btn tts-glow-btn" style="margin-top: 8px;">
                                             <i class="fas fa-download"></i> Download
                                         </a>
                                     </div>
                                 </div>
 
                                 <!-- Voice Upload -->
-                                <div class="card">
-                                    <div class="card-header" style="cursor: pointer;" @click="ttsPlayground.showUploadSection = !ttsPlayground.showUploadSection">
+                                <div class="card tts-glass-card">
+                                    <div class="card-header tts-card-header" style="cursor: pointer;" @click="ttsPlayground.showUploadSection = !ttsPlayground.showUploadSection">
                                         <span class="card-title">
                                             <i class="fas fa-upload"></i> {{ $t('tts_playground.upload_title') }}
                                         </span>
@@ -7160,7 +7161,7 @@
                                             <textarea v-model="ttsPlayground.uploadText" class="form-textarea" rows="2"
                                                 placeholder="输入音频对应的文本内容..."></textarea>
                                         </div>
-                                        <button class="btn btn-primary" @click="uploadCustomVoice()"
+                                        <button class="btn tts-synth-btn" @click="uploadCustomVoice()"
                                             :disabled="ttsPlayground.isUploading || !ttsPlayground.uploadFile || !ttsPlayground.uploadName.trim()">
                                             <i :class="ttsPlayground.isUploading ? 'fas fa-spinner fa-spin' : 'fas fa-upload'"></i>
                                             {{ ttsPlayground.isUploading ? '...' : $t('tts_playground.upload_btn') }}
@@ -7170,96 +7171,6 @@
                             </div>
                         </div>
 
-                        <style>
-                            .tts-range-slider {
-                                width: 100%;
-                                height: 6px;
-                                -webkit-appearance: none;
-                                appearance: none;
-                                background: var(--border-color);
-                                border-radius: 3px;
-                                outline: none;
-                                cursor: pointer;
-                            }
-                            .tts-range-slider::-webkit-slider-thumb {
-                                -webkit-appearance: none;
-                                appearance: none;
-                                width: 18px;
-                                height: 18px;
-                                border-radius: 50%;
-                                background: var(--primary-color);
-                                cursor: pointer;
-                                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                            }
-                            .tts-range-slider::-moz-range-thumb {
-                                width: 18px;
-                                height: 18px;
-                                border-radius: 50%;
-                                background: var(--primary-color);
-                                cursor: pointer;
-                                border: none;
-                                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                            }
-                            .voice-bar {
-                                display: inline-flex;
-                                align-items: center;
-                                gap: 8px;
-                                margin-top: 6px;
-                                padding: 7px 14px;
-                                background: linear-gradient(135deg, var(--primary-color, #4f46e5) 0%, #7c3aed 100%);
-                                border-radius: 20px;
-                                cursor: pointer;
-                                user-select: none;
-                                transition: transform 0.15s, box-shadow 0.15s;
-                                box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);
-                                min-width: 140px;
-                                flex-basis: 100%;
-                                margin-left: 60px;
-                                order: 99;
-                            }
-                            .voice-bar:hover {
-                                transform: translateY(-1px);
-                                box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);
-                            }
-                            .voice-bar:active { transform: scale(0.97); }
-                            .voice-bar-btn {
-                                width: 28px; height: 28px;
-                                display: flex; align-items: center; justify-content: center;
-                                background: rgba(255,255,255,0.25);
-                                border-radius: 50%;
-                                color: #fff;
-                                flex-shrink: 0;
-                                transition: background 0.2s;
-                            }
-                            .voice-bar:hover .voice-bar-btn { background: rgba(255,255,255,0.35); }
-                            .voice-bar-waves {
-                                display: flex;
-                                align-items: center;
-                                gap: 2px;
-                                height: 20px;
-                            }
-                            .voice-bar-wave {
-                                display: inline-block;
-                                width: 3px;
-                                height: 4px;
-                                background: rgba(255,255,255,0.6);
-                                border-radius: 2px;
-                                transition: height 0.1s;
-                            }
-                            .voice-bar-playing .voice-bar-wave {
-                                animation: voiceWave 0.8s ease-in-out infinite alternate;
-                            }
-                            @keyframes voiceWave {
-                                0% { height: 4px; background: rgba(255,255,255,0.4); }
-                                50% { height: 16px; background: rgba(255,255,255,0.9); }
-                                100% { height: 8px; background: rgba(255,255,255,0.6); }
-                            }
-                            .voice-bar-label {
-                                font-size: 12px;
-                                color: rgba(255,255,255,0.85);
-                                white-space: nowrap;
-                            }
-                        </style>
                     </div>
 
                     <!-- Debug Console -->

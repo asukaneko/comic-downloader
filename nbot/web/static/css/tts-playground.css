@@ -1,0 +1,379 @@
+/* ===== TTS Playground — Dark Glassmorphism Theme ===== */
+
+/* Glass Card */
+.tts-glass-card {
+    background: rgba(15, 20, 40, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(100, 80, 220, 0.18);
+    border-radius: 18px;
+    box-shadow:
+        0 4px 30px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.tts-glass-card:hover {
+    transform: translateY(-3px);
+    box-shadow:
+        0 12px 40px rgba(80, 60, 200, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border-color: rgba(100, 80, 220, 0.28);
+}
+
+.tts-card-header {
+    border-bottom: 1px solid rgba(100, 80, 220, 0.12);
+    padding: 14px 20px;
+}
+
+.tts-card-header .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(210, 220, 255, 0.95);
+}
+
+/* Config Summary Chips */
+.tts-config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.tts-config-chip {
+    background: rgba(18, 22, 48, 0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(100, 80, 220, 0.14);
+    border-radius: 14px;
+    padding: 16px 18px;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.tts-config-chip::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(120, 100, 255, 0.25), transparent);
+}
+
+.tts-config-chip:hover {
+    transform: translateY(-3px);
+    border-color: rgba(120, 100, 255, 0.3);
+    box-shadow: 0 8px 28px rgba(80, 60, 200, 0.15);
+}
+
+.tts-config-chip-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(140, 155, 210, 0.65);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+}
+
+.tts-config-chip-value {
+    font-weight: 600;
+    font-size: 14px;
+    color: rgba(220, 228, 255, 0.95);
+}
+
+/* Select Dropdown */
+.tts-select {
+    background: rgba(20, 25, 55, 0.65) !important;
+    border: 1px solid rgba(100, 80, 220, 0.18) !important;
+    border-radius: 12px !important;
+    color: rgba(220, 228, 255, 0.9) !important;
+    padding: 12px 16px !important;
+    font-size: 14px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5L6 8.5L10 4.5' stroke='%238090cc' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 14px center !important;
+    background-size: 12px !important;
+    padding-right: 36px !important;
+}
+
+.tts-select:hover {
+    border-color: rgba(100, 80, 220, 0.3) !important;
+    background-color: rgba(25, 30, 65, 0.7) !important;
+}
+
+.tts-select:focus {
+    border-color: rgba(120, 100, 255, 0.45) !important;
+    box-shadow:
+        0 0 0 3px rgba(100, 80, 220, 0.15),
+        0 0 20px rgba(100, 80, 220, 0.08) !important;
+    outline: none !important;
+}
+
+.tts-select option {
+    background: #141830;
+    color: rgba(220, 228, 255, 0.9);
+    padding: 10px;
+}
+
+/* Textarea */
+.tts-textarea {
+    background: rgba(20, 25, 55, 0.55) !important;
+    border: 1px solid rgba(100, 80, 220, 0.15) !important;
+    border-radius: 14px !important;
+    color: rgba(220, 228, 255, 0.9) !important;
+    padding: 14px 16px !important;
+    font-size: 14px;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.tts-textarea::placeholder {
+    color: rgba(130, 145, 195, 0.4);
+}
+
+.tts-textarea:hover {
+    border-color: rgba(100, 80, 220, 0.25) !important;
+}
+
+.tts-textarea:focus {
+    border-color: rgba(120, 100, 255, 0.4) !important;
+    box-shadow:
+        0 0 0 3px rgba(100, 80, 220, 0.12),
+        0 0 30px rgba(100, 80, 220, 0.06) !important;
+    outline: none !important;
+}
+
+/* Gradient Buttons — Secondary / Ghost */
+.tts-glow-btn {
+    background: rgba(60, 50, 150, 0.25);
+    border: 1px solid rgba(100, 80, 220, 0.22);
+    border-radius: 11px;
+    color: rgba(180, 190, 255, 0.9);
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(6px);
+}
+
+.tts-glow-btn:hover {
+    background: rgba(70, 55, 170, 0.4);
+    border-color: rgba(100, 80, 220, 0.35);
+    box-shadow: 0 4px 20px rgba(80, 60, 200, 0.2);
+    transform: translateY(-1px);
+    color: #fff;
+}
+
+.tts-glow-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(80, 60, 200, 0.15);
+}
+
+/* Gradient Buttons — Primary Synth */
+.tts-synth-btn {
+    background: linear-gradient(135deg, #6c3aed, #4f6cf7);
+    border: none;
+    border-radius: 11px;
+    color: #fff;
+    padding: 11px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 4px 20px rgba(90, 60, 220, 0.35);
+    position: relative;
+    overflow: hidden;
+}
+
+.tts-synth-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.tts-synth-btn:hover:not(:disabled)::before {
+    opacity: 1;
+}
+
+.tts-synth-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #7c4af5, #5b78ff);
+    box-shadow: 0 6px 28px rgba(90, 60, 220, 0.45);
+    transform: translateY(-2px);
+}
+
+.tts-synth-btn:active:not(:disabled) {
+    transform: translateY(0);
+    box-shadow: 0 3px 12px rgba(90, 60, 220, 0.3);
+}
+
+.tts-synth-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+}
+
+/* Stop Button */
+.tts-stop-btn {
+    background: rgba(200, 50, 50, 0.2);
+    border: 1px solid rgba(220, 60, 60, 0.28);
+    border-radius: 11px;
+    color: rgba(255, 170, 170, 0.9);
+    padding: 11px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.tts-stop-btn:hover {
+    background: rgba(220, 50, 50, 0.32);
+    border-color: rgba(220, 60, 60, 0.4);
+    box-shadow: 0 4px 16px rgba(220, 50, 50, 0.15);
+    transform: translateY(-1px);
+}
+
+.tts-stop-btn:active {
+    transform: translateY(0);
+}
+
+/* Range Slider */
+.tts-range-slider {
+    width: 100%;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(90deg, rgba(80, 60, 200, 0.35), rgba(70, 130, 240, 0.35));
+    border-radius: 3px;
+    outline: none;
+    cursor: pointer;
+    transition: background 0.25s ease;
+}
+
+.tts-range-slider:hover {
+    background: linear-gradient(90deg, rgba(80, 60, 200, 0.5), rgba(70, 130, 240, 0.5));
+}
+
+.tts-range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 35%, #a99aff, #6c3aed);
+    cursor: pointer;
+    border: 2px solid rgba(170, 160, 255, 0.35);
+    box-shadow:
+        0 0 10px rgba(120, 100, 255, 0.55),
+        0 2px 6px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.25s ease, transform 0.15s ease;
+}
+
+.tts-range-slider::-webkit-slider-thumb:hover {
+    box-shadow:
+        0 0 18px rgba(120, 100, 255, 0.75),
+        0 2px 8px rgba(0, 0, 0, 0.4);
+    transform: scale(1.12);
+}
+
+.tts-range-slider::-webkit-slider-thumb:active {
+    transform: scale(1.05);
+}
+
+.tts-range-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 35%, #a99aff, #6c3aed);
+    cursor: pointer;
+    border: 2px solid rgba(170, 160, 255, 0.35);
+    box-shadow:
+        0 0 10px rgba(120, 100, 255, 0.55),
+        0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.tts-range-slider::-moz-range-track {
+    height: 6px;
+    background: linear-gradient(90deg, rgba(80, 60, 200, 0.35), rgba(70, 130, 240, 0.35));
+    border-radius: 3px;
+}
+
+/* Audio Player — dark tint for native controls */
+.tts-glass-card audio {
+    border-radius: 10px;
+    filter: invert(1) hue-rotate(180deg) brightness(0.88) contrast(1.1);
+}
+
+/* File Input (upload area) */
+.tts-glass-card input[type="file"] {
+    background: rgba(20, 25, 55, 0.5);
+    border: 1px dashed rgba(100, 80, 220, 0.25);
+    border-radius: 10px;
+    padding: 12px 14px !important;
+    color: rgba(180, 190, 255, 0.8);
+    transition: border-color 0.25s ease, background 0.25s ease;
+}
+
+.tts-glass-card input[type="file"]:hover {
+    border-color: rgba(100, 80, 220, 0.4);
+    background: rgba(25, 30, 65, 0.5);
+}
+
+.tts-glass-card input[type="file"]:focus {
+    outline: none;
+    border-color: rgba(120, 100, 255, 0.45);
+    box-shadow: 0 0 0 3px rgba(100, 80, 220, 0.12);
+}
+
+/* Text Input (upload name) */
+.tts-glass-card .form-input {
+    background: rgba(20, 25, 55, 0.55) !important;
+    border: 1px solid rgba(100, 80, 220, 0.15) !important;
+    border-radius: 10px !important;
+    color: rgba(220, 228, 255, 0.9) !important;
+    padding: 10px 14px !important;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.tts-glass-card .form-input:hover {
+    border-color: rgba(100, 80, 220, 0.25) !important;
+}
+
+.tts-glass-card .form-input:focus {
+    border-color: rgba(120, 100, 255, 0.4) !important;
+    box-shadow: 0 0 0 3px rgba(100, 80, 220, 0.12) !important;
+    outline: none !important;
+}
+
+/* Form Labels inside glass cards */
+.tts-glass-card .form-label {
+    color: rgba(160, 175, 220, 0.75);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+}
+
+/* Badge (speed / pitch / volume value) */
+.tts-glass-card .badge {
+    background: rgba(80, 60, 200, 0.25) !important;
+    color: rgba(170, 160, 255, 0.9) !important;
+    border: 1px solid rgba(100, 80, 220, 0.2) !important;
+    border-radius: 8px !important;
+    padding: 3px 10px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+}
+
+/* Form Hint */
+.tts-glass-card .form-hint {
+    color: rgba(130, 145, 195, 0.6);
+    font-size: 12px;
+}
