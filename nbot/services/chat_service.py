@@ -492,6 +492,49 @@ class QQCallbacks(PipelineCallbacks):
         """QQ 频道通过 BotAPI 补丁自动发送消息，此处为空操作。"""
         pass
 
+    # ---- 表情包 ----
+
+    def send_sticker(
+        self, ctx: PipelineContext, sticker_info: Dict[str, Any]
+    ) -> None:
+        """QQ 频道通过 BotAPI 发送表情包图片（单独消息）"""
+        try:
+            import nbot.commands as _cmd_mod
+            bot_instance = getattr(_cmd_mod, "bot", None)
+            if not bot_instance or not hasattr(bot_instance, "api"):
+                print("[Sticker] QQ Bot 实例不可用，跳过发送")
+                return
+
+            image_url = sticker_info.get("url", "")
+            if not image_url:
+                return
+
+            api = bot_instance.api
+            # 根据会话类型选择发送方式：私聊或群聊
+            if self.user_id:
+                # 私聊
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(api.post_private_msg(self.user_id, image=image_url))
+                finally:
+                    loop.close()
+            elif self.group_id:
+                # 群聊
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(api.post_group_msg(self.group_id, image=image_url))
+                finally:
+                    loop.close()
+
+            print(
+                f"[Sticker] QQ 表情包已发送: target={self.user_id or self.group_id} "
+                f"url={image_url[:80]}"
+            )
+        except Exception as e:
+            print(f"[Sticker] QQ 表情包发送失败: {e}")
+
 
 def search_knowledge_base(query: str, user_id: str = None, group_id: str = None) -> str:
     """

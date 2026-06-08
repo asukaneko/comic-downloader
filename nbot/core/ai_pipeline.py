@@ -469,6 +469,19 @@ class PipelineCallbacks(ABC):
         """AI 响应完成后的回调。默认自动记录 token 用量。"""
         _record_channel_token_stats(ctx, result)
 
+    # ---- 表情包 ----
+
+    def send_sticker(
+        self, ctx: PipelineContext, sticker_info: Dict[str, Any]
+    ) -> None:
+        """发送表情包图片（单独消息）。默认空实现，由各频道覆写。
+
+        Args:
+            ctx: 管道上下文
+            sticker_info: 表情包信息字典 {url, artist_name, anime_name, endpoint}
+        """
+        pass
+
     # ---- 角色运行时 ----
 
     def get_character_context(self, ctx: PipelineContext):
@@ -1405,11 +1418,72 @@ class AIPipeline:
         callbacks: PipelineCallbacks,
         result: PipelineResult,
     ) -> None:
-        """角色运行时 after_turn → 自动记忆 → on_response_complete。"""
+        """角色运行时 after_turn → 自动记忆 → on_response_complete → 表情包。"""
         self._phase_character_runtime_after_turn(ctx, callbacks, result)
         if ctx.metadata.get("session_mode") != "agent":
             self._phase_auto_memory(ctx, callbacks, result)
         callbacks.on_response_complete(ctx, result)
+
+        # 表情包发送：基于角色心情，按配置概率单独发送
+        self._try_send_sticker(ctx, callbacks, result)
+
+    def _try_send_sticker(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+        result: PipelineResult,
+    ) -> None:
+        """根据角色心情发送表情包（仅 web / qq 频道，通过频道回调单独发送）"""
+        # 仅在 web 和 qq 频道启用表情包
+        channel = (
+            ctx.metadata.get("source", "")
+            or getattr(ctx.chat_request, "channel", "")
+            or ctx.metadata.get("channel_type", "")
+        )
+        if channel not in ("web", "qq"):
+            return
+
+        # 有错误时不发表情包
+        if result.error:
+            return
+
+        # 检查表情包功能开关
+        from nbot.services.sticker_service import is_sticker_enabled
+
+        if not is_sticker_enabled():
+            return
+
+        # 从角色运行时上下文获取当前心情
+        mood = ""
+        if hasattr(ctx, "character_turn") and ctx.character_turn:
+            turn = ctx.character_turn
+            if hasattr(turn, "state") and turn.state:
+                mood = getattr(turn.state, "mood", "") or ""
+
+        if not mood:
+            return
+
+        # 按配置概率触发
+        from nbot.services.sticker_service import should_send_sticker, get_sticker_for_mood
+
+        if not should_send_sticker():
+            _log.debug("[Sticker] 概率未命中，跳过: mood=%s", mood)
+            return
+
+        # 获取表情包
+        sticker = get_sticker_for_mood(mood)
+        if not sticker:
+            return
+
+        # 通过频道回调单独发送表情包消息
+        try:
+            callbacks.send_sticker(ctx, sticker)
+            _log.info(
+                "[Sticker] 表情包已发送: channel=%s mood=%s url=%s",
+                channel, mood, sticker.get("url", "")[:80],
+            )
+        except Exception as exc:
+            _log.warning("[Sticker] 发送失败: %s", exc)
 
     def _phase_assemble_result(
         self,

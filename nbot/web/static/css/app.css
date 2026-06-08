@@ -6484,6 +6484,104 @@
             50% { opacity: 0; }
         }
 
+        /* 表情包图片样式（nekos.best，裸图无气泡） */
+        /* sticker 消息的气泡容器收缩到图片大小 */
+        .message.assistant:has(.sticker-image-wrapper) .message-content {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            display: inline-block !important;
+            width: auto !important;
+        }
+
+        .message.assistant:has(.sticker-image-wrapper) .message-content::before {
+            display: none !important;
+        }
+
+        .sticker-body {
+            display: none;
+        }
+
+        .sticker-image-wrapper {
+            /* 裸图：无背景、无边框、无内边距 */
+            padding: 0;
+            margin: 0;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            overflow: visible;
+        }
+
+        .sticker-image {
+            width: auto;
+            height: auto;
+            max-width: 280px;
+            max-height: 300px;
+            object-fit: contain;
+            display: block;
+            border-radius: 8px;
+            /* 裸图效果：无额外边框/阴影 */
+            border: none;
+            box-shadow: none;
+        }
+
+        /* 表情包设置：概率滑块行 */
+        .sticker-probability-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px 4px 36px;
+        }
+
+        .probability-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            min-width: 52px;
+        }
+
+        .probability-slider {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: var(--border-color);
+            outline: none;
+            cursor: pointer;
+        }
+
+        .probability-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .probability-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .probability-value {
+            font-size: 13px;
+            color: var(--primary-color);
+            font-weight: 600;
+            min-width: 38px;
+            text-align: right;
+        }
+
         .markdown-body {
             font-size: 14px;
             line-height: 1.6;

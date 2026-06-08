@@ -6834,6 +6834,30 @@ def main(params):
                     }
                 },
 
+                // 表情包开关切换
+                async toggleSticker() {
+                    const newValue = !this.settings.features.sticker;
+                    this.settings.features.sticker = newValue;
+                    try {
+                        await api.put('/api/settings', { features: { sticker: newValue } });
+                        this.showToast(newValue ? 'AI 表情包已开启' : 'AI 表情包已关闭', 'info');
+                    } catch (e) {
+                        this.settings.features.sticker = !newValue;
+                        this.showToast('表情包设置保存失败', 'error');
+                    }
+                },
+
+                // 表情包发送概率变更（拖动滑块时实时保存）
+                async onStickerProbabilityChange(event) {
+                    const value = parseInt(event.target.value, 10);
+                    this.settings.sticker_probability = value;
+                    try {
+                        await api.put('/api/settings', { sticker_probability: value });
+                    } catch (e) {
+                        console.warn('[Sticker] 概率设置保存失败:', e);
+                    }
+                },
+
                 // ========== API Key 管理 ==========
                 async loadApiKeys() {
                     try {
@@ -14124,11 +14148,21 @@ def main(params):
                 },
 
                 renderMessageBody(msg) {
+                    // 表情包消息：不渲染文本内容，隐藏 message-body
+                    if (msg?.source === 'sticker') {
+                        return '';
+                    }
                     const content = this.parseMessageContent(msg?.content || '', msg);
                     if (msg?.is_streaming) {
                         return this.renderStreamingHtml(content);
                     }
                     return this.renderMarkdown(content, { disableStrikethrough: true });
+                },
+
+                // 表情包图片加载失败时的处理
+                handleStickerError(event) {
+                    event.target.style.display = 'none';
+                    console.warn('[Sticker] 图片加载失败:', event.target.src);
                 },
 
                 isStreamAwaiting(msg) {

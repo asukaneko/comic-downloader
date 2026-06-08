@@ -1422,11 +1422,15 @@
                                                     </div>
                                                 </div>
                                                 <div
-                                                    v-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming)"
+                                                    v-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming || msg.source === 'sticker')"
                                                     class="message-body"
-                                                    :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming }"
+                                                    :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming, 'sticker-body': msg.source === 'sticker' }"
                                                     v-html="renderMessageBody(msg)"
                                                 ></div>
+                                                <!-- AI 表情包图片（nekos.best，裸图无气泡） -->
+                                                <div v-if="msg.source === 'sticker' && msg.sticker" class="sticker-image-wrapper">
+                                                    <img :src="msg.sticker.url" class="sticker-image" @error="handleStickerError" loading="lazy">
+                                                </div>
                                                 <!-- 用户消息编辑态：直接在原位置替换 -->
                                                 <div v-if="msg.role === 'user' && editingMessageId === msg.id" class="user-edit-inline" @click.stop>
                                                     <textarea v-model="editingMessageContent" class="user-edit-textarea" rows="2" @keydown.enter.ctrl="confirmEditMessage(msg)" @keydown.escape="cancelEditMessage()"></textarea>
@@ -1506,7 +1510,7 @@
                                                 </div>
                                                 <!-- TTS 语音条（内嵌在气泡底部） -->
                                                 <div
-                                                    v-if="msg.role === 'assistant' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id])"
+                                                    v-if="msg.role === 'assistant' && msg.source !== 'sticker' && (ttsAudioUrls[msg.id] || ttsAudioStates[msg.id])"
                                                     class="voice-bar"
                                                     :class="{
                                                         'voice-bar-generating': ttsAudioStates[msg.id]?.status === 'generating',
@@ -1562,8 +1566,8 @@
                                                         <i class="fas fa-redo"></i>
                                                     </button>
                                                 </div>
-                                                <!-- 消息操作栏（只对 assistant 消息显示） -->
-                                                <div v-if="msg.role === 'assistant'" class="msg-actions" :class="{ 'msg-actions-always': isOpeningMessage(msg) }">
+                                                <!-- 消息操作栏（只对 assistant 消息显示，表情包消息隐藏） -->
+                                                <div v-if="msg.role === 'assistant' && msg.source !== 'sticker'" class="msg-actions" :class="{ 'msg-actions-always': isOpeningMessage(msg) }">
                                                     <button class="msg-action-btn" @click="copyMessage(msg)" title="复制">
                                                         <i class="fas fa-copy"></i>
                                                     </button>
@@ -6479,6 +6483,22 @@
                                             <label class="toggle-switch" :class="{ active: settings.features.live2d }">
                                                 <div class="toggle-slider"></div>
                                             </label>
+                                        </div>
+                                        <!-- 表情包开关 -->
+                                        <div class="feature-switch-item" @click="toggleSticker()">
+                                            <div class="feature-switch-info">
+                                                <i class="fas fa-face-grin-beam feature-switch-icon"></i>
+                                                <span class="feature-switch-label">AI 表情包</span>
+                                            </div>
+                                            <label class="toggle-switch" :class="{ active: settings.features.sticker }">
+                                                <div class="toggle-slider"></div>
+                                            </label>
+                                        </div>
+                                        <!-- 表情包发送概率 -->
+                                        <div v-if="settings.features.sticker" class="sticker-probability-row">
+                                            <span class="probability-label">发送概率</span>
+                                            <input type="range" min="0" max="100" :value="(settings.sticker_probability || 50)" @input="onStickerProbabilityChange" class="probability-slider">
+                                            <span class="probability-value">{{ settings.sticker_probability || 50 }}%</span>
                                         </div>
                                     </div>
                                 </div>

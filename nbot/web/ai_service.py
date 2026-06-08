@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from nbot.channels.registry import get_channel_adapter
 from nbot.channels.web import WebChannelAdapter
 from nbot.core import (
@@ -521,6 +521,34 @@ class WebCallbacks(PipelineCallbacks):
             room=self.session_id,
         )
         self.server.socketio.sleep(0)
+
+    # ---- 表情包 ----
+
+    def send_sticker(
+        self, ctx: PipelineContext, sticker_info: Dict[str, Any]
+    ) -> None:
+        """Web 频道通过 Socket.IO 发送表情包图片消息（裸图，无气泡包裹）"""
+        import uuid
+        sticker_message = {
+            "id": str(uuid.uuid4()),
+            "role": "assistant",
+            "content": "",
+            "timestamp": __import__("datetime").datetime.now().isoformat(),
+            "sender": "AI",
+            "source": "sticker",
+            "sticker": {
+                "url": sticker_info.get("url", ""),
+                "anime_name": sticker_info.get("anime_name", ""),
+                "artist_name": sticker_info.get("artist_name", ""),
+            },
+        }
+        self.server.socketio.emit(
+            "ai_response",
+            {"session_id": self.session_id, "message": sticker_message},
+            room=self.session_id,
+        )
+        # 同时保存到会话历史
+        self.session_store.append_message(self.session_id, sticker_message)
 
     # ---- 进度 ----
 
