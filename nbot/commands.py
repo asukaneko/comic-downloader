@@ -4433,15 +4433,81 @@ async def dispatch_message(msg, is_group: bool):
             for segment in _iter_message_segments(msg):
                 image_url = _extract_image_url_from_segment(segment)
                 if image_url:
-                    _log.info(f"浠?message segment 鑾峰彇鍥剧墖 URL: {image_url[:50]}...")
+                    _log.info(f"从 message segment 获取图片 URL: {image_url[:50]}...")
                     break
         except Exception as e:
-            _log.warning(f"鏃犳硶浠?message segments 鑾峰彇鍥剧墖 URL: {e}")
+            _log.warning(f"无法从 message segments 获取图片 URL: {e}")
 
     if not image_url:
         image_url = _extract_image_url_from_cq(raw_msg)
         if image_url:
             _log.info(f"从 CQ 码解析图片 URL: {image_url[:50]}...")
+
+    # ===== 提取视频/音频/文件等多媒体附件（供 MessagePreprocessor 处理）=====
+    media_attachments = []
+    try:
+        # 从 msg.message 段提取
+        if hasattr(msg, 'message') and msg.message:
+            for elem in msg.message:
+                if not hasattr(elem, 'type'):
+                    continue
+                etype = elem.type
+                edata = getattr(elem, 'data', {}) or {}
+                if etype == "video":
+                    vurl = edata.get('url', '')
+                    vfile = edata.get('file', '')
+                    if vurl or vfile:
+                        media_attachments.append({
+                            "type": "video",
+                            "source": "qq",
+                            "file": vfile,
+                            "url": vurl,
+                        })
+                        _log.info(f"提取到视频附件: file={vfile[:30]}, url={vurl[:60] if vurl else '无'}...")
+                elif etype == "record":
+                    rurl = edata.get('url', '')
+                    rfile = edata.get('file', '')
+                    if rurl or rfile:
+                        media_attachments.append({
+                            "type": "audio",
+                            "source": "qq",
+                            "file": rfile,
+                            "url": rurl,
+                        })
+                        _log.info(f"提取到音频附件: file={rfile[:30]}, url={rurl[:60] if rurl else '无'}...")
+
+        # 如果 msg.message 没有视频/音频，尝试从 CQ 码补充解析
+        if not any(a["type"] in ("video", "audio") for a in media_attachments):
+            import re as _re
+            # 匹配 [CQ:video,file=xxx,url=xxx] 和 [CQ:record,file=xxx,url=xxx]
+            for cq_match in _re.finditer(r'\[CQ:(video|record),file=([^\],]+),url=([^\]]+)\]', raw_msg):
+                mq_type, mq_file, mq_url = cq_match.group(1), cq_match.group(2), cq_match.group(3)
+                att_type = "audio" if mq_type == "record" else mq_type
+                # 避免重复添加
+                if not any(a["type"] == att_type and a.get("file") == mq_file for a in media_attachments):
+                    media_attachments.append({
+                        "type": att_type,
+                        "source": "qq",
+                        "file": mq_file,
+                        "url": mq_url,
+                    })
+                    _log.info(f"从 CQ 码提取{('音频' if att_type == 'audio' else '视频')}附件: file={mq_file[:30]}")
+
+        # 图片也纳入统一附件列表（如果有的话）
+        if image_url:
+            media_attachments.insert(0, {
+                "type": "image",
+                "source": "qq",
+                "url": image_url,
+            })
+    except Exception as e:
+        _log.warning(f"提取多媒体附件失败: {e}")
+        # 降级：仅使用图片
+        if image_url:
+            media_attachments = [{"type": "image", "source": "qq", "url": image_url}]
+
+    _log.info(f"多媒体附件总数: {len(media_attachments)} "
+               f"(类型: {[a['type'] for a in media_attachments]})")
 
     # 检测并保存用户上传的文件到工作区
     if WORKSPACE_AVAILABLE:
@@ -4489,7 +4555,7 @@ async def dispatch_message(msg, is_group: bool):
         from nbot.services.chat_service import chat as do_chat
         try:
             content = raw_msg
-            atts = [{"type": "image", "url": image_url, "source": "qq"}] if image_url else []
+            atts = media_attachments
             trigger = "at bot" if at_bot else f"auto_reply level={auto_reply_level:.2f}"
             _log.info(f"Processing group message ({trigger}) from {user_id} in {group_id}: {content[:50]}..., image: {bool(image_url)}")
 
@@ -4525,8 +4591,9 @@ async def dispatch_message(msg, is_group: bool):
         try:
             content = raw_msg
             user_id = str(msg.user_id) if hasattr(msg, 'user_id') else None
-            atts = [{"type": "image", "url": image_url, "source": "qq"}] if image_url else []
-            _log.info(f"Processing private message from {user_id}: {content[:50]}..., image: {bool(image_url)}")
+            atts = media_attachments
+            _log.info(f"Processing private message from {user_id}: {content[:50]}..., "
+                       f"attachments={len(atts)}")
             response = await loop.run_in_executor(None, do_chat, content, user_id, None, None, False, None, None, atts)
             if response:
                 _log.info(f"Sending private reply: {response[:50]}...")

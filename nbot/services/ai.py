@@ -187,6 +187,20 @@ except FileNotFoundError:
     os.makedirs("saved_message", exist_ok=True)
 
 
+def _is_gemini_model(provider_type: str, model_name: str) -> bool:
+    """判断模型是否为 Gemini 系列。
+
+    通过 provider_type（如 gemini_native）或模型名前缀（如 gemini-2.5-flash）判断。
+    """
+    pt = (provider_type or "").lower()
+    mn = (model_name or "").lower()
+    if "gemini" in pt and pt != "":
+        return True
+    # 常见 Gemini 模型名模式
+    gemini_prefixes = ("gemini", "models/gemini")
+    return any(mn.startswith(p) for p in gemini_prefixes)
+
+
 class AIClient:
     def __init__(self, api_key: str, base_url: str, model: str, pic_model: str,
                  search_api_key: str, search_api_url: str, video_api: str,
@@ -772,7 +786,11 @@ class AIClient:
             return ""
 
     def describe_video(self, video_url: str, text: str = None) -> Optional[str]:
-        """视频识别，在 video 模型队列内完成故障转移，不跨 purpose 回退。"""
+        """视频识别，在 video 模型队列内完成故障转移，不跨 purpose 回退。
+
+        对 Gemini 模型自动使用原生 inline_data 格式（而非 OpenAI video_url 格式），
+        因为多数 OpenAI 兼容代理无法正确转发 video_url 中的视频内容。
+        """
         _url_preview = video_url[:80]
         _truncated = (
             "...(base64已省略)"
@@ -782,7 +800,8 @@ class AIClient:
         print(f"[视频识别] 开始识别视频, URL: {_url_preview}{_truncated}")
 
         system_prompt = "请分析这个视频的内容。"
-        messages = [
+        # OpenAI 格式的消息（用于非 Gemini 模型）
+        openai_messages = [
             {
                 "role": "user",
                 "content": [
@@ -810,34 +829,20 @@ class AIClient:
                     break
                 mid = cfg.get("model_id", "")
                 mname = cfg.get("model", "")
+                ptype = cfg.get("provider_type", "openai_compatible")
                 attempted.add(mid)
 
                 try:
-                    url = resolve_chat_completion_url(
-                        cfg.get("base_url", ""),
-                        model=mname,
-                        provider_type=cfg.get("provider_type", "openai_compatible"),
-                        append_base_url_path=cfg.get("append_base_url_path", True),
-                    )
-                    payload = {
-                        "model": mname,
-                        "messages": messages
-                    }
-                    headers = {
-                        "Authorization": f"Bearer {cfg.get('api_key', '')}",
-                        "Content-Type": "application/json"
-                    }
-                    request_timeout = cfg.get("failover_timeout", 0) or 120
-                    response = requests.post(
-                        url, json=payload, headers=headers, timeout=request_timeout,
-                    )
-                    response.raise_for_status()
-                    result = self.clean_response(
-                        response_json_utf8(response)["choices"][0]["message"]["content"]
-                    )
-                    failover.record_success(mid)
-                    print(f"[视频识别] 识别成功(video队列), 结果: {result[:100]}...")
-                    return result
+                    # 判断是否为 Gemini 模型 → 使用原生 inline_data 格式
+                    is_gemini = _is_gemini_model(ptype, mname)
+                    if is_gemini:
+                        result = self._call_gemini_video(video_url, text, system_prompt, cfg)
+                    else:
+                        result = self._call_openai_video(openai_messages, cfg)
+                    if result is not None:
+                        failover.record_success(mid)
+                        print(f"[视频识别] 识别成功(video队列), 结果: {result[:100]}...")
+                        return result
                 except Exception as e:
                     status = _extract_status_code(e)
                     category = classify_http_error(status)
@@ -853,30 +858,149 @@ class AIClient:
 
         # 无 video 模型配置：使用 AIClient 自身属性作为单模型请求
         try:
-            url = resolve_chat_completion_url(
-                self.base_url,
-                model="zai-org/GLM-4.6V",
-                provider_type=self.provider_type,
-                append_base_url_path=self.append_base_url_path,
-            )
-            payload = {
-                "model": "zai-org/GLM-4.6V",
-                "messages": messages
-            }
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
-            response.raise_for_status()
-            result = self.clean_response(
-                response_json_utf8(response)["choices"][0]["message"]["content"]
-            )
-            print(f"[视频识别] 识别成功(默认配置), 结果: {result[:100]}...")
+            is_gemini = _is_gemini_model(self.provider_type, model)
+            if is_gemini:
+                cfg = {
+                    "base_url": self.base_url,
+                    "model": model,
+                    "api_key": self.api_key,
+                    "provider_type": self.provider_type,
+                    "append_base_url_path": self.append_base_url_path,
+                    "failover_timeout": 0,
+                }
+                result = self._call_gemini_video(video_url, text, system_prompt, cfg)
+            else:
+                url = resolve_chat_completion_url(
+                    self.base_url,
+                    model="zai-org/GLM-4.6V",
+                    provider_type=self.provider_type,
+                    append_base_url_path=self.append_base_url_path,
+                )
+                payload = {
+                    "model": "zai-org/GLM-4.6V",
+                    "messages": openai_messages
+                }
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json"
+                }
+                response = requests.post(url, json=payload, headers=headers, timeout=120)
+                response.raise_for_status()
+                result = self.clean_response(
+                    response_json_utf8(response)["choices"][0]["message"]["content"]
+                )
+            print(f"[视频识别] 识别成功(默认配置), 结果: {result[:100]}..." if result else "[视频识别] 默认配置返回空")
             return result
         except Exception as e:
             print(f"[视频识别] 默认配置请求失败: {e}")
             return None
+
+    def _call_openai_video(self, messages: list, cfg: dict) -> Optional[str]:
+        """使用 OpenAI 兼容格式发送视频识别请求。"""
+        mname = cfg.get("model", "")
+        url = resolve_chat_completion_url(
+            cfg.get("base_url", ""),
+            model=mname,
+            provider_type=cfg.get("provider_type", "openai_compatible"),
+            append_base_url_path=cfg.get("append_base_url_path", True),
+        )
+        payload = {"model": mname, "messages": messages}
+        headers = {
+            "Authorization": f"Bearer {cfg.get('api_key', '')}",
+            "Content-Type": "application/json",
+        }
+        request_timeout = cfg.get("failover_timeout", 0) or 120
+        response = requests.post(url, json=payload, headers=headers, timeout=request_timeout)
+        response.raise_for_status()
+        return self.clean_response(
+            response_json_utf8(response)["choices"][0]["message"]["content"]
+        )
+
+    def _call_gemini_video(self, video_url: str, text: str, system_prompt: str, cfg: dict) -> Optional[str]:
+        """使用 Gemini 原生 generateContent 格式发送视频识别请求。
+
+        Gemini 原生格式使用 inline_data 而非 OpenAI 的 video_url：
+          {"inline_data": {"mime_type": "video/mp4", "data": "<base64>"}}
+        """
+        from nbot.core.protocols.gemini_native import GeminiNativeProtocol
+
+        api_key = cfg.get("api_key", "")
+        base_url = (cfg.get("base_url", "") or "").rstrip("/")
+        mname = cfg.get("model", "")
+
+        # 从 data URL 中提取 MIME 类型和 base64 数据
+        mime_type = "video/mp4"
+        b64_data = ""
+        if video_url.startswith("data:"):
+            # data:video/mp4;base64,xxxxx
+            header_part, _, b64_data = video_url.partition(",")
+            if ";" in header_part:
+                mime_type = header_part.split(";")[0].replace("data:", "")
+        elif video_url.startswith(("http://", "https://")):
+            # 外部 URL 使用 file_data 格式（Gemini 支持直接下载）
+            b64_data = ""  # 不需要 base64
+
+        protocol = GeminiNativeProtocol()
+
+        # 构建 Gemini 原生 payload
+        if b64_data:
+            # 内嵌 base64 数据（<20MB 视频）
+            contents = [{
+                "parts": [
+                    {"inline_data": {"mime_type": mime_type, "data": b64_data}},
+                    {"text": text or system_prompt},
+                ]
+            }]
+        elif video_url.startswith(("http://", "https://")):
+            # 外部 URL（Gemini 会自动下载）
+            contents = [{
+                "parts": [
+                    {"file_data": {"file_uri": video_url, "mime_type": mime_type}},
+                    {"text": text or system_prompt},
+                ]
+            }]
+        else:
+            print(f"[视频识别] Gemini: 无法处理的视频URL格式: {video_url[:50]}")
+            return None
+
+        payload: Dict[str, Any] = {"contents": contents}
+
+        # 解析 URL：支持多种 Gemini 端点格式
+        if ":generateContent" in base_url or ":streamGenerateContent" in base_url:
+            url = base_url.replace(":streamGenerateContent", ":generateContent")
+        elif "/models/" in base_url:
+            url = f"{base_url}:generateContent"
+        elif base_url.endswith("/v1beta") or base_url.endswith("/v1"):
+            url = f"{base_url}/models/{mname}:generateContent"
+        else:
+            url = f"{base_url}/v1beta/models/{mname}:generateContent"
+
+        # Gemini 认证方式：API Key 通过 URL 参数或 x-goog-api-key 头
+        if api_key:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}key={api_key}"
+        headers = {"Content-Type": "application/json"}
+
+        request_timeout = cfg.get("failover_timeout", 0) or 120
+        print(f"[视频识别] Gemini原生格式请求: {mname}, inline_data={bool(b64_data)}, "
+              f"size={len(b64_data) if b64_data else 'URL'}")
+
+        response = requests.post(url, json=payload, headers=headers, timeout=request_timeout)
+        response.raise_for_status()
+        data = response_json_utf8(response)
+
+        # 解析 Gemini 响应格式: candidates[0].content.parts[0].text
+        candidates = data.get("candidates", [])
+        if not candidates:
+            feedback = data.get("promptFeedback", {})
+            block_reason = feedback.get("blockReason", "")
+            if block_reason:
+                return f"[Gemini 安全拦截: {block_reason}]"
+            return None
+
+        content_parts = candidates[0].get("content", {}).get("parts", [])
+        result = "".join(p.get("text", "") for p in content_parts if "text" in p)
+        return self.clean_response(result) if result else None
 
 
 ai_client = AIClient(

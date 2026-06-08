@@ -243,13 +243,18 @@ class MessagePreprocessor:
                 _, encoded = url.split(",", 1)
                 file_data = base64.b64decode(encoded)
             elif url.startswith(("http://", "https://")):
-                # HTTP URL，下载文件
-                resp = requests.get(url, timeout=60, stream=True)
-                if resp.status_code == 200:
-                    file_data = resp.content
-                else:
-                    _log.warning(f"Preprocessor: download failed HTTP {resp.status_code}")
-                    return None
+                # HTTP URL，使用浏览器风格请求头下载
+                download_headers = {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "*/*",
+                }
+                resp = requests.get(url, headers=download_headers, timeout=60, stream=True)
+                resp.raise_for_status()
+                file_data = resp.content
             elif os.path.isfile(url):
                 # 本地文件路径
                 with open(url, "rb") as f:
@@ -383,6 +388,258 @@ def _resolve_direct_attachment(attachment: Dict[str, Any]) -> Optional[str]:
     )
 
 
+def _resolve_qq_attachment(attachment: Dict[str, Any]) -> Optional[str]:
+    """QQ 频道附件解析器：优先通过 NapCat 本地 API 获取文件，降级为 HTTP 下载。
+
+    三级策略：
+    1. bot.api.get_file() — 获取 NapCat 缓存的本地文件路径（最可靠）
+    2. bot.api.download_file() — 通过 NapCat 内部下载器下载（带正确签名）
+    3. requests 直接下载 — 带浏览器请求头作为最后兜底
+    """
+    # 优先使用已有 data（base64 或本地路径）
+    data = attachment.get("data")
+    if data:
+        return data
+
+    file_id = attachment.get("file", "")
+    url = attachment.get("url") or ""
+
+    # CQ 码中的 URL 可能被 HTML 转义（& → &amp;），需要还原
+    if "&amp;" in url:
+        import html as _html
+        url = _html.unescape(url)
+        _log.debug(f"[QQ Attachment] URL 已反转义: {url[:80]}...")
+
+    att_type = _normalize_media_type(attachment.get("type", "file"))
+    mime_map = {
+        "video": "video/mp4",
+        "image": "image/png",
+        "audio": "audio/mpeg",
+    }
+    fallback_mime = mime_map.get(att_type, "application/octet-stream")
+
+    # ===== 策略1: 通过 NapCat get_file API 获取本地文件路径 =====
+    if file_id:
+        local_path = _try_get_file_via_napcat(file_id, fallback_mime)
+        if local_path:
+            return local_path
+
+    # ===== 策略2: 通过 NapCat download_file API 下载 =====
+    if url and url.startswith("http"):
+        downloaded = _try_download_via_napcat(url)
+        if downloaded:
+            return downloaded
+
+    # ===== 策略3: 直接 HTTP 下载（带浏览器请求头）=====
+    if url and url.startswith("http"):
+        direct = _try_download_direct(url, fallback_mime)
+        if direct:
+            return direct
+
+    # 全部失败：返回原始 URL 让后续流程尝试
+    _log.warning(f"[QQ Attachment] 所有策略均失败, file={file_id[:30] if file_id else '无'}, "
+                 f"url={url[:60] if url else '无'}")
+    return url or None
+
+
+def _try_get_file_via_napcat(file_id: str, fallback_mime: str = "application/octet-stream") -> Optional[str]:
+    """策略1: 调用 NapCat 的 get_file API 获取本地缓存文件的 data URL。
+
+    NapCat 会将收到的多媒体文件缓存在本地磁盘，
+    get_file 返回的 file_info 中包含文件路径或 base64 数据。
+    ncatbot 3.8.5 的签名: get_file_sync(file_id: str) → POST /get_file {file_id}
+    """
+    try:
+        from nbot.commands import bot
+        if not hasattr(bot, "api") or not bot.api:
+            return None
+
+        # 使用同步版本（ncatbot BotAPI 继承 SYNC_API_MIXIN）
+        file_info = None
+        try:
+            file_info = bot.api.get_file_sync(file_id)
+        except Exception as e:
+            _log.debug(f"[QQ Attachment] get_file_sync 异常: {e}")
+            return None
+
+        if not file_info:
+            return None
+
+        # 返回值可能是 dict 或对象，统一按 dict 处理
+        if isinstance(file_info, dict):
+            info = file_info
+        else:
+            info = getattr(file_info, "__dict__", {}) or {}
+
+        # 优先查找本地文件路径
+        local_path = info.get("path") or info.get("file")
+        if local_path and os.path.isfile(local_path):
+            mime_type, _ = mimetypes.guess_type(local_path)
+            mime_type = mime_type or fallback_mime
+            with open(local_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            _log.info(
+                f"[QQ Attachment] 策略1成功: NapCat本地路径={local_path}, "
+                f"size={os.path.getsize(local_path)}, mime={mime_type}"
+            )
+            return f"data:{mime_type};base64,{b64}"
+
+        # 某些版本可能返回 base64 数据或文件路径字符串
+        file_data = info.get("data") or info.get("base64")
+        if file_data:
+            data_size = len(file_data) if isinstance(file_data, (str, bytes, bytearray)) else len(str(file_data))
+
+            # 如果数据很小（<10KB），很可能是文件路径或元数据，不是真正的媒体内容
+            # 视频文件通常 >10KB，图片也通常 >1KB
+            if data_size < 1024:
+                _log.warning(
+                    f"[QQ Attachment] 策略1: get_file 返回数据过小 ({data_size} bytes)，"
+                    f"可能是文件路径而非媒体内容，内容预览: {str(file_data)[:120]}"
+                )
+                # 尝试将返回值当作本地路径读取
+                path_candidate = str(file_data).strip()
+                if os.path.isfile(path_candidate):
+                    mime_type, _ = mimetypes.guess_type(path_candidate)
+                    mime_type = mime_type or fallback_mime
+                    with open(path_candidate, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("utf-8")
+                    _log.info(
+                        f"[QQ Attachment] 策略1成功: 将返回数据解析为本地路径={path_candidate}, "
+                        f"size={os.path.getsize(path_candidate)}, mime={mime_type}"
+                    )
+                    return f"data:{mime_type};base64,{b64}"
+                # 不是有效路径，返回 None 让后续策略处理
+                return None
+
+            _log.info(f"[QQ Attachment] 策略1成功: get_file返回内联数据, size={data_size}")
+            if isinstance(file_data, (bytes, bytearray)):
+                b64 = base64.b64encode(file_data).decode("utf-8")
+                return f"data:{fallback_mime};base64,{b64}"
+            else:
+                return f"data:{fallback_mime};base64,{file_data}"
+
+        _log.debug(f"[QQ Attachment] get_file 返回但无可用的 path/data: {info}")
+        return None
+
+    except ImportError:
+        _log.debug("[QQ Attachment] 无法导入 bot（可能在纯 Web 模式运行）")
+        return None
+    except Exception as e:
+        _log.debug(f"[QQ Attachment] 策略1失败: {e}")
+        return None
+
+
+def _try_download_via_napcat(url: str) -> Optional[str]:
+    """策略2: 调用 NapCat 的 download_file API 下载文件。
+
+    ncatbot 3.8.5 签名: download_file_sync(thread_count, headers, url=..., name=...)
+    headers 是必填参数，传空 dict 让 NapCat 使用默认请求头。
+    """
+    try:
+        from nbot.commands import bot
+        if not hasattr(bot, "api") or not bot.api:
+            return None
+
+        _log.info(f"[QQ Attachment] 策略2: 尝试 NapCat download_file_sync...")
+        result = bot.api.download_file_sync(thread_count=1, headers="", url=url)
+
+        if not result:
+            return None
+
+        # 返回值可能是 dict 或对象
+        if isinstance(result, dict):
+            info = result
+        elif isinstance(result, str) and os.path.isfile(result):
+            # 直接返回了本地文件路径
+            mime_type, _ = mimetypes.guess_type(result)
+            mime_type = mime_type or "application/octet-stream"
+            with open(result, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            _log.info(
+                f"[QQ Attachment] 策略2成功: NapCat下载到本地={result}, "
+                f"size={os.path.getsize(result)}"
+            )
+            return f"data:{mime_type};base64,{b64}"
+        else:
+            info = getattr(result, "__dict__", {}) or {}
+
+        # 从返回值中提取路径或数据
+        dl_path = info.get("path") or info.get("file") or info.get("filepath")
+        if dl_path and os.path.isfile(dl_path):
+            mime_type, _ = mimetypes.guess_type(dl_path)
+            mime_type = mime_type or "application/octet-stream"
+            with open(dl_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            _log.info(
+                f"[QQ Attachment] 策略2成功: download_file返回路径={dl_path}, "
+                f"size={os.path.getsize(dl_path)}"
+            )
+            return f"data:{mime_type};base64,{b64}"
+
+        _log.debug(f"[QQ Attachment] download_file 返回: {info}")
+        return None
+
+    except Exception as e:
+        _log.debug(f"[QQ Attachment] 策略2失败: {e}")
+        return None
+
+
+def _try_download_direct(url: str, fallback_mime: str) -> Optional[str]:
+    """策略3: 使用 requests 直接下载，带完整的浏览器请求头。"""
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Referer": "https://q.qq.com/",
+            "Origin": "https://q.qq.com",
+        }
+        _log.info(f"[QQ Attachment] 策略3: 直接HTTP下载: {url[:100]}...")
+        resp = requests.get(url, headers=headers, timeout=60, stream=True, allow_redirects=True)
+
+        # 记录重定向链（用于诊断）
+        if len(resp.history) > 0:
+            redirect_chain = [r.url for r in resp.history] + [resp.url]
+            _log.info(f"[QQ Attachment] 重定向链 ({len(resp.history)} 次): "
+                       f"{' -> '.join(r[:60] for r in redirect_chain)}")
+
+        resp.raise_for_status()
+
+        file_data = resp.content
+        if not file_data:
+            _log.warning(f"[QQ Attachment] 策略3: 下载内容为空")
+            return None
+
+        content_type = resp.headers.get("Content-Type", "")
+        _log.info(f"[QQ Attachment] 策略3: 下载完成 {len(file_data)} bytes, Content-Type={content_type}")
+
+        # 校验：如果响应是 HTML 而非二进制媒体，说明被重定向到了错误页面
+        if content_type.startswith("text/") or content_type.startswith("application/html"):
+            head_preview = file_data[:200].decode("utf-8", errors="replace")
+            _log.warning(
+                f"[QQ Attachment] 策略3: 响应为HTML而非媒体文件。"
+                f"Content-Type={content_type}, 预览: {head_preview[:120]}"
+            )
+            return None
+
+        # 从响应头获取准确的 MIME 类型
+        mime_type = fallback_mime
+        if content_type and "/" in content_type:
+            mime_type = content_type.split(";")[0].strip()
+
+        b64 = base64.b64encode(file_data).decode("utf-8")
+        _log.info(f"[QQ Attachment] 策略3成功: type={mime_type}, data_size={len(b64)} chars")
+        return f"data:{mime_type};base64,{b64}"
+
+    except Exception as e:
+        _log.warning(f"[QQ Attachment] 策略3失败: {e}")
+        return None
+
+
 def _resolve_web_attachment(attachment: Dict[str, Any]) -> Optional[str]:
     """Web 频道专用附件解析：将本地路径/相对 URL 转为视觉模型可访问的地址。"""
     data = attachment.get("data")
@@ -420,9 +677,9 @@ def _resolve_web_attachment(attachment: Dict[str, Any]) -> Optional[str]:
 
 
 AttachmentResolver.register("web", _resolve_web_attachment)
-AttachmentResolver.register("qq", _resolve_direct_attachment)
-AttachmentResolver.register("qq_private", _resolve_direct_attachment)
-AttachmentResolver.register("qq_group", _resolve_direct_attachment)
+AttachmentResolver.register("qq", _resolve_qq_attachment)
+AttachmentResolver.register("qq_private", _resolve_qq_attachment)
+AttachmentResolver.register("qq_group", _resolve_qq_attachment)
 AttachmentResolver.register("telegram", _resolve_telegram_attachment)
 AttachmentResolver.register("feishu", _resolve_feishu_attachment)
 AttachmentResolver.register("feishu_ws", _resolve_feishu_attachment)
