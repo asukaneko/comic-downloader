@@ -4,6 +4,7 @@ import os
 import base64
 import json
 import io
+from typing import Optional
 from PIL import Image
 import imageio.v2 as imageio
 from nbot.core import (
@@ -485,7 +486,7 @@ class AIClient:
             return result
         except Exception as e:
             print(f"[图片识别] 识别失败, 错误: {e}, 响应: {response.text}")
-            return "链接失效"
+            return None
 
     def gif_to_mp4_data_url(self, image_url: str, fps: int = 10) -> str:
         try:
@@ -506,11 +507,11 @@ class AIClient:
         except Exception:
             return ""
 
-    def describe_gif(self, image_url: str, max_frames: int = 10) -> str:
+    def describe_gif(self, image_url: str, max_frames: int = 10) -> Optional[str]:
         try:
             res = requests.get(image_url, timeout=10)
             if res.status_code != 200:
-                return "链接失效"
+                return None
             img = Image.open(io.BytesIO(res.content))
             total = getattr(img, "n_frames", 1)
             if total <= 1:
@@ -543,7 +544,7 @@ class AIClient:
                     continue
 
             if not content_list:
-                return "解析失败"
+                return None
 
             content_list.append({
                 "type": "text",
@@ -561,19 +562,19 @@ class AIClient:
             try:
                 return self.clean_response(response.choices[0].message.content)
             except Exception:
-                return "解析失败"
+                return None
         except Exception:
-            return "解析失败"
+            return None
 
-    def describe_gif_as_video(self, image_url: str) -> str:
+    def describe_gif_as_video(self, image_url: str) -> Optional[str]:
         data_url = self.gif_to_mp4_data_url(image_url)
         if data_url:
             result = self.describe_video(data_url)
-            if result and not result.startswith("链接失效"):
+            if result:
                 return result
         return self.describe_gif(image_url)
 
-    def describe_webpage_html(self, html: str) -> str:
+    def describe_webpage_html(self, html: str) -> Optional[str]:
         messages = [
             {
                 "role": "user",
@@ -589,7 +590,7 @@ class AIClient:
         try:
             return self.clean_response(response.choices[0].message.content)
         except Exception:
-            return "链接失效"
+            return None
 
     def analyze_json(self, content: str) -> str:
         messages = [
@@ -720,7 +721,7 @@ class AIClient:
             return result
         except Exception as e:
             print(f"[视频识别] 识别失败: {e}")
-            return f"链接失效,错误: {str(e)}"
+            return None
 
 
 ai_client = AIClient(

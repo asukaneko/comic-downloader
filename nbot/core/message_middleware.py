@@ -21,6 +21,7 @@ import base64
 import logging
 import mimetypes
 import os
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 import requests
@@ -44,6 +45,9 @@ def _normalize_media_type(att_type: str) -> str:
 # 支持描述的标准附件类型
 DESCRIBABLE_TYPES = {"image", "video", "audio"}
 TYPE_LABELS = {"image": "图片", "video": "视频", "audio": "音频", "file": "文件"}
+
+# 描述失败时的错误标识，匹配到这些前缀的描述不会注入用户消息
+_DESC_ERROR_PREFIXES = ("链接失效", "解析失败")
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +158,12 @@ class MessagePreprocessor:
 
             desc = MediaDescriber.describe(att_type, url)
             if desc:
+                # 过滤描述失败时的错误提示，避免将"链接失效"等注入用户消息
+                if any(desc.startswith(p) for p in _DESC_ERROR_PREFIXES):
+                    _log.warning(
+                        f"Preprocessor: describe returned error for {att_type}: {desc}"
+                    )
+                    continue
                 label = TYPE_LABELS.get(att_type, att_type)
                 descriptions.append(f"[{label}{len(descriptions)+1}描述]: {desc}")
                 processed_indices.append(i)
@@ -208,6 +218,11 @@ class MessagePreprocessor:
             att_type = _normalize_media_type(attachment.get("type", "file"))
             ext_map = {"image": ".png", "video": ".mp4", "audio": ".mp3", "file": ".bin"}
             filename = f"attachment{ext_map.get(att_type, '.bin')}"
+
+        # 文件名添加时间戳前缀，避免同名文件覆盖
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name, ext = os.path.splitext(filename)
+        filename = f"{timestamp}_{name}{ext}"
 
         # 检查工作区是否已有同名文件（去重）
         try:

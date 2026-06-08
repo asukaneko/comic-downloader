@@ -676,15 +676,15 @@ def chat_image(iurl: str) -> str:
     print(f"[图片识别] chat_image 收到请求, URL: {iurl}")
     result = ai_client.describe_image(iurl, "请描述这个图片的内容，仅作描述，不要分析内容")
     print(f"[图片识别] chat_image 返回结果: {result[:50] if result else '空'}...")
-    return result
+    return result or "图片识别失败"
 
 
 def chat_gif(iurl: str) -> str:
-    return ai_client.describe_gif_as_video(iurl)
+    return ai_client.describe_gif_as_video(iurl) or "GIF识别失败"
 
 
 def chat_video(vurl: str) -> str:
-    return ai_client.describe_video(vurl)
+    return ai_client.describe_video(vurl) or "视频识别失败"
 
 
 def chat_webpage(wurl: str) -> str:
@@ -697,13 +697,13 @@ def chat_webpage(wurl: str) -> str:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }, timeout=10)
     except:
-        return "链接失效"
+        return "网页获取失败"
 
     html = res.text
     if len(html) > max_seq_len:
         html = html[:max_seq_len]
 
-    return ai_client.describe_webpage_html(html)
+    return ai_client.describe_webpage_html(html) or "网页解析失败"
 
 
 def chat_json(content: str) -> str:
