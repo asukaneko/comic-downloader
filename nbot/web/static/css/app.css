@@ -24151,3 +24151,93 @@
     50% { height: 14px; opacity: 1; }
     100% { height: 6px; opacity: 0.65; }
 }
+
+/* ============================================
+   语音条 - 浅色模式适配
+   ============================================ */
+
+[data-theme="light"] .voice-bar {
+    border-top-color: rgba(0, 0, 0, 0.06);
+    background: rgba(0, 0, 0, 0.03);
+    color: rgba(30, 30, 60, 0.85);
+}
+
+[data-theme="light"] .voice-bar::before {
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(100, 80, 220, 0.2) 30%,
+        rgba(100, 80, 220, 0.2) 70%,
+        transparent 100%
+    );
+}
+
+[data-theme="light"] .voice-bar-generating {
+    background: rgba(100, 80, 220, 0.04);
+}
+
+[data-theme="light"] .voice-bar-generating .voice-bar-btn {
+    background: rgba(100, 80, 220, 0.12);
+}
+
+[data-theme="light"] .voice-bar-playing {
+    background: rgba(100, 80, 220, 0.06);
+}
+
+[data-theme="light"] .voice-bar-playing .voice-bar-btn {
+    background: rgba(100, 80, 220, 0.18);
+    box-shadow: 0 0 6px rgba(100, 80, 220, 0.15);
+}
+
+[data-theme="light"] .voice-bar-error {
+    background: rgba(220, 38, 38, 0.05);
+}
+
+[data-theme="light"] .voice-bar-error .voice-bar-btn {
+    background: rgba(220, 38, 38, 0.12);
+}
+
+[data-theme="light"] .voice-bar-btn {
+    color: rgba(30, 30, 60, 0.85);
+    background: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .voice-bar-btn:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .voice-bar-btn:disabled:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .voice-bar-end {
+    color: rgba(30, 30, 60, 0.6);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .voice-bar-end:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .voice-bar-wave {
+    background: rgba(100, 80, 220, 0.4);
+}
+
+[data-theme="light"] .voice-bar-playing .voice-bar-wave {
+    background: rgba(100, 80, 220, 0.7);
+}
+
+[data-theme="light"] .voice-bar-generating .voice-bar-wave {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .voice-bar-label {
+    color: rgba(30, 30, 60, 0.55);
+}
+
+[data-theme="light"] .voice-bar-playing .voice-bar-label {
+    color: rgba(100, 80, 220, 0.85);
+}
+
+[data-theme="light"] .voice-bar-duration {
+    color: rgba(30, 30, 60, 0.35);
+}

@@ -1,4 +1,8 @@
-/* ===== TTS Playground — Dark Glassmorphism Theme ===== */
+/* ===== TTS Playground — Glassmorphism Theme ===== */
+
+/* ============================================
+   Dark Theme (default)
+   ============================================ */
 
 /* Glass Card */
 .tts-glass-card {
@@ -376,4 +380,242 @@
 .tts-glass-card .form-hint {
     color: rgba(130, 145, 195, 0.6);
     font-size: 12px;
+}
+
+/* ============================================
+   Light Theme
+   ============================================ */
+
+[data-theme="light"] .tts-glass-card {
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(100, 80, 220, 0.12);
+    box-shadow:
+        0 4px 24px rgba(31, 41, 55, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="light"] .tts-glass-card:hover {
+    box-shadow:
+        0 12px 36px rgba(100, 80, 220, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 1);
+    border-color: rgba(100, 80, 220, 0.2);
+}
+
+[data-theme="light"] .tts-card-header {
+    border-bottom: 1px solid rgba(100, 80, 220, 0.08);
+}
+
+[data-theme="light"] .tts-card-header .card-title {
+    color: rgba(30, 30, 60, 0.9);
+}
+
+/* Config Chips — Light */
+[data-theme="light"] .tts-config-chip {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(100, 80, 220, 0.1);
+}
+
+[data-theme="light"] .tts-config-chip::before {
+    background: linear-gradient(90deg, transparent, rgba(100, 80, 220, 0.15), transparent);
+}
+
+[data-theme="light"] .tts-config-chip:hover {
+    border-color: rgba(100, 80, 220, 0.2);
+    box-shadow: 0 8px 24px rgba(100, 80, 220, 0.08);
+}
+
+[data-theme="light"] .tts-config-chip-label {
+    color: rgba(100, 110, 150, 0.7);
+}
+
+[data-theme="light"] .tts-config-chip-value {
+    color: rgba(30, 30, 60, 0.92);
+}
+
+/* Select — Light */
+[data-theme="light"] body .tts-select,
+[data-theme="light"] .tts-select {
+    background-color: rgba(255, 255, 255, 0.7) !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5L6 8.5L10 4.5' stroke='%237060c0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 14px center !important;
+    background-size: 12px !important;
+    border: 1px solid rgba(100, 80, 220, 0.15) !important;
+    color: rgba(30, 30, 60, 0.9) !important;
+}
+
+[data-theme="light"] body .tts-select:hover,
+[data-theme="light"] .tts-select:hover {
+    border-color: rgba(100, 80, 220, 0.25) !important;
+    background-color: rgba(245, 240, 255, 0.8) !important;
+}
+
+[data-theme="light"] body .tts-select:focus,
+[data-theme="light"] .tts-select:focus {
+    border-color: rgba(100, 80, 220, 0.35) !important;
+    box-shadow:
+        0 0 0 3px rgba(100, 80, 220, 0.1),
+        0 0 16px rgba(100, 80, 220, 0.06) !important;
+}
+
+[data-theme="light"] body .tts-select option,
+[data-theme="light"] .tts-select option {
+    background: #fff;
+    color: rgba(30, 30, 60, 0.9);
+}
+
+/* Textarea — Light */
+[data-theme="light"] .tts-textarea {
+    background: rgba(255, 255, 255, 0.65) !important;
+    border: 1px solid rgba(100, 80, 220, 0.12) !important;
+    color: rgba(30, 30, 60, 0.9) !important;
+}
+
+[data-theme="light"] .tts-textarea::placeholder {
+    color: rgba(120, 130, 170, 0.5);
+}
+
+[data-theme="light"] .tts-textarea:hover {
+    border-color: rgba(100, 80, 220, 0.2) !important;
+}
+
+[data-theme="light"] .tts-textarea:focus {
+    border-color: rgba(100, 80, 220, 0.35) !important;
+    box-shadow:
+        0 0 0 3px rgba(100, 80, 220, 0.08),
+        0 0 20px rgba(100, 80, 220, 0.04) !important;
+}
+
+/* Ghost Button — Light */
+[data-theme="light"] .tts-glow-btn {
+    background: rgba(100, 80, 220, 0.08);
+    border: 1px solid rgba(100, 80, 220, 0.15);
+    color: rgba(80, 60, 180, 0.85);
+    backdrop-filter: blur(6px);
+}
+
+[data-theme="light"] .tts-glow-btn:hover {
+    background: rgba(100, 80, 220, 0.15);
+    border-color: rgba(100, 80, 220, 0.25);
+    box-shadow: 0 4px 16px rgba(100, 80, 220, 0.1);
+    color: rgba(70, 50, 170, 1);
+}
+
+/* Synth Button — Light */
+[data-theme="light"] .tts-synth-btn {
+    background: linear-gradient(135deg, #7c4af5, #5b78ff);
+    box-shadow: 0 4px 16px rgba(90, 60, 220, 0.25);
+}
+
+[data-theme="light"] .tts-synth-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #6c3aed, #4f6cf7);
+    box-shadow: 0 6px 24px rgba(90, 60, 220, 0.35);
+}
+
+/* Stop Button — Light */
+[data-theme="light"] .tts-stop-btn {
+    background: rgba(220, 50, 50, 0.08);
+    border: 1px solid rgba(220, 50, 50, 0.2);
+    color: rgba(180, 40, 40, 0.9);
+}
+
+[data-theme="light"] .tts-stop-btn:hover {
+    background: rgba(220, 50, 50, 0.14);
+    border-color: rgba(220, 50, 50, 0.3);
+    box-shadow: 0 4px 12px rgba(220, 50, 50, 0.1);
+}
+
+/* Range Slider — Light */
+[data-theme="light"] .tts-range-slider {
+    background: linear-gradient(90deg, rgba(100, 80, 220, 0.2), rgba(90, 120, 220, 0.2));
+}
+
+[data-theme="light"] .tts-range-slider:hover {
+    background: linear-gradient(90deg, rgba(100, 80, 220, 0.3), rgba(90, 120, 220, 0.3));
+}
+
+[data-theme="light"] .tts-range-slider::-webkit-slider-thumb {
+    background: radial-gradient(circle at 38% 35%, #b0a0ff, #7c4af5);
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    box-shadow:
+        0 0 8px rgba(100, 80, 220, 0.35),
+        0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .tts-range-slider::-webkit-slider-thumb:hover {
+    box-shadow:
+        0 0 14px rgba(100, 80, 220, 0.5),
+        0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .tts-range-slider::-moz-range-thumb {
+    background: radial-gradient(circle at 38% 35%, #b0a0ff, #7c4af5);
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    box-shadow:
+        0 0 8px rgba(100, 80, 220, 0.35),
+        0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .tts-range-slider::-moz-range-track {
+    background: linear-gradient(90deg, rgba(100, 80, 220, 0.2), rgba(90, 120, 220, 0.2));
+}
+
+/* Audio Player — Light (no invert filter) */
+[data-theme="light"] .tts-glass-card audio {
+    filter: none;
+    border-radius: 10px;
+}
+
+/* File Input — Light */
+[data-theme="light"] .tts-glass-card input[type="file"] {
+    background: rgba(245, 240, 255, 0.6);
+    border-color: rgba(100, 80, 220, 0.18);
+    color: rgba(60, 50, 120, 0.85);
+}
+
+[data-theme="light"] .tts-glass-card input[type="file"]:hover {
+    border-color: rgba(100, 80, 220, 0.3);
+    background: rgba(240, 235, 255, 0.7);
+}
+
+[data-theme="light"] .tts-glass-card input[type="file"]:focus {
+    border-color: rgba(100, 80, 220, 0.35);
+    box-shadow: 0 0 0 3px rgba(100, 80, 220, 0.08);
+}
+
+/* Text Input — Light */
+[data-theme="light"] .tts-glass-card .form-input {
+    background: rgba(255, 255, 255, 0.65) !important;
+    border: 1px solid rgba(100, 80, 220, 0.12) !important;
+    color: rgba(30, 30, 60, 0.9) !important;
+}
+
+[data-theme="light"] .tts-glass-card .form-input:hover {
+    border-color: rgba(100, 80, 220, 0.2) !important;
+}
+
+[data-theme="light"] .tts-glass-card .form-input:focus {
+    border-color: rgba(100, 80, 220, 0.35) !important;
+    box-shadow: 0 0 0 3px rgba(100, 80, 220, 0.08) !important;
+}
+
+/* Form Labels — Light */
+[data-theme="light"] .tts-glass-card .form-label {
+    color: rgba(60, 70, 120, 0.75);
+}
+
+/* Badge — Light */
+[data-theme="light"] .tts-glass-card .badge {
+    background: rgba(100, 80, 220, 0.1) !important;
+    color: rgba(80, 60, 180, 0.9) !important;
+    border: 1px solid rgba(100, 80, 220, 0.15) !important;
+}
+
+/* Form Hint — Light */
+[data-theme="light"] .tts-glass-card .form-hint {
+    color: rgba(100, 110, 150, 0.65);
 }
