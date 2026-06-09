@@ -75,7 +75,7 @@ def register_auth_routes(app, server):
         # 登录成功，清除失败记录
         server._reset_login_failures(client_ip)
 
-        token = server._generate_login_token(username)
+        token = server._generate_login_token(username, ip_address=client_ip)
         response = jsonify(
             {
                 "success": True,

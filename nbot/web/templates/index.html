@@ -7291,6 +7291,7 @@
                                             <tr>
                                                 <th>{{ $t('login_tokens.hash_prefix') }}</th>
                                                 <th>{{ $t('login_tokens.username') }}</th>
+                                                <th>{{ $t('login_tokens.ip_address') }}</th>
                                                 <th>{{ $t('login_tokens.created_at') }}</th>
                                                 <th>{{ $t('login_tokens.expires_at') }}</th>
                                                 <th style="width: 100px;">{{ $t('session.actions') }}</th>
@@ -7302,6 +7303,7 @@
                                                     <code class="token-hash">{{ token.token_prefix }}...</code>
                                                 </td>
                                                 <td>{{ token.username }}</td>
+                                                <td><code>{{ token.ip_address || '-' }}</code></td>
                                                 <td>{{ formatDateTime(token.created_at) }}</td>
                                                 <td>{{ formatDateTime(token.expires_at) }}</td>
                                                 <td>

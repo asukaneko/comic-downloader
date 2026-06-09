@@ -904,12 +904,13 @@ class WebChatServer:
         """将明文 token 进行 SHA-256 哈希，用于安全存储"""
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
-    def _generate_login_token(self, username: str) -> str:
+    def _generate_login_token(self, username: str, ip_address: str = "") -> str:
         """
         生成登录 Token
 
         Args:
             username: 用户名
+            ip_address: 创建令牌时的客户端 IP 地址
 
         Returns:
             token 字符串（明文，仅此一次返回）
@@ -926,9 +927,10 @@ class WebChatServer:
             "created_at": now.isoformat(),
             "expires_at": expires_at.isoformat(),
             "token_prefix": token[:8],
+            "ip_address": ip_address,
         }
 
-        _log.info(f"[Auth] 生成登录 Token: username={username}, expires={expires_at}")
+        _log.info(f"[Auth] 生成登录 Token: username={username}, ip={ip_address}, expires={expires_at}")
 
         self._save_login_tokens()
         return token

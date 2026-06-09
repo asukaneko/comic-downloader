@@ -20,6 +20,7 @@ def register_login_token_routes(app, server):
                     "username": info.get("username", ""),
                     "created_at": info.get("created_at", ""),
                     "expires_at": info.get("expires_at", ""),
+                    "ip_address": info.get("ip_address", ""),
                 })
             # 按创建时间倒序
             tokens.sort(key=lambda t: t.get("created_at", ""), reverse=True)
@@ -38,9 +39,10 @@ def register_login_token_routes(app, server):
             expires_days = max(1, min(expires_days, 365))
 
             # 临时修改过期天数
+            client_ip = request.remote_addr or ""
             original_days = server.token_expire_days
             server.token_expire_days = expires_days
-            token = server._generate_login_token(username)
+            token = server._generate_login_token(username, ip_address=client_ip)
             server.token_expire_days = original_days
 
             _log.info(f"[LoginTokens] 手动创建令牌: username={username}, expires_days={expires_days}")
