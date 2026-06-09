@@ -71,6 +71,12 @@ if not hasattr(BotAPI, '_nbot_patched'):
     async def wrapped_post_private_msg(self, user_id, **kwargs):
         content = kwargs.get('text', '')
         if content and isinstance(content, str):
+            # 剥离 <||> 标记
+            from nbot.message_filter import MessageFilter
+            stripped = MessageFilter.strip_default_markers(content)
+            if stripped != content:
+                kwargs['text'] = stripped
+                content = stripped
             try:
                 from nbot.services.chat_service import record_assistant_message
                 record_assistant_message(content, user_id=user_id)
@@ -81,6 +87,12 @@ if not hasattr(BotAPI, '_nbot_patched'):
     async def wrapped_post_group_msg(self, group_id, **kwargs):
         content = kwargs.get('text', '')
         if content and isinstance(content, str):
+            # 剥离 <||> 标记
+            from nbot.message_filter import MessageFilter
+            stripped = MessageFilter.strip_default_markers(content)
+            if stripped != content:
+                kwargs['text'] = stripped
+                content = stripped
             try:
                 from nbot.services.chat_service import record_assistant_message, log_to_group_full_file
                 context_key = (str(group_id), content)
@@ -103,7 +115,13 @@ if not hasattr(BotAPI, '_nbot_patched'):
     async def wrapped_group_reply(self, text=None, **kwargs):
         content = text if isinstance(text, str) else kwargs.get("text", "")
         if content and isinstance(content, str):
-            context_key = (str(self.group_id), content)
+            # 剥离 <||> 标记
+            from nbot.message_filter import MessageFilter
+            stripped = MessageFilter.strip_default_markers(content)
+            if stripped != content:
+                text = stripped
+                kwargs["text"] = stripped
+            context_key = (str(self.group_id), stripped if stripped != content else content)
             pending_group_reply_context.setdefault(context_key, []).append(str(self.user_id))
         return await original_group_reply(self, text=text, **kwargs)
 
@@ -4089,6 +4107,209 @@ async def handle_api(msg,is_group):
             await bot.api.post_private_msg(msg.user_id, text=text)
 
 
+# ----------------------
+# 消息过滤器命令
+# ----------------------
+
+@register_command(
+    "/filter_add",
+    help_text="/filter_add <关键词|regex:正则> [群号] [strip|recall] -> 添加过滤规则(admin)",
+    category="4",
+    admin_show=True,
+)
+async def handle_filter_add(msg, is_group=True):
+    if str(msg.user_id) not in admin:
+        reply = "你没有权限使用此命令喵~"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    from nbot.message_filter import message_filter
+
+    raw = msg.raw_message[len("/filter_add"):].strip()
+    parts = raw.split() if raw else []
+    if not parts:
+        reply = "格式: /filter_add <关键词|regex:正则> [群号] [strip|recall]\n群号省略为全局规则"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    pattern = parts[0]
+    target_group = None
+    action = "strip"
+
+    for arg in parts[1:]:
+        if arg in ("strip", "recall"):
+            action = arg
+        elif arg.isdigit():
+            target_group = arg
+
+    # 检测正则前缀
+    rule_type = "keyword"
+    if pattern.startswith("regex:"):
+        rule_type = "regex"
+        pattern = pattern[6:]
+
+    # 校验 pattern 非空
+    if not pattern.strip():
+        reply = "过滤关键词不能为空喵~"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    # 如果是群聊且未指定群号，默认使用当前群
+    if is_group and target_group is None:
+        target_group = str(msg.group_id)
+
+    rule = message_filter.add_rule(
+        pattern=pattern,
+        group_id=target_group,
+        rule_type=rule_type,
+        action=action,
+    )
+
+    action_text = "删除文字" if action == "strip" else "撤回消息"
+    scope_text = f"群 {target_group}" if target_group else "全局"
+    reply = (
+        f"已添加过滤规则喵~\n"
+        f"ID: {rule['id']}\n"
+        f"模式: {rule_type}\n"
+        f"规则: {pattern}\n"
+        f"动作: {action_text}\n"
+        f"范围: {scope_text}"
+    )
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+
+@register_command(
+    "/filter_del",
+    help_text="/filter_del <规则ID> [群号] -> 删除过滤规则(admin)",
+    category="4",
+    admin_show=True,
+)
+async def handle_filter_del(msg, is_group=True):
+    if str(msg.user_id) not in admin:
+        reply = "你没有权限使用此命令喵~"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    from nbot.message_filter import message_filter
+
+    raw = msg.raw_message[len("/filter_del"):].strip()
+    parts = raw.split() if raw else []
+    if not parts:
+        reply = "格式: /filter_del <规则ID> [群号]"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    rule_id = parts[0]
+    target_group = parts[1] if len(parts) > 1 else None
+
+    # 如果是群聊且未指定群号，默认使用当前群
+    if is_group and target_group is None:
+        target_group = str(msg.group_id)
+
+    removed = message_filter.remove_rule(rule_id, group_id=target_group)
+    if removed:
+        reply = f"已删除规则 {rule_id} 喵~"
+    else:
+        reply = f"未找到规则 {rule_id} 喵~"
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+
+@register_command(
+    "/filter_list",
+    help_text="/filter_list [群号] -> 查看过滤规则(admin)",
+    category="4",
+    admin_show=True,
+)
+async def handle_filter_list(msg, is_group=True):
+    if str(msg.user_id) not in admin:
+        reply = "你没有权限使用此命令喵~"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    from nbot.message_filter import message_filter
+
+    raw = msg.raw_message[len("/filter_list"):].strip()
+    target_group = raw if raw else None
+
+    # 如果是群聊且未指定群号，默认使用当前群
+    if is_group and target_group is None:
+        target_group = str(msg.group_id)
+
+    rules = message_filter.list_rules(group_id=target_group)
+    if not rules:
+        scope_text = f"群 {target_group}" if target_group else "全局"
+        reply = f"{scope_text}没有过滤规则喵~"
+    else:
+        scope_text = f"群 {target_group}" if target_group else "全局"
+        lines = [f"【{scope_text}过滤规则】"]
+        for r in rules:
+            action_text = "删除文字" if r.get("action") != "recall" else "撤回消息"
+            status = "✓" if r.get("enabled", True) else "✗"
+            lines.append(
+                f"  {status} {r['id']} | {r.get('type', 'keyword')} | "
+                f"{action_text} | {r['pattern']}"
+            )
+        reply = "\n".join(lines)
+
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+
+@register_command(
+    "/filter",
+    help_text="/filter on|off -> 开关过滤器(admin)",
+    category="4",
+    admin_show=True,
+)
+async def handle_filter_toggle(msg, is_group=True):
+    if str(msg.user_id) not in admin:
+        reply = "你没有权限使用此命令喵~"
+        if is_group:
+            await msg.reply(text=reply)
+        else:
+            await bot.api.post_private_msg(msg.user_id, text=reply)
+        return
+
+    from nbot.message_filter import message_filter
+
+    state = msg.raw_message[len("/filter"):].strip().lower()
+    if state not in ("on", "off"):
+        reply = "请输入 on 或 off 喵~"
+    else:
+        message_filter.set_enabled(state == "on")
+        reply = f"消息过滤器已{'开启' if state == 'on' else '关闭'}喵~"
+    if is_group:
+        await msg.reply(text=reply)
+    else:
+        await bot.api.post_private_msg(msg.user_id, text=reply)
+
+
 async def handle_group_message(msg):
     """处理群消息"""
     is_group = True
@@ -4414,6 +4635,68 @@ async def dispatch_message(msg, is_group: bool):
 
     if not raw_msg:
         return
+
+    # ===== 默认标记剥离（QQ 频道自动删除 <||> 标记内容）=====
+    from nbot.message_filter import MessageFilter
+
+    stripped = MessageFilter.strip_default_markers(raw_msg)
+    if stripped != raw_msg:
+        raw_msg = stripped
+        try:
+            msg.raw_message = raw_msg
+        except Exception:
+            pass
+        if not raw_msg:
+            return
+
+    # ===== 消息过滤器检查（仅群聊，私聊不做过滤）=====
+    if is_group:
+        try:
+            from nbot.message_filter import message_filter
+
+            group_id = str(msg.group_id) if hasattr(msg, "group_id") else None
+            session_id = f"qq:group:{group_id}" if group_id else ""
+            matched_rules = message_filter.match_all(raw_msg, channel="qq", session_id=session_id)
+            if matched_rules:
+                # 按 action 分类处理
+                recall_rules = [r for r in matched_rules if r.get("action") == "recall"]
+                strip_rules = [r for r in matched_rules if r.get("action") != "recall"]
+
+                # recall 模式：回复"当前内容被过滤"
+                if recall_rules:
+                    try:
+                        await msg.reply(text="当前内容被过滤")
+                        _log.info(
+                            "[消息过滤] 已过滤匹配消息: group=%s, rule=%s",
+                            group_id,
+                            recall_rules[0].get("pattern"),
+                        )
+                    except Exception as del_err:
+                        _log.warning("[消息过滤] 回复失败: %s", del_err)
+                    return
+
+                # strip 模式：删除消息中的指定文字，用处理后的内容继续后续流程
+                if strip_rules:
+                    raw_msg = message_filter.strip_content(raw_msg, strip_rules)
+                    if not raw_msg:
+                        _log.info(
+                            "[消息过滤] 消息被完全过滤（内容清空）: group=%s, user=%s",
+                            group_id,
+                            str(msg.user_id) if hasattr(msg, "user_id") else "",
+                        )
+                        return
+                    _log.info(
+                        "[消息过滤] 已过滤消息文字: group=%s, rules=%d",
+                        group_id,
+                        len(strip_rules),
+                    )
+                    # 更新 msg.raw_message 供后续命令匹配使用
+                    try:
+                        msg.raw_message = raw_msg
+                    except Exception:
+                        pass
+        except Exception as filter_err:
+            _log.warning("[消息过滤] 检查异常: %s", filter_err)
 
     # 获取图片 URL - 优先使用 msg.message[0].data.url
     image_url = None

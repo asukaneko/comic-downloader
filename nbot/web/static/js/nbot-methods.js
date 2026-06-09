@@ -1755,6 +1755,10 @@ const NbotMethods = {
                         case 'channels':
                             await this.loadChannels();
                             break;
+                        case 'message-filter':
+                            await this.loadChannels();
+                            await this.loadMessageFilter();
+                            break;
                         case 'tts-playground':
                             await this.loadActiveModelsByPurpose();
                             await this.loadTTSModels();
@@ -3960,6 +3964,142 @@ def main(params):
                                 this.isLoading = false;
                             }
                         }
+                    });
+                },
+
+                // ===== 消息过滤器 =====
+                async loadMessageFilter() {
+                    try {
+                        const res = await api.get('/api/message-filter');
+                        this.messageFilterEnabled = res.data.enabled !== false;
+                        const rules = res.data.rules;
+                        this.messageFilterRules = [];
+                        if (rules && typeof rules === 'object') {
+                            // global 规则
+                            const globalRules = rules.global || [];
+                            for (const r of globalRules) {
+                                this.messageFilterRules.push({ ...r, _channel: 'global', _session: 'all', _session_id: '' });
+                            }
+                            // 频道规则
+                            const channels = rules.channels || {};
+                            for (const chName of Object.keys(channels)) {
+                                const chRules = channels[chName];
+                                if (Array.isArray(chRules)) {
+                                    for (const r of chRules) {
+                                        this.messageFilterRules.push({
+                                            ...r,
+                                            _channel: chName,
+                                            _session: r.session_scope || 'all',
+                                            _session_id: r.session_id || '',
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to load message filter:', e);
+                        this.messageFilterRules = [];
+                    }
+                },
+
+                async toggleMessageFilter() {
+                    try {
+                        await api.post('/api/message-filter/toggle', {
+                            enabled: this.messageFilterEnabled,
+                        });
+                        this.showToast(this.messageFilterEnabled ? '过滤器已开启' : '过滤器已关闭', 'success');
+                    } catch (e) {
+                        this.showToast('切换过滤器状态失败', 'error');
+                        this.messageFilterEnabled = !this.messageFilterEnabled;
+                    }
+                },
+
+                openFilterModal(rule) {
+                    if (rule) {
+                        this.editingFilterRule = rule;
+                        const channel = rule._channel || 'global';
+                        this.filterForm = {
+                            channel: channel,
+                            session_scope: rule._session || 'all',
+                            session_id: rule._session_id || '',
+                            pattern: rule.pattern,
+                            type: rule.type || 'keyword',
+                            action: rule.action || 'strip',
+                        };
+                    } else {
+                        this.editingFilterRule = null;
+                        this.filterForm = { channel: 'global', session_scope: 'all', session_id: '', pattern: '', type: 'keyword', action: 'strip' };
+                    }
+                    this.showFilterModal = true;
+                },
+
+                async saveFilterRule() {
+                    if (!this.filterForm.pattern) return;
+                    this.isLoading = true;
+                    try {
+                        const payload = {
+                            pattern: this.filterForm.pattern,
+                            type: this.filterForm.type,
+                            action: this.filterForm.action,
+                            channel: this.filterForm.channel,
+                            session_scope: this.filterForm.channel === 'global' ? 'all' : this.filterForm.session_scope,
+                            session_id: this.filterForm.session_scope === 'specific' ? this.filterForm.session_id : '',
+                        };
+                        if (this.editingFilterRule) {
+                            await api.put(`/api/message-filter/${this.editingFilterRule.id}`, {
+                                ...payload,
+                                _old_channel: this.editingFilterRule._channel || 'global',
+                                _old_session_id: this.editingFilterRule._session_id || '',
+                            });
+                        } else {
+                            await api.post('/api/message-filter', payload);
+                        }
+                        this.showFilterModal = false;
+                        await this.loadMessageFilter();
+                        this.showToast(this.editingFilterRule ? '规则已更新' : '规则已添加', 'success');
+                    } catch (e) {
+                        this.showToast(e.response?.data?.error || '保存规则失败', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async toggleFilterRule(rule) {
+                    try {
+                        await api.put(`/api/message-filter/${rule.id}`, {
+                            enabled: !rule.enabled,
+                            channel: rule._channel || 'global',
+                            session_id: rule._session_id || '',
+                        });
+                        rule.enabled = !rule.enabled;
+                        this.showToast(rule.enabled ? '规则已启用' : '规则已禁用', 'success');
+                    } catch (e) {
+                        this.showToast('切换规则状态失败', 'error');
+                    }
+                },
+
+                async deleteFilterRule(rule) {
+                    this.showConfirm({
+                        title: '删除过滤规则',
+                        message: `确定要删除规则 "${rule.pattern}" 吗？`,
+                        highlight: rule.pattern,
+                        impact: '该规则将被永久删除',
+                        confirmText: '删除',
+                        danger: true,
+                        onConfirm: async () => {
+                            this.isLoading = true;
+                            try {
+                                await api.delete(`/api/message-filter/${rule.id}`, {
+                                    params: { channel: rule._channel || 'global', session_id: rule._session_id || '' },
+                                });
+                                await this.loadMessageFilter();
+                                this.showToast('规则已删除', 'success');
+                            } catch (e) {
+                                this.showToast('删除规则失败', 'error');
+                            } finally {
+                                this.isLoading = false;
+                            }
+                        },
                     });
                 },
 

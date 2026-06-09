@@ -176,7 +176,13 @@ class BaseChannelAdapter:
         return channel_message
 
     def normalize_inbound_message(self, content: str) -> str:
-        return (content or "").strip()
+        result = (content or "").strip()
+        # 非 Web 频道：剥离默认删除标记 <||>
+        if self.channel_name != "web" and result:
+            from nbot.message_filter import MessageFilter
+
+            result = MessageFilter.strip_default_markers(result)
+        return result
 
     def normalize_attachments(
         self, attachments: list[dict[str, Any]] | None = None

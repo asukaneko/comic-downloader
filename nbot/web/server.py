@@ -56,6 +56,7 @@ from nbot.web.routes import (
     register_login_token_routes,
     register_mcp_server_routes,
     register_memory_routes,
+    register_message_filter_routes,
     register_personality_routes,
     register_public_session_routes,
     register_push_routes,
@@ -2852,6 +2853,7 @@ class WebChatServer:
         register_knowledge_routes(self.app, self)
         register_live2d_routes(self.app, self)
         register_memory_routes(self.app, self)
+        register_message_filter_routes(self.app, self)
         register_personality_routes(self.app, self)
         register_push_routes(self.app, self)
         register_qq_overview_routes(self.app, self)

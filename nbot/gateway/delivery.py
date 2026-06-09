@@ -186,8 +186,14 @@ class GatewayDelivery:
                 _log.warning("[Delivery] 投递记录创建失败 trace=%s error=%s", trace_id, str(e))
 
         try:
-            # 内容预处理：Markdown 降级
+            # 内容预处理：非 Web 频道剥离 <||> 标记
             processed_content = content
+            if channel_id != "web" and processed_content:
+                from nbot.message_filter import MessageFilter
+
+                processed_content = MessageFilter.strip_default_markers(processed_content)
+
+            # 内容预处理：Markdown 降级
             if self._enable_markdown_strip:
                 processed_content = strip_markdown(processed_content)
 

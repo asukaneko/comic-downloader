@@ -16,6 +16,7 @@ from nbot.web.routes.live2d import register_live2d_routes
 from nbot.web.routes.login_tokens import register_login_token_routes
 from nbot.web.routes.mcp_servers import register_mcp_server_routes
 from nbot.web.routes.memory import register_memory_routes
+from nbot.web.routes.message_filter import register_message_filter_routes
 from nbot.web.routes.personality import register_personality_routes
 from nbot.web.routes.public_sessions import register_public_session_routes
 from nbot.web.routes.push import register_push_routes
@@ -55,6 +56,7 @@ __all__ = [
     "register_login_token_routes",
     "register_mcp_server_routes",
     "register_memory_routes",
+    "register_message_filter_routes",
     "register_personality_routes",
     "register_public_session_routes",
     "register_push_routes",

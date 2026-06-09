@@ -14442,6 +14442,7 @@
 
         /* 滑动开关 */
         .toggle-switch {
+            display: inline-block;
             position: relative;
             width: 56px;
             height: 28px;
@@ -14460,7 +14461,7 @@
             bottom: 0;
             width: 100%;
             height: 100%;
-            background: var(--bg-tertiary);
+            background: #4b5563;
             border-radius: 14px;
             transition: all 0.3s ease;
         }

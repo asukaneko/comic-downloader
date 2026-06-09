@@ -7008,6 +7008,158 @@
                         </div>
                     </div>
 
+                    <!-- Message Filter -->
+                    <div v-if="currentPage === 'message-filter'" class="fade-in">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title"><i class="fas fa-shield-alt"></i> 消息过滤器</span>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <label class="toggle-switch" title="全局开关">
+                                        <input type="checkbox" v-model="messageFilterEnabled" @change="toggleMessageFilter()">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <span style="font-size: 13px; color: var(--text-secondary);">
+                                        {{ messageFilterEnabled ? '已启用' : '已禁用' }}
+                                    </span>
+                                    <button class="btn btn-primary" @click="openFilterModal()" :disabled="isLoading">
+                                        <i class="fas fa-plus"></i> 添加规则
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div v-if="messageFilterRules.length === 0" class="empty-state">
+                                    <i class="fas fa-shield-alt" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 16px;"></i>
+                                    <p>暂无过滤规则</p>
+                                    <button class="btn btn-primary" @click="openFilterModal()" style="margin-top: 12px;">
+                                        <i class="fas fa-plus"></i> 添加第一条规则
+                                    </button>
+                                </div>
+                                <div v-else>
+                                    <div style="overflow-x: auto;">
+                                        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                                            <thead>
+                                                <tr style="border-bottom: 1px solid var(--border-color);">
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">状态</th>
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">作用域</th>
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">规则</th>
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">类型</th>
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">动作</th>
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">创建时间</th>
+                                                    <th style="text-align: right; padding: 8px 12px; color: var(--text-secondary);">操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="rule in messageFilterRules" :key="rule.id" style="border-bottom: 1px solid var(--border-color);">
+                                                    <td style="padding: 10px 12px;">
+                                                        <label class="toggle-switch" style="margin: 0;">
+                                                            <input type="checkbox" :checked="rule.enabled" @change="toggleFilterRule(rule)">
+                                                            <span class="toggle-slider"></span>
+                                                        </label>
+                                                    </td>
+                                                    <td style="padding: 10px 12px;">
+                                                        <span v-if="rule._channel === 'global'" class="badge badge-info">全局</span>
+                                                        <span v-else class="badge badge-secondary">{{ rule._channel }}</span>
+                                                    </td>
+                                                    <td style="padding: 10px 12px;">
+                                                        <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 13px;">{{ rule.pattern }}</code>
+                                                    </td>
+                                                    <td style="padding: 10px 12px;">
+                                                        <span class="badge" :class="rule.type === 'regex' ? 'badge-warning' : 'badge-info'">
+                                                            {{ rule.type === 'regex' ? '正则' : '关键词' }}
+                                                        </span>
+                                                    </td>
+                                                    <td style="padding: 10px 12px;">
+                                                        <span class="badge" :class="rule.action === 'recall' ? 'badge-danger' : 'badge-success'">
+                                                            {{ rule.action === 'recall' ? '撤回消息' : '删除文字' }}
+                                                        </span>
+                                                    </td>
+                                                    <td style="padding: 10px 12px; color: var(--text-secondary); font-size: 12px;">
+                                                        {{ rule.created_at ? rule.created_at.replace('T', ' ').substring(0, 19) : '-' }}
+                                                    </td>
+                                                    <td style="padding: 10px 12px; text-align: right;">
+                                                        <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                                                            <button class="btn btn-secondary" @click="openFilterModal(rule)" :disabled="isLoading" style="padding: 4px 8px;">
+                                                                <i class="fas fa-edit"></i>
+                                                            </button>
+                                                            <button class="btn btn-danger" @click="deleteFilterRule(rule)" :disabled="isLoading" style="padding: 4px 8px;">
+                                                                <i class="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 规则编辑 Modal -->
+                        <div v-if="showFilterModal" class="modal-overlay" @click.self="showFilterModal = false">
+                            <div class="modal" style="max-width: 520px;">
+                                <div class="modal-header">
+                                    <span class="modal-title">{{ editingFilterRule ? '编辑规则' : '新增规则' }}</span>
+                                    <button class="modal-close" @click="showFilterModal = false">&times;</button>
+                                </div>
+                                <div class="modal-body">
+                                    <!-- 第一步：作用频道 -->
+                                    <div class="form-group">
+                                        <label class="form-label">作用频道</label>
+                                        <select v-model="filterForm.channel" class="form-input">
+                                            <option value="global">全局（所有频道）</option>
+                                            <option value="web">Web</option>
+                                            <option v-for="ch in channels.filter(c => c.id !== 'web')" :key="ch.id" :value="ch.id">{{ ch.name || ch.id }}</option>
+                                        </select>
+                                    </div>
+                                    <!-- 第二步：非全局频道选择会话范围 -->
+                                    <div class="form-group" v-if="filterForm.channel && filterForm.channel !== 'global'">
+                                        <label class="form-label">作用会话</label>
+                                        <select v-model="filterForm.session_scope" class="form-input">
+                                            <option value="all">全局会话（该频道所有会话）</option>
+                                            <option value="specific">指定会话</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" v-if="filterForm.channel !== 'global' && filterForm.session_scope === 'specific'">
+                                        <label class="form-label">会话 ID</label>
+                                        <input v-model="filterForm.session_id" class="form-input" placeholder="例如 qq:group:123456、web:session_abc">
+                                        <div class="form-hint">留空则匹配该频道所有会话</div>
+                                    </div>
+                                    <!-- 第三步：内容 -->
+                                    <div class="form-group">
+                                        <label class="form-label">匹配内容</label>
+                                        <input v-model="filterForm.pattern" class="form-input" placeholder="输入关键词或正则表达式">
+                                    </div>
+                                    <div class="grid-2">
+                                        <div class="form-group">
+                                            <label class="form-label">匹配类型</label>
+                                            <select v-model="filterForm.type" class="form-input">
+                                                <option value="keyword">关键词（子串匹配）</option>
+                                                <option value="regex">正则表达式</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">过滤动作</label>
+                                            <select v-model="filterForm.action" class="form-input">
+                                                <option value="strip">删除文字（保留消息）</option>
+                                                <option value="recall">撤回消息</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-hint" style="margin-top: -8px;">
+                                        <span v-if="filterForm.type === 'keyword'">关键词模式：大小写不敏感的子串匹配</span>
+                                        <span v-else>正则模式：使用 Python 正则表达式语法，如 <code>广告.*链接</code></span>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="showFilterModal = false">取消</button>
+                                    <button class="btn btn-primary" @click="saveFilterRule()" :disabled="isLoading || !filterForm.pattern">
+                                        <i class="fas fa-save"></i> 保存
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- TTS Playground -->
                     <div v-if="currentPage === 'tts-playground'" class="fade-in">
                         <!-- Hero Header -->
@@ -10339,6 +10491,7 @@
                             { id: 'tools', labelKey: 'nav.tools', icon: 'fas fa-toolbox' },
                             { id: 'mcp-servers', labelKey: 'nav.mcp_servers', icon: 'fas fa-server' },
                             { id: 'channels', labelKey: 'nav.channels', icon: 'fas fa-plug' },
+                            { id: 'message-filter', labelKey: 'nav.message_filter', icon: 'fas fa-shield-alt' },
                             { id: 'tts-playground', labelKey: 'nav.tts_playground', icon: 'fas fa-headphones' }
                         ],
                         system: [
@@ -11070,6 +11223,20 @@
                         enabled: true,
                         configText: '{}',
                         capabilitiesText: '{}'
+                    },
+
+                    // 消息过滤器
+                    messageFilterRules: [],
+                    messageFilterEnabled: true,
+                    showFilterModal: false,
+                    editingFilterRule: null,
+                    filterForm: {
+                        channel: 'global',
+                        session_scope: 'all',
+                        session_id: '',
+                        pattern: '',
+                        type: 'keyword',
+                        action: 'strip',
                     },
 
                     // Tokens
