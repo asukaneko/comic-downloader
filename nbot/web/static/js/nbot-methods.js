@@ -14148,12 +14148,24 @@ def main(params):
                     return content;
                 },
 
+                // 将括号内容标记为斜体：（）() 及包括的内容
+                applyParenthesisItalic(text) {
+                    if (!text) return text;
+                    // 全角括号：（内容）→（*内容*）
+                    text = text.replace(/（([^）]+)）/g, '（*$1*）');
+                    // 半角括号：(内容) → (*内容*)，避免匹配 URL、函数调用、markdown 链接
+                    // 仅当括号前为：空格、CJK 字符、中文标点、行首 时生效
+                    text = text.replace(/(^|[\s一-鿿　-〿＀-￯぀-ゟ゠-ヿ가-힯.,;!?。，、；！？…—～])\(([^)]+)\)/g, '$1(*$2*)');
+                    return text;
+                },
+
                 renderMessageBody(msg) {
                     // 表情包消息：不渲染文本内容，隐藏 message-body
                     if (msg?.source === 'sticker') {
                         return '';
                     }
-                    const content = this.parseMessageContent(msg?.content || '', msg);
+                    let content = this.parseMessageContent(msg?.content || '', msg);
+                    content = this.applyParenthesisItalic(content);
                     if (msg?.is_streaming) {
                         return this.renderStreamingHtml(content);
                     }
@@ -14185,13 +14197,16 @@ def main(params):
                     const rawParts = this.splitMessageBubbles(parsedContent);
                     const lastIndex = rawParts.length - 1;
                     return rawParts
-                        .map((part, index) => ({
-                            text: part,
-                            html: msg.is_streaming && index === lastIndex
-                                ? this.renderStreamingHtml(part)
-                                : this.renderMarkdown(part, { disableStrikethrough: true }),
-                            isStreaming: !!msg.is_streaming && index === lastIndex,
-                        }))
+                        .map((part, index) => {
+                            const italicPart = this.applyParenthesisItalic(part);
+                            return {
+                                text: part,
+                                html: msg.is_streaming && index === lastIndex
+                                    ? this.renderStreamingHtml(italicPart)
+                                    : this.renderMarkdown(italicPart, { disableStrikethrough: true }),
+                                isStreaming: !!msg.is_streaming && index === lastIndex,
+                            };
+                        })
                         .filter((bubble, index) => {
                             if (bubble.text) return true;
                             return !!msg.is_streaming && index === lastIndex;
