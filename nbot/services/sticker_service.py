@@ -68,7 +68,7 @@ _REQUEST_TIMEOUT = 10
 def _get_settings_path() -> str:
     """获取 settings.json 的路径"""
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    return os.path.join(base_dir, "data", "settings.json")
+    return os.path.join(base_dir, "data", "web", "settings.json")
 
 
 def _load_sticker_settings() -> dict:

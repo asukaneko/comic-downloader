@@ -593,6 +593,67 @@ class WebChatServer:
         except Exception as e:
             _log.error(f"自动启动飞书长连接频道失败: {e}")
 
+    def _auto_connect_mcp_servers(self):
+        """启动时自动连接所有 auto_connect=True 的 MCP 服务器（独立后台线程，不阻塞初始化）"""
+        try:
+            from nbot.services.mcp_bridge import get_mcp_bridge
+
+            config_path = os.path.join(self.data_dir, "mcp_servers.json")
+            if not os.path.exists(config_path):
+                return
+
+            with open(config_path, encoding="utf-8") as f:
+                configs = json.load(f)
+            if not isinstance(configs, list):
+                return
+
+            # 筛选需要自动连接的服务器
+            targets = [
+                cfg for cfg in configs
+                if cfg.get("auto_connect") and cfg.get("enabled", True) and cfg.get("id")
+            ]
+            if not targets:
+                return
+
+            def _connect_all():
+                bridge = get_mcp_bridge()
+                connected_count = 0
+
+                for cfg in targets:
+                    server_id = cfg["id"]
+                    transport = cfg.get("transport", "streamable-http")
+                    if transport == "stdio" and not cfg.get("command"):
+                        continue
+                    if transport != "stdio" and not cfg.get("url"):
+                        continue
+
+                    try:
+                        result = bridge.run_async(bridge.connect_server(server_id, cfg))
+                        if result.get("ok"):
+                            cfg["connected"] = True
+                            cfg["tool_count"] = result.get("tool_count", 0)
+                            cfg["last_connected_at"] = datetime.now().isoformat()
+                            connected_count += 1
+                            _log.info("[MCP] 自动连接成功: %s (%d 个工具)", cfg.get("name", server_id), cfg["tool_count"])
+                        else:
+                            _log.warning("[MCP] 自动连接失败: %s - %s", cfg.get("name", server_id), result.get("error", "unknown"))
+                    except Exception as e:
+                        _log.warning("[MCP] 自动连接异常: %s - %s", cfg.get("name", server_id), e)
+
+                if connected_count > 0:
+                    try:
+                        with open(config_path, "w", encoding="utf-8") as f:
+                            json.dump(configs, f, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        _log.warning("[MCP] 保存自动连接状态失败: %s", e)
+
+                _log.info("[MCP] 自动连接完成: %d/%d 个服务器已连接", connected_count, len(targets))
+
+            t = threading.Thread(target=_connect_all, name="mcp-auto-connect", daemon=True)
+            t.start()
+        except Exception as e:
+            _log.error(f"自动连接 MCP 服务器失败: {e}")
+
     def _start_background_initialization(self):
         """Load heavier startup data after the server begins accepting requests."""
 
@@ -610,6 +671,8 @@ class WebChatServer:
                 self._check_knowledge_index()
                 # 自动启动飞书长连接频道
                 self._auto_start_feishu_ws_channels()
+                # 自动连接 MCP 服务器
+                self._auto_connect_mcp_servers()
                 self.startup_ready = True
                 _log.info("Web server background initialization completed")
             except Exception as e:

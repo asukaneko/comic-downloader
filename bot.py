@@ -648,7 +648,9 @@ if __name__ == "__main__":
     else:
         _mode = "QQ Bot + Web Dashboard"
 
-    print_startup_banner(version=__version__, mode=_mode)
+    # mcp_only 模式下不打印 banner，避免污染 stdout（JSON-RPC 协议通道）
+    if not mcp_only:
+        print_startup_banner(version=__version__, mode=_mode)
 
     if mcp_connect:
         # MCP 客户端模式 - 连接远程 MCP Server

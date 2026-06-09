@@ -147,7 +147,12 @@ def register_mcp_server_routes(app, server):
         for cfg in configs:
             if cfg["id"] == server_id:
                 cfg["name"] = data.get("name", cfg["name"])
-                cfg["url"] = data.get("url", cfg["url"])
+                if "url" in data or "url" in cfg:
+                    cfg["url"] = data.get("url", cfg.get("url", ""))
+                if "command" in data:
+                    cfg["command"] = data["command"]
+                if "args" in data:
+                    cfg["args"] = data["args"]
                 cfg["description"] = data.get("description", cfg.get("description", ""))
                 cfg["enabled"] = data.get("enabled", cfg.get("enabled", True))
                 cfg["auto_connect"] = data.get("auto_connect", cfg.get("auto_connect", False))
