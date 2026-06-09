@@ -24722,3 +24722,60 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
         max-width: 100% !important;
     }
 }
+
+/* Login Token Management */
+.token-hash {
+    background: var(--bg-tertiary, #21262d);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-secondary, #8b949e);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.token-copy-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.token-copy-row .form-input {
+    flex: 1;
+}
+
+.created-token-display {
+    padding: 4px 0;
+}
+
+.created-token-display .alert-success {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(35, 134, 54, 0.15);
+    border: 1px solid rgba(35, 134, 54, 0.3);
+    border-radius: 8px;
+    color: var(--success, #238636);
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.created-token-display .form-hint {
+    font-size: 12px;
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.page-card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.data-table-info {
+    font-size: 13px;
+    color: var(--text-secondary, #8b949e);
+    margin-bottom: 12px;
+}

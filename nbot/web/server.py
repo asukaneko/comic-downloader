@@ -53,6 +53,7 @@ from nbot.web.routes import (
     register_heartbeat_routes,
     register_knowledge_routes,
     register_live2d_routes,
+    register_login_token_routes,
     register_mcp_server_routes,
     register_memory_routes,
     register_personality_routes,
@@ -856,11 +857,12 @@ class WebChatServer:
         now = datetime.now()
         expires_at = now + timedelta(days=self.token_expire_days)
 
-        # 存储 token hash 而非明文
+        # 存储 token hash 而非明文（附带前缀用于界面展示）
         self.login_tokens[token_hash] = {
             "username": username,
             "created_at": now.isoformat(),
             "expires_at": expires_at.isoformat(),
+            "token_prefix": token[:8],
         }
 
         _log.info(f"[Auth] 生成登录 Token: username={username}, expires={expires_at}")
@@ -2804,6 +2806,7 @@ class WebChatServer:
         register_config_legacy_routes(self.app, self)
         register_config_transfer_routes(self.app, self)
         register_update_routes(self.app, self)
+        register_login_token_routes(self.app, self)
 
         # 初始化 Gateway 并注入 AgentService
         self._init_gateway()

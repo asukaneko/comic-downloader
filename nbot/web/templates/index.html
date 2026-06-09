@@ -7255,6 +7255,128 @@
 
                     </div>
 
+                    <!-- Login Tokens -->
+                    <div v-if="currentPage === 'login-tokens'" class="fade-in">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">
+                                    <i class="fas fa-key"></i> {{ $t('login_tokens.title') }}
+                                </span>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn btn-primary" @click="showCreateTokenModal = true">
+                                        <i class="fas fa-plus"></i> {{ $t('login_tokens.create') }}
+                                    </button>
+                                    <button class="btn btn-danger" @click="revokeAllLoginTokens"
+                                        :disabled="loginTokens.length === 0">
+                                        <i class="fas fa-trash-alt"></i> {{ $t('login_tokens.revoke_all') }}
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-subtitle" style="margin-bottom: 16px; color: var(--text-secondary);">
+                                    {{ $t('login_tokens.subtitle') }}
+                                </p>
+
+                                <div v-if="loginTokens.length === 0" class="empty-state">
+                                    <i class="fas fa-key" style="font-size: 48px; opacity: 0.3;"></i>
+                                    <p>{{ $t('login_tokens.no_tokens') }}</p>
+                                </div>
+
+                                <div v-else>
+                                    <div class="data-table-info" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">
+                                        <span>{{ $t('login_tokens.count', { count: loginTokens.length }) }}</span>
+                                    </div>
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>{{ $t('login_tokens.hash_prefix') }}</th>
+                                                <th>{{ $t('login_tokens.username') }}</th>
+                                                <th>{{ $t('login_tokens.created_at') }}</th>
+                                                <th>{{ $t('login_tokens.expires_at') }}</th>
+                                                <th style="width: 100px;">{{ $t('session.actions') }}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="token in loginTokens" :key="token.hash_full">
+                                                <td>
+                                                    <code class="token-hash">{{ token.token_prefix }}...</code>
+                                                </td>
+                                                <td>{{ token.username }}</td>
+                                                <td>{{ formatDateTime(token.created_at) }}</td>
+                                                <td>{{ formatDateTime(token.expires_at) }}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-danger"
+                                                        @click="revokeLoginToken(token.hash_full)"
+                                                        :title="$t('login_tokens.revoke')">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create Token Modal -->
+                        <div v-if="showCreateTokenModal" class="modal-overlay" @click.self="showCreateTokenModal = false">
+                            <div class="modal" style="max-width: 500px;">
+                                <div class="modal-header">
+                                    <h3>{{ $t('login_tokens.create_title') }}</h3>
+                                    <button class="modal-close" @click="showCreateTokenModal = false">&times;</button>
+                                </div>
+                                <div class="modal-body">
+                                    <div v-if="createdToken" class="created-token-display">
+                                        <div class="alert alert-success">
+                                            <i class="fas fa-check-circle"></i>
+                                            {{ $t('login_tokens.create_success') }}
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('login_tokens.token_value') }}</label>
+                                            <div class="token-copy-row">
+                                                <input type="text" class="form-input" :value="createdToken" readonly
+                                                    style="font-family: monospace; font-size: 13px;">
+                                                <button class="btn btn-primary btn-sm" @click="copyCreatedToken">
+                                                    <i class="fas fa-copy"></i> {{ $t('login_tokens.copy') }}
+                                                </button>
+                                            </div>
+                                            <p class="form-hint" style="color: var(--danger-color, #ef4444);">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                                {{ $t('login_tokens.new_token_notice') }}
+                                            </p>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button class="btn btn-secondary" @click="closeCreateTokenModal">
+                                                {{ $t('app.close') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div v-else>
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('login_tokens.username') }}</label>
+                                            <input v-model="newTokenForm.username" type="text" class="form-input"
+                                                placeholder="admin">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">{{ $t('login_tokens.expires_days') }}</label>
+                                            <input v-model.number="newTokenForm.expires_days" type="number" class="form-input"
+                                                min="1" max="365" placeholder="30">
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button class="btn btn-secondary" @click="showCreateTokenModal = false">
+                                                {{ $t('app.cancel') }}
+                                            </button>
+                                            <button class="btn btn-primary" @click="createLoginToken"
+                                                :disabled="isLoading">
+                                                <i class="fas fa-plus"></i> {{ $t('login_tokens.create') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Debug Console -->
                     <div v-if="currentPage === 'debug'" class="fade-in">
                         <div class="grid-2">
@@ -10177,6 +10299,7 @@
                             { id: 'tokens', labelKey: 'nav.tokens', icon: 'fas fa-coins' },
                             { id: 'logs', labelKey: 'nav.logs', icon: 'fas fa-file-alt' },
                             { id: 'settings', labelKey: 'nav.settings', icon: 'fas fa-cog' },
+                            { id: 'login-tokens', labelKey: 'nav.login_tokens', icon: 'fas fa-key' },
                             { id: 'debug', labelKey: 'nav.debug', icon: 'fas fa-bug' }
                         ]
                     },
@@ -11111,6 +11234,15 @@
                     },
                     showThemePanel: false,
                     showManualModal: false,
+
+                    // 登录令牌管理
+                    loginTokens: [],
+                    showCreateTokenModal: false,
+                    createdToken: '',
+                    newTokenForm: {
+                        username: 'admin',
+                        expires_days: 30
+                    },
                     showQqScrollButton: false,
                     pendingMessageQueues: {},
                     isProcessingQueuedMessage: false,
@@ -11446,6 +11578,7 @@
                         tokens: 'Token 用量',
                         logs: '日志',
                         settings: '系统设置',
+                        'login-tokens': '登录令牌',
                         debug: '调试台'
                     };
                     return titles[this.currentPage] || 'NekoBot';

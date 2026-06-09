@@ -1702,6 +1702,9 @@ const NbotMethods = {
                             await this.loadTTSModels();
                             await this.loadTTSVoices();
                             break;
+                        case 'login-tokens':
+                            await this.loadLoginTokens();
+                            break;
                     }
                 },
                 
@@ -5346,7 +5349,105 @@ def main(params):
                         console.error('Failed to load settings:', e);
                     }
                 },
-                
+
+                // Login Token Management
+                async loadLoginTokens() {
+                    try {
+                        const res = await api.get('/api/login-tokens');
+                        this.loginTokens = res.data.tokens || [];
+                    } catch (e) {
+                        console.error('Failed to load login tokens:', e);
+                        this.loginTokens = [];
+                    }
+                },
+
+                async createLoginToken() {
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post('/api/login-tokens', {
+                            username: this.newTokenForm.username || 'admin',
+                            expires_days: this.newTokenForm.expires_days || 30
+                        });
+                        if (res.data.success) {
+                            this.createdToken = res.data.token;
+                            await this.loadLoginTokens();
+                        } else {
+                            this.showToast(res.data.error || '创建失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('创建令牌失败', 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                revokeLoginToken(tokenHash) {
+                    this.showConfirm({
+                        title: this.$t('login_tokens.revoke'),
+                        message: this.$t('login_tokens.revoke_confirm'),
+                        danger: true,
+                        onConfirm: async () => {
+                            try {
+                                await api.delete(`/api/login-tokens/${tokenHash}`);
+                                await this.loadLoginTokens();
+                                this.showToast('令牌已撤销', 'success');
+                            } catch (e) {
+                                this.showToast('撤销失败', 'error');
+                            }
+                        }
+                    });
+                },
+
+                revokeAllLoginTokens() {
+                    this.showConfirm({
+                        title: this.$t('login_tokens.revoke_all'),
+                        message: this.$t('login_tokens.revoke_all_confirm'),
+                        danger: true,
+                        onConfirm: async () => {
+                            try {
+                                const res = await api.delete('/api/login-tokens');
+                                await this.loadLoginTokens();
+                                this.showToast(res.data.message || '已撤销全部', 'success');
+                            } catch (e) {
+                                this.showToast('撤销失败', 'error');
+                            }
+                        }
+                    });
+                },
+
+                copyCreatedToken() {
+                    if (this.createdToken) {
+                        navigator.clipboard.writeText(this.createdToken).then(() => {
+                            this.showToast(this.$t('login_tokens.token_copied'), 'success');
+                        }).catch(() => {
+                            // Fallback
+                            const ta = document.createElement('textarea');
+                            ta.value = this.createdToken;
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            this.showToast(this.$t('login_tokens.token_copied'), 'success');
+                        });
+                    }
+                },
+
+                closeCreateTokenModal() {
+                    this.showCreateTokenModal = false;
+                    this.createdToken = '';
+                    this.newTokenForm = { username: 'admin', expires_days: 30 };
+                },
+
+                formatDateTime(isoStr) {
+                    if (!isoStr) return '-';
+                    try {
+                        const d = new Date(isoStr);
+                        return d.toLocaleString(this.currentLanguage === 'zh' ? 'zh-CN' : 'en-US');
+                    } catch {
+                        return isoStr;
+                    }
+                },
+
                 // Chat Functions
                 async selectSession(session) {
                     const previousSessionId = this.currentSession?.id;

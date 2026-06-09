@@ -13,6 +13,7 @@ from nbot.web.routes.gateway_logs import register_gateway_log_routes
 from nbot.web.routes.heartbeat import register_heartbeat_routes
 from nbot.web.routes.knowledge import register_knowledge_routes
 from nbot.web.routes.live2d import register_live2d_routes
+from nbot.web.routes.login_tokens import register_login_token_routes
 from nbot.web.routes.mcp_servers import register_mcp_server_routes
 from nbot.web.routes.memory import register_memory_routes
 from nbot.web.routes.personality import register_personality_routes
@@ -51,6 +52,7 @@ __all__ = [
     "register_heartbeat_routes",
     "register_knowledge_routes",
     "register_live2d_routes",
+    "register_login_token_routes",
     "register_mcp_server_routes",
     "register_memory_routes",
     "register_personality_routes",

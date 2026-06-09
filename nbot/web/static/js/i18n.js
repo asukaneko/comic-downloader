@@ -95,7 +95,30 @@ const i18nMessages = {
     'nav.tokens': 'Token 用量',
     'nav.logs': '系统日志',
     'nav.debug': '调试台',
-    
+    'nav.login_tokens': '登录令牌',
+
+    // 登录令牌管理
+    'login_tokens.title': '登录令牌管理',
+    'login_tokens.subtitle': '管理 Web 端登录令牌，支持创建和撤销',
+    'login_tokens.create': '创建令牌',
+    'login_tokens.revoke': '撤销',
+    'login_tokens.revoke_all': '撤销全部',
+    'login_tokens.revoke_all_confirm': '确定要撤销全部令牌吗？当前会话的令牌将被保留。',
+    'login_tokens.revoke_confirm': '确定要撤销此令牌吗？使用该令牌的会话将立即失效。',
+    'login_tokens.username': '用户名',
+    'login_tokens.expires_days': '有效期（天）',
+    'login_tokens.token_value': '令牌值',
+    'login_tokens.token_copied': '令牌已复制到剪贴板',
+    'login_tokens.copy': '复制',
+    'login_tokens.created_at': '创建时间',
+    'login_tokens.expires_at': '过期时间',
+    'login_tokens.hash_prefix': '令牌前缀',
+    'login_tokens.no_tokens': '暂无活跃令牌',
+    'login_tokens.create_success': '令牌创建成功，请妥善保存',
+    'login_tokens.create_title': '创建新令牌',
+    'login_tokens.new_token_notice': '请复制并妥善保存此令牌，关闭后将无法再次查看',
+    'login_tokens.count': '共 {count} 个令牌',
+
     // 登录
     'login.title': 'NekoBot Chat',
     'login.subtitle': 'NekoBot管理后台',
@@ -1486,7 +1509,30 @@ const i18nMessages = {
     'nav.tokens': 'Token Usage',
     'nav.logs': 'System Logs',
     'nav.debug': 'Debug Console',
-    
+    'nav.login_tokens': 'Login Tokens',
+
+    // Login Token Management
+    'login_tokens.title': 'Login Token Management',
+    'login_tokens.subtitle': 'Manage web login tokens - create and revoke',
+    'login_tokens.create': 'Create Token',
+    'login_tokens.revoke': 'Revoke',
+    'login_tokens.revoke_all': 'Revoke All',
+    'login_tokens.revoke_all_confirm': 'Revoke all tokens? Your current session token will be kept.',
+    'login_tokens.revoke_confirm': 'Revoke this token? Sessions using it will be invalidated immediately.',
+    'login_tokens.username': 'Username',
+    'login_tokens.expires_days': 'Expires (days)',
+    'login_tokens.token_value': 'Token Value',
+    'login_tokens.token_copied': 'Token copied to clipboard',
+    'login_tokens.copy': 'Copy',
+    'login_tokens.created_at': 'Created At',
+    'login_tokens.expires_at': 'Expires At',
+    'login_tokens.hash_prefix': 'Token Prefix',
+    'login_tokens.no_tokens': 'No active tokens',
+    'login_tokens.create_success': 'Token created successfully, please save it securely',
+    'login_tokens.create_title': 'Create New Token',
+    'login_tokens.new_token_notice': 'Please copy and save this token securely. It cannot be viewed again after closing.',
+    'login_tokens.count': '{count} token(s)',
+
     // Login
     'login.title': 'NekoBot Chat',
     'login.subtitle': 'Smart QQ Bot Management Panel',
