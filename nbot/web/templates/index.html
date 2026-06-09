@@ -2169,7 +2169,7 @@
                                                     <button class="btn btn-secondary btn-small" @click="openSession(session)" :disabled="isLoading">
                                                         打开
                                                     </button>
-                                                    <button class="btn btn-secondary btn-small" @click="viewSessionDetails(session)" :disabled="isLoading">
+                                                    <button class="btn btn-secondary btn-small" @click="viewWebSessionDetails(session)" :disabled="isLoading">
                                                         详情
                                                     </button>
                                                     <details class="session-more-menu">
@@ -2284,7 +2284,7 @@
                                                     <button class="btn btn-secondary btn-small" @click="openSession(session)" :disabled="isLoading">
                                                         打开
                                                     </button>
-                                                    <button class="btn btn-secondary btn-small" @click="viewSessionDetails(session)" :disabled="isLoading">
+                                                    <button class="btn btn-secondary btn-small" @click="viewWebSessionDetails(session)" :disabled="isLoading">
                                                         详情
                                                     </button>
                                                     <details class="session-more-menu">
@@ -8973,7 +8973,7 @@
                             <i class="fas fa-chart-line" style="color: var(--accent-primary);"></i> {{ $t('runtime.status_timeline') }}
                         </div>
                         <div class="runtime-timeline runtime-timeline-detail">
-                            <div v-for="item in getRuntimeTimelineNodes(viewingSession.character_runtime_timeline, 12).reverse()" :key="item.timestamp" class="runtime-timeline-item">
+                            <div v-for="item in getRuntimeTimelineNodes(viewingSession.character_runtime_timeline, 6).reverse()" :key="item.timestamp" class="runtime-timeline-item">
                                 <div class="runtime-timeline-node" :title="$translateMood(item.visible_emotion) || $translateMood(item.mood) || $t('runtime.status_node')"></div>
                                 <span>{{ formatFullTime(item.timestamp) }}</span>
                                 <strong>{{ $translateMood(item.mood) || $t('runtime.unknown') }}</strong>

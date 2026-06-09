@@ -7372,61 +7372,91 @@ def main(params):
 
                 // Web 会话详情
                 async viewWebSessionDetails(session) {
+                    // 先直接展示已有数据，再后台加载完整详情
+                    const targetSessionId = String(session.id || '');
+                    this.viewingSession = {
+                        id: session.id,
+                        name: session.name,
+                        type: session.type,
+                        user_id: session.user_id || '',
+                        created_at: session.created_at,
+                        message_count: session.message_count || 0,
+                        system_prompt: session.system_prompt || '',
+                        archived: session.archived || false,
+                        is_archive: session.is_archive || false,
+                        read_only: session.read_only || false,
+                        channel_id: session.channel_id || '',
+                        tags: session.tags || [],
+                        favorite: !!session.favorite,
+                        pinned: !!session.pinned,
+                        proactive_chat: {
+                            enabled: false,
+                            interval_minutes: 60,
+                            idle_minutes: 10,
+                            visible_only: true,
+                            ...(session.proactive_chat || {})
+                        },
+                        tts_config: session.tts_config || { enabled: false, model_id: '', voice: '' },
+                        character_runtime_snapshot: session.character_runtime_snapshot || null,
+                        character_runtime_timeline: session.character_runtime_timeline || [],
+                        customPrompts: [...(session.custom_prompts || [])].map(cp => ({ ...cp })),
+                    };
+                    this.customPromptsDirty = false;
+                    // 重置公开状态
+                    this.sessionQrCode = '';
+                    this.sessionShareUrl = '';
+                    this.sessionIsPublic = false;
+                    this.publicSharePasswordRequired = false;
+                    this.publicShareExpiresAt = null;
+                    this.publicShareOptions = {
+                        expires_days: 30,
+                        password: '',
+                        include_character: true,
+                        include_user_messages: true,
+                        message_start: '',
+                        message_end: ''
+                    };
+                    this.showSessionDetailsModal = true;
+                    this.checkSessionPublicStatus(targetSessionId);
+
+                    // 后台加载完整数据（含消息列表）
                     try {
-                        const res = await api.get('/api/sessions/' + session.id);
-                        const fullSession = res.data;
-                        if (fullSession.error) {
-                            this.showToast('会话不存在或已被删除', 'error');
+                        const res = await api.get(`/api/sessions/${targetSessionId}`);
+                        if (String(this.viewingSession?.id || '') !== targetSessionId) {
                             return;
                         }
-                        this.viewingSession = {
-                            id: fullSession.id || session.id,
-                            name: fullSession.name || session.name,
-                            type: fullSession.type || session.type,
-                            user_id: fullSession.user_id || session.user_id || '',
-                            created_at: fullSession.created_at || session.created_at,
-                            message_count: fullSession.message_count || session.message_count || 0,
-                            system_prompt: fullSession.system_prompt || session.system_prompt || '',
-                            prompt_stack_debug: fullSession.prompt_stack_debug || session.prompt_stack_debug || [],
-                            disabled_prompt_keys: fullSession.disabled_prompt_keys || session.disabled_prompt_keys || [],
-                            character_runtime_snapshot: fullSession.character_runtime_snapshot || session.character_runtime_snapshot || null,
-                            archived: fullSession.archived || false,
-                            is_archive: fullSession.is_archive || false,
-                            read_only: fullSession.read_only || false,
-                            channel_id: fullSession.channel_id || '',
-                            proactive_chat: {
-                                enabled: false,
-                                interval_minutes: 60,
-                                idle_minutes: 10,
-                                visible_only: true,
-                                ...(fullSession.proactive_chat || session.proactive_chat || {})
-                            },
-                            tts_config: fullSession.tts_config || session.tts_config || { enabled: false, model_id: '', voice: '' },
-                            messages: fullSession.messages || [],
-                            custom_prompts: fullSession.custom_prompts || session.custom_prompts || [],
-                            customPrompts: [...(fullSession.custom_prompts || session.custom_prompts || [])].map(cp => ({ ...cp }))
-                        };
-                        this.customPromptsDirty = false;
-                        const listSession = this.sessions.find(s => s.id === this.viewingSession.id);
-                        if (listSession) {
-                            listSession.custom_prompts = this.viewingSession.custom_prompts;
+                        if (res.data && !res.data.error) {
+                            // 如果用户已编辑自定义提示词（dirty），保留本地编辑状态不被覆盖
+                            const serverCustomPrompts = (res.data.custom_prompts || []).map(cp => ({ ...cp }));
+                            const keepLocalCustomPrompts = this.customPromptsDirty
+                                && this.viewingSession?.customPrompts?.length > 0;
+                            const mergedCustomPrompts = keepLocalCustomPrompts
+                                ? this.viewingSession.customPrompts
+                                : serverCustomPrompts;
+                            this.viewingSession = {
+                                ...this.viewingSession,
+                                ...res.data,
+                                proactive_chat: {
+                                    enabled: false,
+                                    interval_minutes: 60,
+                                    idle_minutes: 10,
+                                    visible_only: true,
+                                    ...(res.data.proactive_chat || {})
+                                },
+                                message_count: res.data.message_count || this.viewingSession.message_count,
+                                customPrompts: mergedCustomPrompts,
+                            };
+                            // 同步 custom_prompts 到 sessions 列表，确保下次打开能拿到
+                            const listSession = this.sessions.find(s => s.id === targetSessionId);
+                            if (listSession && res.data.custom_prompts) {
+                                listSession.custom_prompts = res.data.custom_prompts;
+                            }
+                            // 预加载当前 TTS 模型的音色列表
+                            const viewTtsModelId = this.viewingSession.tts_config?.model_id;
+                            if (viewTtsModelId) this.fetchTTSVoices(viewTtsModelId);
                         }
-                        if (this.currentSession?.id === this.viewingSession.id) {
-                            this.currentSession.custom_prompts = this.viewingSession.custom_prompts;
-                        }
-                        // 重置公开状态
-                        this.sessionQrCode = '';
-                        this.sessionShareUrl = '';
-                        this.sessionIsPublic = false;
-                        this.showSessionDetailsModal = true;
-                        // 预加载当前 TTS 模型的音色列表
-                        const viewTtsModelId = this.viewingSession.tts_config && this.viewingSession.tts_config.model_id;
-                        if (viewTtsModelId) this.fetchTTSVoices(viewTtsModelId);
-                        // 查询公开状态
-                        this.checkSessionPublicStatus(this.viewingSession.id);
                     } catch (e) {
                         console.error('获取会话详情失败:', e);
-                        this.showToast('获取详情失败', 'error');
                     }
                 },
 
@@ -8182,89 +8212,7 @@ def main(params):
                     }
                 },
                 
-                async viewSessionDetails(session) {
-                    // 先直接展示已有数据，再后台加载完整详情
-                    const targetSessionId = String(session.id || '');
-                    this.viewingSession = {
-                        id: session.id,
-                        name: session.name,
-                        type: session.type,
-                        user_id: session.user_id || '',
-                        created_at: session.created_at,
-                        message_count: session.message_count || 0,
-                        system_prompt: session.system_prompt || '',
-                        archived: session.archived || false,
-                        is_archive: session.is_archive || false,
-                        read_only: session.read_only || false,
-                        channel_id: session.channel_id || '',
-                        tags: session.tags || [],
-                        favorite: !!session.favorite,
-                        pinned: !!session.pinned,
-                        proactive_chat: {
-                            enabled: false,
-                            interval_minutes: 60,
-                            idle_minutes: 10,
-                            visible_only: true,
-                            ...(session.proactive_chat || {})
-                        },
-                        character_runtime_timeline: session.character_runtime_timeline || [],
-                        customPrompts: [...(session.custom_prompts || [])].map(cp => ({ ...cp })),
-                    };
-                    this.customPromptsDirty = false;
-                    this.sessionQrCode = '';
-                    this.sessionShareUrl = '';
-                    this.sessionIsPublic = false;
-                    this.publicSharePasswordRequired = false;
-                    this.publicShareExpiresAt = null;
-                    this.publicShareOptions = {
-                        expires_days: 30,
-                        password: '',
-                        include_character: true,
-                        include_user_messages: true,
-                        message_start: '',
-                        message_end: ''
-                    };
-                    this.showSessionDetailsModal = true;
-                    this.checkSessionPublicStatus(targetSessionId);
 
-                    // 后台加载完整数据（含消息列表）
-                    try {
-                        const res = await api.get(`/api/sessions/${targetSessionId}`);
-                        if (String(this.viewingSession?.id || '') !== targetSessionId) {
-                            return;
-                        }
-                        if (res.data && !res.data.error) {
-                            // 如果用户已编辑自定义提示词（dirty），保留本地编辑状态不被覆盖
-                            const serverCustomPrompts = (res.data.custom_prompts || []).map(cp => ({ ...cp }));
-                            const keepLocalCustomPrompts = this.customPromptsDirty
-                                && this.viewingSession?.customPrompts?.length > 0;
-                            const mergedCustomPrompts = keepLocalCustomPrompts
-                                ? this.viewingSession.customPrompts
-                                : serverCustomPrompts;
-                            this.viewingSession = {
-                                ...this.viewingSession,
-                                ...res.data,
-                                proactive_chat: {
-                                    enabled: false,
-                                    interval_minutes: 60,
-                                    idle_minutes: 10,
-                                    visible_only: true,
-                                    ...(res.data.proactive_chat || {})
-                                },
-                                message_count: res.data.message_count || this.viewingSession.message_count,
-                                customPrompts: mergedCustomPrompts,
-                            };
-                            // 同步 custom_prompts 到 sessions 列表，确保下次打开能拿到
-                            const listSession = this.sessions.find(s => s.id === targetSessionId);
-                            if (listSession && res.data.custom_prompts) {
-                                listSession.custom_prompts = res.data.custom_prompts;
-                            }
-                        }
-                    } catch (e) {
-                        console.error('加载会话完整详情失败:', e);
-                    }
-                },
-               
                 copySessionRawData() {
                     if (!this.viewingSession) return;
                     

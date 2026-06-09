@@ -3838,6 +3838,182 @@
             font-weight: 500;
         }
 
+        /* === Token Usage Page — Light Mode === */
+        [data-theme="light"] .token-page-header .page-title {
+            color: #1e293b;
+        }
+        [data-theme="light"] .token-page-header .page-subtitle {
+            color: #64748b;
+        }
+        [data-theme="light"] .token-icon-btn {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(148, 163, 184, 0.2);
+            color: #64748b;
+        }
+        [data-theme="light"] .token-icon-btn:hover {
+            background: rgba(226, 232, 240, 0.9);
+            color: #334155;
+        }
+        [data-theme="light"] .token-glass-card {
+            background: rgba(255, 255, 255, 0.88);
+            border-color: rgba(219, 228, 239, 0.7);
+        }
+        [data-theme="light"] .usage-filters {
+            background: rgba(255, 255, 255, 0.88);
+            border-color: rgba(219, 228, 239, 0.7);
+            box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
+        }
+        [data-theme="light"] .filter-label {
+            color: #475569;
+        }
+        [data-theme="light"] .filter-buttons {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(219, 228, 239, 0.5);
+        }
+        [data-theme="light"] .filter-btn {
+            color: #64748b;
+        }
+        [data-theme="light"] .filter-btn:hover {
+            color: #1e293b;
+            background: rgba(219, 228, 239, 0.4);
+        }
+        [data-theme="light"] .token-date-range {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(219, 228, 239, 0.5);
+        }
+        [data-theme="light"] .token-date-input {
+            background: rgba(255, 255, 255, 0.9);
+            border-color: rgba(219, 228, 239, 0.6);
+            color: #1e293b;
+        }
+        [data-theme="light"] .token-date-input:hover {
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+        [data-theme="light"] .token-date-input:focus {
+            border-color: rgba(59, 130, 246, 0.6);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        }
+        [data-theme="light"] .token-date-input::-webkit-calendar-picker-indicator {
+            filter: none;
+        }
+        [data-theme="light"] .token-date-separator {
+            background: rgba(219, 228, 239, 0.6);
+        }
+        [data-theme="light"] .overview-card {
+            background: rgba(255, 255, 255, 0.88);
+            border-color: rgba(219, 228, 239, 0.6);
+            box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
+        }
+        [data-theme="light"] .overview-card:hover {
+            box-shadow: 0 8px 32px rgba(31, 41, 55, 0.1);
+            border-color: rgba(219, 228, 239, 0.8);
+        }
+        [data-theme="light"] .overview-label {
+            color: #475569;
+        }
+        [data-theme="light"] .overview-value {
+            color: #1e293b;
+        }
+        [data-theme="light"] .overview-sub.change-neutral {
+            color: #475569;
+        }
+        [data-theme="light"] .chart-card.token-chart-card {
+            background: rgba(255, 255, 255, 0.88);
+            border-color: rgba(219, 228, 239, 0.6);
+            box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
+        }
+        [data-theme="light"] .chart-card.token-chart-card .chart-header {
+            border-bottom-color: rgba(219, 228, 239, 0.5);
+        }
+        [data-theme="light"] .chart-card.token-chart-card .chart-title {
+            color: #1e293b;
+        }
+        [data-theme="light"] .chart-card.token-chart-card .chart-subtitle {
+            color: #64748b;
+        }
+        [data-theme="light"] .chart-legend-pill {
+            color: #64748b;
+        }
+        [data-theme="light"] .rankings-panel {
+            background: rgba(255, 255, 255, 0.88);
+            border-color: rgba(219, 228, 239, 0.6);
+            box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
+        }
+        [data-theme="light"] .ranking-title {
+            color: #1e293b;
+        }
+        [data-theme="light"] .ranking-tabs {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(219, 228, 239, 0.5);
+        }
+        [data-theme="light"] .ranking-tab {
+            color: #64748b;
+        }
+        [data-theme="light"] .ranking-tab:hover {
+            color: #334155;
+        }
+        [data-theme="light"] .ranking-item:hover {
+            background: rgba(219, 228, 239, 0.3);
+        }
+        [data-theme="light"] .ranking-rank {
+            background: rgba(241, 245, 249, 0.8);
+            color: #475569;
+        }
+        [data-theme="light"] .ranking-name {
+            color: #1e293b;
+        }
+        [data-theme="light"] .ranking-bar {
+            background: rgba(219, 228, 239, 0.4);
+        }
+        [data-theme="light"] .ranking-value {
+            color: #1e293b;
+        }
+        [data-theme="light"] .ranking-empty {
+            color: #64748b;
+        }
+        [data-theme="light"] .token-records-card {
+            background: rgba(255, 255, 255, 0.88);
+            border-color: rgba(219, 228, 239, 0.6);
+            box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
+        }
+        [data-theme="light"] .token-records-card .card-header {
+            border-bottom-color: rgba(219, 228, 239, 0.5);
+        }
+        [data-theme="light"] .token-records-card .card-title {
+            color: #1e293b;
+        }
+        [data-theme="light"] .token-export-btn {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(219, 228, 239, 0.5);
+            color: #475569;
+        }
+        [data-theme="light"] .token-export-btn:hover {
+            background: rgba(226, 232, 240, 0.9);
+            color: #1e293b;
+            border-color: rgba(219, 228, 239, 0.7);
+        }
+        [data-theme="light"] .token-records-card .data-table th {
+            color: #475569;
+            border-bottom-color: rgba(219, 228, 239, 0.5);
+            background: rgba(241, 245, 249, 0.5);
+        }
+        [data-theme="light"] .token-records-card .data-table td {
+            color: #334155;
+            border-bottom-color: rgba(219, 228, 239, 0.3);
+        }
+        [data-theme="light"] .token-records-card .data-table tr:hover td {
+            background: rgba(219, 228, 239, 0.2);
+        }
+        [data-theme="light"] .token-records-card .empty-state-icon {
+            color: #94a3b8;
+        }
+        [data-theme="light"] .token-records-card .empty-state-title {
+            color: #64748b;
+        }
+        [data-theme="light"] .token-skeleton {
+            background: linear-gradient(90deg, rgba(148, 163, 184, 0.1) 25%, rgba(148, 163, 184, 0.18) 50%, rgba(148, 163, 184, 0.1) 75%);
+        }
+
         /* Memory Styles */
         .memory-stats {
             display: grid;
@@ -16485,6 +16661,9 @@
         }
         .custom-save-btn {
             flex-shrink: 0;
+            height: 40px;
+            padding: 0 12px;
+            font-size: 13px;
         }
         .custom-prompts-empty {
             text-align: center;
@@ -22885,6 +23064,12 @@
     grid-template-columns: 1fr 1fr;
     gap: 10px;
 }
+.fo-detail-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
 .fo-detail-label {
     font-size: 11px;
     color: var(--text-muted);
@@ -22893,6 +23078,7 @@
 .fo-detail-value {
     font-size: 14px;
     font-weight: 500;
+    color: var(--text-primary);
 }
 
 .fo-queue-actions {
@@ -22941,6 +23127,34 @@
 }
 .fo-reset-btn:hover {
     background: rgba(245, 158, 11, 0.18);
+}
+
+/* 故障转移 / Token 用量 - 浅色模式适配 */
+[data-theme="light"] .fo-health-badge.fo-health-ok {
+    background: rgba(16, 185, 129, 0.15);
+    color: #059669;
+}
+[data-theme="light"] .fo-health-badge.fo-health-cooldown {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+}
+[data-theme="light"] .fo-badge-limited {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+}
+[data-theme="light"] .fo-token-bar-track {
+    background: rgba(148, 163, 184, 0.22);
+}
+[data-theme="light"] .fo-reset-btn {
+    background: rgba(245, 158, 11, 0.1);
+    color: #d97706;
+}
+[data-theme="light"] .fo-reset-btn:hover {
+    background: rgba(245, 158, 11, 0.2);
+}
+[data-theme="light"] .fo-queue-first {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(var(--accent-primary-rgb, 99, 102, 241), 0.08), transparent);
 }
 
 /* 已保存卡片中的优先级标签 */
