@@ -24507,7 +24507,9 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
 .message .message-content.multi-bubble-content::after {
     display: none !important;
 }
+} /* /@media (min-width: 769px) — desktop layout override ends */
 
+/* Multi-bubble message-body colours & backgrounds — global (all viewports) */
 .message .multi-bubble-content .message-body,
 .message .message-content.multi-bubble-content .message-body {
     margin: 0 !important;
@@ -24552,6 +24554,7 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
     color: #fff !important;
 }
 
+/* Multi-bubble msg-actions & voice-bar — global (all viewports) */
 .message .multi-bubble-content .msg-actions,
 .message .message-content.multi-bubble-content .msg-actions {
     width: auto !important;
@@ -24630,7 +24633,6 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
     background: rgba(254, 242, 242, 0.86) !important;
     border-color: rgba(220, 38, 38, 0.18) !important;
 }
-} /* /@media (min-width: 769px) — desktop override ends */
 
 @media (max-width: 768px) {
     .message .multi-bubble-content,
