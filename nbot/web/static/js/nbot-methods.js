@@ -881,6 +881,64 @@ const NbotMethods = {
                     }
                 },
 
+                // ---- 自定义提示词管理（会话详情页） ----
+                addViewingCustomPrompt() {
+                    if (!this.viewingSession) return;
+                    if (!this.viewingSession.customPrompts) {
+                        this.viewingSession.customPrompts = [];
+                    }
+                    const nextOrder = this.viewingSession.customPrompts.length + 1;
+                    this.viewingSession.customPrompts.push({ order: nextOrder, title: '', content: '' });
+                    this.markCustomPromptsDirty();
+                },
+                removeViewingCustomPrompt(index) {
+                    if (!this.viewingSession?.customPrompts) return;
+                    this.viewingSession.customPrompts.splice(index, 1);
+                    this.reorderViewingCustomPrompts();
+                },
+                reorderViewingCustomPrompts() {
+                    if (!this.viewingSession?.customPrompts) return;
+                    this.viewingSession.customPrompts.sort((a, b) => (a.order || 0) - (b.order || 0));
+                    this.viewingSession.customPrompts.forEach((cp, idx) => {
+                        cp.order = idx + 1;
+                    });
+                    this.markCustomPromptsDirty();
+                },
+                markCustomPromptsDirty() {
+                    this.customPromptsDirty = true;
+                },
+                async saveCustomPrompts() {
+                    if (!this.viewingSession?.id) return;
+                    this.isLoading = true;
+                    try {
+                        const payload = (this.viewingSession.customPrompts || [])
+                            .filter(cp => (cp.content || '').trim())
+                            .map(cp => ({
+                                order: cp.order || 0,
+                                title: (cp.title || '').trim(),
+                                content: cp.content.trim(),
+                            }));
+                        const res = await api.put(`/api/sessions/${this.viewingSession.id}/custom-prompts`, {
+                            custom_prompts: payload,
+                        });
+                        // 同步更新 viewingSession 自身、sessions 列表
+                        const saved = (res.data?.custom_prompts || payload).map(cp => ({ ...cp }));
+                        this.viewingSession.customPrompts = saved;
+                        this.viewingSession.custom_prompts = saved;
+                        const s = this.sessions.find(s => s.id === this.viewingSession.id);
+                        if (s) s.custom_prompts = saved;
+                        if (this.currentSession?.id === this.viewingSession.id) {
+                            this.currentSession.custom_prompts = saved;
+                        }
+                        this.customPromptsDirty = false;
+                        this.showToast('自定义提示词已保存', 'success');
+                    } catch (e) {
+                        this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
                 async logout() {
                     // 调用后端登出 API 删除 Token
                     const token = localStorage.getItem('auth_token');
@@ -7344,8 +7402,18 @@ def main(params):
                                 ...(fullSession.proactive_chat || session.proactive_chat || {})
                             },
                             tts_config: fullSession.tts_config || session.tts_config || { enabled: false, model_id: '', voice: '' },
-                            messages: fullSession.messages || []
+                            messages: fullSession.messages || [],
+                            custom_prompts: fullSession.custom_prompts || session.custom_prompts || [],
+                            customPrompts: [...(fullSession.custom_prompts || session.custom_prompts || [])].map(cp => ({ ...cp }))
                         };
+                        this.customPromptsDirty = false;
+                        const listSession = this.sessions.find(s => s.id === this.viewingSession.id);
+                        if (listSession) {
+                            listSession.custom_prompts = this.viewingSession.custom_prompts;
+                        }
+                        if (this.currentSession?.id === this.viewingSession.id) {
+                            this.currentSession.custom_prompts = this.viewingSession.custom_prompts;
+                        }
                         // 重置公开状态
                         this.sessionQrCode = '';
                         this.sessionShareUrl = '';
@@ -8140,7 +8208,9 @@ def main(params):
                             ...(session.proactive_chat || {})
                         },
                         character_runtime_timeline: session.character_runtime_timeline || [],
+                        customPrompts: [...(session.custom_prompts || [])].map(cp => ({ ...cp })),
                     };
+                    this.customPromptsDirty = false;
                     this.sessionQrCode = '';
                     this.sessionShareUrl = '';
                     this.sessionIsPublic = false;
@@ -8164,6 +8234,13 @@ def main(params):
                             return;
                         }
                         if (res.data && !res.data.error) {
+                            // 如果用户已编辑自定义提示词（dirty），保留本地编辑状态不被覆盖
+                            const serverCustomPrompts = (res.data.custom_prompts || []).map(cp => ({ ...cp }));
+                            const keepLocalCustomPrompts = this.customPromptsDirty
+                                && this.viewingSession?.customPrompts?.length > 0;
+                            const mergedCustomPrompts = keepLocalCustomPrompts
+                                ? this.viewingSession.customPrompts
+                                : serverCustomPrompts;
                             this.viewingSession = {
                                 ...this.viewingSession,
                                 ...res.data,
@@ -8175,7 +8252,13 @@ def main(params):
                                     ...(res.data.proactive_chat || {})
                                 },
                                 message_count: res.data.message_count || this.viewingSession.message_count,
+                                customPrompts: mergedCustomPrompts,
                             };
+                            // 同步 custom_prompts 到 sessions 列表，确保下次打开能拿到
+                            const listSession = this.sessions.find(s => s.id === targetSessionId);
+                            if (listSession && res.data.custom_prompts) {
+                                listSession.custom_prompts = res.data.custom_prompts;
+                            }
                         }
                     } catch (e) {
                         console.error('加载会话完整详情失败:', e);

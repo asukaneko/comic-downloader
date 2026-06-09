@@ -25,6 +25,15 @@ from nbot.core.chat_models import ChatRequest, ChatResponse
 _log = logging.getLogger(__name__)
 
 
+def _custom_prompt_stack_key(custom_prompt: Dict[str, Any]) -> str:
+    """Build a stable PromptStack key for a session custom prompt."""
+    order = custom_prompt.get("order", 0)
+    title = str(custom_prompt.get("title") or "").strip()
+    if title:
+        return f"custom:{order}:{title}"
+    return f"custom:{order}"
+
+
 # ============================================================================
 # 公共 Token 统计
 # ============================================================================
@@ -790,6 +799,21 @@ class AIPipeline:
             for item in ctx.prompt_stack.items:
                 if item.key in disabled_keys:
                     item.enabled = False
+
+        # 注入用户自定义提示词（从会话数据中读取，按 order 排序后逐条加入 PromptStack）
+        custom_prompts = ctx.metadata.get("custom_prompts", [])
+        if isinstance(custom_prompts, list) and custom_prompts:
+            sorted_prompts = sorted(custom_prompts, key=lambda x: x.get("order", 0))
+            for cp in sorted_prompts:
+                content = (cp.get("content") or "").strip()
+                if not content:
+                    continue
+                ctx.prompt_stack.add(
+                    key=_custom_prompt_stack_key(cp),
+                    content=content,
+                    priority=35,  # 在角色卡(30)之后、角色状态(40)之前
+                    scope="session",
+                )
 
         # PromptStack 合成最终 system prompt
         composed_system = ctx.prompt_stack.render(base_prompt)

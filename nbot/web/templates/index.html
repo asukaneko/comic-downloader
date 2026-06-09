@@ -8982,6 +8982,51 @@
                         </div>
                     </div>
 
+                    <!-- 自定义提示词 -->
+                    <div class="form-section" v-if="viewingSession.id && !viewingSession.read_only">
+                        <div class="form-section-title">
+                            <i class="fas fa-edit" style="color: var(--accent-primary);"></i> 自定义提示词
+                            <span class="form-hint">按序号注入到提示词栈中</span>
+                        </div>
+                        <div class="custom-prompts-list">
+                            <div v-for="(cp, cpIdx) in viewingSession.customPrompts" :key="cpIdx"
+                                 class="custom-prompt-item">
+                                <div class="custom-prompt-index">
+                                    <span class="custom-prompt-order-badge">#{{ cp.order }}</span>
+                                </div>
+                                <div class="custom-prompt-content">
+                                    <input type="text" v-model="cp.title" class="form-input custom-prompt-title-input"
+                                           placeholder="提示词名称（选填）" @input="markCustomPromptsDirty">
+                                    <textarea v-model="cp.content" class="form-textarea custom-prompt-textarea"
+                                              rows="2" placeholder="输入自定义提示词内容..."
+                                              @input="markCustomPromptsDirty"></textarea>
+                                </div>
+                                <div class="custom-prompt-actions">
+                                    <button class="custom-prompt-remove-btn"
+                                            @click="removeViewingCustomPrompt(cpIdx)" title="删除此条">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="!viewingSession.customPrompts || viewingSession.customPrompts.length === 0"
+                                 class="custom-prompts-empty">
+                                <i class="fas fa-lightbulb" style="opacity: 0.4;"></i>
+                                暂无自定义提示词，点击下方按钮添加
+                            </div>
+                        </div>
+                        <div class="custom-prompts-toolbar">
+                            <button class="custom-add-btn" @click="addViewingCustomPrompt">
+                                <i class="fas fa-plus"></i> 添加提示词
+                            </button>
+                            <button v-if="customPromptsDirty"
+                                    class="btn btn-primary btn-small custom-save-btn"
+                                    @click="saveCustomPrompts"
+                                    :disabled="isLoading">
+                                <i class="fas fa-save"></i> 保存
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- PromptStack 调试 -->
                     <div class="form-section" v-if="viewingSession.prompt_stack_debug && viewingSession.prompt_stack_debug.length > 0">
                         <div class="form-section-title">
@@ -11160,6 +11205,7 @@
                     selectedEditMessages: [],
                     bindingFromEdit: false,
                     showSessionDetailsModal: false,
+                    customPromptsDirty: false,
                     viewingSession: null,
                     isEditingSessionTitle: false,
                     editingSessionTitle: '',

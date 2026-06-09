@@ -157,6 +157,9 @@ def _normalize_session_record(session_id, session):
         "character_runtime_timeline": session.get("character_runtime_timeline")
         if isinstance(session.get("character_runtime_timeline"), list)
         else [],
+        "custom_prompts": session.get("custom_prompts")
+        if isinstance(session.get("custom_prompts"), list)
+        else [],
     }
     if not normalized.get("character_id") and normalized.get("sender_name"):
         normalized["character_id"] = normalized["sender_name"]

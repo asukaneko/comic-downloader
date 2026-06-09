@@ -655,6 +655,7 @@ def register_session_routes(app, server):
                     "session_mode": session.get("session_mode", "character"),
                     "character_runtime_snapshot": session.get("character_runtime_snapshot"),
                     "character_runtime_timeline": timeline,
+                    "custom_prompts": session.get("custom_prompts", []),
                 }
             )
 
@@ -904,6 +905,52 @@ def register_session_routes(app, server):
             except Exception as exc:
                 _log.warning("Failed to start proactive chat loop: %s", exc)
         return jsonify({"success": True, "session": session})
+
+    # ---- 自定义提示词 CRUD ----
+
+    @app.route("/api/sessions/<session_id>/custom-prompts", methods=["GET"])
+    def get_custom_prompts(session_id):
+        """获取会话的自定义提示词列表"""
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+        return jsonify({"success": True, "custom_prompts": session.get("custom_prompts", [])})
+
+    @app.route("/api/sessions/<session_id>/custom-prompts", methods=["PUT"])
+    def update_custom_prompts(session_id):
+        """更新会话的自定义提示词列表（全量替换）"""
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        data = request.json or {}
+        custom_prompts = data.get("custom_prompts", [])
+        if not isinstance(custom_prompts, list):
+            return jsonify({"error": "custom_prompts must be a list"}), 400
+
+        # 校验并清洗每条自定义提示词
+        cleaned = []
+        for idx, item in enumerate(custom_prompts):
+            if not isinstance(item, dict):
+                continue
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            title = str(item.get("title", "")).strip()
+            cleaned.append({
+                "order": int(item.get("order", idx + 1)),
+                "title": title,
+                "content": content,
+            })
+
+        # 按 order 排序
+        cleaned.sort(key=lambda x: x["order"])
+
+        session["custom_prompts"] = cleaned
+        session_store.set_session(session_id, session)
+        if hasattr(server, "_invalidate_sessions_cache"):
+            server._invalidate_sessions_cache()
+        return jsonify({"success": True, "custom_prompts": cleaned})
 
     @app.route("/api/sessions/<session_id>/runtime-timeline", methods=["GET"])
     def get_runtime_timeline(session_id):
