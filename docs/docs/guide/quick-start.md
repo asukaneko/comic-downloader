@@ -135,6 +135,7 @@ Web 后台功能：
 - **Skills 配置** - 技能插件管理
 - **Tools 配置** - 工具配置
 - **工作流** - 可视化工作流编排
+- **登录令牌** - 登录令牌管理（创建、查看、删除，支持 IP 记录）
 - **定时任务** - 任务调度
 - **Token 用量** - 用量统计（自定义日期范围、CSV 导出）
 - **频道管理** - 多频道接入配置（QQ / Telegram / 飞书）
@@ -167,8 +168,12 @@ nekobot/
 ├── data/                  # 运行数据
 │   ├── qq/               # QQ 相关数据
 │   ├── web/              # Web 会话、模型配置
+│   ├── character/        # 角色运行时数据
 │   ├── skills/           # Skills 存储
-│   └── workspaces/       # 私有 / 共享工作区
+│   ├── models/           # 本地模型缓存
+│   ├── sessions.db       # 会话持久化数据库
+│   ├── memories.json     # 跨会话记忆
+│   └── world_books.json  # 世界书数据
 └── resources/            # 静态资源
     ├── config/           # 配置文件
     └── prompts/          # 提示词

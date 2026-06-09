@@ -35,6 +35,9 @@ features:
   - icon: 🔧
     title: 工具调用
     details: 支持文件操作、搜索、代码执行等工具调用，可继续执行中断任务
+  - icon: 😸
+    title: AI 表情包
+    details: 基于角色心情自动匹配二次元表情包，支持 nekos.best 多类别图片
   - icon: 🔄
     title: 工作流
     details: 可视化工作流编排，支持定时任务和自动化流程

@@ -104,6 +104,7 @@ Ncatbot-comic-QQbot/
 │   │   ├── todo_tools.py      # 待办工具
 │   │   ├── react.py           # ReAct 模式
 │   │   ├── dynamic_executor.py # 动态执行器
+│   │   ├── sticker_service.py # AI 表情包服务
 │   │   ├── stt.py             # 语音转文字
 │   │   ├── tts.py             # 文字转语音
 │   │   ├── tool_registry.py   # 工具注册表
@@ -139,8 +140,13 @@ Ncatbot-comic-QQbot/
 ├── data/                      # 运行数据
 │   ├── qq/                    # QQ 相关数据
 │   ├── web/                   # Web 会话、模型配置
+│   ├── character/             # 角色运行时数据（状态、关系、记忆）
 │   ├── skills/                # Skills 存储
-│   └── workspaces/            # 私有 / 共享工作区
+│   ├── models/                # 本地模型缓存（如 faster-whisper）
+│   ├── certs/                 # HTTPS 证书
+│   ├── sessions.db            # 会话持久化数据库
+│   ├── memories.json          # 跨会话记忆
+│   └── world_books.json       # 世界书数据
 │
 └── resources/                 # 静态资源
     ├── config/                # 配置文件

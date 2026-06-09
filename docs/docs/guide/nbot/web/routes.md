@@ -39,6 +39,7 @@ nbot/web/routes/
 ├── api_keys.py          # API 密钥管理
 ├── config_legacy.py     # 旧版配置
 ├── config_transfer.py   # 配置导入导出
+├── login_tokens.py      # 登录令牌管理
 ├── web_agent.py         # Web Agent
 └── admin_misc.py        # 管理杂项（日志/统计/设置）
 ```
@@ -54,6 +55,27 @@ nbot/web/routes/
 | POST | `/api/login` | 用户登录 |
 | POST | `/api/verify-token` | 验证会话 Token |
 | POST | `/api/logout` | 注销登录 |
+
+---
+
+## 登录令牌管理 (login_tokens.py)
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/login-tokens` | 列出所有活跃的登录令牌 |
+| POST | `/api/login-tokens` | 创建新的登录令牌（支持自定义过期天数） |
+| DELETE | `/api/login-tokens/<token_hash>` | 删除指定令牌 |
+
+创建令牌时可选参数：
+
+```json
+{
+  "username": "admin",
+  "expires_days": 30
+}
+```
+
+返回的令牌信息包含：`token_prefix`（前缀）、`hash_full`（哈希）、`username`、`created_at`、`expires_at`、`ip_address`（客户端 IP）。
 
 ---
 
@@ -96,6 +118,14 @@ nbot/web/routes/
 | POST | `/api/sessions/<session_id>/compress` | 压缩上下文（摘要） |
 | POST | `/api/sessions/<session_id>/ai-summary` | AI 生成会话摘要 |
 | POST | `/api/sessions/<session_id>/restore-from-archive` | 从归档恢复消息 |
+
+### 自定义提示词
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/sessions/<session_id>/custom-prompt` | 获取会话自定义提示词 |
+| PUT | `/api/sessions/<session_id>/custom-prompt` | 设置会话自定义提示词 |
+| DELETE | `/api/sessions/<session_id>/custom-prompt` | 删除会话自定义提示词 |
 
 ### 运行时时间线
 
