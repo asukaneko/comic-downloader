@@ -13,7 +13,8 @@ _log = logging.getLogger(__name__)
 
 _STATE_TURN_COUNTERS: Dict[str, int] = {}
 _STATE_TURN_BUFFER: Dict[str, List[Dict[str, str]]] = {}
-_STATE_TURN_INTERVAL = 4
+_STATE_TURN_INTERVAL = 2
+_STATE_TURN_WINDOW = 5
 
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
 RELATIONSHIP_FIELDS = (
@@ -331,17 +332,17 @@ def update_state_from_recent_turns(
             "assistant": assistant_message,
         }
     )
+    _STATE_TURN_BUFFER[key] = _STATE_TURN_BUFFER[key][-_STATE_TURN_WINDOW:]
 
     if _STATE_TURN_COUNTERS[key] < _STATE_TURN_INTERVAL:
         return state, relationship, False
 
-    buffered_turns = _STATE_TURN_BUFFER.pop(key, [])
+    buffered_turns = list(_STATE_TURN_BUFFER[key])
     try:
         adjustment = _call_state_model(buffered_turns, profile, state, relationship)
     except Exception as exc:
         _log.warning("[AutoState] state model call failed: %s", exc, exc_info=True)
-        _STATE_TURN_BUFFER[key] = buffered_turns
-        _STATE_TURN_COUNTERS[key] = _STATE_TURN_INTERVAL
+        _STATE_TURN_COUNTERS[key] = 0
         return state, relationship, False
 
     _STATE_TURN_COUNTERS[key] = 0
