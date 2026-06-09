@@ -24459,8 +24459,10 @@
     color: rgba(30, 30, 60, 0.35);
 }
 
-/* Final multi-bubble override: one message can contain several visual bubbles. */
-.message .multi-bubble-content,
+/* Final multi-bubble override: one message can contain several visual bubbles.
+   Desktop only — mobile gets its own rules below that do not restrict width. */
+@media (min-width: 769px) {
+    .message .multi-bubble-content,
 .message .message-content.multi-bubble-content,
 .message.user .multi-bubble-content,
 .message.user .message-content.multi-bubble-content,
@@ -24628,6 +24630,7 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
     background: rgba(254, 242, 242, 0.86) !important;
     border-color: rgba(220, 38, 38, 0.18) !important;
 }
+} /* /@media (min-width: 769px) — desktop override ends */
 
 @media (max-width: 768px) {
     .message .multi-bubble-content,
@@ -24637,9 +24640,8 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
     .message.user .message-content.multi-bubble-content,
     .message.assistant .message-content.multi-bubble-content {
         flex: 0 1 auto !important;
-        width: var(--mobile-chat-bubble-max) !important;
         min-width: 0 !important;
-        max-width: var(--mobile-chat-bubble-max) !important;
+        max-width: 100% !important;
     }
 
     .message .multi-bubble-content .message-body,
@@ -24662,7 +24664,6 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
 @media (max-width: 768px) {
     .messages-container .message.assistant .multi-bubble-content,
     .messages-container .message.assistant .message-content.multi-bubble-content {
-        width: var(--mobile-chat-bubble-max) !important;
-        max-width: var(--mobile-chat-bubble-max) !important;
+        max-width: 100% !important;
     }
 }
