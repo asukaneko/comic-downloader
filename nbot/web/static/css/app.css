@@ -18736,23 +18736,23 @@
         }
 
         .message-content.multi-bubble-content .message-body {
-            width: fit-content;
-            max-width: 100%;
-            padding: 14px 18px;
-            border-radius: 18px;
-            border: 1px solid rgba(139, 148, 158, 0.16);
-            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
-            overflow-wrap: anywhere;
+            width: fit-content !important;
+            max-width: 100% !important;
+            padding: 14px 18px !important;
+            border-radius: 20px !important;
+            border-color: rgba(139, 148, 158, 0.16) !important;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16) !important;
+            overflow-wrap: anywhere !important;
         }
 
         .message.assistant .message-content.multi-bubble-content .message-body {
-            background: linear-gradient(145deg, rgba(33, 38, 45, 0.92), rgba(22, 27, 34, 0.88));
+            background: linear-gradient(145deg, rgba(33, 38, 45, 0.92), rgba(22, 27, 34, 0.88)) !important;
         }
 
         .message.user .message-content.multi-bubble-content .message-body {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-            border-color: rgba(255, 255, 255, 0.16);
-            box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+            border-color: rgba(255, 255, 255, 0.16) !important;
+            box-shadow: 0 16px 36px rgba(37, 99, 235, 0.24) !important;
         }
 
         .message.is-progress {
@@ -24486,13 +24486,6 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
     gap: 14px !important;
     width: min(45%, 760px) !important;
     max-width: calc(100% - 64px) !important;
-    padding: 0 !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
     overflow: visible !important;
 }
 
@@ -24509,30 +24502,89 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
 }
 } /* /@media (min-width: 769px) — desktop layout override ends */
 
-/* Multi-bubble message-body colours & backgrounds — global (all viewports) */
+/* Multi-bubble outer container — always transparent (all viewports) */
+.message .multi-bubble-content,
+.message .message-content.multi-bubble-content,
+.message.user .multi-bubble-content,
+.message.user .message-content.multi-bubble-content,
+.message.assistant .multi-bubble-content,
+.message.assistant .message-content.multi-bubble-content,
+body.has-bg-image .message .multi-bubble-content,
+body.has-bg-image .message .message-content.multi-bubble-content,
+body.has-bg-image .message.user .multi-bubble-content,
+body.has-bg-image .message.user .message-content.multi-bubble-content,
+body.has-bg-image .message.assistant .multi-bubble-content,
+body.has-bg-image .message.assistant .message-content.multi-bubble-content,
+[data-theme="light"] body.has-bg-image .message .multi-bubble-content,
+[data-theme="light"] body.has-bg-image .message .message-content.multi-bubble-content,
+[data-theme="light"] body.has-bg-image .message.user .multi-bubble-content,
+[data-theme="light"] body.has-bg-image .message.user .message-content.multi-bubble-content,
+[data-theme="light"] body.has-bg-image .message.assistant .multi-bubble-content,
+[data-theme="light"] body.has-bg-image .message.assistant .message-content.multi-bubble-content {
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* Multi-bubble message-body — base styles matching regular .message-content.
+   Values mirror the non-desktop, non-bg-image, non-light-theme .message-content rules.
+   Desktop override: @media (min-width: 769px) block (lines ~18738-18756).
+   bg-image override: body.has-bg-image rules below.
+   Light-theme override: [data-theme="light"] rules below.
+   Mobile layout override: @media (max-width: 768px) block. */
+
+/* --- Base message-body (all roles) --- */
 .message .multi-bubble-content .message-body,
 .message .message-content.multi-bubble-content .message-body {
-    margin: 0 !important;
-    padding: 14px 18px !important;
-    border-radius: 18px !important;
+    margin: 0;
+    padding: 14px 18px;
+    border-radius: 20px;
+    color: rgba(255, 255, 255, 0.92);
+    background: rgba(20, 30, 45, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
 }
 
+/* --- Assistant --- */
 .message.assistant .multi-bubble-content .message-body,
 .message.assistant .message-content.multi-bubble-content .message-body {
-    background: linear-gradient(145deg, rgba(33, 38, 45, 0.94), rgba(22, 27, 34, 0.9)) !important;
-    border: 1px solid rgba(139, 148, 158, 0.16) !important;
-    color: rgba(255, 255, 255, 0.92) !important;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16) !important;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
+/* --- User --- */
 .message.user .multi-bubble-content .message-body,
 .message.user .message-content.multi-bubble-content .message-body {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.16) !important;
-    color: #fff !important;
-    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22) !important;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.5) 0%, rgba(37, 99, 235, 0.55) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: white;
+    box-shadow: 0 8px 32px rgba(37, 99, 235, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
+/* --- body.has-bg-image overrides (dark theme) --- */
+body.has-bg-image .message.assistant .multi-bubble-content .message-body,
+body.has-bg-image .message.assistant .message-content.multi-bubble-content .message-body {
+    background: rgba(18, 27, 42, 0.9) !important;
+    border-color: rgba(148, 163, 184, 0.24) !important;
+    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.26) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+}
+
+body.has-bg-image .message.user .multi-bubble-content .message-body,
+body.has-bg-image .message.user .message-content.multi-bubble-content .message-body {
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 16px 36px rgba(37, 99, 235, 0.28) !important;
+}
+
+/* --- Light theme overrides --- */
 [data-theme="light"] .message.assistant .multi-bubble-content .message-body,
 [data-theme="light"] .message.assistant .message-content.multi-bubble-content .message-body,
 [data-theme="light"] body.has-bg-image .message.assistant .multi-bubble-content .message-body,
@@ -24651,8 +24703,9 @@ body.has-bg-image .message.assistant .message-content.multi-bubble-content,
         box-sizing: border-box !important;
         width: 100% !important;
         max-width: 100% !important;
-        padding: 13px 16px !important;
-        border-radius: 16px !important;
+        padding: 9px 10px !important;
+        border-radius: 10px !important;
+        font-size: 13px !important;
     }
 
     .message .multi-bubble-content .voice-bar,

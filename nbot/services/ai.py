@@ -4,7 +4,7 @@ import os
 import base64
 import json
 import io
-from typing import Optional
+from typing import Any, Dict, Optional
 from PIL import Image
 import imageio.v2 as imageio
 from nbot.core import (
