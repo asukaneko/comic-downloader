@@ -2267,6 +2267,35 @@ def register_session_routes(app, server):
         if not user_content:
             return jsonify({"error": "Content is required"}), 400
 
+        try:
+            from nbot.message_filter import message_filter
+
+            filter_session_id = f"web:{session_id}"
+            matched_rules = message_filter.match_all(
+                user_content,
+                channel="web",
+                session_id=filter_session_id,
+            )
+            if matched_rules:
+                recall_rules = [r for r in matched_rules if r.get("action") == "recall"]
+                strip_rules = [r for r in matched_rules if r.get("action") != "recall"]
+                if recall_rules:
+                    return jsonify({
+                        "success": True,
+                        "filtered": True,
+                        "message": "当前内容被过滤",
+                    })
+                if strip_rules:
+                    user_content = message_filter.strip_content(user_content, strip_rules)
+                    if not user_content:
+                        return jsonify({
+                            "success": True,
+                            "filtered": True,
+                            "message": "当前内容被过滤",
+                        })
+        except Exception as filter_err:
+            _log.warning("[消息过滤] Web 检查异常: %s", filter_err)
+
         user_message = {
             "id": str(uuid.uuid4()),
             "role": "user",

@@ -24,7 +24,7 @@ def register_message_filter_routes(app, server):
     @app.route("/api/message-filter", methods=["POST"])
     def create_message_filter_rule():
         """添加过滤规则"""
-        from nbot.message_filter import message_filter
+        from nbot.message_filter import MessageFilter, message_filter
 
         data = request.json or {}
         pattern = (data.get("pattern") or "").strip()
@@ -39,9 +39,12 @@ def register_message_filter_routes(app, server):
         if action not in ("strip", "recall"):
             return jsonify({"error": "动作必须是 strip 或 recall"}), 400
 
-        channel = data.get("channel", "global")
-        session_scope = data.get("session_scope", "all")
-        session_id = data.get("session_id", "")
+        channel = MessageFilter.normalize_channel(data.get("channel", "global"))
+        session_id = MessageFilter.normalize_session_id(channel, data.get("session_id", ""))
+        session_scope = MessageFilter.normalize_session_scope(
+            data.get("session_scope", "all"),
+            session_id,
+        )
 
         rule = message_filter.add_rule(
             pattern=pattern,
@@ -56,13 +59,16 @@ def register_message_filter_routes(app, server):
     @app.route("/api/message-filter/<rule_id>", methods=["PUT"])
     def update_message_filter_rule(rule_id):
         """更新过滤规则"""
-        from nbot.message_filter import message_filter
+        from nbot.message_filter import MessageFilter, message_filter
 
         data = request.json or {}
 
         # 找到规则：需要知道它在哪个 channel 下
-        old_channel = data.get("_old_channel", "global")
-        old_session_id = data.get("_old_session_id", "")
+        old_channel = MessageFilter.normalize_channel(data.get("_old_channel", "global"))
+        old_session_id = MessageFilter.normalize_session_id(
+            old_channel,
+            data.get("_old_session_id", ""),
+        )
 
         rule = message_filter.find_rule(rule_id, old_channel, old_session_id)
         if not rule:
@@ -82,9 +88,14 @@ def register_message_filter_routes(app, server):
             rule["enabled"] = bool(data["enabled"])
 
         # 如果 channel 或 session_id 变了，需要移动规则
-        new_channel = data.get("channel", old_channel)
-        new_session_scope = data.get("session_scope", "all")
-        new_session_id = data.get("session_id", "") if new_session_scope == "specific" else ""
+        new_channel = MessageFilter.normalize_channel(data.get("channel", old_channel))
+        requested_scope = data.get("session_scope", "all")
+        requested_session_id = data.get("session_id", "") if requested_scope == "specific" else ""
+        new_session_id = MessageFilter.normalize_session_id(new_channel, requested_session_id)
+        new_session_scope = MessageFilter.normalize_session_scope(
+            requested_scope,
+            new_session_id,
+        )
 
         if new_channel != old_channel or new_session_id != old_session_id:
             message_filter.remove_rule(rule_id, old_channel, old_session_id)
@@ -99,10 +110,10 @@ def register_message_filter_routes(app, server):
     @app.route("/api/message-filter/<rule_id>", methods=["DELETE"])
     def delete_message_filter_rule(rule_id):
         """删除过滤规则"""
-        from nbot.message_filter import message_filter
+        from nbot.message_filter import MessageFilter, message_filter
 
-        channel = request.args.get("channel", "global")
-        session_id = request.args.get("session_id", "")
+        channel = MessageFilter.normalize_channel(request.args.get("channel", "global"))
+        session_id = MessageFilter.normalize_session_id(channel, request.args.get("session_id", ""))
 
         removed = message_filter.remove_rule(rule_id, channel, session_id)
         if not removed:

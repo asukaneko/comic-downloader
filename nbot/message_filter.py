@@ -43,6 +43,8 @@ _regex_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="msg_filter_r
 
 DEFAULT_STRIP_MARKER = "<||>"
 
+_QQ_CHANNEL_ALIASES = {"qq", "qq_group", "qq_private"}
+
 
 class MessageFilter:
     """消息过滤器：按频道/会话/全局配置关键词，支持文本删除和消息撤回"""
@@ -67,6 +69,44 @@ class MessageFilter:
         if not content or DEFAULT_STRIP_MARKER not in content:
             return content
         return content.replace(DEFAULT_STRIP_MARKER, "").strip()
+
+    @staticmethod
+    def normalize_channel(channel: str) -> str:
+        value = (channel or "global").strip()
+        if value in _QQ_CHANNEL_ALIASES:
+            return "qq"
+        return value or "global"
+
+    @staticmethod
+    def normalize_session_id(channel: str, session_id: str) -> str:
+        value = (session_id or "").strip()
+        if not value:
+            return ""
+
+        normalized_channel = MessageFilter.normalize_channel(channel)
+        if normalized_channel == "qq":
+            if value.startswith("qq_group_"):
+                group_id = value[len("qq_group_"):].split("_", 1)[0]
+                return f"qq:group:{group_id}" if group_id else ""
+            if value.startswith("qq_private_"):
+                user_id = value[len("qq_private_"):].split("_", 1)[0]
+                return f"qq:private:{user_id}" if user_id else ""
+            if value.startswith("qq_group:"):
+                return "qq:group:" + value.split(":", 1)[1]
+            if value.startswith("qq_private:"):
+                return "qq:private:" + value.split(":", 1)[1]
+
+        if normalized_channel == "web" and ":" not in value:
+            return f"web:{value}"
+
+        return value
+
+    @staticmethod
+    def normalize_session_scope(session_scope: str, session_id: str) -> str:
+        scope = (session_scope or "all").strip()
+        if scope == "specific" and not (session_id or "").strip():
+            return "all"
+        return scope if scope in {"all", "specific"} else "all"
 
     # ------------------------------------------------------------------
     # 自动重载
@@ -98,6 +138,8 @@ class MessageFilter:
             return []
 
         self.reload_if_needed()
+        channel = self.normalize_channel(channel)
+        session_id = self.normalize_session_id(channel, session_id)
         text = content.strip()
         matched: list[dict] = []
 
@@ -143,6 +185,64 @@ class MessageFilter:
 
         return result.strip()
 
+    def filter_content(
+        self, content: str, channel: str = "", session_id: str = ""
+    ) -> dict[str, Any]:
+        matched_rules = self.match_all(content, channel=channel, session_id=session_id)
+        if not matched_rules:
+            return {
+                "content": content,
+                "filtered": False,
+                "blocked": False,
+                "rules": [],
+            }
+
+        recall_rules = [r for r in matched_rules if r.get("action") == "recall"]
+        if recall_rules:
+            return {
+                "content": "",
+                "filtered": True,
+                "blocked": True,
+                "rules": matched_rules,
+            }
+
+        filtered_content = self.strip_content(content, matched_rules)
+        return {
+            "content": filtered_content,
+            "filtered": filtered_content != content,
+            "blocked": not filtered_content,
+            "rules": matched_rules,
+        }
+
+    def filter_message(
+        self,
+        message: dict,
+        channel: str = "",
+        session_id: str = "",
+    ) -> dict[str, Any]:
+        if message.get("role") != "user":
+            return {
+                "message": message,
+                "filtered": False,
+                "blocked": False,
+                "rules": [],
+            }
+
+        result = self.filter_content(
+            str(message.get("content") or ""),
+            channel=channel,
+            session_id=session_id,
+        )
+        if result["blocked"]:
+            message["filtered"] = True
+            message["filter_blocked"] = True
+            message["filter_rule_count"] = len(result["rules"])
+        if result["filtered"] and not result["blocked"]:
+            message["content"] = result["content"]
+            message["filtered"] = True
+            message["filter_rule_count"] = len(result["rules"])
+        return {"message": message, **result}
+
     def _match_rule(self, text: str, rule: dict) -> bool:
         if not rule.get("enabled", True):
             return False
@@ -186,7 +286,15 @@ class MessageFilter:
         session_id: str = "",
         rule_type: str = "keyword",
         action: str = "strip",
+        group_id: str | None = None,
     ) -> dict:
+        if group_id:
+            channel = "qq"
+            session_scope = "specific"
+            session_id = f"qq:group:{group_id}"
+        channel = self.normalize_channel(channel)
+        session_id = self.normalize_session_id(channel, session_id)
+        session_scope = self.normalize_session_scope(session_scope, session_id)
         rule = {
             "id": f"rule_{uuid.uuid4().hex[:8]}",
             "pattern": pattern,
@@ -214,6 +322,9 @@ class MessageFilter:
         rule: dict,
     ) -> None:
         """将已有规则添加到指定位置（用于移动规则）。"""
+        channel = self.normalize_channel(channel)
+        session_id = self.normalize_session_id(channel, session_id)
+        session_scope = self.normalize_session_scope(session_scope, session_id)
         rule["session_scope"] = session_scope
         rule["session_id"] = session_id
         if channel == "global":
@@ -225,6 +336,8 @@ class MessageFilter:
         self, rule_id: str, channel: str = "global", session_id: str = ""
     ) -> dict | None:
         """查找规则。"""
+        channel = self.normalize_channel(channel)
+        session_id = self.normalize_session_id(channel, session_id)
         if channel == "global":
             rules = self.filters.get("global", [])
         else:
@@ -246,8 +359,17 @@ class MessageFilter:
         return None
 
     def remove_rule(
-        self, rule_id: str, channel: str = "global", session_id: str = ""
+        self,
+        rule_id: str,
+        channel: str = "global",
+        session_id: str = "",
+        group_id: str | None = None,
     ) -> bool:
+        if group_id:
+            channel = "qq"
+            session_id = f"qq:group:{group_id}"
+        channel = self.normalize_channel(channel)
+        session_id = self.normalize_session_id(channel, session_id)
         if channel == "global":
             rules = self.filters.get("global", [])
             before = len(rules)
@@ -267,6 +389,24 @@ class MessageFilter:
             self._compiled_regex.pop(rule_id, None)
             self.save()
         return removed
+
+    def list_rules(
+        self, channel: str = "global", session_id: str = "", group_id: str | None = None
+    ) -> list[dict]:
+        if group_id:
+            channel = "qq"
+            session_id = f"qq:group:{group_id}"
+        channel = self.normalize_channel(channel)
+        session_id = self.normalize_session_id(channel, session_id)
+        if channel == "global":
+            return list(self.filters.get("global", []))
+
+        result = []
+        for rule in self.filters.get("channels", {}).get(channel, []):
+            scope = rule.get("session_scope", "all")
+            if scope == "all" or rule.get("session_id", "") == session_id:
+                result.append(rule)
+        return result
 
     def list_all_rules(self) -> dict[str, Any]:
         result: dict[str, Any] = {"global": list(self.filters.get("global", []))}

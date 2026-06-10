@@ -7107,6 +7107,7 @@
                                         <label class="form-label">作用频道</label>
                                         <select v-model="filterForm.channel" class="form-input">
                                             <option value="global">全局（所有频道）</option>
+                                            <option value="qq">QQ</option>
                                             <option value="web">Web</option>
                                             <option v-for="ch in channels.filter(c => c.id !== 'web')" :key="ch.id" :value="ch.id">{{ ch.name || ch.id }}</option>
                                         </select>

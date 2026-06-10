@@ -171,6 +171,7 @@ class WebSessionStore:
         return None
 
     def set_session(self, session_id: str, session: Dict[str, Any]) -> Dict[str, Any]:
+        self._filter_session_messages(session_id, session)
         self.sessions[session_id] = session
         if self.save_callback:
             self.save_callback()
@@ -191,6 +192,9 @@ class WebSessionStore:
 
     def append_message(self, session_id: str, message: Dict[str, Any]) -> List[Dict[str, Any]]:
         messages = self.get_messages(session_id)
+        session = self.get_session(session_id) or {}
+        if self._filter_message(session_id, message, session) is None:
+            return messages
         messages.append(message)
         if self.save_callback:
             self.save_callback()
@@ -202,10 +206,74 @@ class WebSessionStore:
         session = self.get_session(session_id)
         if not session:
             return []
-        session["messages"] = messages
+        session["messages"] = self._filter_messages(session_id, messages, session)
         if self.save_callback:
             self.save_callback()
         return session["messages"]
+
+    def _filter_session_messages(self, session_id: str, session: Dict[str, Any]) -> None:
+        if isinstance(session.get("messages"), list):
+            session["messages"] = self._filter_messages(
+                session_id,
+                session["messages"],
+                session,
+            )
+
+    def _filter_messages(
+        self,
+        session_id: str,
+        messages: List[Dict[str, Any]],
+        session: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        filtered_messages = []
+        for message in messages:
+            filtered_message = self._filter_message(session_id, message, session)
+            if filtered_message is not None:
+                filtered_messages.append(filtered_message)
+        return filtered_messages
+
+    def _filter_message(
+        self,
+        session_id: str,
+        message: Dict[str, Any],
+        session: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            from nbot.message_filter import message_filter
+
+            channel, filter_session_id = self._filter_target(session_id, session)
+            result = message_filter.filter_message(
+                message,
+                channel=channel,
+                session_id=filter_session_id,
+            )
+            if result.get("blocked"):
+                return None
+        except Exception:
+            pass
+        return message
+
+    def _filter_target(
+        self,
+        session_id: str,
+        session: Optional[Dict[str, Any]] = None,
+    ) -> tuple[str, str]:
+        session = session or self.get_session(session_id) or {}
+        session_type = str(session.get("type") or "")
+        qq_id = str(session.get("qq_id") or "").strip()
+
+        if session_type == "qq_group" and qq_id:
+            return "qq", f"qq:group:{qq_id}"
+        if session_type == "qq_private" and qq_id:
+            return "qq", f"qq:private:{qq_id}"
+        if session_id.startswith("qq_group_"):
+            group_id = session_id[len("qq_group_"):].split("_", 1)[0]
+            return "qq", f"qq:group:{group_id}"
+        if session_id.startswith("qq_private_"):
+            user_id = session_id[len("qq_private_"):].split("_", 1)[0]
+            return "qq", f"qq:private:{user_id}"
+
+        return "web", f"web:{session_id}"
 
 
 def dump_json(filepath: str, data: Any) -> None:

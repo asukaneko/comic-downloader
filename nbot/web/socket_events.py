@@ -264,6 +264,19 @@ def register_socket_events(server):
                 )
 
                 session_store.append_message(session_id, message)
+                if message.get("filter_blocked"):
+                    server.socketio.emit(
+                        "message_filtered",
+                        {
+                            "session_id": session_id,
+                            "tempId": temp_id,
+                            "message": "当前内容被过滤",
+                        },
+                        room=request.sid,
+                    )
+                    return
+
+                chat_request.content = message.get("content", chat_request.content)
 
                 if getattr(server, "MESSAGE_MODULE_AVAILABLE", False) and getattr(
                     server, "message_manager", None

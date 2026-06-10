@@ -102,6 +102,32 @@ class AgentService:
         adapter: Optional["BaseChannelAdapter"] = None,
         **kwargs,
     ) -> ChatResponse:
+        try:
+            from nbot.message_filter import message_filter
+
+            filter_result = message_filter.filter_content(
+                chat_request.content,
+                channel=chat_request.channel,
+                session_id=chat_request.conversation_id,
+            )
+            if filter_result.get("blocked"):
+                return ChatResponse(
+                    final_content="当前内容被过滤",
+                    metadata={
+                        "filtered": True,
+                        "filter_rule_count": len(filter_result.get("rules", [])),
+                    },
+                )
+            if filter_result.get("filtered"):
+                chat_request.content = filter_result.get("content", "")
+                chat_request.metadata = dict(chat_request.metadata or {})
+                chat_request.metadata["filtered"] = True
+                chat_request.metadata["filter_rule_count"] = len(
+                    filter_result.get("rules", [])
+                )
+        except Exception as filter_err:
+            _log.warning("[消息过滤] AgentService 检查异常: %s", filter_err)
+
         # === 路由到频道处理器 ===
         handler = self._handlers.get(chat_request.channel) or get_channel_handler(
             chat_request.channel

@@ -14083,6 +14083,22 @@ def main(params):
                         this.processPendingQueue(finishedSessionId);
                     });
 
+                    socket.on('message_filtered', (data) => {
+                        const filteredSessionId = data?.session_id || this.loadingSessionId || this.currentSession?.id;
+                        const tempId = data?.tempId;
+                        if (this.currentSession && filteredSessionId === this.currentSession.id && tempId) {
+                            this.currentMessages = this.currentMessages.filter(m => m.id !== tempId);
+                        }
+                        this.isTyping = false;
+                        this.isLoading = false;
+                        this.loadingSessionId = null;
+                        this.loadingStartTime = null;
+                        localStorage.removeItem('nbot_loading_session_id');
+                        localStorage.removeItem('nbot_loading_start_time');
+                        this.showToast(data?.message || '当前内容被过滤', 'warning');
+                        this.processPendingQueue(filteredSessionId);
+                    });
+
                     socket.on('error', (err) => {
                         console.error('Socket error:', err);
                         this.isTyping = false;
