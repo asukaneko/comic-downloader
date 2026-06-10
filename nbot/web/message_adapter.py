@@ -249,7 +249,8 @@ class WebMessageAdapter:
             )
             if self.session_id in self.server.sessions:
                 self.session_store.append_message(self.session_id, message)
-            self.server.socketio.emit("new_message", message, room=self.session_id)
+            if not message.get("filter_blocked"):
+                self.server.socketio.emit("new_message", message, room=self.session_id)
         if image:
             self._reply_image = image
 

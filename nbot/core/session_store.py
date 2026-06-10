@@ -1,6 +1,9 @@
 import json
+import logging
 import uuid
 from typing import Any, Callable, Dict, List, Optional
+
+_log = logging.getLogger(__name__)
 
 
 def build_qq_session_id(
@@ -114,10 +117,38 @@ class QQSessionStore:
         group_user_id: Optional[str] = None,
         extra: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
+        # 过滤检查
+        filtered_content = content
+        try:
+            from nbot.message_filter import message_filter
+
+            if user_id:
+                filter_session_id = f"qq:private:{user_id}"
+            elif group_id:
+                filter_session_id = f"qq:group:{group_id}"
+            else:
+                filter_session_id = ""
+
+            message_dict = {"role": role, "content": content}
+            result = message_filter.filter_message(
+                message_dict,
+                channel="qq",
+                session_id=filter_session_id,
+            )
+            if result.get("blocked"):
+                messages = self.ensure_history(
+                    user_id=user_id, group_id=group_id, group_user_id=group_user_id
+                )
+                return messages
+            if result.get("filtered"):
+                filtered_content = result["message"].get("content", content)
+        except Exception as e:
+            _log.debug("[QQSessionStore] 过滤检查异常: %s", e)
+
         messages = self.ensure_history(
             user_id=user_id, group_id=group_id, group_user_id=group_user_id
         )
-        messages.append(build_chat_message(role, content, extra=extra))
+        messages.append(build_chat_message(role, filtered_content, extra=extra))
         self._trim(messages)
         self.save()
         return messages

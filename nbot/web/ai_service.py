@@ -483,6 +483,9 @@ class WebCallbacks(PipelineCallbacks):
         if ctx.metadata.get("streamed"):
             # 流式已发送，无需再次发送
             return
+        # 如果消息被过滤，不发送给客户端
+        if message.get("filter_blocked"):
+            return
         self.server.socketio.emit(
             "ai_response",
             {"session_id": self.session_id, "message": message},
@@ -511,6 +514,19 @@ class WebCallbacks(PipelineCallbacks):
         self.server.socketio.sleep(0)
 
     def on_stream_end(self, ctx: PipelineContext, message_id: str) -> None:
+        # 如果流式消息被过滤，通知客户端撤回
+        streamed_msg = ctx.metadata.get("_streamed_message_ref")
+        if streamed_msg and streamed_msg.get("filter_blocked"):
+            self.server.socketio.emit(
+                "message_filtered",
+                {
+                    "session_id": self.session_id,
+                    "message_id": message_id,
+                    "message": "当前内容被过滤",
+                },
+                room=self.session_id,
+            )
+            return
         self.server.socketio.emit(
             "ai_stream_end",
             {

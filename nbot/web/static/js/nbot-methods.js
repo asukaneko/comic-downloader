@@ -4025,10 +4025,11 @@ def main(params):
                             pattern: rule.pattern,
                             type: rule.type || 'keyword',
                             action: rule.action || 'strip',
+                            filter_target: rule.filter_target || 'user',
                         };
                     } else {
                         this.editingFilterRule = null;
-                        this.filterForm = { channel: 'global', session_scope: 'all', session_id: '', pattern: '', type: 'keyword', action: 'strip' };
+                        this.filterForm = { channel: 'global', session_scope: 'all', session_id: '', pattern: '', type: 'keyword', action: 'strip', filter_target: 'user' };
                     }
                     this.showFilterModal = true;
                 },
@@ -4041,6 +4042,7 @@ def main(params):
                             pattern: this.filterForm.pattern,
                             type: this.filterForm.type,
                             action: this.filterForm.action,
+                            filter_target: this.filterForm.filter_target || 'user',
                             channel: this.filterForm.channel,
                             session_scope: this.filterForm.channel === 'global' ? 'all' : this.filterForm.session_scope,
                             session_id: this.filterForm.session_scope === 'specific' ? this.filterForm.session_id : '',

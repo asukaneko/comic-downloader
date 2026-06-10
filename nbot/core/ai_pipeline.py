@@ -1522,6 +1522,8 @@ class AIPipeline:
         if ctx.metadata.get("streamed") and ctx.streamed_message:
             ctx.streamed_message["content"] = ctx.final_content
             callbacks.save_assistant_message(ctx, ctx.streamed_message)
+            # 存储引用以便 on_stream_end 检查过滤状态
+            ctx.metadata["_streamed_message_ref"] = ctx.streamed_message
             result = PipelineResult(
                 final_content=ctx.final_content,
                 assistant_message=ctx.streamed_message,

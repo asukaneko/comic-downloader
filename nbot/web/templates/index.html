@@ -7041,6 +7041,7 @@
                                                 <tr style="border-bottom: 1px solid var(--border-color);">
                                                     <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">状态</th>
                                                     <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">作用域</th>
+                                                    <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">过滤目标</th>
                                                     <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">规则</th>
                                                     <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">类型</th>
                                                     <th style="text-align: left; padding: 8px 12px; color: var(--text-secondary);">动作</th>
@@ -7059,6 +7060,11 @@
                                                     <td style="padding: 10px 12px;">
                                                         <span v-if="rule._channel === 'global'" class="badge badge-info">全局</span>
                                                         <span v-else class="badge badge-secondary">{{ rule._channel }}</span>
+                                                    </td>
+                                                    <td style="padding: 10px 12px;">
+                                                        <span class="badge" :class="(rule.filter_target || 'user') === 'user' ? 'badge-info' : (rule.filter_target === 'ai' ? 'badge-warning' : 'badge-danger')">
+                                                            {{ (rule.filter_target || 'user') === 'user' ? '用户' : (rule.filter_target === 'ai' ? 'AI' : '用户 + AI') }}
+                                                        </span>
                                                     </td>
                                                     <td style="padding: 10px 12px;">
                                                         <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-size: 13px;">{{ rule.pattern }}</code>
@@ -7125,7 +7131,17 @@
                                         <input v-model="filterForm.session_id" class="form-input" placeholder="例如 qq:group:123456、web:session_abc">
                                         <div class="form-hint">留空则匹配该频道所有会话</div>
                                     </div>
-                                    <!-- 第三步：内容 -->
+                                    <!-- 第三步：过滤目标 -->
+                                    <div class="form-group">
+                                        <label class="form-label">过滤目标</label>
+                                        <select v-model="filterForm.filter_target" class="form-input">
+                                            <option value="user">仅用户消息</option>
+                                            <option value="ai">仅 AI 回复</option>
+                                            <option value="both">用户消息 + AI 回复</option>
+                                        </select>
+                                        <div class="form-hint">选择此规则应用于哪一方的消息内容</div>
+                                    </div>
+                                    <!-- 第四步：内容 -->
                                     <div class="form-group">
                                         <label class="form-label">匹配内容</label>
                                         <input v-model="filterForm.pattern" class="form-input" placeholder="输入关键词或正则表达式">
@@ -11238,6 +11254,7 @@
                         pattern: '',
                         type: 'keyword',
                         action: 'strip',
+                        filter_target: 'user',
                     },
 
                     // Tokens

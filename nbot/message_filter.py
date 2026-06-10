@@ -45,6 +45,8 @@ DEFAULT_STRIP_MARKER = "<||>"
 
 _QQ_CHANNEL_ALIASES = {"qq", "qq_group", "qq_private"}
 
+VALID_FILTER_TARGETS = {"user", "ai", "both"}
+
 
 class MessageFilter:
     """消息过滤器：按频道/会话/全局配置关键词，支持文本删除和消息撤回"""
@@ -214,13 +216,31 @@ class MessageFilter:
             "rules": matched_rules,
         }
 
+    @staticmethod
+    def _rule_applies_to_role(rule: dict, role: str) -> bool:
+        """检查规则是否适用于给定角色。"""
+        target = rule.get("filter_target", "user")
+        if target == "both":
+            return True
+        if role == "user":
+            return target == "user"
+        # AI / assistant 角色
+        return target == "ai"
+
     def filter_message(
         self,
         message: dict,
         channel: str = "",
         session_id: str = "",
     ) -> dict[str, Any]:
-        if message.get("role") != "user":
+        role = message.get("role", "user")
+        content = str(message.get("content") or "")
+
+        # 匹配所有规则，再按 filter_target 筛选适用于当前角色的
+        all_matched = self.match_all(content, channel=channel, session_id=session_id)
+        matched_rules = [r for r in all_matched if self._rule_applies_to_role(r, role)]
+
+        if not matched_rules:
             return {
                 "message": message,
                 "filtered": False,
@@ -228,20 +248,36 @@ class MessageFilter:
                 "rules": [],
             }
 
-        result = self.filter_content(
-            str(message.get("content") or ""),
-            channel=channel,
-            session_id=session_id,
-        )
-        if result["blocked"]:
+        recall_rules = [r for r in matched_rules if r.get("action") == "recall"]
+        if recall_rules:
             message["filtered"] = True
             message["filter_blocked"] = True
-            message["filter_rule_count"] = len(result["rules"])
-        if result["filtered"] and not result["blocked"]:
-            message["content"] = result["content"]
+            message["filter_rule_count"] = len(matched_rules)
+            return {
+                "message": message,
+                "content": "",
+                "filtered": True,
+                "blocked": True,
+                "rules": matched_rules,
+            }
+
+        filtered_content = self.strip_content(content, matched_rules)
+        blocked = not filtered_content
+        if blocked:
             message["filtered"] = True
-            message["filter_rule_count"] = len(result["rules"])
-        return {"message": message, **result}
+            message["filter_blocked"] = True
+            message["filter_rule_count"] = len(matched_rules)
+        elif filtered_content != content:
+            message["content"] = filtered_content
+            message["filtered"] = True
+            message["filter_rule_count"] = len(matched_rules)
+        return {
+            "message": message,
+            "content": filtered_content,
+            "filtered": filtered_content != content,
+            "blocked": blocked,
+            "rules": matched_rules,
+        }
 
     def _match_rule(self, text: str, rule: dict) -> bool:
         if not rule.get("enabled", True):
@@ -286,6 +322,7 @@ class MessageFilter:
         session_id: str = "",
         rule_type: str = "keyword",
         action: str = "strip",
+        filter_target: str = "user",
         group_id: str | None = None,
     ) -> dict:
         if group_id:
@@ -295,11 +332,14 @@ class MessageFilter:
         channel = self.normalize_channel(channel)
         session_id = self.normalize_session_id(channel, session_id)
         session_scope = self.normalize_session_scope(session_scope, session_id)
+        if filter_target not in VALID_FILTER_TARGETS:
+            filter_target = "user"
         rule = {
             "id": f"rule_{uuid.uuid4().hex[:8]}",
             "pattern": pattern,
             "type": rule_type,
             "action": action,
+            "filter_target": filter_target,
             "session_scope": session_scope,
             "session_id": session_id,
             "enabled": True,

@@ -39,6 +39,10 @@ def register_message_filter_routes(app, server):
         if action not in ("strip", "recall"):
             return jsonify({"error": "动作必须是 strip 或 recall"}), 400
 
+        filter_target = data.get("filter_target", "user")
+        if filter_target not in ("user", "ai", "both"):
+            return jsonify({"error": "过滤目标必须是 user、ai 或 both"}), 400
+
         channel = MessageFilter.normalize_channel(data.get("channel", "global"))
         session_id = MessageFilter.normalize_session_id(channel, data.get("session_id", ""))
         session_scope = MessageFilter.normalize_session_scope(
@@ -53,6 +57,7 @@ def register_message_filter_routes(app, server):
             session_id=session_id,
             rule_type=rule_type,
             action=action,
+            filter_target=filter_target,
         )
         return jsonify({"success": True, "rule": rule})
 
@@ -84,6 +89,8 @@ def register_message_filter_routes(app, server):
             rule["type"] = data["type"]
         if "action" in data and data["action"] in ("strip", "recall"):
             rule["action"] = data["action"]
+        if "filter_target" in data and data["filter_target"] in ("user", "ai", "both"):
+            rule["filter_target"] = data["filter_target"]
         if "enabled" in data:
             rule["enabled"] = bool(data["enabled"])
 
