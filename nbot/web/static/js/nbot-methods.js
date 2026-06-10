@@ -10855,7 +10855,7 @@ def main(params):
                             description: this.personality.description || '',
                             basic_info: this.personality.basicInfo || '',
                             personality: this.personality.personality || ''
-                        });
+                        }, { timeout: 180000 });
 
                         if (res.data.success) {
                             this.personality.portrait = res.data.portrait_url;

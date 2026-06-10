@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import logging
@@ -1318,7 +1319,7 @@ def register_personality_routes(app, server):
             provider_type = image_gen_config.get('provider_type', 'openai_compatible')
 
             if provider_type in ['openai_compatible', 'openai'] or 'openai' in full_url.lower():
-                # OpenAI DALL-E API 格式
+                # OpenAI 兼容 API 格式（支持 DALL-E、gpt-image 等）
                 headers = {
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
@@ -1328,9 +1329,7 @@ def register_personality_routes(app, server):
                     "model": model,
                     "prompt": image_prompt,
                     "n": 1,
-                    "size": image_size,
-                    "quality": "standard",
-                    "response_format": "url"
+                    "size": image_size
                 }
 
                 response = requests.post(
@@ -1345,7 +1344,38 @@ def register_personality_routes(app, server):
                     return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
 
                 result = response.json()
-                image_url = result.get("data", [{}])[0].get("url")
+                _log.info(f"图片生成API响应: {json.dumps(result, ensure_ascii=False)[:500]}")
+
+                # 兼容多种响应格式
+                image_url = None
+
+                # 格式1: DALL-E 标准 -> data[0].url / data[0].b64_json
+                data_list = result.get("data", [])
+                if data_list:
+                    item = data_list[0]
+                    image_url = item.get("url") or item.get("b64_json")
+
+                # 格式2: gpt-image 聊天补全格式 -> choices[0].message.content
+                if not image_url and result.get("choices"):
+                    content = result["choices"][0].get("message", {}).get("content", "")
+                    _log.info(f"图片生成choices content: {content[:300]}")
+                    # content 可能是 base64、URL、或 markdown 图片链接 ![img](url)
+                    if content:
+                        # 尝试提取 markdown 图片链接
+                        md_match = re.search(r'!\[.*?\]\((https?://\S+)\)', content)
+                        if md_match:
+                            image_url = md_match.group(1)
+                        elif content.startswith("http"):
+                            image_url = content.strip()
+                        elif content.startswith("data:"):
+                            image_url = content
+                        else:
+                            # 可能是纯 base64
+                            image_url = content
+
+                # 格式3: images[0].url
+                if not image_url and result.get("images"):
+                    image_url = result["images"][0].get("url")
 
             elif provider_type == 'siliconflow' or 'siliconflow' in full_url.lower():
                 # SiliconFlow API 格式
@@ -1407,11 +1437,6 @@ def register_personality_routes(app, server):
             if not image_url:
                 return jsonify({"success": False, "error": "未能获取生成的图片URL"}), 500
 
-            # 下载图片并保存到本地
-            image_response = requests.get(image_url, timeout=60)
-            if image_response.status_code != 200:
-                return jsonify({"success": False, "error": "下载生成的图片失败"}), 500
-
             # 创建上传目录
             upload_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
             os.makedirs(upload_dir, exist_ok=True)
@@ -1420,9 +1445,28 @@ def register_personality_routes(app, server):
             new_filename = f"portrait_ai_{uuid.uuid4().hex[:16]}.png"
             filepath = os.path.join(upload_dir, new_filename)
 
-            # 保存文件
-            with open(filepath, 'wb') as f:
-                f.write(image_response.content)
+            # 判断是URL还是base64数据
+            if image_url.startswith("data:"):
+                # data URI 格式: data:image/png;base64,xxxxx
+                image_bytes = base64.b64decode(image_url.split(",", 1)[1])
+                with open(filepath, 'wb') as f:
+                    f.write(image_bytes)
+            elif image_url.startswith("http"):
+                # URL 格式，下载图片
+                image_response = requests.get(image_url, timeout=60)
+                if image_response.status_code != 200:
+                    return jsonify({"success": False, "error": "下载生成的图片失败"}), 500
+                with open(filepath, 'wb') as f:
+                    f.write(image_response.content)
+            else:
+                # 纯 base64 字符串
+                try:
+                    image_bytes = base64.b64decode(image_url)
+                    with open(filepath, 'wb') as f:
+                        f.write(image_bytes)
+                except Exception as decode_err:
+                    _log.error(f"base64解码失败: {decode_err}")
+                    return jsonify({"success": False, "error": "图片数据解析失败"}), 500
 
             portrait_url = f"/static/uploads/portraits/{new_filename}"
             _log.info(f"AI立绘生成成功: {character_name} -> {portrait_url}")
