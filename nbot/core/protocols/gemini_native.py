@@ -152,14 +152,20 @@ class GeminiNativeProtocol(ModelProtocol):
                 thinking_content += part.get("thought", "")
             if "functionCall" in part:
                 fc = part["functionCall"]
-                tool_calls.append({
+                tool_call = {
                     "id": f"call_{uuid.uuid4().hex[:12]}",
                     "type": "function",
                     "function": {
                         "name": fc.get("name", ""),
                         "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False),
                     },
-                })
+                }
+                # 保留 thoughtSignature，后续请求必须原样回传
+                # thoughtSignature 可能在 functionCall 内部或 part 级别
+                sig = fc.get("thoughtSignature") or part.get("thoughtSignature")
+                if sig:
+                    tool_call["_thought_signature"] = sig
+                tool_calls.append(tool_call)
 
         content = repair_mojibake_text(content)
         thinking_content = repair_mojibake_text(thinking_content)
@@ -192,13 +198,17 @@ class GeminiNativeProtocol(ModelProtocol):
                     return {"type": "content", "content": text}
             if "functionCall" in part:
                 fc = part["functionCall"]
+                tool_call = {
+                    "id": f"call_{uuid.uuid4().hex[:12]}",
+                    "name": fc.get("name", ""),
+                    "arguments": fc.get("args", {}),
+                }
+                sig = fc.get("thoughtSignature") or part.get("thoughtSignature")
+                if sig:
+                    tool_call["_thought_signature"] = sig
                 return {
                     "type": "tool_call_start",
-                    "tool_call": {
-                        "id": f"call_{uuid.uuid4().hex[:12]}",
-                        "name": fc.get("name", ""),
-                        "arguments": fc.get("args", {}),
-                    },
+                    "tool_call": tool_call,
                 }
 
         usage = self._parse_usage(chunk_data)
@@ -297,12 +307,17 @@ class GeminiNativeProtocol(ModelProtocol):
                             args = {}
                     else:
                         args = args_raw
-                    parts.append({
+                    fc_part: Dict[str, Any] = {
                         "functionCall": {
                             "name": name,
                             "args": args,
                         }
-                    })
+                    }
+                    # 保留 thoughtSignature，Gemini API 要求后续请求原样回传
+                    sig = tc.get("_thought_signature")
+                    if sig:
+                        fc_part["thoughtSignature"] = sig
+                    parts.append(fc_part)
                 if parts:
                     contents.append({"role": "model", "parts": parts})
                 continue

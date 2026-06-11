@@ -477,22 +477,27 @@ def run_tool_call_loop(
         thinking_content = response.get("thinking_content") or response.get("content", "")
 
         if tool_calls:
+            tool_call_entries = []
+            for tool_call in tool_calls:
+                entry = {
+                    "id": tool_call.get("id"),
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.get("name"),
+                        "arguments": json.dumps(
+                            tool_call.get("arguments", {}), ensure_ascii=False
+                        ),
+                    },
+                }
+                # 保留 thoughtSignature（Gemini API 要求后续请求原样回传）
+                sig = tool_call.get("_thought_signature")
+                if sig:
+                    entry["_thought_signature"] = sig
+                tool_call_entries.append(entry)
             assistant_message = {
                 "role": "assistant",
                 "content": response.get("content", ""),
-                "tool_calls": [
-                    {
-                        "id": tool_call.get("id"),
-                        "type": "function",
-                        "function": {
-                            "name": tool_call.get("name"),
-                            "arguments": json.dumps(
-                                tool_call.get("arguments", {}), ensure_ascii=False
-                            ),
-                        },
-                    }
-                    for tool_call in tool_calls
-                ],
+                "tool_calls": tool_call_entries,
             }
             tool_messages.append(assistant_message)
 
