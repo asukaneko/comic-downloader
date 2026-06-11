@@ -1499,6 +1499,9 @@ class WebChatServer:
     def set_qq_bot(self, bot):
         """设置 QQ Bot 引用"""
         self.qq_bot = bot
+        # 更新 TTS 处理器的 QQ Bot 引用
+        if hasattr(self, '_tts_handler') and self._tts_handler:
+            self._tts_handler.set_qq_bot(bot)
 
     def log_message(self, level: str, message: str, important: bool = False):
         """记录系统日志，important=True 时会在最近活动中显示"""
@@ -2811,6 +2814,7 @@ class WebChatServer:
             from nbot.gateway.dispatcher import GatewayDispatcher
             from nbot.gateway.gateway import set_gateway
             from nbot.gateway.storage import init_gateway_storage
+            from nbot.gateway.tts_handler import create_tts_handler
 
             if not hasattr(self, "agent_service") or self.agent_service is None:
                 _log.warning("[Gateway] AgentService 未就绪，Gateway 将使用延迟初始化")
@@ -2827,6 +2831,16 @@ class WebChatServer:
                 dispatcher=dispatcher,
                 storage=storage,
             )
+
+            # 创建并注册 TTS 处理器
+            # 注意：switch 在 commands.py 中已初始化，需要导入
+            try:
+                from nbot.commands import switch as switch_manager
+                self._tts_handler = create_tts_handler(switch_manager, self.qq_bot)
+                gateway.delivery.register_tts_handler(self._tts_handler.handle_tts)
+                _log.info("[Gateway] TTS 处理器已注册")
+            except ImportError:
+                _log.warning("[Gateway] 无法导入 switch_manager，TTS 处理器未注册")
 
             # 设置为全局实例
             set_gateway(gateway)

@@ -1,13 +1,16 @@
 import configparser
+import logging
 import os
 import time
 
 from nbot.web.utils.config_loader import get_tts_model_config
 
+_log = logging.getLogger(__name__)
+
 config_parser = configparser.ConfigParser()
 config_parser.read('config.ini', encoding='utf-8')
 
-cache_address = config_parser.get('cache', 'cache_address')
+cache_address = os.path.abspath(config_parser.get('cache', 'cache_address'))
 
 
 def _get_tts_config():
@@ -77,8 +80,44 @@ def tts(content: str):
 
         return MessageChain([Record(speech_file_path)])
     except Exception as e:
-        print(f"TTS生成失败: {e}")
+        _log.error("TTS生成失败(tts): %s", str(e))
         return MessageChain([])
+
+
+def generate_tts_audio(content: str) -> str | None:
+    """生成 TTS 音频文件并返回文件路径
+
+    用于 Gateway 频道集成，返回音频文件路径而非 MessageChain。
+
+    Args:
+        content: 要转换为语音的文本内容
+
+    Returns:
+        音频文件路径，失败时返回 None
+    """
+    file_path = os.path.join(cache_address, "tts/")
+    os.makedirs(file_path, exist_ok=True)
+    speech_file_path = os.path.join(file_path, f"{int(time.time())}.mp3")
+
+    tts_config = _get_tts_config()
+    clean_text = remove_brackets_content(content)
+
+    try:
+        from nbot.services.tts_adapters import get_adapter
+        provider = tts_config.get("tts_provider") or tts_config.get("provider_type", "")
+        _log.info("TTS 开始生成语音 provider=%s model=%s", provider, tts_config.get("tts_model", ""))
+        adapter = get_adapter(provider)
+        adapter.synthesize(clean_text, tts_config, speech_file_path)
+
+        if os.path.exists(speech_file_path):
+            file_size = os.path.getsize(speech_file_path)
+            _log.info("TTS 语音生成成功 path=%s size=%d", speech_file_path, file_size)
+            return speech_file_path
+        _log.warning("TTS 语音文件未生成 path=%s", speech_file_path)
+        return None
+    except Exception as e:
+        _log.error("TTS生成失败: %s", str(e))
+        return None
 
 
 def upload_voice(file_path: str, name: str, text: str):
