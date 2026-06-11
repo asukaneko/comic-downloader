@@ -11085,6 +11085,67 @@ def main(params):
                     }
                 },
                 
+
+                selectCharacterCard(preset) {
+                    this.selectedCharacterCard = preset;
+                },
+
+                editSelectedCharacterCard() {
+                    if (!this.selectedCharacterCard) return;
+                    this.loadPersonalityToEditor(this.selectedCharacterCard);
+                    this.navigateTo('personality');
+                },
+
+                openSelectedCharacterMemory() {
+                    if (!this.selectedCharacterCard) return;
+                    this.selectedMemorySpace = `character:${this.selectedCharacterCard.name || ''}`;
+                    this.memoryCharacterFilter = '';
+                    this.navigateTo('memory');
+                },
+
+                openSelectedCharacterState() {
+                    if (!this.selectedCharacterCard) return;
+                    this.loadPersonalityToEditor(this.selectedCharacterCard);
+                    if (this.foldedSections && Object.prototype.hasOwnProperty.call(this.foldedSections, 'characterState')) {
+                        this.foldedSections.characterState = false;
+                    }
+                    this.navigateTo('personality');
+                    this.$nextTick(() => {
+                        const stateSection = document.querySelector('.section-header-title .fa-heart');
+                        if (stateSection) stateSection.closest('.form-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                },
+
+                getCharacterStats(preset) {
+                    const name = preset?.name || preset?.sender_name || '';
+                    const relatedSessions = (this.sessions || []).filter(s => s.sender_name === name);
+                    const memoryCount = (this.memories || []).filter(m => m.character_name === name).length;
+                    let messageCount = 0;
+                    let tokenTotal = 0;
+                    relatedSessions.forEach(session => {
+                        messageCount += Number(session.message_count || session.messages_count || session.turn_count || 0);
+                        tokenTotal += Number(session.total_tokens || session.token_total || session.tokens || session.token_usage || 0);
+                    });
+                    return {
+                        conversationCount: relatedSessions.length,
+                        messageCount,
+                        memoryCount,
+                        tokenTotal
+                    };
+                },
+
+                getCharacterStateBars(preset) {
+                    const state = preset?.state || {};
+                    const clamp = value => Math.max(0, Math.min(100, Number(value ?? 0)));
+                    return [
+                        { key: 'affection', label: this.$t ? this.$t('personality.affection') : '好感', icon: '❤️', value: clamp(state.affection ?? 50), color: 'linear-gradient(90deg, #ff6b9d, #ff4081)' },
+                        { key: 'trust', label: this.$t ? this.$t('personality.trust') : '信任', icon: '🤝', value: clamp(state.trust ?? 50), color: 'linear-gradient(90deg, #4fc3f7, #2196f3)' },
+                        { key: 'familiarity', label: this.$t ? this.$t('personality.familiarity') : '熟悉', icon: '🌿', value: clamp(state.familiarity ?? 30), color: 'linear-gradient(90deg, #81c784, #4caf50)' },
+                        { key: 'dependency', label: this.$t ? this.$t('personality.dependency') : '依赖', icon: '💫', value: clamp(state.dependency ?? 30), color: 'linear-gradient(90deg, #ce93d8, #9c27b0)' },
+                        { key: 'security', label: this.$t ? this.$t('personality.security') : '安全感', icon: '🏠', value: clamp(state.security ?? 50), color: 'linear-gradient(90deg, #ffb74d, #ff9800)' }
+                    ];
+                },
+
                 // Memory Functions
                 async exportMemory() {
                     try {

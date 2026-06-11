@@ -2827,6 +2827,140 @@
                     </div>
 
                     <!-- Personality - 角色卡编辑器 -->
+                    <!-- Character Cards Gallery -->
+                    <div v-if="currentPage === 'characters'" class="fade-in character-gallery-page">
+                        <template v-if="!selectedCharacterCard">
+                            <div class="character-gallery-hero">
+                                <div>
+                                    <div class="character-gallery-kicker">Character Cards</div>
+                                    <h2>角色卡</h2>
+                                    <p>以卡片形式浏览当前角色库；点击任意角色进入详情，再进行编辑、查看记忆或查看状态。</p>
+                                </div>
+                                <button class="btn btn-primary" @click="navigateTo('personality')">
+                                    <i class="fas fa-plus"></i> 新建 / 导入角色
+                                </button>
+                            </div>
+
+                            <div v-if="customPersonalityPresets.length === 0" class="character-gallery-empty">
+                                <i class="fas fa-id-card"></i>
+                                <h3>暂无角色卡</h3>
+                                <p>前往角色设置创建或导入第一个角色。</p>
+                                <button class="btn btn-primary" @click="navigateTo('personality')">去角色设置</button>
+                            </div>
+
+                            <div v-else class="character-gallery-grid">
+                                <div
+                                    v-for="preset in customPersonalityPresets"
+                                    :key="preset.id || preset.name"
+                                    class="character-gallery-card"
+                                    @click="selectCharacterCard(preset)"
+                                >
+                                    <div class="character-gallery-cover" :class="{ 'has-portrait': preset.portrait }">
+                                        <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
+                                        <i v-else :class="preset.avatar || preset.icon || 'fas fa-user-circle'"></i>
+                                        <div class="character-gallery-cover-shade"></div>
+                                    </div>
+                                    <div class="character-gallery-card-body">
+                                        <div class="character-gallery-card-title-row">
+                                            <h3>{{ preset.name || '未命名角色' }}</h3>
+                                            <span>{{ getCharacterStats(preset).memoryCount }} 记忆</span>
+                                        </div>
+                                        <p>{{ preset.description || preset.basicInfo || '暂无角色简介' }}</p>
+                                        <div v-if="preset.tags && preset.tags.length" class="character-gallery-tags">
+                                            <span v-for="tag in preset.tags.slice(0, 4)" :key="tag">{{ tag }}</span>
+                                        </div>
+                                        <div class="character-gallery-mini-stats">
+                                            <span><b>{{ getCharacterStats(preset).conversationCount }}</b> 对话</span>
+                                            <span><b>{{ formatTokenCount(getCharacterStats(preset).tokenTotal) }}</b> Token</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template v-else>
+                            <div class="character-detail-shell">
+                                <button class="character-detail-back" @click="selectedCharacterCard = null">
+                                    <i class="fas fa-arrow-left"></i> 返回角色卡
+                                </button>
+
+                                <div class="character-detail-hero-card">
+                                    <div class="character-detail-portrait" :class="{ 'has-portrait': selectedCharacterCard.portrait }">
+                                        <img v-if="selectedCharacterCard.portrait" :src="selectedCharacterCard.portrait" :alt="selectedCharacterCard.name">
+                                        <i v-else :class="selectedCharacterCard.avatar || selectedCharacterCard.icon || 'fas fa-user-circle'"></i>
+                                    </div>
+                                    <div class="character-detail-main">
+                                        <div class="character-gallery-kicker">Character Profile</div>
+                                        <h2>{{ selectedCharacterCard.name || '未命名角色' }}</h2>
+                                        <p>{{ selectedCharacterCard.description || selectedCharacterCard.basicInfo || '这个角色还没有填写简介。' }}</p>
+                                        <div v-if="selectedCharacterCard.tags && selectedCharacterCard.tags.length" class="character-detail-tags">
+                                            <span v-for="tag in selectedCharacterCard.tags" :key="tag">{{ tag }}</span>
+                                        </div>
+                                        <div class="character-detail-actions">
+                                            <button class="btn btn-primary" @click="editSelectedCharacterCard">
+                                                <i class="fas fa-edit"></i> 编辑角色卡
+                                            </button>
+                                            <button class="btn btn-secondary" @click="openSelectedCharacterMemory">
+                                                <i class="fas fa-brain"></i> 查看记忆
+                                            </button>
+                                            <button class="btn btn-secondary" @click="openSelectedCharacterState">
+                                                <i class="fas fa-heart-pulse"></i> 查看状态
+                                            </button>
+                                            <button class="btn btn-accent" @click="startSessionWithPreset(selectedCharacterCard)">
+                                                <i class="fas fa-comments"></i> 开始对话
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="character-detail-grid">
+                                    <div class="character-detail-panel character-detail-story">
+                                        <div class="character-detail-panel-title"><i class="fas fa-scroll"></i> 角色设定</div>
+                                        <div class="character-detail-field" v-if="selectedCharacterCard.basicInfo">
+                                            <label>基本信息</label>
+                                            <p>{{ selectedCharacterCard.basicInfo }}</p>
+                                        </div>
+                                        <div class="character-detail-field" v-if="selectedCharacterCard.personality">
+                                            <label>性格特点</label>
+                                            <p>{{ selectedCharacterCard.personality }}</p>
+                                        </div>
+                                        <div class="character-detail-field" v-if="selectedCharacterCard.scenario">
+                                            <label>背景设定</label>
+                                            <p>{{ selectedCharacterCard.scenario }}</p>
+                                        </div>
+                                        <div class="character-detail-field" v-if="selectedCharacterCard.firstMessage">
+                                            <label>开场白</label>
+                                            <p>{{ selectedCharacterCard.firstMessage }}</p>
+                                        </div>
+                                        <div v-if="!selectedCharacterCard.basicInfo && !selectedCharacterCard.personality && !selectedCharacterCard.scenario && !selectedCharacterCard.firstMessage" class="character-detail-muted">
+                                            暂无详细设定，点击编辑角色卡补充。
+                                        </div>
+                                    </div>
+
+                                    <div class="character-detail-panel">
+                                        <div class="character-detail-panel-title"><i class="fas fa-chart-pie"></i> 角色统计</div>
+                                        <div class="character-stat-grid">
+                                            <div class="character-stat-card"><span>对话数</span><b>{{ getCharacterStats(selectedCharacterCard).conversationCount }}</b></div>
+                                            <div class="character-stat-card"><span>消息数</span><b>{{ getCharacterStats(selectedCharacterCard).messageCount }}</b></div>
+                                            <div class="character-stat-card"><span>记忆数</span><b>{{ getCharacterStats(selectedCharacterCard).memoryCount }}</b></div>
+                                            <div class="character-stat-card"><span>Token</span><b>{{ formatTokenCount(getCharacterStats(selectedCharacterCard).tokenTotal) }}</b></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="character-detail-panel">
+                                        <div class="character-detail-panel-title"><i class="fas fa-heart"></i> 初始状态</div>
+                                        <div class="character-state-bars">
+                                            <div v-for="item in getCharacterStateBars(selectedCharacterCard)" :key="item.key" class="character-state-row">
+                                                <div class="character-state-label"><span>{{ item.icon }} {{ item.label }}</span><b>{{ item.value }}</b></div>
+                                                <div class="character-state-track"><div class="character-state-fill" :style="{ width: item.value + '%', background: item.color }"></div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
                     <div v-if="currentPage === 'personality'" class="fade-in personality-page">
                         <div class="grid-2 personality-layout" style="align-items: start;">
                             <!-- 左侧：角色卡编辑器 -->
@@ -10552,6 +10686,7 @@
                             { id: 'chat', labelKey: 'nav.chat_chat', icon: 'fas fa-comments' },
                             { id: 'sessions', labelKey: 'nav.sessions', icon: 'fas fa-list' },
                             { id: 'message-style', labelKey: 'nav.message_style', icon: 'fas fa-paint-brush' },
+                            { id: 'characters', labelKey: 'nav.characters', icon: 'fas fa-id-card' },
                             { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
                             { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' },
                             { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' }
@@ -10965,6 +11100,7 @@
                     memoryFilter: 'all',
                     memoryCharacterFilter: '',
                     selectedMemorySpace: null,
+                    selectedCharacterCard: null,
                     memorySortBy: 'newest',
                     memorySelectMode: false,
                     selectedMemoryIds: [],
@@ -11857,6 +11993,7 @@
                         'task-center': '定时任务',
                         workflows: '工作流',
                         heartbeat: '定时任务配置',
+                        characters: '角色卡',
                         personality: '角色设置',
                         'personality-journey': '状态历程',
                         'world-book': '世界书',
