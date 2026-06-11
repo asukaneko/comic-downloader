@@ -6599,6 +6599,81 @@
                                         <div class="form-hint">PEM 格式私钥文件的绝对路径</div>
                                     </div>
                                 </div>
+                                <!-- SSL 证书文件验证 -->
+                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                                    <label class="form-label"><i class="fas fa-file-shield"></i> SSL 证书文件验证</label>
+                                    <div class="form-hint" style="margin-bottom: 12px;">
+                                        上传 CA 颁发机构提供的 fileauth.txt 等验证文件，CA 将通过
+                                        <code style="padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; font-size: 12px;">/.well-known/pki-validation/文件名</code>
+                                        路径验证域名所有权。
+                                    </div>
+                                    <div class="config-transfer-panel">
+                                        <div class="config-transfer-title">
+                                            <i class="fas fa-upload"></i>
+                                            验证文件管理
+                                        </div>
+                                        <!-- 已上传文件列表 -->
+                                        <div v-if="sslValidationFiles.length > 0" style="margin: 12px 0;">
+                                            <div v-for="file in sslValidationFiles" :key="file.filename" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 8px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
+                                                <div style="flex: 1; min-width: 0;">
+                                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                                        <i class="fas fa-file-lines" style="color: var(--accent-primary);"></i>
+                                                        <span style="font-weight: 600; font-size: 13px;">{{ file.filename }}</span>
+                                                        <span v-if="file.original_name && file.original_name !== file.filename" style="font-size: 11px; color: var(--text-secondary);">({{ file.original_name }})</span>
+                                                    </div>
+                                                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; display: flex; gap: 12px;">
+                                                        <span>{{ formatBytes(file.size) }}</span>
+                                                        <span v-if="file.uploaded_at">{{ file.uploaded_at }}</span>
+                                                        <a :href="file.url" target="_blank" style="color: var(--accent-primary); text-decoration: none;">{{ file.url }}</a>
+                                                    </div>
+                                                </div>
+                                                <div style="display: flex; gap: 6px; margin-left: 12px;">
+                                                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" @click="editSslValidationFile(file.filename)" title="编辑内容">
+                                                        <i class="fas fa-pen"></i>
+                                                    </button>
+                                                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; color: var(--danger-color);" @click="deleteSslValidationFile(file.filename)" title="删除">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-else style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">
+                                            <i class="fas fa-inbox" style="font-size: 24px; display: block; margin-bottom: 8px; opacity: 0.5;"></i>
+                                            暂无验证文件
+                                        </div>
+                                        <!-- 上传区域 -->
+                                        <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                                            <label class="btn btn-primary" style="cursor: pointer; margin: 0;">
+                                                <i class="fas fa-upload"></i> 上传验证文件
+                                                <input type="file" ref="sslValidationFileInput" @change="uploadSslValidationFile" style="display: none;">
+                                            </label>
+                                            <input v-model="sslValidationCustomFilename" type="text" class="form-input" style="max-width: 240px; height: 34px; font-size: 13px;" placeholder="自定义文件名（可选）">
+                                        </div>
+                                        <div class="form-hint" style="margin-top: 6px;">
+                                            默认保留原文件名（如 fileauth.txt），也可自定义文件名。
+                                        </div>
+                                        <!-- 在线编辑器 -->
+                                        <div v-if="sslEditingFile" style="margin-top: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                                <span style="font-weight: 600; font-size: 13px;">
+                                                    <i class="fas fa-pen-to-square"></i> 编辑: {{ sslEditingFile }}
+                                                </span>
+                                                <button style="background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px;" @click="sslEditingFile = ''">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <textarea v-model="sslEditingContent" class="form-input" rows="6" style="width: 100%; font-family: monospace; font-size: 13px; resize: vertical;"></textarea>
+                                            <div style="margin-top: 8px; display: flex; gap: 8px;">
+                                                <button class="btn btn-primary" style="padding: 4px 16px; font-size: 13px;" @click="saveSslValidationContent" :disabled="isLoading">
+                                                    <i class="fas fa-save"></i> 保存
+                                                </button>
+                                                <button class="btn btn-secondary" style="padding: 4px 16px; font-size: 13px;" @click="sslEditingFile = ''">
+                                                    取消
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div class="form-group" style="margin-top: 20px;">
                                     <label class="form-label">角色卡平台</label>
                                     <div class="grid-2">
@@ -11564,6 +11639,10 @@
                     configExportPassword: '',
                     configImportPassword: '',
                     configImportFileName: '',
+                    sslValidationFiles: [],
+                    sslValidationCustomFilename: '',
+                    sslEditingFile: '',
+                    sslEditingContent: '',
 
                     // Update
                     currentVersion: '',

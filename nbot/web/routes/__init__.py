@@ -25,6 +25,7 @@ from nbot.web.routes.qrcode import register_qrcode_routes
 from nbot.web.routes.sessions import register_session_routes
 from nbot.web.routes.skills import register_skill_routes
 from nbot.web.routes.skills_storage import register_skills_storage_routes
+from nbot.web.routes.ssl_validation import register_ssl_validation_routes
 from nbot.web.routes.task_center import register_task_center_routes
 from nbot.web.routes.tools import register_tool_routes
 from nbot.web.routes.tts_playground import register_tts_playground_routes
@@ -65,6 +66,7 @@ __all__ = [
     "register_session_routes",
     "register_skill_routes",
     "register_skills_storage_routes",
+    "register_ssl_validation_routes",
     "register_task_center_routes",
     "register_tool_routes",
     "register_tts_playground_routes",

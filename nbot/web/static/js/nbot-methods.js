@@ -1742,6 +1742,7 @@ const NbotMethods = {
                             break;
                         case 'settings':
                             await this.loadSettings();
+                            await this.loadSslValidationFiles();
                             break;
                         case 'skills':
                             await this.loadSkills();
@@ -13215,6 +13216,95 @@ def main(params):
                         this.showOnboarding = false;
                     } catch (e) {
                         this.showToast('导入失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                // ── SSL 证书文件验证管理 ─────────────────────────────
+
+                async loadSslValidationFiles() {
+                    try {
+                        const res = await api.get('/api/ssl-validation');
+                        if (res.data?.success) {
+                            this.sslValidationFiles = res.data.files || [];
+                        }
+                    } catch (e) {
+                        console.error('加载 SSL 验证文件失败:', e);
+                    }
+                },
+
+                async uploadSslValidationFile(event) {
+                    const file = event.target.files && event.target.files[0];
+                    if (!file) return;
+                    this.isLoading = true;
+                    try {
+                        const form = new FormData();
+                        form.append('file', file);
+                        if (this.sslValidationCustomFilename.trim()) {
+                            form.append('custom_filename', this.sslValidationCustomFilename.trim());
+                        }
+                        const res = await api.post('/api/ssl-validation/upload', form, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        if (res.data?.success) {
+                            this.showToast(`验证文件已上传: ${res.data.filename}`, 'success');
+                            this.sslValidationCustomFilename = '';
+                            await this.loadSslValidationFiles();
+                        }
+                    } catch (e) {
+                        this.showToast('上传失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                        if (this.$refs.sslValidationFileInput) {
+                            this.$refs.sslValidationFileInput.value = '';
+                        }
+                    }
+                },
+
+                async deleteSslValidationFile(filename) {
+                    if (!confirm(`确定删除验证文件 "${filename}"？`)) return;
+                    try {
+                        const res = await api.delete(`/api/ssl-validation/${filename}`);
+                        if (res.data?.success) {
+                            this.showToast(`已删除: ${filename}`, 'success');
+                            if (this.sslEditingFile === filename) {
+                                this.sslEditingFile = '';
+                                this.sslEditingContent = '';
+                            }
+                            await this.loadSslValidationFiles();
+                        }
+                    } catch (e) {
+                        this.showToast('删除失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                async editSslValidationFile(filename) {
+                    try {
+                        const res = await api.get(`/api/ssl-validation/content/${filename}`);
+                        if (res.data?.success) {
+                            this.sslEditingFile = filename;
+                            this.sslEditingContent = res.data.content || '';
+                        }
+                    } catch (e) {
+                        this.showToast('获取内容失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                async saveSslValidationContent() {
+                    if (!this.sslEditingFile) return;
+                    this.isLoading = true;
+                    try {
+                        const res = await api.put(`/api/ssl-validation/content/${this.sslEditingFile}`, {
+                            content: this.sslEditingContent
+                        });
+                        if (res.data?.success) {
+                            this.showToast('内容已保存', 'success');
+                            this.sslEditingFile = '';
+                            this.sslEditingContent = '';
+                        }
+                    } catch (e) {
+                        this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
                         this.isLoading = false;
                     }

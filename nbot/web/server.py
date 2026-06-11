@@ -65,6 +65,7 @@ from nbot.web.routes import (
     register_session_routes,
     register_skill_routes,
     register_skills_storage_routes,
+    register_ssl_validation_routes,
     register_task_center_routes,
     register_tool_routes,
     register_tts_playground_routes,
@@ -2861,6 +2862,7 @@ class WebChatServer:
         register_public_session_routes(self.app, self)
         register_session_routes(self.app, self)
         register_skill_routes(self.app, self)
+        register_ssl_validation_routes(self.app, self)
         register_task_center_routes(self.app, self)
         register_tool_routes(self.app, self)
         register_mcp_server_routes(self.app, self)
