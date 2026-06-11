@@ -2871,7 +2871,7 @@
                                         </div>
                                         <div class="character-gallery-mini-stats">
                                             <span><b>{{ getCharacterStats(preset).conversationCount }}</b> 对话</span>
-                                            <span><b>{{ formatTokenCount(getCharacterStats(preset).tokenTotal) }}</b> Token</span>
+                                            <span><b>{{ getCharacterStats(preset).messageCount }}</b> 消息</span>
                                         </div>
                                     </div>
                                 </div>
@@ -2890,7 +2890,7 @@
                                         <i v-else :class="selectedCharacterCard.avatar || selectedCharacterCard.icon || 'fas fa-user-circle'"></i>
                                     </div>
                                     <div class="character-detail-main">
-                                        <div class="character-gallery-kicker">Character Profile</div>
+                                        <div class="character-detail-kicker"><i class="fas fa-id-card"></i> Character Profile</div>
                                         <h2>{{ selectedCharacterCard.name || '未命名角色' }}</h2>
                                         <p>{{ selectedCharacterCard.description || selectedCharacterCard.basicInfo || '这个角色还没有填写简介。' }}</p>
                                         <div v-if="selectedCharacterCard.tags && selectedCharacterCard.tags.length" class="character-detail-tags">
