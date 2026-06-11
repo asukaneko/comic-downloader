@@ -24,6 +24,26 @@ from nbot.core.model_adapter import (
 )
 from nbot.core.protocols.base import ModelProtocol
 
+# Gemini API 不支持的 JSON Schema 扩展字段
+_JSON_SCHEMA_EXTRA_KEYS = frozenset({
+    "$schema", "$id", "$ref", "$defs", "definitions",
+    "additionalProperties", "unevaluatedProperties",
+    "if", "then", "else", "allOf", "anyOf", "oneOf", "not",
+})
+
+
+def _strip_json_schema_extras(obj: Any) -> Any:
+    """递归移除 Gemini API 不接受的 JSON Schema 扩展字段。"""
+    if isinstance(obj, dict):
+        return {
+            k: _strip_json_schema_extras(v)
+            for k, v in obj.items()
+            if k not in _JSON_SCHEMA_EXTRA_KEYS
+        }
+    if isinstance(obj, list):
+        return [_strip_json_schema_extras(item) for item in obj]
+    return obj
+
 
 class GeminiNativeProtocol(ModelProtocol):
     """Gemini native generateContent protocol."""
@@ -376,9 +396,12 @@ class GeminiNativeProtocol(ModelProtocol):
         for tool in tools:
             if tool.get("type") == "function":
                 func = tool.get("function", {})
+                parameters = func.get("parameters", {"type": "object", "properties": {}})
+                # Gemini API 不接受 JSON Schema 扩展字段，需要清除
+                parameters = _strip_json_schema_extras(parameters)
                 declarations.append({
                     "name": func.get("name", ""),
                     "description": func.get("description", ""),
-                    "parameters": func.get("parameters", {"type": "object", "properties": {}}),
+                    "parameters": parameters,
                 })
         return [{"functionDeclarations": declarations}]
