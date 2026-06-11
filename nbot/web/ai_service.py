@@ -2094,9 +2094,44 @@ server,
 
     except Exception as e:
         _log.error(f"AI with tools error: {e}")
-        # 回退到普通 AI 调用
-        content = server._get_ai_response(messages)
-        return {"content": content}
+        # 回退到普通 AI 调用（遍历故障转移队列，不依赖全局配置）
+        if model_configs:
+            from nbot.core.model_adapter import response_json_utf8
+            for cfg in model_configs:
+                try:
+                    cfg_pt = cfg.get("provider_type", "openai_compatible")
+                    cfg_protocol = _get_proto(cfg_pt)
+                    cfg_url = cfg_protocol.resolve_url(
+                        cfg.get("base_url", ""),
+                        model=cfg.get("model", ""),
+                        append_base_url_path=cfg.get("append_base_url_path", True),
+                        api_key=cfg.get("api_key", ""),
+                    )
+                    cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""))
+                    cfg_payload = cfg_protocol.build_payload(
+                        cfg.get("model", ""),
+                        messages,
+                        stream=False,
+                        base_url=cfg.get("base_url", ""),
+                        provider_type=cfg_pt,
+                    )
+                    resp = requests.post(
+                        cfg_url, json=cfg_payload, headers=cfg_headers,
+                        timeout=cfg.get("failover_timeout", 0) or 120,
+                    )
+                    resp.raise_for_status()
+                    data = response_json_utf8(resp)
+                    normalized = cfg_protocol.parse_response(
+                        data,
+                        model=cfg.get("model", ""),
+                        base_url=cfg.get("base_url", ""),
+                        provider_type=cfg_pt,
+                    )
+                    return {"content": normalized.content or ""}
+                except Exception:
+                    continue
+        # 所有模型都失败
+        return {"content": f"AI 服务暂时不可用: {e}"}
 
 
 def parse_tool_call_from_text(self, content: str) -> list:

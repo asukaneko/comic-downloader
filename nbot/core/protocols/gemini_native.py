@@ -25,10 +25,10 @@ from nbot.core.model_adapter import (
 from nbot.core.protocols.base import ModelProtocol
 
 # Gemini API 不支持的 JSON Schema 扩展字段
+# 注意：只移除 Gemini 明确拒绝的字段，不要移除 additionalProperties 等
+# 其他提供商支持的字段，否则会导致故障转移时格式不兼容
 _JSON_SCHEMA_EXTRA_KEYS = frozenset({
     "$schema", "$id", "$ref", "$defs", "definitions",
-    "additionalProperties", "unevaluatedProperties",
-    "if", "then", "else", "allOf", "anyOf", "oneOf", "not",
 })
 
 
