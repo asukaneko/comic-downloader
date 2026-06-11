@@ -11152,8 +11152,43 @@ def main(params):
                     this.expandedMemory = this.expandedMemory === id ? null : id;
                 },
 
+                selectMemorySpace(space) {
+                    this.selectedMemorySpace = space.id;
+                    this.expandedMemory = null;
+                    this.selectedMemoryIds = [];
+                    this.memoryCharacterFilter = '';
+                },
+
+                backToMemorySpaces() {
+                    this.selectedMemorySpace = null;
+                    this.expandedMemory = null;
+                    this.selectedMemoryIds = [];
+                    this.memorySelectMode = false;
+                },
+
+                getMemorySpaceSubtitle(space) {
+                    if (!space) return '';
+                    if (space.type === 'public') return '对所有角色与会话可用的共享记忆';
+                    return `${space.name} 的专属记忆档案`;
+                },
+
+                getMemorySpacePreview(space) {
+                    const items = this._applyMemorySort(space?.memories || []);
+                    const latest = items[0];
+                    if (!latest) return '暂无记忆，点击进入后可以添加第一条。';
+                    return latest.summary || latest.title || latest.key || latest.content || latest.value || '最近有一条记忆更新';
+                },
+
                 _applyMemoryFilter(memories) {
                     let result = memories || [];
+                    if (this.selectedMemorySpace === 'public') {
+                        result = result.filter(m => !m.character_name);
+                    } else if (this.selectedMemorySpace && this.selectedMemorySpace.startsWith('character:')) {
+                        const selectedCharacter = this.selectedMemorySpace.slice('character:'.length);
+                        result = result.filter(m => m.character_name === selectedCharacter);
+                    } else if (this.memoryCharacterFilter) {
+                        result = result.filter(m => m.character_name === this.memoryCharacterFilter);
+                    }
                     if (this.memorySearch) {
                         const search = this.memorySearch.toLowerCase();
                         result = result.filter(m => {
@@ -11163,7 +11198,7 @@ def main(params):
                             return title.includes(search) || content.includes(search) || charName.includes(search);
                         });
                     }
-                    if (this.memoryCharacterFilter) {
+                    if (this.memoryCharacterFilter && this.selectedMemorySpace === null) {
                         result = result.filter(m => m.character_name === this.memoryCharacterFilter);
                     }
                     return result;
@@ -11286,6 +11321,12 @@ def main(params):
                         this.editingMemory.character_name = this.currentSession.sender_name;
                     } else if (this.personality && this.personality.name) {
                         this.editingMemory.character_name = this.personality.name;
+                    }
+                    // 从记忆空间进入时，以当前空间为准；公共空间保持空角色。
+                    if (this.selectedMemorySpace === 'public') {
+                        this.editingMemory.character_name = '';
+                    } else if (this.selectedMemorySpace && this.selectedMemorySpace.startsWith('character:')) {
+                        this.editingMemory.character_name = this.selectedMemorySpace.slice('character:'.length);
                     }
                     this.showAddMemoryModal = true;
                 },

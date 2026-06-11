@@ -4159,9 +4159,67 @@
                             </div>
                         </div>
 
+                        <!-- 记忆空间入口 -->
+                        <div v-if="selectedMemorySpace === null" class="memory-space-panel">
+                            <div class="memory-space-panel-header">
+                                <div>
+                                    <div class="memory-space-eyebrow">Memory Spaces</div>
+                                    <h2>选择记忆空间</h2>
+                                    <p>先按公共记忆或角色分组浏览，点进卡片后再查看、编辑对应记忆。</p>
+                                </div>
+                                <div class="memory-space-header-actions">
+                                    <button class="btn btn-primary btn-sm" @click="openAddMemoryModal">
+                                        <i class="fas fa-plus"></i> 添加记忆
+                                    </button>
+                                    <button class="btn-icon memory-toolbar-btn" @click="importMemoryDialog" title="导入记忆">
+                                        <i class="fas fa-file-import"></i>
+                                    </button>
+                                    <button class="btn-icon memory-toolbar-btn" @click="exportMemory" title="导出记忆">
+                                        <i class="fas fa-file-export"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="memory-space-grid">
+                                <div
+                                    v-for="space in memorySpaces"
+                                    :key="space.id"
+                                    class="memory-space-card"
+                                    :class="{ public: space.type === 'public', empty: space.total === 0 }"
+                                    @click="selectMemorySpace(space)"
+                                >
+                                    <div class="memory-space-portrait" :class="{ 'has-portrait': space.portrait }">
+                                        <img v-if="space.portrait" :src="space.portrait" :alt="space.name">
+                                        <i v-else :class="space.icon"></i>
+                                    </div>
+                                    <div class="memory-space-info">
+                                        <div class="memory-space-type">{{ space.type === 'public' ? '公共记忆' : '角色记忆' }}</div>
+                                        <h3>{{ space.name }}</h3>
+                                        <p>{{ getMemorySpaceSubtitle(space) }}</p>
+                                        <div class="memory-space-preview">{{ getMemorySpacePreview(space) }}</div>
+                                    </div>
+                                    <div class="memory-space-metrics">
+                                        <span><b>{{ space.longCount }}</b> 长期</span>
+                                        <span><b>{{ space.shortCount }}</b> 短期</span>
+                                        <span><b>{{ space.total }}</b> 总计</span>
+                                    </div>
+                                    <div class="memory-space-open">
+                                        <span>查看记忆</span>
+                                        <i class="fas fa-arrow-right"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- 工具栏 -->
-                        <div class="memory-toolbar">
+                        <div v-if="selectedMemorySpace !== null" class="memory-toolbar memory-detail-toolbar">
                             <div class="memory-toolbar-left">
+                                <button class="btn btn-secondary btn-sm" @click="backToMemorySpaces">
+                                    <i class="fas fa-arrow-left"></i> 返回卡片
+                                </button>
+                                <div class="memory-detail-title">
+                                    <span>{{ selectedMemorySpaceInfo ? selectedMemorySpaceInfo.name : '记忆详情' }}</span>
+                                    <small>{{ selectedMemorySpaceInfo ? getMemorySpaceSubtitle(selectedMemorySpaceInfo) : '' }}</small>
+                                </div>
                                 <button class="btn btn-primary btn-sm" @click="openAddMemoryModal">
                                     <i class="fas fa-plus"></i> 添加
                                 </button>
@@ -4206,7 +4264,7 @@
                         </div>
 
                         <!-- 记忆列表 -->
-                        <div class="memory-grid">
+                        <div v-if="selectedMemorySpace !== null" class="memory-grid">
                             <!-- 长期记忆 -->
                             <div v-if="memoryFilter !== 'short'" class="memory-section">
                                 <div class="memory-section-header">
@@ -10906,6 +10964,7 @@
                     memorySearch: '',
                     memoryFilter: 'all',
                     memoryCharacterFilter: '',
+                    selectedMemorySpace: null,
                     memorySortBy: 'newest',
                     memorySelectMode: false,
                     selectedMemoryIds: [],
@@ -12376,6 +12435,61 @@
                         if (m.character_name) names.add(m.character_name);
                     });
                     return [...names].sort();
+                },
+
+                memorySpaces() {
+                    const groups = new Map();
+                    const makeSpace = (id, type, name) => ({
+                        id,
+                        type,
+                        name,
+                        memories: [],
+                        longCount: 0,
+                        shortCount: 0,
+                        total: 0,
+                        portrait: null,
+                        icon: type === 'public' ? 'fas fa-globe-asia' : 'fas fa-user-circle',
+                        latestAt: 0
+                    });
+                    groups.set('public', makeSpace('public', 'public', '公共记忆'));
+                    (this.memories || []).forEach(mem => {
+                        const characterName = mem.character_name || '';
+                        const id = characterName ? `character:${characterName}` : 'public';
+                        if (!groups.has(id)) groups.set(id, makeSpace(id, 'character', characterName));
+                        const space = groups.get(id);
+                        space.memories.push(mem);
+                        space.total += 1;
+                        if ((mem.type || 'long') === 'short') space.shortCount += 1;
+                        else space.longCount += 1;
+                        const created = new Date(mem.created_at || mem.updated_at || 0).getTime() || 0;
+                        space.latestAt = Math.max(space.latestAt, created);
+                    });
+                    (this.customPersonalityPresets || []).forEach(preset => {
+                        const name = preset.name || preset.sender_name;
+                        if (!name) return;
+                        const id = `character:${name}`;
+                        if (!groups.has(id)) groups.set(id, makeSpace(id, 'character', name));
+                    });
+                    const spaces = [...groups.values()].map(space => {
+                        if (space.type === 'character') {
+                            const portrait = this.getCharacterPortraitByName(space.name);
+                            space.portrait = portrait.portrait;
+                            space.icon = portrait.avatar || 'fas fa-user-circle';
+                        }
+                        return space;
+                    });
+                    spaces.sort((a, b) => {
+                        if (a.type === 'public') return -1;
+                        if (b.type === 'public') return 1;
+                        if (b.total !== a.total) return b.total - a.total;
+                        return a.name.localeCompare(b.name);
+                    });
+                    return spaces;
+                },
+
+                selectedMemorySpaceInfo() {
+                    if (this.selectedMemorySpace === null) return null;
+                    return this.memorySpaces.find(space => space.id === this.selectedMemorySpace) || null;
                 },
 
                 sortedFilteredLongTermMemories() {
