@@ -491,6 +491,7 @@ class WebCallbacks(PipelineCallbacks):
             {"session_id": self.session_id, "message": message},
             room=self.session_id,
         )
+        self._try_send_push(message)
 
     def on_stream_start(self, ctx: PipelineContext, message: Dict) -> None:
         self.server.socketio.emit(
@@ -537,6 +538,31 @@ class WebCallbacks(PipelineCallbacks):
             room=self.session_id,
         )
         self.server.socketio.sleep(0)
+        self._try_send_push(streamed_msg or {})
+
+    def _try_send_push(self, message: Dict) -> None:
+        """尝试发送浏览器推送通知（仅在用户不在页面时）。"""
+        try:
+            from nbot.web.routes.push import send_web_push
+            content = str(message.get("content") or "").strip()
+            if not content:
+                return
+            # 截取前 100 字符作为通知正文
+            preview = content[:100]
+            if len(content) > 100:
+                preview += "..."
+            sender = message.get("sender") or "AI"
+            send_web_push(
+                self.server,
+                title=sender,
+                body=preview,
+                url=f"/?session_id={self.session_id}",
+                session_id=self.session_id,
+                tag="nekobot-message",
+                skip_visible=True,
+            )
+        except Exception as exc:
+            _log.debug("Push notification skipped: %s", exc)
 
     # ---- 表情包 ----
 

@@ -45,7 +45,7 @@ def ensure_vapid_keys(data_dir: str) -> dict:
 
     meta = {
         "public_key": _public_key_to_webpush_base64(private_key.public_key()),
-        "subject": os.getenv("VAPID_SUBJECT", "mailto:admin@localhost"),
+        "subject": os.getenv("VAPID_SUBJECT", "mailto:noreply@nekobot.local"),
     }
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
