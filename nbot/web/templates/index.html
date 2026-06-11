@@ -6530,169 +6530,109 @@
 
                     <!-- Settings -->
                     <div v-if="currentPage === 'settings'" class="fade-in">
-                        <div class="card">
-                            <div class="card-header">
-                                <span class="card-title">{{ $t('page.settings') }}</span>
-                                <button class="btn btn-primary" @click="saveSettings" :disabled="isLoading">
-                                    <i class="fas fa-save"></i> 保存设置
-                                </button>
+                        <div class="settings-page">
+
+                            <!-- Header -->
+                            <div class="settings-header">
+                                <div class="settings-header-left">
+                                    <div class="settings-header-title">
+                                        <i class="fas fa-cog"></i>
+                                        {{ $t('page.settings') }}
+                                    </div>
+                                    <div class="settings-header-desc">管理服务端口、功能开关、数据维护、配置迁移与版本更新</div>
+                                </div>
+                                <div class="settings-header-actions">
+                                    <button class="btn btn-secondary" @click="refreshSettings" :disabled="isLoading">
+                                        <i class="fas fa-rotate"></i> 刷新
+                                    </button>
+                                    <button class="btn btn-primary" @click="saveSettings" :disabled="isLoading">
+                                        <i class="fas fa-save"></i> 保存设置
+                                    </button>
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <div class="grid-2">
-                                    <div class="form-group">
-                                        <label class="form-label">Web 服务端口</label>
-                                        <input v-model.number="settings.web_port" type="number" class="form-input">
-                                        <div class="form-hint">保存后需重启服务生效</div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">QQ Bot WS 地址</label>
-                                        <input v-model="settings.ws_uri" type="text" class="form-input" placeholder="ws://127.0.0.1:3001">
-                                        <div class="form-hint">保存后需重启服务生效</div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">管理员 QQ 号</label>
-                                        <input v-model="settings.master_id" type="text" class="form-input" placeholder="多个用逗号分隔">
-                                        <div class="form-hint">保存后需重启服务生效</div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">机器人 QQ 号</label>
-                                        <input v-model="settings.bot_id" type="text" class="form-input">
-                                        <div class="form-hint">保存后需重启服务生效</div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label class="form-label">公网访问地址</label>
-                                        <input v-model="settings.public_base_url" type="text" class="form-input" placeholder="https://example.com">
-                                        <div class="form-hint">用于 QQ/外部客户端访问签名文件链接；保存后立即生效。</div>
-                                    </div>
+
+                            <!-- Tab Navigation -->
+                            <div class="settings-tabs">
+                                <div class="settings-tab" :class="{ active: settingsTab === 'basic' }" @click="settingsTab = 'basic'">
+                                    <i class="fas fa-sliders"></i> 基础设置
                                 </div>
-                                <div class="grid-2" style="margin-top: 16px;">
-                                    <div class="form-group">
-                                        <label class="form-label">启用 HTTPS (SSL)</label>
-                                        <div class="toggle-row">
-                                            <label class="toggle-switch">
-                                                <input type="checkbox" v-model="settings.ssl_enabled">
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                            <span class="toggle-row-label" v-text="settings.ssl_enabled ? '已开启' : '已关闭'"></span>
-                                        </div>
-                                        <div class="form-hint">保存后需重启服务生效</div>
-                                    </div>
-                                    <div class="form-group" v-if="settings.ssl_enabled">
-                                        <label class="form-label">使用自签名证书</label>
-                                        <div class="toggle-row">
-                                            <label class="toggle-switch">
-                                                <input type="checkbox" v-model="settings.ssl_self_signed">
-                                                <span class="toggle-slider"></span>
-                                            </label>
-                                            <span class="toggle-row-label" v-text="settings.ssl_self_signed ? '已开启' : '已关闭'"></span>
-                                        </div>
-                                        <div class="form-hint">自动生成自签名证书（有效期 10 年），无需手动提供证书文件</div>
-                                    </div>
-                                    <div class="form-group" v-if="settings.ssl_enabled && !settings.ssl_self_signed">
-                                        <label class="form-label">SSL 证书文件路径</label>
-                                        <input v-model="settings.ssl_certfile" type="text" class="form-input" placeholder="/path/to/cert.pem">
-                                        <div class="form-hint">PEM 格式证书文件的绝对路径</div>
-                                    </div>
-                                    <div class="form-group" v-if="settings.ssl_enabled && !settings.ssl_self_signed">
-                                        <label class="form-label">SSL 私钥文件路径</label>
-                                        <input v-model="settings.ssl_keyfile" type="text" class="form-input" placeholder="/path/to/key.pem">
-                                        <div class="form-hint">PEM 格式私钥文件的绝对路径</div>
-                                    </div>
+                                <div class="settings-tab" :class="{ active: settingsTab === 'features' }" @click="settingsTab = 'features'">
+                                    <i class="fas fa-toggle-on"></i> 功能开关
                                 </div>
-                                <!-- SSL 证书文件验证 -->
-                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                                    <label class="form-label"><i class="fas fa-file-shield"></i> SSL 证书文件验证</label>
-                                    <div class="form-hint" style="margin-bottom: 12px;">
-                                        上传 CA 颁发机构提供的 fileauth.txt 等验证文件，CA 将通过
-                                        <code style="padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px; font-size: 12px;">/.well-known/pki-validation/文件名</code>
-                                        路径验证域名所有权。
-                                    </div>
-                                    <div class="config-transfer-panel">
-                                        <div class="config-transfer-title">
-                                            <i class="fas fa-upload"></i>
-                                            验证文件管理
+                                <div class="settings-tab" :class="{ active: settingsTab === 'data' }" @click="settingsTab = 'data'">
+                                    <i class="fas fa-database"></i> 数据维护
+                                </div>
+                                <div class="settings-tab" :class="{ active: settingsTab === 'transfer' }" @click="settingsTab = 'transfer'">
+                                    <i class="fas fa-exchange-alt"></i> 配置迁移
+                                </div>
+                                <div class="settings-tab" :class="{ active: settingsTab === 'ssl' }" @click="settingsTab = 'ssl'">
+                                    <i class="fas fa-shield-halved"></i> SSL / 服务
+                                </div>
+                                <div class="settings-tab" :class="{ active: settingsTab === 'update' }" @click="settingsTab = 'update'">
+                                    <i class="fas fa-arrow-up-right-dots"></i> 版本更新
+                                </div>
+                            </div>
+
+                            <!-- Tab: 基础设置 -->
+                            <div v-if="settingsTab === 'basic'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-server"></i> 服务配置</div>
+                                    <div class="settings-section-desc">配置 Web 服务端口、Bot 连接地址与管理员信息</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="settings-grid">
+                                        <div class="form-group">
+                                            <label class="form-label">Web 服务端口</label>
+                                            <input v-model.number="settings.web_port" type="number" class="form-input">
+                                            <div class="form-hint">保存后需重启服务生效</div>
                                         </div>
-                                        <!-- 已上传文件列表 -->
-                                        <div v-if="sslValidationFiles.length > 0" style="margin: 12px 0;">
-                                            <div v-for="file in sslValidationFiles" :key="file.filename" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 8px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
-                                                <div style="flex: 1; min-width: 0;">
-                                                    <div style="display: flex; align-items: center; gap: 8px;">
-                                                        <i class="fas fa-file-lines" style="color: var(--accent-primary);"></i>
-                                                        <span style="font-weight: 600; font-size: 13px;">{{ file.filename }}</span>
-                                                        <span v-if="file.original_name && file.original_name !== file.filename" style="font-size: 11px; color: var(--text-secondary);">({{ file.original_name }})</span>
-                                                    </div>
-                                                    <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; display: flex; gap: 12px;">
-                                                        <span>{{ formatBytes(file.size) }}</span>
-                                                        <span v-if="file.uploaded_at">{{ file.uploaded_at }}</span>
-                                                        <a :href="file.url" target="_blank" style="color: var(--accent-primary); text-decoration: none;">{{ file.url }}</a>
-                                                    </div>
-                                                </div>
-                                                <div style="display: flex; gap: 6px; margin-left: 12px;">
-                                                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" @click="editSslValidationFile(file.filename)" title="编辑内容">
-                                                        <i class="fas fa-pen"></i>
-                                                    </button>
-                                                    <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; color: var(--danger-color);" @click="deleteSslValidationFile(file.filename)" title="删除">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
+                                        <div class="form-group">
+                                            <label class="form-label">QQ Bot WS 地址</label>
+                                            <input v-model="settings.ws_uri" type="text" class="form-input" placeholder="ws://127.0.0.1:3001">
+                                            <div class="form-hint">保存后需重启服务生效</div>
                                         </div>
-                                        <div v-else style="padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px;">
-                                            <i class="fas fa-inbox" style="font-size: 24px; display: block; margin-bottom: 8px; opacity: 0.5;"></i>
-                                            暂无验证文件
+                                        <div class="form-group">
+                                            <label class="form-label">管理员 QQ 号</label>
+                                            <input v-model="settings.master_id" type="text" class="form-input" placeholder="多个用逗号分隔">
+                                            <div class="form-hint">保存后需重启服务生效</div>
                                         </div>
-                                        <!-- 上传区域 -->
-                                        <div style="margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                                            <label class="btn btn-primary" style="cursor: pointer; margin: 0;">
-                                                <i class="fas fa-upload"></i> 上传验证文件
-                                                <input type="file" ref="sslValidationFileInput" @change="uploadSslValidationFile" style="display: none;">
-                                            </label>
-                                            <input v-model="sslValidationCustomFilename" type="text" class="form-input" style="max-width: 240px; height: 34px; font-size: 13px;" placeholder="自定义文件名（可选）">
+                                        <div class="form-group">
+                                            <label class="form-label">机器人 QQ 号</label>
+                                            <input v-model="settings.bot_id" type="text" class="form-input">
+                                            <div class="form-hint">保存后需重启服务生效</div>
                                         </div>
-                                        <div class="form-hint" style="margin-top: 6px;">
-                                            默认保留原文件名（如 fileauth.txt），也可自定义文件名。
-                                        </div>
-                                        <!-- 在线编辑器 -->
-                                        <div v-if="sslEditingFile" style="margin-top: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; border: 1px solid var(--border-color);">
-                                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                                                <span style="font-weight: 600; font-size: 13px;">
-                                                    <i class="fas fa-pen-to-square"></i> 编辑: {{ sslEditingFile }}
-                                                </span>
-                                                <button style="background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px;" @click="sslEditingFile = ''">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </div>
-                                            <textarea v-model="sslEditingContent" class="form-input" rows="6" style="width: 100%; font-family: monospace; font-size: 13px; resize: vertical;"></textarea>
-                                            <div style="margin-top: 8px; display: flex; gap: 8px;">
-                                                <button class="btn btn-primary" style="padding: 4px 16px; font-size: 13px;" @click="saveSslValidationContent" :disabled="isLoading">
-                                                    <i class="fas fa-save"></i> 保存
-                                                </button>
-                                                <button class="btn btn-secondary" style="padding: 4px 16px; font-size: 13px;" @click="sslEditingFile = ''">
-                                                    取消
-                                                </button>
-                                            </div>
+                                        <div class="form-group">
+                                            <label class="form-label">公网访问地址</label>
+                                            <input v-model="settings.public_base_url" type="text" class="form-input" placeholder="https://example.com">
+                                            <div class="form-hint">用于 QQ/外部客户端访问签名文件链接；保存后立即生效</div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="form-group" style="margin-top: 20px;">
-                                    <label class="form-label">角色卡平台</label>
-                                    <div class="grid-2">
+                                <div class="settings-section-header" style="margin-top: 28px;">
+                                    <div class="settings-section-title"><i class="fas fa-id-card"></i> 角色卡平台</div>
+                                    <div class="settings-section-desc">配置角色卡平台的连接地址与认证令牌</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="settings-grid">
                                         <div class="form-group">
                                             <label class="form-label">平台地址</label>
                                             <input v-model="settings.role_card_platform_url" type="text" class="form-input" placeholder="http://127.0.0.1:7861">
-                                            <div class="form-hint">用于“我的角色卡”上传到平台，保存后立即生效。</div>
+                                            <div class="form-hint">用于"我的角色卡"上传到平台，保存后立即生效</div>
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label">平台 Token</label>
                                             <input v-model="settings.role_card_platform_token" type="password" class="form-input" placeholder="未设置令牌时可留空">
-                                            <div class="form-hint">对应平台端 ROLE_CARD_API_TOKEN；本地平台未启用令牌时留空。</div>
+                                            <div class="form-hint">对应平台端 ROLE_CARD_API_TOKEN；本地平台未启用令牌时留空</div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="form-group" style="margin-top: 20px;">
-                                    <label class="form-label">{{ $t('language.title') }}</label>
-                                    <div class="grid-2">
+                                <div class="settings-section-header" style="margin-top: 28px;">
+                                    <div class="settings-section-title"><i class="fas fa-language"></i> 界面语言</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="settings-grid">
                                         <div class="form-group">
+                                            <label class="form-label">{{ $t('language.title') }}</label>
                                             <select v-model="currentLanguage" @change="changeLanguage(currentLanguage)" class="form-input">
                                                 <option value="zh">{{ $t('language.zh') }}</option>
                                                 <option value="en">{{ $t('language.en') }}</option>
@@ -6700,144 +6640,149 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="form-group" style="margin-top: 20px;">
-                                    <label class="form-label">{{ $t('settings.feature_toggles') }}</label>
-                                    <div class="feature-switches-grid">
-                                        <!-- 知识库 -->
-                                        <div class="feature-switch-item" @click="settings.features.knowledge = !settings.features.knowledge">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-book feature-switch-icon"></i>
-                                                <span class="feature-switch-label">知识库</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: settings.features.knowledge }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                            </div>
+
+                            <!-- Tab: 功能开关 -->
+                            <div v-if="settingsTab === 'features'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-toggle-on"></i> {{ $t('settings.feature_toggles') }}</div>
+                                    <div class="settings-section-desc">启用或禁用各功能模块，开关会即时生效</div>
+                                </div>
+                                <div class="setting-toggle-grid">
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.features.knowledge }" @click="settings.features.knowledge = !settings.features.knowledge">
+                                        <div class="setting-toggle-icon"><i class="fas fa-book"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">知识库</div>
+                                            <div class="setting-toggle-desc">启用 RAG 知识库检索</div>
                                         </div>
-                                        <!-- 自动记忆 -->
-                                        <div class="feature-switch-item" @click="settings.features.auto_memory = !settings.features.auto_memory">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-brain feature-switch-icon"></i>
-                                                <span class="feature-switch-label">自动保存记忆</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: settings.features.auto_memory }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                                        <label class="toggle-switch" :class="{ active: settings.features.knowledge }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.features.auto_memory }" @click="settings.features.auto_memory = !settings.features.auto_memory">
+                                        <div class="setting-toggle-icon"><i class="fas fa-brain"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">自动保存记忆</div>
+                                            <div class="setting-toggle-desc">对话中自动提取并保存记忆</div>
                                         </div>
-                                        <!-- 显示进度卡片 -->
-                                        <div class="feature-switch-item" @click="toggleThinkingCards()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-tasks feature-switch-icon"></i>
-                                                <span class="feature-switch-label">显示进度卡片</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: showThinkingCard }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                                        <label class="toggle-switch" :class="{ active: settings.features.auto_memory }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': showThinkingCard }" @click="toggleThinkingCards()">
+                                        <div class="setting-toggle-icon"><i class="fas fa-tasks"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">显示进度卡片</div>
+                                            <div class="setting-toggle-desc">对话中展示思考与工具调用过程</div>
                                         </div>
-                                        <!-- Web端TTS开关 -->
-                                        <div class="feature-switch-item" @click="toggleTTS()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-microphone-alt feature-switch-icon"></i>
-                                                <span class="feature-switch-label">Web端语音播报</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: ttsEnabled }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                                        <label class="toggle-switch" :class="{ active: showThinkingCard }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': ttsEnabled }" @click="toggleTTS()">
+                                        <div class="setting-toggle-icon"><i class="fas fa-microphone-alt"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">Web端语音播报</div>
+                                            <div class="setting-toggle-desc">启用 TTS 语音合成播放</div>
                                         </div>
-                                        <!-- Skills 提示词注入 -->
-                                        <div class="feature-switch-item" @click="settings.features.skills_prompt_injection = !settings.features.skills_prompt_injection">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-wand-magic-sparkles feature-switch-icon"></i>
-                                                <span class="feature-switch-label">Skills 提示词注入</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: settings.features.skills_prompt_injection }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                                        <label class="toggle-switch" :class="{ active: ttsEnabled }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.features.skills_prompt_injection }" @click="settings.features.skills_prompt_injection = !settings.features.skills_prompt_injection">
+                                        <div class="setting-toggle-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">Skills 提示词注入</div>
+                                            <div class="setting-toggle-desc">将 Skills 提示词注入对话上下文</div>
                                         </div>
-                                        <div class="feature-switch-item" @click="toggleLive2d()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-user-astronaut feature-switch-icon"></i>
-                                                <span class="feature-switch-label">Live2D 看板娘</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: settings.features.live2d }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                                        <label class="toggle-switch" :class="{ active: settings.features.skills_prompt_injection }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.features.live2d }" @click="toggleLive2d()">
+                                        <div class="setting-toggle-icon"><i class="fas fa-user-astronaut"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">Live2D 看板娘</div>
+                                            <div class="setting-toggle-desc">在页面右下角显示 Live2D 角色</div>
                                         </div>
-                                        <!-- 表情包开关 -->
-                                        <div class="feature-switch-item" @click="toggleSticker()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-face-grin-beam feature-switch-icon"></i>
-                                                <span class="feature-switch-label">AI 表情包</span>
-                                            </div>
-                                            <label class="toggle-switch" :class="{ active: settings.features.sticker }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
+                                        <label class="toggle-switch" :class="{ active: settings.features.live2d }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.features.sticker }" @click="toggleSticker()">
+                                        <div class="setting-toggle-icon"><i class="fas fa-face-grin-beam"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">AI 表情包</div>
+                                            <div class="setting-toggle-desc">对话中自动生成表情包</div>
                                         </div>
-                                        <!-- 表情包发送概率 -->
-                                        <div v-if="settings.features.sticker" class="sticker-probability-row">
-                                            <span class="probability-label">发送概率</span>
-                                            <input type="range" min="0" max="100" :value="(settings.sticker_probability || 50)" @input="onStickerProbabilityChange" class="probability-slider">
-                                            <span class="probability-value">{{ settings.sticker_probability || 50 }}%</span>
-                                        </div>
+                                        <label class="toggle-switch" :class="{ active: settings.features.sticker }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div v-if="settings.features.sticker" class="sticker-prob-row">
+                                        <span class="sticker-prob-label">发送概率</span>
+                                        <input type="range" min="0" max="100" :value="(settings.sticker_probability || 50)" @input="onStickerProbabilityChange" class="probability-slider">
+                                        <span class="sticker-prob-value">{{ settings.sticker_probability || 50 }}%</span>
                                     </div>
                                 </div>
-                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                                    <label class="form-label">{{ $t('settings.data_maintenance') }}</label>
-                                    <div class="feature-switch-item" style="margin-bottom: 12px;" @click="settings.log_cleanup.enabled = !settings.log_cleanup.enabled; saveLogCleanupSettings()">
-                                        <div class="feature-switch-info">
-                                            <i class="fas fa-file-circle-minus feature-switch-icon"></i>
-                                            <span class="feature-switch-label">自动删除 logs 目录日志</span>
+                            </div>
+
+                            <!-- Tab: 数据维护 -->
+                            <div v-if="settingsTab === 'data'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-database"></i> {{ $t('settings.data_maintenance') }}</div>
+                                    <div class="settings-section-desc">管理日志清理规则、保留策略和磁盘空间释放</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="maintenance-summary" v-if="settings.log_cleanup.last_run">
+                                        <div class="maintenance-stat">
+                                            <span class="maintenance-stat-label">上次清理</span>
+                                            <span class="maintenance-stat-value">{{ settings.log_cleanup.last_run || '尚未执行' }}</span>
                                         </div>
-                                        <label class="toggle-switch" :class="{ active: settings.log_cleanup.enabled }">
-                                            <div class="toggle-slider"></div>
-                                        </label>
+                                        <div class="maintenance-stat">
+                                            <span class="maintenance-stat-label">删除文件</span>
+                                            <span class="maintenance-stat-value">{{ settings.log_cleanup.last_deleted_count || 0 }} 个</span>
+                                        </div>
+                                        <div class="maintenance-stat">
+                                            <span class="maintenance-stat-label">裁剪记录</span>
+                                            <span class="maintenance-stat-value">{{ settings.log_cleanup.last_deleted_entries || 0 }} 条</span>
+                                        </div>
+                                        <div class="maintenance-stat">
+                                            <span class="maintenance-stat-label">释放空间</span>
+                                            <span class="maintenance-stat-value">{{ formatBytes(settings.log_cleanup.last_freed_bytes || 0) }}</span>
+                                        </div>
                                     </div>
-                                    <div class="grid-2" v-if="settings.log_cleanup.enabled" style="margin-bottom: 12px;">
-                                        <div class="feature-switch-item" @click="settings.log_cleanup.include_logs_dir = !settings.log_cleanup.include_logs_dir; saveLogCleanupSettings()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-folder-open feature-switch-icon"></i>
-                                                <span class="feature-switch-label">logs 目录日志</span>
+                                    <div v-if="settings.log_cleanup.last_error" class="form-hint" style="margin-bottom: 12px; color: var(--danger);">
+                                        <i class="fas fa-exclamation-triangle"></i> 上次清理错误：{{ settings.log_cleanup.last_error }}
+                                    </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.log_cleanup.enabled }" style="margin-bottom: 16px;" @click="settings.log_cleanup.enabled = !settings.log_cleanup.enabled; saveLogCleanupSettings()">
+                                        <div class="setting-toggle-icon"><i class="fas fa-file-circle-minus"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">自动清理日志</div>
+                                            <div class="setting-toggle-desc">按规则自动删除过期日志文件</div>
+                                        </div>
+                                        <label class="toggle-switch" :class="{ active: settings.log_cleanup.enabled }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div v-if="settings.log_cleanup.enabled">
+                                        <div style="font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 10px;">清理目标</div>
+                                        <div class="maintenance-toggle-list" style="margin-bottom: 16px;">
+                                            <div class="setting-toggle-card" :class="{ 'is-on': settings.log_cleanup.include_logs_dir }" @click="settings.log_cleanup.include_logs_dir = !settings.log_cleanup.include_logs_dir; saveLogCleanupSettings()">
+                                                <div class="setting-toggle-icon"><i class="fas fa-folder-open"></i></div>
+                                                <div class="setting-toggle-info"><div class="setting-toggle-title">logs 目录日志</div></div>
+                                                <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_logs_dir }"><div class="toggle-slider"></div></label>
                                             </div>
-                                            <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_logs_dir }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
-                                        </div>
-                                        <div class="feature-switch-item" @click="settings.log_cleanup.include_system_logs = !settings.log_cleanup.include_system_logs; saveLogCleanupSettings()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-list-ul feature-switch-icon"></i>
-                                                <span class="feature-switch-label">system_logs.json</span>
+                                            <div class="setting-toggle-card" :class="{ 'is-on': settings.log_cleanup.include_system_logs }" @click="settings.log_cleanup.include_system_logs = !settings.log_cleanup.include_system_logs; saveLogCleanupSettings()">
+                                                <div class="setting-toggle-icon"><i class="fas fa-list-ul"></i></div>
+                                                <div class="setting-toggle-info"><div class="setting-toggle-title">system_logs.json</div></div>
+                                                <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_system_logs }"><div class="toggle-slider"></div></label>
                                             </div>
-                                            <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_system_logs }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
-                                        </div>
-                                        <div class="feature-switch-item" @click="settings.log_cleanup.include_token_stats = !settings.log_cleanup.include_token_stats; saveLogCleanupSettings()">
-                                            <div class="feature-switch-info">
-                                                <i class="fas fa-coins feature-switch-icon"></i>
-                                                <span class="feature-switch-label">token_stats.json</span>
+                                            <div class="setting-toggle-card" :class="{ 'is-on': settings.log_cleanup.include_token_stats }" @click="settings.log_cleanup.include_token_stats = !settings.log_cleanup.include_token_stats; saveLogCleanupSettings()">
+                                                <div class="setting-toggle-icon"><i class="fas fa-coins"></i></div>
+                                                <div class="setting-toggle-info"><div class="setting-toggle-title">token_stats.json</div></div>
+                                                <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_token_stats }"><div class="toggle-slider"></div></label>
                                             </div>
-                                            <label class="toggle-switch" :class="{ active: settings.log_cleanup.include_token_stats }">
-                                                <div class="toggle-slider"></div>
-                                            </label>
                                         </div>
-                                    </div>
-                                    <div class="grid-2" v-if="settings.log_cleanup.enabled" style="margin-bottom: 12px;">
-                                        <div class="form-group">
-                                            <label class="form-label">保留天数</label>
-                                            <input v-model.number="settings.log_cleanup.retention_days" type="number" min="0" class="form-input" placeholder="0 表示不按天数删除" @change="saveLogCleanupSettings">
-                                            <div class="form-hint">超过该天数的日志文件会被删除，填 0 则关闭此规则。</div>
+                                        <div class="cleanup-rules-grid">
+                                            <div class="form-group">
+                                                <label class="form-label">保留天数</label>
+                                                <input v-model.number="settings.log_cleanup.retention_days" type="number" min="0" class="form-input" placeholder="0 表示不按天数删除" @change="saveLogCleanupSettings">
+                                                <div class="form-hint">超过该天数的日志会被删除，填 0 关闭此规则</div>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label">最大目录大小 (MB)</label>
+                                                <input v-model.number="settings.log_cleanup.max_size_mb" type="number" min="0" class="form-input" placeholder="0 表示不按大小删除" @change="saveLogCleanupSettings">
+                                                <div class="form-hint">超过该大小时从最早日志开始删除</div>
+                                            </div>
                                         </div>
-                                        <div class="form-group">
-                                            <label class="form-label">最大目录大小 MB</label>
-                                            <input v-model.number="settings.log_cleanup.max_size_mb" type="number" min="0" class="form-input" placeholder="0 表示不按大小删除" @change="saveLogCleanupSettings">
-                                            <div class="form-hint">logs 目录超过该大小时，从最早修改的日志开始删除。</div>
-                                        </div>
+                                        <div class="form-hint" style="margin-top: 10px;">勾选 system_logs.json / token_stats.json 时会按同样规则裁剪 JSON 内的旧记录。</div>
                                     </div>
-                                    <div v-if="settings.log_cleanup.enabled" class="form-hint" style="margin-bottom: 12px;">
-                                        上次清理：{{ settings.log_cleanup.last_run || '尚未执行' }}；删除 {{ settings.log_cleanup.last_deleted_count || 0 }} 个文件；裁剪 {{ settings.log_cleanup.last_deleted_entries || 0 }} 条记录；释放 {{ formatBytes(settings.log_cleanup.last_freed_bytes || 0) }}。
-                                        勾选 system_logs.json / token_stats.json 时会按同样规则裁剪 JSON 内的旧记录。
-                                        <span v-if="settings.log_cleanup.last_error" style="color: var(--danger-color);">错误：{{ settings.log_cleanup.last_error }}</span>
-                                    </div>
-                                    <div style="display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+                                    <div class="danger-zone-actions">
                                         <button class="btn btn-secondary" @click="cleanupLogFiles" :disabled="isLoading || !settings.log_cleanup.enabled">
                                             <i class="fas fa-broom"></i> 立即清理日志
                                         </button>
@@ -6845,72 +6790,188 @@
                                             <i class="fas fa-broom"></i> {{ isCleaningPortraits ? '清理中...' : '清理未使用角色立绘' }}
                                         </button>
                                     </div>
-                                    <div class="form-hint">删除未被任何角色卡引用的立绘文件，释放磁盘空间</div>
+                                    <div class="form-hint" style="margin-top: 8px;"><i class="fas fa-info-circle"></i> 删除未被任何角色卡引用的立绘文件，释放磁盘空间</div>
                                 </div>
-                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                                    <label class="form-label">配置迁移</label>
-                                    <div class="config-transfer-panel">
-                                        <div class="config-transfer-title">
-                                            <i class="fas fa-lock"></i>
-                                            加密导出 / 导入全部配置
-                                        </div>
-                                        <div class="config-transfer-desc">用于快速切换服务器。导出内容包含系统设置、AI 模型、API Keys、频道、Skills、Tools、定时任务、人格、聊天记录和角色立绘，打包为 ZIP 文件。导入支持 ZIP 和旧版 .nbotcfg 格式，不包含登录令牌。</div>
-                                        <div class="grid-2">
+                            </div>
+
+                            <!-- Tab: 配置迁移 -->
+                            <div v-if="settingsTab === 'transfer'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-exchange-alt"></i> 配置迁移</div>
+                                    <div class="settings-section-desc">加密导出或导入全部配置，用于快速迁移或备份</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="config-transfer-grid">
+                                        <div class="config-transfer-side">
+                                            <div class="config-transfer-side-title"><i class="fas fa-file-export"></i> 导出配置</div>
                                             <div class="form-group">
                                                 <label class="form-label">导出密码</label>
                                                 <input v-model="configExportPassword" type="password" class="form-input" placeholder="用于加密配置包">
                                             </div>
+                                            <button class="btn btn-primary" style="width: 100%; justify-content: center; margin-top: 8px;" @click="exportAllConfig" :disabled="isLoading || !configExportPassword">
+                                                <i class="fas fa-file-export"></i> 一键导出全部配置
+                                            </button>
+                                        </div>
+                                        <div class="config-transfer-side">
+                                            <div class="config-transfer-side-title"><i class="fas fa-file-import"></i> 导入配置</div>
                                             <div class="form-group">
                                                 <label class="form-label">导入密码</label>
                                                 <input v-model="configImportPassword" type="password" class="form-input" placeholder="导出时设置的密码">
                                             </div>
-                                        </div>
-                                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                                            <button class="btn btn-primary" @click="exportAllConfig" :disabled="isLoading || !configExportPassword">
-                                                <i class="fas fa-file-export"></i> 一键导出全部配置
-                                            </button>
-                                            <button class="btn btn-secondary" @click="triggerConfigImport" :disabled="isLoading || !configImportPassword">
+                                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 8px;" @click="triggerConfigImport" :disabled="isLoading || !configImportPassword">
                                                 <i class="fas fa-file-import"></i> 导入配置包
                                             </button>
-                                            <span v-if="configImportFileName" class="form-hint">已选择: {{ configImportFileName }}</span>
+                                            <div v-if="configImportFileName" class="form-hint" style="margin-top: 6px;">已选择: {{ configImportFileName }}</div>
+                                            <div class="config-transfer-warning"><i class="fas fa-exclamation-triangle"></i> 导入会覆盖现有配置，请谨慎操作</div>
                                         </div>
-                                    </div>
-                                </div>
-                                <div class="form-group" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
-                                    <label class="form-label">{{ $t('update.title') }}</label>
-                                    <div class="config-transfer-panel">
-                                        <div class="config-transfer-title">
-                                            <i class="fas fa-download"></i>
-                                            {{ $t('update.current_version') }}: v{{ currentVersion }}
-                                            <span v-if="updateInfo && updateInfo.has_update" style="margin-left: 12px; color: var(--accent-primary); font-weight: 600;">
-                                                → v{{ updateInfo.latest_version }}
-                                            </span>
+                                        <div class="config-transfer-note">
+                                            <i class="fas fa-info-circle"></i>
+                                            导出内容包含：系统设置、AI 模型、API Keys、频道、Skills、Tools、定时任务、人格、聊天记录和角色立绘，打包为 ZIP 文件。导入支持 ZIP 和旧版 .nbotcfg 格式。<b>不包含登录令牌。</b>
                                         </div>
-                                        <div v-if="updateInfo && updateInfo.has_update && updateInfo.release_notes" class="update-release-notes" style="margin: 12px 0; padding: 12px; background: var(--bg-secondary, rgba(0,0,0,0.05)); border-radius: 8px; max-height: 200px; overflow-y: auto; font-size: 13px; line-height: 1.6; white-space: pre-wrap;">{{ updateInfo.release_notes }}</div>
-                                        <div v-if="updateInfo && !updateInfo.has_update && !updateInfo.error" style="margin: 8px 0; color: var(--success, #22c55e); font-size: 13px;">
-                                            <i class="fas fa-check-circle"></i> {{ $t('update.up_to_date') }}
-                                        </div>
-                                        <div v-if="updateInfo && updateInfo.error" style="margin: 8px 0; color: var(--warning, #f59e0b); font-size: 13px;">
-                                            <i class="fas fa-exclamation-triangle"></i> {{ updateInfo.error }}
-                                        </div>
-                                        <div v-if="updateProgress" style="margin: 8px 0; color: var(--text-secondary); font-size: 13px;">
-                                            <i class="fas fa-spinner fa-spin"></i> {{ updateProgress }}
-                                        </div>
-                                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-                                            <button class="btn btn-secondary" @click="checkForUpdate" :disabled="isCheckingUpdate">
-                                                <i class="fas fa-sync-alt"></i> {{ isCheckingUpdate ? $t('update.checking') : $t('update.check') }}
-                                            </button>
-                                            <button v-if="updateInfo && updateInfo.has_update" class="btn btn-primary" @click="doUpdate" :disabled="isUpdating">
-                                                <i class="fas fa-download"></i> {{ isUpdating ? $t('update.updating') : $t('update.update_now') }}
-                                            </button>
-                                            <span v-if="updateInfo && updateInfo.has_update && updateInfo.published_at" class="form-hint">
-                                                {{ $t('update.published_at') }}: {{ new Date(updateInfo.published_at).toLocaleDateString() }}
-                                            </span>
-                                        </div>
-                                        <div class="form-hint" style="margin-top: 8px;">{{ $t('update.restart_hint') }}</div>
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Tab: SSL / 服务 -->
+                            <div v-if="settingsTab === 'ssl'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-shield-halved"></i> HTTPS / SSL 配置</div>
+                                    <div class="settings-section-desc">管理 SSL 证书、自签名选项和证书验证文件</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="settings-grid">
+                                        <div class="form-group">
+                                            <label class="form-label">启用 HTTPS (SSL)</label>
+                                            <div class="toggle-row">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" v-model="settings.ssl_enabled">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <span class="toggle-row-label" v-text="settings.ssl_enabled ? '已开启' : '已关闭'"></span>
+                                            </div>
+                                            <div class="form-hint">保存后需重启服务生效</div>
+                                        </div>
+                                        <div class="form-group" v-if="settings.ssl_enabled">
+                                            <label class="form-label">使用自签名证书</label>
+                                            <div class="toggle-row">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" v-model="settings.ssl_self_signed">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <span class="toggle-row-label" v-text="settings.ssl_self_signed ? '已开启' : '已关闭'"></span>
+                                            </div>
+                                            <div class="form-hint">自动生成自签名证书（有效期 10 年），无需手动提供证书文件</div>
+                                        </div>
+                                        <div class="form-group" v-if="settings.ssl_enabled && !settings.ssl_self_signed">
+                                            <label class="form-label">SSL 证书文件路径</label>
+                                            <input v-model="settings.ssl_certfile" type="text" class="form-input" placeholder="/path/to/cert.pem">
+                                            <div class="form-hint">PEM 格式证书文件的绝对路径</div>
+                                        </div>
+                                        <div class="form-group" v-if="settings.ssl_enabled && !settings.ssl_self_signed">
+                                            <label class="form-label">SSL 私钥文件路径</label>
+                                            <input v-model="settings.ssl_keyfile" type="text" class="form-input" placeholder="/path/to/key.pem">
+                                            <div class="form-hint">PEM 格式私钥文件的绝对路径</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="settings-section-header" style="margin-top: 28px;">
+                                    <div class="settings-section-title"><i class="fas fa-file-shield"></i> SSL 证书文件验证</div>
+                                    <div class="settings-section-desc">
+                                        上传 CA 颁发机构提供的验证文件，CA 将通过
+                                        <code class="code-badge">/.well-known/pki-validation/文件名</code>
+                                        路径验证域名所有权
+                                    </div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="ssl-file-list" v-if="sslValidationFiles.length > 0">
+                                        <div class="ssl-file-item" v-for="file in sslValidationFiles" :key="file.filename">
+                                            <div class="ssl-file-info">
+                                                <div class="ssl-file-name">
+                                                    <i class="fas fa-file-lines"></i>
+                                                    {{ file.filename }}
+                                                    <span v-if="file.original_name && file.original_name !== file.filename" style="font-size: 11px; color: var(--text-muted); font-weight: 400;">({{ file.original_name }})</span>
+                                                </div>
+                                                <div class="ssl-file-meta">
+                                                    <span>{{ formatBytes(file.size) }}</span>
+                                                    <span v-if="file.uploaded_at">{{ file.uploaded_at }}</span>
+                                                    <a :href="file.url" target="_blank" style="color: var(--accent-primary); text-decoration: none;">{{ file.url }}</a>
+                                                </div>
+                                            </div>
+                                            <div class="ssl-file-actions">
+                                                <button class="btn btn-secondary" @click="editSslValidationFile(file.filename)" title="编辑内容"><i class="fas fa-pen"></i></button>
+                                                <button class="btn btn-secondary" style="color: var(--danger);" @click="deleteSslValidationFile(file.filename)" title="删除"><i class="fas fa-trash"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div v-else class="ssl-empty">
+                                        <i class="fas fa-inbox"></i>
+                                        暂无验证文件
+                                    </div>
+                                    <div class="upload-zone">
+                                        <label class="btn btn-primary" style="cursor: pointer; margin: 0;">
+                                            <i class="fas fa-upload"></i> 上传验证文件
+                                            <input type="file" ref="sslValidationFileInput" @change="uploadSslValidationFile" style="display: none;">
+                                        </label>
+                                        <input v-model="sslValidationCustomFilename" type="text" class="form-input" style="max-width: 240px; height: 36px; font-size: 13px;" placeholder="自定义文件名（可选）">
+                                    </div>
+                                    <div class="form-hint" style="margin-top: 6px;">默认保留原文件名（如 fileauth.txt），也可自定义文件名</div>
+                                    <div v-if="sslEditingFile" class="ssl-editor">
+                                        <div class="ssl-editor-header">
+                                            <span class="ssl-editor-title"><i class="fas fa-pen-to-square"></i> 编辑: {{ sslEditingFile }}</span>
+                                            <button class="ssl-editor-close" @click="sslEditingFile = ''"><i class="fas fa-times"></i></button>
+                                        </div>
+                                        <textarea v-model="sslEditingContent" rows="6"></textarea>
+                                        <div class="ssl-editor-actions">
+                                            <button class="btn btn-primary" @click="saveSslValidationContent" :disabled="isLoading"><i class="fas fa-save"></i> 保存</button>
+                                            <button class="btn btn-secondary" @click="sslEditingFile = ''">取消</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tab: 版本更新 -->
+                            <div v-if="settingsTab === 'update'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-arrow-up-right-dots"></i> {{ $t('update.title') }}</div>
+                                    <div class="settings-section-desc">检查并安装最新版本</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                                        <div class="version-badge"><i class="fas fa-code-branch"></i> v{{ currentVersion }}</div>
+                                        <button class="btn btn-secondary" @click="checkForUpdate" :disabled="isCheckingUpdate">
+                                            <i class="fas fa-sync-alt"></i> {{ isCheckingUpdate ? $t('update.checking') : $t('update.check') }}
+                                        </button>
+                                    </div>
+                                    <div v-if="updateInfo && !updateInfo.has_update && !updateInfo.error" class="version-status is-latest">
+                                        <i class="fas fa-check-circle"></i> {{ $t('update.up_to_date') }}
+                                    </div>
+                                    <div v-if="updateInfo && updateInfo.has_update" class="version-status has-update">
+                                        <i class="fas fa-arrow-right"></i> 发现新版本 v{{ updateInfo.latest_version }}
+                                    </div>
+                                    <div v-if="updateInfo && updateInfo.error" class="version-status has-error">
+                                        <i class="fas fa-exclamation-triangle"></i> {{ updateInfo.error }}
+                                    </div>
+                                    <div v-if="updateProgress" style="margin-top: 8px; color: var(--text-secondary); font-size: 13px;">
+                                        <i class="fas fa-spinner fa-spin"></i> {{ updateProgress }}
+                                    </div>
+                                    <div v-if="updateInfo && updateInfo.has_update && updateInfo.release_notes" class="update-release-notes">{{ updateInfo.release_notes }}</div>
+                                    <div v-if="updateInfo && updateInfo.has_update" style="margin-top: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                                        <button class="btn btn-primary" @click="doUpdate" :disabled="isUpdating">
+                                            <i class="fas fa-download"></i> {{ isUpdating ? $t('update.updating') : $t('update.update_now') }}
+                                        </button>
+                                        <span v-if="updateInfo.published_at" class="form-hint">{{ $t('update.published_at') }}: {{ new Date(updateInfo.published_at).toLocaleDateString() }}</span>
+                                    </div>
+                                    <div class="form-hint" style="margin-top: 12px;"><i class="fas fa-info-circle"></i> {{ $t('update.restart_hint') }}</div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Sticky Save Bar -->
+                        <div v-if="settingsDirty" class="sticky-save-bar">
+                            <span class="sticky-save-hint"><i class="fas fa-circle-exclamation"></i> 有未保存的更改</span>
+                            <button class="btn btn-primary" @click="saveSettings" :disabled="isLoading"><i class="fas fa-save"></i> 保存设置</button>
+                            <button class="btn btn-secondary" @click="discardSettings"><i class="fas fa-undo"></i> 撤销更改</button>
                         </div>
                     </div>
 
@@ -11644,6 +11705,11 @@
                     sslEditingFile: '',
                     sslEditingContent: '',
 
+                    // Settings page UI state
+                    settingsTab: 'basic',
+                    settingsDirty: false,
+                    settingsSnapshot: '',
+
                     // Update
                     currentVersion: '',
                     updateInfo: null,
@@ -12775,6 +12841,12 @@
                 document.title = 'NekoBot Dashboard';
                 // 初始化主题
                 this.initTheme();
+
+                // Settings dirty tracking watcher
+                this.$watch('settings', () => {
+                    if (!this.settingsSnapshot) return;
+                    this.settingsDirty = JSON.stringify(this.settings) !== this.settingsSnapshot;
+                }, { deep: true });
 
                 // 加载自定义字体后再应用消息样式
                 this.loadCustomFonts();

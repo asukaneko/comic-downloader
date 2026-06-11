@@ -5546,6 +5546,8 @@ def main(params):
                             window.__nbotLive2dSetEnabled(this.settings.features.live2d);
                         }
                         this.updateContextStats();
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
                     } catch (e) {
                         console.error('Failed to load settings:', e);
                     }
@@ -7126,6 +7128,8 @@ def main(params):
                     }
                     try {
                         await api.put('/api/settings', { features: { live2d: this.settings.features.live2d } });
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
                         this.showToast(this.settings.features.live2d ? 'Live2D 看板娘已开启' : 'Live2D 看板娘已关闭', 'info');
                     } catch (e) {
                         this.settings.features.live2d = !this.settings.features.live2d;
@@ -7142,6 +7146,8 @@ def main(params):
                     this.settings.features.sticker = newValue;
                     try {
                         await api.put('/api/settings', { features: { sticker: newValue } });
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
                         this.showToast(newValue ? 'AI 表情包已开启' : 'AI 表情包已关闭', 'info');
                     } catch (e) {
                         this.settings.features.sticker = !newValue;
@@ -7155,6 +7161,8 @@ def main(params):
                     this.settings.sticker_probability = value;
                     try {
                         await api.put('/api/settings', { sticker_probability: value });
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
                     } catch (e) {
                         console.warn('[Sticker] 概率设置保存失败:', e);
                     }
@@ -13031,12 +13039,36 @@ def main(params):
                     this.isLoading = true;
                     try {
                         await api.put('/api/settings', this.settings);
+                        this.settingsDirty = false;
+                        this.settingsSnapshot = JSON.stringify(this.settings);
                         this.showToast('设置已保存', 'success');
                     } catch (e) {
                         this.showToast('保存失败', 'error');
                     } finally {
                         this.isLoading = false;
                     }
+                },
+
+                markSettingsDirty() {
+                    if (!this.settingsSnapshot) return;
+                    this.settingsDirty = JSON.stringify(this.settings) !== this.settingsSnapshot;
+                },
+
+                discardSettings() {
+                    if (this.settingsSnapshot) {
+                        const snap = JSON.parse(this.settingsSnapshot);
+                        Object.keys(snap).forEach(k => {
+                            this.settings[k] = snap[k];
+                        });
+                    }
+                    this.settingsDirty = false;
+                    this.showToast('已撤销更改', 'info');
+                },
+
+                async refreshSettings() {
+                    await this.loadSettings();
+                    this.settingsDirty = false;
+                    this.showToast('设置已刷新', 'success');
                 },
 
                 async cleanupLogFiles() {
@@ -13078,6 +13110,8 @@ def main(params):
                             ...cleanup,
                             ...((res.data?.settings || {}).log_cleanup || {})
                         };
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
                         if (!options.silent) {
                             this.showToast('日志清理配置已保存', 'success');
                         }
