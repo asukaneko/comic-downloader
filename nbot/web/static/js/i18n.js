@@ -1281,6 +1281,25 @@ const i18nMessages = {
     'settings.import_config': '导入配置包',
     'settings.upload_skill_folder': '上传 Skill 文件夹',
 
+    // PWA 安装
+    'settings.pwa_install': 'PWA 应用安装',
+    'settings.pwa_install_desc': '将 NekoBot 安装为桌面应用，获得更好的使用体验',
+    'settings.pwa_installed': '已安装',
+    'settings.pwa_installable': '可安装',
+    'settings.pwa_unavailable': '当前环境不支持安装',
+    'settings.pwa_install_btn': '安装到桌面',
+    'settings.pwa_installed_btn': '已安装',
+    'settings.pwa_unavailable_btn': '不可安装',
+    'settings.pwa_fast_launch': '快速启动',
+    'settings.pwa_offline': '离线访问',
+    'settings.pwa_push': '推送通知',
+    'settings.pwa_desktop': '桌面体验',
+    'settings.pwa_installing': '正在安装应用...',
+    'settings.pwa_install_cancelled': '安装已取消',
+    'settings.pwa_install_failed': '安装失败，请重试',
+    'settings.pwa_install_success': '应用已安装到桌面',
+    'settings.pwa_not_supported': '当前浏览器不支持安装或应用已安装',
+
     // 样式编辑页面
     'style.chat_background': '聊天背景',
     'style.restore_default': '恢复默认',
@@ -2730,6 +2749,25 @@ const i18nMessages = {
     'settings.not_yet_run': 'Not Yet Run',
     'settings.cleanup_detail': 'When system_logs.json / token_stats.json are checked, old records in JSON files are trimmed by the same rules.',
     'settings.ws_address': 'QQ Bot WS Address',
+
+    // PWA Install
+    'settings.pwa_install': 'PWA App Installation',
+    'settings.pwa_install_desc': 'Install NekoBot as a desktop app for a better experience',
+    'settings.pwa_installed': 'Installed',
+    'settings.pwa_installable': 'Installable',
+    'settings.pwa_unavailable': 'Not available in current environment',
+    'settings.pwa_install_btn': 'Install to Desktop',
+    'settings.pwa_installed_btn': 'Installed',
+    'settings.pwa_unavailable_btn': 'Not Available',
+    'settings.pwa_fast_launch': 'Fast Launch',
+    'settings.pwa_offline': 'Offline Access',
+    'settings.pwa_push': 'Push Notifications',
+    'settings.pwa_desktop': 'Desktop Experience',
+    'settings.pwa_installing': 'Installing app...',
+    'settings.pwa_install_cancelled': 'Installation cancelled',
+    'settings.pwa_install_failed': 'Installation failed, please retry',
+    'settings.pwa_install_success': 'App installed to desktop',
+    'settings.pwa_not_supported': 'Current browser does not support installation or app is already installed',
 
     // Character Cards
     'personality.my_characters': 'My Characters',

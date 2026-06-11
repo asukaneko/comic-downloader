@@ -6640,6 +6640,62 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div class="settings-section-header" style="margin-top: 28px;">
+                                    <div class="settings-section-title"><i class="fas fa-download"></i> {{ $t('settings.pwa_install') }}</div>
+                                    <div class="settings-section-desc">{{ $t('settings.pwa_install_desc') }}</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="pwa-install-section">
+                                        <div class="pwa-install-info">
+                                            <div class="pwa-install-icon">
+                                                <img src="/static/neko.png" alt="NekoBot" width="64" height="64">
+                                            </div>
+                                            <div class="pwa-install-details">
+                                                <div class="pwa-install-title">NekoBot Dashboard</div>
+                                                <div class="pwa-install-desc">
+                                                    <template v-if="pwaInstalled">
+                                                        <span class="pwa-status installed"><i class="fas fa-check-circle"></i> {{ $t('settings.pwa_installed') }}</span>
+                                                    </template>
+                                                    <template v-else-if="pwaInstallable">
+                                                        <span class="pwa-status installable"><i class="fas fa-download"></i> {{ $t('settings.pwa_installable') }}</span>
+                                                    </template>
+                                                    <template v-else>
+                                                        <span class="pwa-status unavailable"><i class="fas fa-info-circle"></i> {{ $t('settings.pwa_unavailable') }}</span>
+                                                    </template>
+                                                </div>
+                                                <div class="pwa-install-features">
+                                                    <div class="pwa-feature"><i class="fas fa-bolt"></i> {{ $t('settings.pwa_fast_launch') }}</div>
+                                                    <div class="pwa-feature"><i class="fas fa-wifi"></i> {{ $t('settings.pwa_offline') }}</div>
+                                                    <div class="pwa-feature"><i class="fas fa-bell"></i> {{ $t('settings.pwa_push') }}</div>
+                                                    <div class="pwa-feature"><i class="fas fa-desktop"></i> {{ $t('settings.pwa_desktop') }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="pwa-install-actions">
+                                            <button
+                                                v-if="pwaInstallable && !pwaInstalled"
+                                                class="btn btn-primary btn-lg"
+                                                @click="installPWA"
+                                            >
+                                                <i class="fas fa-download"></i> {{ $t('settings.pwa_install_btn') }}
+                                            </button>
+                                            <button
+                                                v-else-if="pwaInstalled"
+                                                class="btn btn-secondary btn-lg"
+                                                disabled
+                                            >
+                                                <i class="fas fa-check"></i> {{ $t('settings.pwa_installed_btn') }}
+                                            </button>
+                                            <button
+                                                v-else
+                                                class="btn btn-secondary btn-lg"
+                                                disabled
+                                            >
+                                                <i class="fas fa-ban"></i> {{ $t('settings.pwa_unavailable_btn') }}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Tab: 功能开关 -->
@@ -11710,6 +11766,11 @@
                     settingsDirty: false,
                     settingsSnapshot: '',
 
+                    // PWA Install
+                    pwaInstallPrompt: null,
+                    pwaInstallable: false,
+                    pwaInstalled: false,
+
                     // Update
                     currentVersion: '',
                     updateInfo: null,
@@ -12915,6 +12976,9 @@
                 this.initSocket();
                 await this.refreshPushState();
 
+                // 初始化 PWA 安装监听
+                this.initPWAInstallListener();
+
                 // 监听窗口大小变化，调整图表
                 window.addEventListener('resize', this.handleResize);
                 this._modalOverlayClickCaptureHandler = (event) => this.handleGlobalModalOverlayClick(event);
@@ -12961,6 +13025,8 @@
                     document.removeEventListener('visibilitychange', this._visibilityHandler);
                     this._visibilityHandler = null;
                 }
+                // Cleanup PWA install listeners
+                this.cleanupPWAInstallListener();
                 if (this.sessionRefreshTimer) {
                     clearInterval(this.sessionRefreshTimer);
                 }

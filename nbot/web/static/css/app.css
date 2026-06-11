@@ -26503,3 +26503,125 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
                 gap: 12px;
             }
         }
+
+        /* --- PWA Install Section --- */
+        .pwa-install-section {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .pwa-install-info {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .pwa-install-icon {
+            flex-shrink: 0;
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .pwa-install-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .pwa-install-details {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .pwa-install-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .pwa-install-desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .pwa-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .pwa-status.installed {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+        }
+
+        .pwa-status.installable {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+        }
+
+        .pwa-status.unavailable {
+            background: rgba(156, 163, 175, 0.1);
+            color: #9ca3af;
+        }
+
+        .pwa-install-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .pwa-feature {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .pwa-feature i {
+            color: var(--primary-color);
+            font-size: 12px;
+        }
+
+        .pwa-install-actions {
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .btn-lg {
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 10px;
+        }
+
+        @media (max-width: 768px) {
+            .pwa-install-info {
+                flex-direction: column;
+                align-items: center;
+                text-align: center;
+            }
+
+            .pwa-install-features {
+                justify-content: center;
+            }
+
+            .pwa-install-actions {
+                justify-content: center;
+            }
+        }

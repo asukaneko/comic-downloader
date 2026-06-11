@@ -47,6 +47,59 @@ const NbotMethods = {
                     }
                 },
 
+                // PWA Install
+                initPWAInstallListener() {
+                    this._beforeInstallPromptHandler = (e) => {
+                        e.preventDefault();
+                        this.pwaInstallPrompt = e;
+                        this.pwaInstallable = true;
+                    };
+                    this._appInstalledHandler = () => {
+                        this.pwaInstalled = true;
+                        this.pwaInstallable = false;
+                        this.pwaInstallPrompt = null;
+                        this.showToast(this.$t('settings.pwa_install_success'), 'success');
+                    };
+                    window.addEventListener('beforeinstallprompt', this._beforeInstallPromptHandler);
+                    window.addEventListener('appinstalled', this._appInstalledHandler);
+                    // Check if already installed
+                    if (window.matchMedia('(display-mode: standalone)').matches) {
+                        this.pwaInstalled = true;
+                    }
+                },
+
+                cleanupPWAInstallListener() {
+                    if (this._beforeInstallPromptHandler) {
+                        window.removeEventListener('beforeinstallprompt', this._beforeInstallPromptHandler);
+                        this._beforeInstallPromptHandler = null;
+                    }
+                    if (this._appInstalledHandler) {
+                        window.removeEventListener('appinstalled', this._appInstalledHandler);
+                        this._appInstalledHandler = null;
+                    }
+                },
+
+                async installPWA() {
+                    if (!this.pwaInstallPrompt) {
+                        this.showToast(this.$t('settings.pwa_not_supported'), 'info');
+                        return;
+                    }
+                    try {
+                        this.pwaInstallPrompt.prompt();
+                        const { outcome } = await this.pwaInstallPrompt.userChoice;
+                        if (outcome === 'accepted') {
+                            this.showToast(this.$t('settings.pwa_installing'), 'success');
+                        } else {
+                            this.showToast(this.$t('settings.pwa_install_cancelled'), 'info');
+                        }
+                        this.pwaInstallPrompt = null;
+                        this.pwaInstallable = false;
+                    } catch (e) {
+                        console.error('PWA install error:', e);
+                        this.showToast(this.$t('settings.pwa_install_failed'), 'error');
+                    }
+                },
+
                 updateWebVisibility() {
                     if (!socket || !socket.connected) return;
                     socket.emit('web_visibility', {
