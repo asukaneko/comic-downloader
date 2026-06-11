@@ -925,6 +925,7 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
         base_url,
         model=model,
         append_base_url_path=append_base_url_path,
+        api_key=api_key,
     )
     headers = protocol.build_headers(api_key)
     payload = protocol.build_payload(
@@ -982,6 +983,7 @@ def _stream_to_web(
         base_url,
         model=model,
         append_base_url_path=append_base_url_path,
+        api_key=api_key,
     )
     headers = protocol.build_headers(api_key, stream=True)
 
@@ -1021,6 +1023,7 @@ def _stream_to_web(
                 cfg.get("base_url", ""),
                 model=cfg.get("model", ""),
                 append_base_url_path=cfg.get("append_base_url_path", True),
+                api_key=cfg.get("api_key", ""),
             )
             cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=True)
             cfg_payload = cfg_protocol.build_payload(
@@ -1773,6 +1776,7 @@ def get_ai_response_with_images(
             base_url,
             model=model,
             append_base_url_path=append_base_url_path,
+            api_key=api_key,
         )
 
         headers = _img_protocol.build_headers(api_key)
@@ -1905,6 +1909,7 @@ server,
                 config.get("base_url", ""),
                 model=config.get("model", ""),
                 append_base_url_path=config.get("append_base_url_path", True),
+                api_key=config.get("api_key", ""),
             )
             _headers = _srv_protocol.build_headers(config.get("api_key", ""))
             _payload = _srv_protocol.build_payload(

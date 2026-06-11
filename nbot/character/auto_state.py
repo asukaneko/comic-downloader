@@ -201,6 +201,7 @@ def _call_state_model(
     protocol = get_protocol(provider_type)
     url = protocol.resolve_url(
         base_url, model=model, append_base_url_path=append_base_url_path,
+        api_key=api_key,
     )
     payload = protocol.build_payload(
         model, messages, stream=False,

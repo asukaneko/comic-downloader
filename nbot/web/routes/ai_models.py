@@ -825,6 +825,7 @@ def register_ai_model_routes(app, server):
                         base_url,
                         model=model_name,
                         append_base_url_path=append_base_url_path,
+                        api_key=api_key,
                     )
                     headers = protocol.build_headers(api_key)
                     payload = protocol.build_payload(

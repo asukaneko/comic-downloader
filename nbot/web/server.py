@@ -2697,6 +2697,7 @@ class WebChatServer:
                 self.ai_base_url,
                 model=self.ai_model or "",
                 append_base_url_path=(active_model or {}).get("append_base_url_path", True),
+                api_key=self.ai_api_key,
             )
             srv_headers = srv_protocol.build_headers(self.ai_api_key)
             srv_payload = srv_protocol.build_payload(

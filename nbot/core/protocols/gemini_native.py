@@ -47,6 +47,7 @@ class GeminiNativeProtocol(ModelProtocol):
         *,
         append_base_url_path: bool = True,
         stream: bool = False,
+        api_key: str = "",
         **opts: Any,
     ) -> str:
         url_base = (base_url or "").rstrip("/")
@@ -54,21 +55,32 @@ class GeminiNativeProtocol(ModelProtocol):
             raise ValueError("base_url 未配置")
 
         if ":generateContent" in url_base or ":streamGenerateContent" in url_base:
-            return url_base
+            url = url_base
+        elif "streamGenerateContent" in url_base:
+            url = url_base
+        else:
+            action = "streamGenerateContent" if stream else "generateContent"
+            if "/models/" in url_base:
+                url = f"{url_base}:{action}"
+            elif not append_base_url_path:
+                url = url_base
+            else:
+                url = f"{url_base}/models/{model}:{action}"
 
-        action = "streamGenerateContent" if stream else "generateContent"
-        if "/models/" in url_base:
-            return f"{url_base}:{action}"
+        # Google 官方 API 需要 ?key=xxx 认证
+        if api_key and ("googleapis.com" in url or "google.com" in url):
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}key={api_key}"
 
-        if not append_base_url_path:
-            return url_base
-
-        return f"{url_base}/models/{model}:{action}"
+        return url
 
     def build_headers(self, api_key: str, *, stream: bool = False) -> Dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if stream:
             headers["Accept"] = "text/event-stream"
+        # 代理/中转服务通常通过 Authorization: Bearer 传递令牌
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
         return headers
 
     def build_payload(

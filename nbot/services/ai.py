@@ -294,6 +294,7 @@ class AIClient:
             self.base_url,
             model=model_name or "",
             append_base_url_path=self.append_base_url_path,
+            api_key=self.api_key,
         )
         headers = protocol.build_headers(self.api_key, stream=stream)
         payload = protocol.build_payload(
@@ -362,6 +363,7 @@ class AIClient:
                 cfg.get("base_url", ""),
                 model=mname or "",
                 append_base_url_path=cfg.get("append_base_url_path", True),
+                api_key=cfg.get("api_key", ""),
             )
             cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=False)
             cfg_payload = cfg_protocol.build_payload(
