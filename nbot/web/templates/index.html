@@ -34,10 +34,37 @@
     <link rel="stylesheet" href="/static/css/app.css?v=20260609-italic">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
+        // PWA install prompt - must be captured before Vue mounts
+        window.__pwaInstallPrompt = null;
+        window.__pwaInstallable = false;
+        window.__pwaInstalled = false;
+
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            window.__pwaInstallPrompt = e;
+            window.__pwaInstallable = true;
+            console.log('[PWA] beforeinstallprompt captured');
+        });
+
+        window.addEventListener('appinstalled', function() {
+            window.__pwaInstalled = true;
+            window.__pwaInstallable = false;
+            window.__pwaInstallPrompt = null;
+            console.log('[PWA] app installed');
+        });
+
+        // Check if already installed (standalone mode)
+        if (window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true) {
+            window.__pwaInstalled = true;
+        }
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js?v=' + window.__nbotAssetVersion).catch(function(err) {
-                    console.warn('SW registration failed:', err);
+                navigator.serviceWorker.register('/sw.js?v=' + window.__nbotAssetVersion).then(function(reg) {
+                    console.log('[PWA] Service Worker registered', reg.scope);
+                }).catch(function(err) {
+                    console.warn('[PWA] SW registration failed:', err);
                 });
             });
         }
@@ -6693,6 +6720,42 @@
                                             >
                                                 <i class="fas fa-ban"></i> {{ $t('settings.pwa_unavailable_btn') }}
                                             </button>
+                                            <button
+                                                class="btn btn-secondary"
+                                                @click="checkPWAStatus"
+                                                style="margin-left: 12px;"
+                                            >
+                                                <i class="fas fa-stethoscope"></i> 诊断
+                                            </button>
+                                        </div>
+                                        <div v-if="pwaDiagnostics" class="pwa-diagnostics">
+                                            <div class="pwa-diag-title"><i class="fas fa-stethoscope"></i> PWA 诊断结果</div>
+                                            <div class="pwa-diag-item" :class="{ 'ok': pwaDiagnostics.isSecure }">
+                                                <i :class="pwaDiagnostics.isSecure ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+                                                安全上下文 (HTTPS/localhost): {{ pwaDiagnostics.isSecure ? '是' : '否' }}
+                                            </div>
+                                            <div class="pwa-diag-item" :class="{ 'ok': pwaDiagnostics.hasSW }">
+                                                <i :class="pwaDiagnostics.hasSW ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+                                                Service Worker: {{ pwaDiagnostics.hasSW ? '已注册' : '未注册' }}
+                                            </div>
+                                            <div class="pwa-diag-item" :class="{ 'ok': pwaDiagnostics.hasManifest }">
+                                                <i :class="pwaDiagnostics.hasManifest ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+                                                Manifest 文件: {{ pwaDiagnostics.hasManifest ? '已加载' : '未加载' }}
+                                            </div>
+                                            <div class="pwa-diag-item" :class="{ 'ok': pwaDiagnostics.promptCaptured }">
+                                                <i :class="pwaDiagnostics.promptCaptured ? 'fas fa-check-circle' : 'fas fa-times-circle'"></i>
+                                                安装提示事件: {{ pwaDiagnostics.promptCaptured ? '已捕获' : '未捕获' }}
+                                            </div>
+                                            <div class="pwa-diag-item" :class="{ 'ok': pwaDiagnostics.displayMode }">
+                                                <i :class="pwaDiagnostics.displayMode ? 'fas fa-check-circle' : 'fas fa-info-circle'"></i>
+                                                显示模式: {{ pwaDiagnostics.displayModeStr }}
+                                            </div>
+                                            <div v-if="pwaDiagnostics.troubleshoot" class="pwa-diag-troubleshoot">
+                                                <strong>可能的原因：</strong>
+                                                <ul>
+                                                    <li v-for="tip in pwaDiagnostics.troubleshoot" :key="tip">{{ tip }}</li>
+                                                </ul>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -11770,6 +11833,7 @@
                     pwaInstallPrompt: null,
                     pwaInstallable: false,
                     pwaInstalled: false,
+                    pwaDiagnostics: null,
 
                     // Update
                     currentVersion: '',

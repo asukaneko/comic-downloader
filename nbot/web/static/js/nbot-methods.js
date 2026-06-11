@@ -49,23 +49,37 @@ const NbotMethods = {
 
                 // PWA Install
                 initPWAInstallListener() {
+                    // Sync state from early page-level listeners
+                    this.pwaInstallPrompt = window.__pwaInstallPrompt || null;
+                    this.pwaInstallable = window.__pwaInstallable || false;
+                    this.pwaInstalled = window.__pwaInstalled || false;
+
+                    // Also listen for future events
                     this._beforeInstallPromptHandler = (e) => {
                         e.preventDefault();
                         this.pwaInstallPrompt = e;
                         this.pwaInstallable = true;
+                        window.__pwaInstallPrompt = e;
+                        window.__pwaInstallable = true;
                     };
                     this._appInstalledHandler = () => {
                         this.pwaInstalled = true;
                         this.pwaInstallable = false;
                         this.pwaInstallPrompt = null;
+                        window.__pwaInstalled = true;
+                        window.__pwaInstallable = false;
+                        window.__pwaInstallPrompt = null;
                         this.showToast(this.$t('settings.pwa_install_success'), 'success');
                     };
                     window.addEventListener('beforeinstallprompt', this._beforeInstallPromptHandler);
                     window.addEventListener('appinstalled', this._appInstalledHandler);
-                    // Check if already installed
-                    if (window.matchMedia('(display-mode: standalone)').matches) {
-                        this.pwaInstalled = true;
-                    }
+
+                    // Debug log
+                    console.log('[PWA] Install listener initialized', {
+                        installable: this.pwaInstallable,
+                        installed: this.pwaInstalled,
+                        hasPrompt: !!this.pwaInstallPrompt
+                    });
                 },
 
                 cleanupPWAInstallListener() {
@@ -77,6 +91,73 @@ const NbotMethods = {
                         window.removeEventListener('appinstalled', this._appInstalledHandler);
                         this._appInstalledHandler = null;
                     }
+                },
+
+                async checkPWAStatus() {
+                    const diag = {
+                        isSecure: false,
+                        hasSW: false,
+                        hasManifest: false,
+                        promptCaptured: false,
+                        displayMode: false,
+                        displayModeStr: '',
+                        troubleshoot: []
+                    };
+
+                    // Check secure context
+                    diag.isSecure = window.isSecureContext;
+                    if (!diag.isSecure) {
+                        diag.troubleshoot.push('需要 HTTPS 或 localhost 才能安装 PWA');
+                    }
+
+                    // Check Service Worker
+                    if ('serviceWorker' in navigator) {
+                        try {
+                            const regs = await navigator.serviceWorker.getRegistrations();
+                            diag.hasSW = regs.length > 0;
+                        } catch (e) {
+                            diag.hasSW = false;
+                        }
+                    }
+                    if (!diag.hasSW) {
+                        diag.troubleshoot.push('Service Worker 未注册，请检查 /sw.js 是否可访问');
+                    }
+
+                    // Check manifest
+                    try {
+                        const resp = await fetch('/manifest.webmanifest');
+                        if (resp.ok) {
+                            const manifest = await resp.json();
+                            diag.hasManifest = !!(manifest.name || manifest.short_name);
+                        }
+                    } catch (e) {
+                        diag.hasManifest = false;
+                    }
+                    if (!diag.hasManifest) {
+                        diag.troubleshoot.push('manifest.webmanifest 文件缺失或无效');
+                    }
+
+                    // Check prompt
+                    diag.promptCaptured = !!this.pwaInstallPrompt || !!window.__pwaInstallPrompt;
+                    if (!diag.promptCaptured) {
+                        diag.troubleshoot.push('浏览器尚未触发安装提示（可能已安装，或用户交互不足）');
+                        diag.troubleshoot.push('Chrome 要求用户至少与页面交互 30 秒后才会触发');
+                        diag.troubleshoot.push('如果使用自签名证书，浏览器可能不信任，需先在浏览器中信任证书');
+                    }
+
+                    // Check display mode
+                    const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                                         window.navigator.standalone === true;
+                    diag.displayMode = isStandalone;
+                    diag.displayModeStr = isStandalone ? 'standalone (已安装)' : 'browser (未安装)';
+
+                    // Additional checks
+                    if (window.location.protocol === 'http:') {
+                        diag.troubleshoot.push('当前使用 HTTP 协议，必须使用 HTTPS 才能安装');
+                    }
+
+                    this.pwaDiagnostics = diag;
+                    console.log('[PWA] Diagnostics:', diag);
                 },
 
                 async installPWA() {

@@ -26625,3 +26625,66 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
                 justify-content: center;
             }
         }
+
+        /* --- PWA Diagnostics --- */
+        .pwa-diagnostics {
+            margin-top: 20px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .pwa-diag-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pwa-diag-item {
+            font-size: 13px;
+            color: var(--text-secondary);
+            padding: 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pwa-diag-item i {
+            font-size: 14px;
+            color: #ef4444;
+        }
+
+        .pwa-diag-item.ok i {
+            color: #22c55e;
+        }
+
+        .pwa-diag-troubleshoot {
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(234, 179, 8, 0.1);
+            border-radius: 8px;
+            border-left: 3px solid #eab308;
+        }
+
+        .pwa-diag-troubleshoot strong {
+            font-size: 13px;
+            color: #eab308;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .pwa-diag-troubleshoot ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .pwa-diag-troubleshoot li {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
