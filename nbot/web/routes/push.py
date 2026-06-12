@@ -80,14 +80,12 @@ def send_web_push(
     kept = []
     sent = 0
     failed = 0
+    errors = []
 
     for item in _load_subscriptions(server):
-        if session_id and item.get("session_id") not in ("", session_id):
-            kept.append(item)
-            continue
-
         subscription = item.get("subscription")
         if not subscription:
+            kept.append(item)
             continue
 
         try:
@@ -106,14 +104,21 @@ def send_web_push(
             status_code = getattr(getattr(exc, "response", None), "status_code", None)
             if status_code not in (404, 410):
                 kept.append(item)
+            err_msg = str(exc)
+            errors.append(err_msg)
             _log.warning("Web Push failed: %s", exc)
         except Exception as exc:
             failed += 1
             kept.append(item)
+            err_msg = str(exc)
+            errors.append(err_msg)
             _log.warning("Web Push failed: %s", exc)
 
     _save_subscriptions(server, kept)
-    return {"sent": sent, "failed": failed}
+    result = {"sent": sent, "failed": failed}
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 def register_push_routes(app, server):
@@ -157,7 +162,6 @@ def register_push_routes(app, server):
     def push_subscribe():
         data = request.get_json(force=True) or {}
         subscription = data.get("subscription")
-        session_id = str(data.get("session_id") or "")
 
         if not subscription or not subscription.get("endpoint"):
             return jsonify({"ok": False, "error": "invalid subscription"}), 400
@@ -170,7 +174,7 @@ def register_push_routes(app, server):
         ]
         subscriptions.append(
             {
-                "session_id": session_id,
+                "session_id": "",
                 "subscription": subscription,
                 "created_at": datetime.now().isoformat(),
                 "user_agent": request.headers.get("User-Agent", ""),
@@ -198,13 +202,15 @@ def register_push_routes(app, server):
     def push_test():
         data = request.get_json(silent=True) or {}
         session_id = str(data.get("session_id") or "")
+        skip_visible = data.get("skip_visible", True)
         result = send_web_push(
             server,
-            title="NekoBot test notification",
-            body=data.get("body") or "Web Push is working.",
+            title="NekoBot",
+            body=data.get("body") or "通知已开启",
             url=f"/?session_id={session_id}" if session_id else "/",
             session_id=session_id or None,
             tag="nekobot-test",
-            skip_visible=False,
+            skip_visible=skip_visible,
         )
-        return jsonify({"ok": "error" not in result, "result": result})
+        ok = result.get("sent", 0) > 0 and "error" not in result
+        return jsonify({"ok": ok, "result": result})

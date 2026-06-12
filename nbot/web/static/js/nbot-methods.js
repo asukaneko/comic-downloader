@@ -33,11 +33,18 @@ const NbotMethods = {
                         } else {
                             await window.NekoPush.enable(this.currentSession?.id || '');
                             this.pushSubscribed = true;
-                            await api.post('/api/push/test', {
+                            const testResp = await api.post('/api/push/test', {
                                 session_id: this.currentSession?.id || '',
-                                body: 'NekoBot browser notifications are enabled.'
+                                body: 'NekoBot browser notifications are enabled.',
+                                skip_visible: false,
                             });
-                            this.showToast('Browser notifications enabled', 'success');
+                            const testResult = testResp?.data;
+                            if (testResult && !testResult.ok) {
+                                const errMsg = testResult?.result?.errors?.[0] || 'Push delivery failed';
+                                this.showToast('Subscription saved, but test notification failed: ' + errMsg, 'error');
+                            } else {
+                                this.showToast('Browser notifications enabled', 'success');
+                            }
                         }
                         await this.refreshPushState();
                     } catch (e) {
