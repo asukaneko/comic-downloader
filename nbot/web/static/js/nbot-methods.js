@@ -35,7 +35,8 @@ const NbotMethods = {
                             this.pushSubscribed = true;
                             const testResp = await api.post('/api/push/test', {
                                 session_id: this.currentSession?.id || '',
-                                body: 'NekoBot browser notifications are enabled.'
+                                body: 'NekoBot browser notifications are enabled.',
+                                skip_visible: false,
                             });
                             const testResult = testResp?.data;
                             if (testResult && !testResult.ok) {

@@ -538,7 +538,8 @@ class WebCallbacks(PipelineCallbacks):
             room=self.session_id,
         )
         self.server.socketio.sleep(0)
-        self._try_send_push(streamed_msg or {})
+        if streamed_msg and streamed_msg.get("content"):
+            self._try_send_push(streamed_msg)
 
     def _try_send_push(self, message: Dict) -> None:
         """尝试发送浏览器推送通知（仅在用户不在页面时）。"""
@@ -547,7 +548,6 @@ class WebCallbacks(PipelineCallbacks):
             content = str(message.get("content") or "").strip()
             if not content:
                 return
-            # 截取前 100 字符作为通知正文
             preview = content[:100]
             if len(content) > 100:
                 preview += "..."
