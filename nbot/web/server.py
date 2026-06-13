@@ -493,6 +493,10 @@ class WebChatServer:
         self.channels_config: list[dict] = []
 
         # Heartbeat 配置
+        # AI 立绘生成异步任务管理
+        self.portrait_generation_tasks: dict = {}  # task_id -> {status, character_name, portrait_url, error, updated_at}
+        self.pending_portraits: dict = {}  # character_name -> portrait_url
+
         self.heartbeat_config: dict = {
             "enabled": False,
             "interval_minutes": 60,

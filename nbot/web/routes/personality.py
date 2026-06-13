@@ -212,6 +212,214 @@ def compile_personality_prompt(personality_data, session_context=None, user_name
     return _compile(personality_data, session_context=session_context, user_name=user_name)
 
 
+def _do_generate_portrait_bg(server, task_id, character_name, description, basic_info, personality, image_gen_config):
+    """后台执行 AI 立绘生成任务，完成后通过 SocketIO 推送结果"""
+    import requests
+    import time
+
+    task = server.portrait_generation_tasks.get(task_id)
+    if not task:
+        return
+
+    try:
+        # 构建图片生成提示词
+        prompt_template = image_gen_config.get('prompt_template', '').strip()
+        if not prompt_template:
+            prompt_template = "Create an anime-style character portrait of {character_name}."
+
+        image_prompt = prompt_template.format(
+            character_name=character_name,
+            description=description or '',
+            personality=personality or '',
+            basic_info=basic_info or ''
+        )
+
+        additional_info = []
+        if basic_info and '{basic_info}' not in prompt_template:
+            additional_info.append(f"Appearance: {basic_info}")
+        if personality and '{personality}' not in prompt_template:
+            additional_info.append(f"Personality: {personality}")
+        if description and '{description}' not in prompt_template:
+            additional_info.append(f"Description: {description}")
+
+        if additional_info:
+            image_prompt += " " + " ".join(additional_info)
+
+        style_keywords = ['style', 'quality', 'format', 'anime', 'illustration', 'art']
+        if not any(keyword in prompt_template.lower() for keyword in style_keywords):
+            image_prompt += " Style: High-quality anime illustration, detailed, vibrant colors, professional character art."
+            image_prompt += " Format: Portrait orientation, upper body or bust shot, clean background or simple gradient."
+
+        api_key = image_gen_config.get('api_key', '')
+        full_url = image_gen_config.get('base_url', '')
+        model = image_gen_config.get('model', 'dall-e-3')
+        image_size = image_gen_config.get('size', '1024x1024')
+
+        if 'volces' in full_url.lower() or 'ark' in full_url.lower():
+            width, height = image_size.split('x')
+            pixels = int(width) * int(height)
+            if pixels < 3686400:
+                image_size = '1920x1920'
+
+        if not full_url:
+            task["status"] = "failed"
+            task["error"] = "未配置图片生成API地址"
+            task["updated_at"] = datetime.now().isoformat()
+            _log.error(f"[PortraitBG] {character_name}: 未配置API地址")
+            return
+
+        provider_type = image_gen_config.get('provider_type', 'openai_compatible')
+
+        # 使用较长的超时时间（5分钟）确保大部分模型都能返回
+        _API_TIMEOUT = 300
+
+        if provider_type in ['openai_compatible', 'openai'] or 'openai' in full_url.lower():
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "prompt": image_prompt,
+                "n": 1,
+                "size": image_size
+            }
+            response = requests.post(full_url, headers=headers, json=payload, timeout=_API_TIMEOUT)
+            if response.status_code != 200:
+                raise Exception(f"图片生成API错误: {response.text}")
+            result = response.json()
+            _log.info(f"[PortraitBG] API响应: {json.dumps(result, ensure_ascii=False)[:500]}")
+
+            image_url = None
+            data_list = result.get("data", [])
+            if data_list:
+                item = data_list[0]
+                image_url = item.get("url") or item.get("b64_json")
+            if not image_url and result.get("choices"):
+                content = result["choices"][0].get("message", {}).get("content", "")
+                if content:
+                    md_match = re.search(r'!\[.*?\]\((https?://\S+)\)', content)
+                    if md_match:
+                        image_url = md_match.group(1)
+                    elif content.startswith("http"):
+                        image_url = content.strip()
+                    elif content.startswith("data:"):
+                        image_url = content
+                    else:
+                        image_url = content
+            if not image_url and result.get("images"):
+                image_url = result["images"][0].get("url")
+
+        elif provider_type == 'siliconflow' or 'siliconflow' in full_url.lower():
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "prompt": image_prompt,
+                "image_size": image_size,
+                "batch_size": 1
+            }
+            response = requests.post(full_url, headers=headers, json=payload, timeout=_API_TIMEOUT)
+            if response.status_code != 200:
+                raise Exception(f"图片生成API错误: {response.text}")
+            result = response.json()
+            image_url = result.get("images", [{}])[0].get("url")
+
+        else:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "prompt": image_prompt,
+                "n": 1,
+                "size": image_size
+            }
+            response = requests.post(full_url, headers=headers, json=payload, timeout=_API_TIMEOUT)
+            if response.status_code != 200:
+                raise Exception(f"图片生成API错误: {response.text}")
+            result = response.json()
+            image_url = result.get("data", [{}])[0].get("url") or result.get("images", [{}])[0].get("url")
+
+        if not image_url:
+            raise Exception("未能获取生成的图片URL")
+
+        # 创建上传目录
+        upload_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        new_filename = f"portrait_ai_{uuid.uuid4().hex[:16]}.png"
+        filepath = os.path.join(upload_dir, new_filename)
+
+        # 判断是URL还是base64数据
+        if image_url.startswith("data:"):
+            image_bytes = base64.b64decode(image_url.split(",", 1)[1])
+            with open(filepath, 'wb') as f:
+                f.write(image_bytes)
+        elif image_url.startswith("http"):
+            image_response = requests.get(image_url, timeout=120)
+            if image_response.status_code != 200:
+                raise Exception("下载生成的图片失败")
+            with open(filepath, 'wb') as f:
+                f.write(image_response.content)
+        else:
+            image_bytes = base64.b64decode(image_url)
+            with open(filepath, 'wb') as f:
+                f.write(image_bytes)
+
+        portrait_url = f"/static/uploads/portraits/{new_filename}"
+        _log.info(f"[PortraitBG] AI立绘生成成功: {character_name} -> {portrait_url}")
+
+        # 更新任务状态
+        task["status"] = "completed"
+        task["portrait_url"] = portrait_url
+        task["updated_at"] = datetime.now().isoformat()
+
+        # 存入 pending_portraits，供后续加载角色时查询
+        server.pending_portraits[character_name] = portrait_url
+
+        # 通过 SocketIO 推送生成完成事件
+        if hasattr(server, 'socketio') and server.socketio:
+            server.socketio.emit("portrait_generation_complete", {
+                "task_id": task_id,
+                "character_name": character_name,
+                "portrait_url": portrait_url,
+                "status": "completed",
+                "message": "立绘生成成功"
+            })
+            _log.info(f"[PortraitBG] SocketIO 事件已推送: portrait_generation_complete -> {character_name}")
+
+    except requests.exceptions.Timeout:
+        _log.error(f"[PortraitBG] 图片生成请求超时: {character_name}")
+        task["status"] = "failed"
+        task["error"] = "图片生成请求超时，请稍后重试"
+        task["updated_at"] = datetime.now().isoformat()
+        if hasattr(server, 'socketio') and server.socketio:
+            server.socketio.emit("portrait_generation_complete", {
+                "task_id": task_id,
+                "character_name": character_name,
+                "portrait_url": None,
+                "status": "failed",
+                "error": "图片生成请求超时，请稍后重试"
+            })
+    except Exception as e:
+        _log.error(f"[PortraitBG] AI立绘生成失败: {e}")
+        task["status"] = "failed"
+        task["error"] = f"生成失败: {str(e)}"
+        task["updated_at"] = datetime.now().isoformat()
+        if hasattr(server, 'socketio') and server.socketio:
+            server.socketio.emit("portrait_generation_complete", {
+                "task_id": task_id,
+                "character_name": character_name,
+                "portrait_url": None,
+                "status": "failed",
+                "error": f"生成失败: {str(e)}"
+            })
+
+
 def register_personality_routes(app, server):
     @app.route("/api/personality")
     def get_personality():
@@ -1261,228 +1469,57 @@ def register_personality_routes(app, server):
                 "error": "未配置图片生成模型，请先在AI配置中添加图片生成模型"
             }), 400
 
-        try:
-            # 构建图片生成提示词
-            # 获取用户配置的提示词模板，如果没有则使用默认模板
-            prompt_template = image_gen_config.get('prompt_template', '').strip()
-            if not prompt_template:
-                prompt_template = "Create an anime-style character portrait of {character_name}."
+        # 创建任务并立即返回，实际生成在后台线程执行
+        task_id = f"portrait_{uuid.uuid4().hex[:16]}"
+        server.portrait_generation_tasks[task_id] = {
+            "status": "processing",
+            "character_name": character_name,
+            "portrait_url": None,
+            "error": None,
+            "updated_at": datetime.now().isoformat()
+        }
 
-            # 替换模板中的占位符
-            image_prompt = prompt_template.format(
-                character_name=character_name,
-                description=description or '',
-                personality=personality or '',
-                basic_info=basic_info or ''
-            )
+        # 启动后台生成任务
+        server.socketio.start_background_task(
+            _do_generate_portrait_bg,
+            server, task_id, character_name, description,
+            basic_info, personality, image_gen_config
+        )
 
-            # 添加额外的角色信息（如果模板中没有包含）
-            additional_info = []
-            if basic_info and '{basic_info}' not in prompt_template:
-                additional_info.append(f"Appearance: {basic_info}")
-            if personality and '{personality}' not in prompt_template:
-                additional_info.append(f"Personality: {personality}")
-            if description and '{description}' not in prompt_template:
-                additional_info.append(f"Description: {description}")
+        return jsonify({
+            "success": True,
+            "task_id": task_id,
+            "status": "processing",
+            "message": "立绘生成已提交，正在后台处理"
+        })
 
-            if additional_info:
-                image_prompt += " " + " ".join(additional_info)
+    @app.route("/api/personality/generate-portrait/<task_id>", methods=["GET"])
+    def get_portrait_generation_status(task_id):
+        """查询立绘生成任务状态"""
+        task = server.portrait_generation_tasks.get(task_id)
+        if not task:
+            return jsonify({"success": False, "error": "任务不存在或已过期"}), 404
+        return jsonify({"success": True, **task})
 
-            # 添加风格和质量要求（如果模板中没有包含风格相关关键词）
-            style_keywords = ['style', 'quality', 'format', 'anime', 'illustration', 'art']
-            if not any(keyword in prompt_template.lower() for keyword in style_keywords):
-                image_prompt += " Style: High-quality anime illustration, detailed, vibrant colors, professional character art."
-                image_prompt += " Format: Portrait orientation, upper body or bust shot, clean background or simple gradient."
+    @app.route("/api/personality/pending-portraits", methods=["GET"])
+    def get_pending_portraits():
+        """查询指定角色是否有后台生成的待处理立绘"""
+        character_name = request.args.get("character_name", "").strip()
+        if not character_name:
+            return jsonify({"success": False, "error": "请提供角色名称"}), 400
 
-            # 调用图片生成API
-            import requests
-            import os
-
-            api_key = image_gen_config.get('api_key', '')
-            # 使用用户输入的完整URL（包含路径后缀）
-            full_url = image_gen_config.get('base_url', '')
-            model = image_gen_config.get('model', 'dall-e-3')
-            # 获取配置的图片尺寸，默认为 1024x1024
-            image_size = image_gen_config.get('size', '1024x1024')
-            # 火山引擎等需要至少 3686400 像素（约 1920x1920），如果配置的是小尺寸则使用兼容尺寸
-            if 'volces' in full_url.lower() or 'ark' in full_url.lower():
-                # 火山引擎需要大图片尺寸
-                width, height = image_size.split('x')
-                pixels = int(width) * int(height)
-                if pixels < 3686400:
-                    image_size = '1920x1920'  # 使用兼容的最小尺寸
-
-            if not full_url:
-                return jsonify({"success": False, "error": "未配置图片生成API地址"}), 400
-
-            # 根据不同provider调用不同的API格式
-            provider_type = image_gen_config.get('provider_type', 'openai_compatible')
-
-            if provider_type in ['openai_compatible', 'openai'] or 'openai' in full_url.lower():
-                # OpenAI 兼容 API 格式（支持 DALL-E、gpt-image 等）
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-
-                payload = {
-                    "model": model,
-                    "prompt": image_prompt,
-                    "n": 1,
-                    "size": image_size
-                }
-
-                response = requests.post(
-                    full_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=120
-                )
-
-                if response.status_code != 200:
-                    _log.error(f"图片生成API错误: {response.text}")
-                    return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
-
-                result = response.json()
-                _log.info(f"图片生成API响应: {json.dumps(result, ensure_ascii=False)[:500]}")
-
-                # 兼容多种响应格式
-                image_url = None
-
-                # 格式1: DALL-E 标准 -> data[0].url / data[0].b64_json
-                data_list = result.get("data", [])
-                if data_list:
-                    item = data_list[0]
-                    image_url = item.get("url") or item.get("b64_json")
-
-                # 格式2: gpt-image 聊天补全格式 -> choices[0].message.content
-                if not image_url and result.get("choices"):
-                    content = result["choices"][0].get("message", {}).get("content", "")
-                    _log.info(f"图片生成choices content: {content[:300]}")
-                    # content 可能是 base64、URL、或 markdown 图片链接 ![img](url)
-                    if content:
-                        # 尝试提取 markdown 图片链接
-                        md_match = re.search(r'!\[.*?\]\((https?://\S+)\)', content)
-                        if md_match:
-                            image_url = md_match.group(1)
-                        elif content.startswith("http"):
-                            image_url = content.strip()
-                        elif content.startswith("data:"):
-                            image_url = content
-                        else:
-                            # 可能是纯 base64
-                            image_url = content
-
-                # 格式3: images[0].url
-                if not image_url and result.get("images"):
-                    image_url = result["images"][0].get("url")
-
-            elif provider_type == 'siliconflow' or 'siliconflow' in full_url.lower():
-                # SiliconFlow API 格式
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-
-                payload = {
-                    "model": model,
-                    "prompt": image_prompt,
-                    "image_size": image_size,
-                    "batch_size": 1
-                }
-
-                response = requests.post(
-                    full_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=120
-                )
-
-                if response.status_code != 200:
-                    _log.error(f"图片生成API错误: {response.text}")
-                    return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
-
-                result = response.json()
-                image_url = result.get("images", [{}])[0].get("url")
-
-            else:
-                # 通用OpenAI兼容格式
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-
-                payload = {
-                    "model": model,
-                    "prompt": image_prompt,
-                    "n": 1,
-                    "size": image_size
-                }
-
-                response = requests.post(
-                    full_url,
-                    headers=headers,
-                    json=payload,
-                    timeout=120
-                )
-
-                if response.status_code != 200:
-                    _log.error(f"图片生成API错误: {response.text}")
-                    return jsonify({"success": False, "error": f"图片生成失败: {response.text}"}), 500
-
-                result = response.json()
-                # 尝试多种可能的响应格式
-                image_url = result.get("data", [{}])[0].get("url") or result.get("images", [{}])[0].get("url")
-
-            if not image_url:
-                return jsonify({"success": False, "error": "未能获取生成的图片URL"}), 500
-
-            # 创建上传目录
-            upload_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
-            os.makedirs(upload_dir, exist_ok=True)
-
-            # 生成唯一文件名
-            new_filename = f"portrait_ai_{uuid.uuid4().hex[:16]}.png"
-            filepath = os.path.join(upload_dir, new_filename)
-
-            # 判断是URL还是base64数据
-            if image_url.startswith("data:"):
-                # data URI 格式: data:image/png;base64,xxxxx
-                image_bytes = base64.b64decode(image_url.split(",", 1)[1])
-                with open(filepath, 'wb') as f:
-                    f.write(image_bytes)
-            elif image_url.startswith("http"):
-                # URL 格式，下载图片
-                image_response = requests.get(image_url, timeout=60)
-                if image_response.status_code != 200:
-                    return jsonify({"success": False, "error": "下载生成的图片失败"}), 500
-                with open(filepath, 'wb') as f:
-                    f.write(image_response.content)
-            else:
-                # 纯 base64 字符串
-                try:
-                    image_bytes = base64.b64decode(image_url)
-                    with open(filepath, 'wb') as f:
-                        f.write(image_bytes)
-                except Exception as decode_err:
-                    _log.error(f"base64解码失败: {decode_err}")
-                    return jsonify({"success": False, "error": "图片数据解析失败"}), 500
-
-            portrait_url = f"/static/uploads/portraits/{new_filename}"
-            _log.info(f"AI立绘生成成功: {character_name} -> {portrait_url}")
-
+        portrait_url = server.pending_portraits.get(character_name)
+        if portrait_url:
             return jsonify({
                 "success": True,
                 "portrait_url": portrait_url,
-                "message": "立绘生成成功"
+                "has_pending": True
             })
-
-        except requests.exceptions.Timeout:
-            _log.error("图片生成请求超时")
-            return jsonify({"success": False, "error": "图片生成请求超时，请稍后重试"}), 504
-        except Exception as e:
-            _log.error(f"AI立绘生成失败: {e}")
-            return jsonify({"success": False, "error": f"生成失败: {str(e)}"}), 500
+        return jsonify({
+            "success": True,
+            "portrait_url": None,
+            "has_pending": False
+        })
 
     @app.route("/api/personality/clean-unused-portraits", methods=["POST"])
     def clean_unused_portraits():

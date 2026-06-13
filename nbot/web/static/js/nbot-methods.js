@@ -10322,11 +10322,21 @@ def main(params):
 
                 // 加载角色到编辑器（不显示确认对话框）
                 loadPersonalityToEditor(preset) {
+                    const characterName = preset.name || '';
+
+                    // 检查是否有后台生成的待处理立绘
+                    let portraitUrl = preset.portrait || '';
+                    if (characterName && this.pendingPortraits[characterName]) {
+                        portraitUrl = this.pendingPortraits[characterName];
+                        delete this.pendingPortraits[characterName];
+                        console.log('[Portrait] 加载角色时自动应用后台生成的立绘:', characterName, portraitUrl);
+                    }
+
                     this.personality = {
-                        name: preset.name || '',
+                        name: characterName,
                         description: preset.description || '',
                         avatar: preset.avatar || preset.icon || '',
-                        portrait: preset.portrait || '',
+                        portrait: portraitUrl,
                         tags: preset.tags || [],
                         systemPrompt: preset.systemPrompt || preset.prompt || '',
                         basicInfo: preset.basicInfo || '',
@@ -10999,44 +11009,148 @@ def main(params):
                     }
 
                     this.isGeneratingPortrait = true;
+                    const characterName = this.personality.name;
                     try {
                         const res = await api.post('/api/personality/generate-portrait', {
-                            character_name: this.personality.name,
+                            character_name: characterName,
                             description: this.personality.description || '',
                             basic_info: this.personality.basicInfo || '',
                             personality: this.personality.personality || ''
-                        }, { timeout: 180000 });
+                        });
 
-                        if (res.data.success) {
-                            this.personality.portrait = res.data.portrait_url;
-                            this.personalityHasUnsavedChanges = true;
-                            this.showToast('立绘生成成功！请点击"应用"保存', 'success');
-                        } else {
-                            if (res.data.need_config) {
-                                this.showToast('请先配置图片生成模型', 'error');
-                                setTimeout(() => {
-                                    this.showConfirm({
-                                        title: '配置图片生成模型',
-                                        message: '是否跳转到 AI 配置页面配置图片生成模型？',
-                                        confirmText: '前往配置',
-                                        icon: 'fa-image',
-                                        iconColor: 'var(--accent-primary)',
-                                        iconBg: 'rgba(59,130,246,0.12)',
-                                        onConfirm: () => {
-                                            this.currentPage = 'ai-config';
-                                        }
-                                    });
-                                }, 500);
+                        if (res.data.success && res.data.task_id) {
+                            const taskId = res.data.task_id;
+                            const taskStatus = res.data.status;
+
+                            if (taskStatus === 'completed' && res.data.portrait_url) {
+                                // 后台已完成（极少情况：同步完成）
+                                this._applyPortraitResult(characterName, res.data.portrait_url);
+                                this.isGeneratingPortrait = false;
                             } else {
-                                this.showToast(res.data.error || '生成失败', 'error');
+                                // 后台处理中，开始轮询
+                                this.showToast('立绘生成已提交，正在后台处理...', 'info');
+                                this._startPortraitPolling(taskId, characterName);
                             }
+                        } else if (res.data.need_config) {
+                            this.isGeneratingPortrait = false;
+                            this.showToast('请先配置图片生成模型', 'error');
+                            setTimeout(() => {
+                                this.showConfirm({
+                                    title: '配置图片生成模型',
+                                    message: '是否跳转到 AI 配置页面配置图片生成模型？',
+                                    confirmText: '前往配置',
+                                    icon: 'fa-image',
+                                    iconColor: 'var(--accent-primary)',
+                                    iconBg: 'rgba(59,130,246,0.12)',
+                                    onConfirm: () => {
+                                        this.currentPage = 'ai-config';
+                                    }
+                                });
+                            }, 500);
+                        } else {
+                            this.isGeneratingPortrait = false;
+                            this.showToast(res.data.error || '生成失败', 'error');
                         }
                     } catch (e) {
-                        console.error('AI生成立绘失败:', e);
-                        this.showToast('生成失败: ' + (e.response?.data?.error || e.message), 'error');
-                    } finally {
+                        console.error('AI生成立绘提交失败:', e);
                         this.isGeneratingPortrait = false;
+                        this.showToast('提交失败: ' + (e.response?.data?.error || e.message), 'error');
                     }
+                },
+
+                // 开始轮询立绘生成任务状态
+                _startPortraitPolling(taskId, characterName) {
+                    const self = this;
+                    let pollCount = 0;
+                    const maxPolls = 60; // 最多轮询60次（3秒一次 = 3分钟）
+                    const interval = 3000;
+
+                    // 清除该任务的旧轮询
+                    if (this.portraitPollTimers[taskId]) {
+                        clearInterval(this.portraitPollTimers[taskId]);
+                    }
+
+                    const timer = setInterval(async () => {
+                        pollCount++;
+                        try {
+                            const res = await api.get('/api/personality/generate-portrait/' + taskId);
+                            const task = res.data;
+
+                            if (task.status === 'completed' && task.portrait_url) {
+                                clearInterval(timer);
+                                delete self.portraitPollTimers[taskId];
+                                self._applyPortraitResult(characterName, task.portrait_url);
+                                if (self.isGeneratingPortrait) {
+                                    self.isGeneratingPortrait = false;
+                                }
+                                return;
+                            }
+
+                            if (task.status === 'failed') {
+                                clearInterval(timer);
+                                delete self.portraitPollTimers[taskId];
+                                self.isGeneratingPortrait = false;
+                                self.showToast(task.error || '立绘生成失败', 'error');
+                                return;
+                            }
+
+                            // 超过最大轮询次数，转后台等待
+                            if (pollCount >= maxPolls) {
+                                clearInterval(timer);
+                                delete self.portraitPollTimers[taskId];
+                                self.isGeneratingPortrait = false;
+                                self.showToast(
+                                    '立绘生成仍在后台处理中，完成后将自动更新。也可稍后重新加载该角色到编辑器获取立绘。',
+                                    'info'
+                                );
+                            }
+                        } catch (e) {
+                            console.error('轮询立绘状态失败:', e);
+                            if (pollCount >= maxPolls) {
+                                clearInterval(timer);
+                                delete self.portraitPollTimers[taskId];
+                                self.isGeneratingPortrait = false;
+                            }
+                        }
+                    }, interval);
+
+                    this.portraitPollTimers[taskId] = timer;
+                },
+
+                // 应用立绘生成结果
+                _applyPortraitResult(characterName, portraitUrl) {
+                    if (!portraitUrl) return;
+
+                    // 存入 pendingPortraits
+                    this.pendingPortraits[characterName] = portraitUrl;
+
+                    // 如果当前编辑器角色名匹配，直接更新
+                    if (this.personality && this.personality.name === characterName) {
+                        this.personality.portrait = portraitUrl;
+                        this.personalityHasUnsavedChanges = true;
+                        this.showToast('立绘生成成功！请点击"应用"保存', 'success');
+                    } else {
+                        this.showToast(
+                            '角色「' + characterName + '」的立绘已生成，下次加载该角色到编辑器时将自动应用。',
+                            'success'
+                        );
+                    }
+
+                    // 更新角色卡列表中的立绘
+                    if (this.personalityPresets) {
+                        const preset = this.personalityPresets.find(p => p.name === characterName);
+                        if (preset) {
+                            preset.portrait = portraitUrl;
+                        }
+                    }
+                    if (this.customPersonalityPresets) {
+                        const preset = this.customPersonalityPresets.find(p => p.name === characterName);
+                        if (preset) {
+                            preset.portrait = portraitUrl;
+                        }
+                    }
+
+                    this.isGeneratingPortrait = false;
                 },
 
                 // 清理未使用角色立绘
@@ -14563,6 +14677,17 @@ def main(params):
                             this.$nextTick(() => this.scrollToBottom(false));
                         }
                         this.processPendingQueue(finishedSessionId);
+                    });
+
+                    // 监听后台 AI 立绘生成完成事件
+                    socket.on('portrait_generation_complete', (data) => {
+                        console.log('[Portrait] 收到立绘生成完成事件:', data);
+                        if (data && data.status === 'completed' && data.portrait_url) {
+                            this._applyPortraitResult(data.character_name, data.portrait_url);
+                        } else if (data && data.status === 'failed') {
+                            this.isGeneratingPortrait = false;
+                            this.showToast(data.error || '立绘生成失败', 'error');
+                        }
                     });
                 },
                 

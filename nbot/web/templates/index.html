@@ -11304,6 +11304,8 @@
                     showCreateCharacterMenu: false, // 新建角色下拉菜单
                     showBulkImportExportMenu: false, // 批量导入导出菜单
                     isGeneratingPortrait: false, // 是否正在AI生成立绘
+                    pendingPortraits: {}, // 后台生成待领取的立绘 { character_name: portrait_url }
+                    portraitPollTimers: {}, // 立绘生成轮询定时器 { task_id: timer_id }
                     isCleaningPortraits: false, // 是否正在清理未使用立绘
                     characterCardViewMode: localStorage.getItem('characterCardViewMode') || 'grid', // 角色卡视图模式: grid/list
                     showCharacterCardFullscreen: false, // 是否显示角色卡全屏界面
