@@ -4,6 +4,7 @@ import datetime
 import time
 import re
 import copy
+import logging
 from typing import Any, Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from nbot.services.ai import (
@@ -79,6 +80,7 @@ except ImportError:
     KNOWLEDGE_AVAILABLE = False
 
 last_log_entry = {}
+_log = logging.getLogger(__name__)
 
 
 def _get_project_root() -> str:
