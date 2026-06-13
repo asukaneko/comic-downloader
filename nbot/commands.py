@@ -1,6 +1,7 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage, BotAPI
 from ncatbot.utils.logger import get_log
 from nbot.core.heartbeat import HeartbeatCore
+from nbot.core.switches import SwitchManager
 
 from nbot.web.utils.config_loader import load_config
 from nbot.web.secure_store import read_secure_json, write_secure_json
@@ -739,7 +740,7 @@ def build_novel_detail_html(title: str, info: dict, filepath: str):
         f.write(html_content)
 
 
-class SwitchManager:
+class LegacySwitchManager:
     """
     开关管理器，支持群聊、个人和会话开关的批量管理
     群聊开关以群为整体，会话开关以 conversation_id 为整体
