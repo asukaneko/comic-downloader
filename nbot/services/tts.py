@@ -3,6 +3,7 @@ import logging
 import os
 import time
 
+from nbot.services.tts_config import get_tts_config, get_tts_config_from_server
 from nbot.web.utils.config_loader import get_tts_model_config
 
 _log = logging.getLogger(__name__)
@@ -13,7 +14,7 @@ config_parser.read('config.ini', encoding='utf-8')
 cache_address = os.path.abspath(config_parser.get('cache', 'cache_address'))
 
 
-def _get_tts_config():
+def _get_legacy_tts_config():
     """获取TTS配置，返回统一字段格式"""
     tts_config = get_tts_model_config()
     if tts_config and tts_config.get("api_key"):
@@ -49,6 +50,19 @@ def _get_tts_config():
         "tts_headers": "",
         "tts_body_template": "",
     }
+
+
+def _get_tts_config():
+    try:
+        from nbot.web.server import WebChatServer
+
+        server = WebChatServer.get_instance()
+        if server:
+            return get_tts_config_from_server(server)
+    except Exception:
+        pass
+
+    return get_tts_config()
 
 
 def remove_brackets_content(text: str) -> str:
