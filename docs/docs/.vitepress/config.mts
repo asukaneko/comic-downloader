@@ -111,116 +111,168 @@ export default defineConfig({
             { text: '频道管理与接入', link: '/guide/channels.md' },
           ]
         },
-        {
-          text: 'nbot 核心模块',
-          collapsed: true,
-          items: [
-            {
-              text: 'core - AI核心',
+{
+              text: 'nbot 核心模块',
               collapsed: true,
               items: [
-                { text: 'ai_pipeline - 管道中间件', link: '/guide/nbot/core/ai_pipeline.md' },
-                { text: 'chat_models - 聊天模型', link: '/guide/nbot/core/chat_models.md' },
-                { text: 'agent_service - AI服务', link: '/guide/nbot/core/agent_service.md' },
-                { text: 'session_store - 会话存储', link: '/guide/nbot/core/session_store.md' },
-                { text: 'model_adapter - 模型适配', link: '/guide/nbot/core/model_adapter.md' },
-                { text: 'protocols - 多协议适配', link: '/guide/nbot/core/protocols.md' },
-                { text: 'workspace - 工作区', link: '/guide/nbot/core/workspace.md' },
-                { text: 'workflow - 工作流', link: '/guide/nbot/core/workflow.md' },
-                { text: 'token_stats - Token用量统计', link: '/guide/nbot/core/token_stats.md' },
+                {
+                  text: 'core - AI核心',
+                  collapsed: true,
+                  items: [
+                    { text: 'ai_pipeline - 管道中间件', link: '/guide/nbot/core/ai_pipeline.md' },
+                    { text: 'chat_models - 聊天模型', link: '/guide/nbot/core/chat_models.md' },
+                    { text: 'agent_service - AI服务', link: '/guide/nbot/core/agent_service.md' },
+                    { text: 'session_store - 会话存储', link: '/guide/nbot/core/session_store.md' },
+                    { text: 'model_adapter - 模型适配', link: '/guide/nbot/core/model_adapter.md' },
+                    { text: 'protocols - 多协议适配', link: '/guide/nbot/core/protocols.md' },
+                    { text: 'workspace - 工作区', link: '/guide/nbot/core/workspace.md' },
+                    { text: 'workflow - 工作流', link: '/guide/nbot/core/workflow.md' },
+                    { text: 'token_stats - Token用量统计', link: '/guide/nbot/core/token_stats.md' },
+                    { text: 'failover - 故障转移', link: '/guide/nbot/core/failover.md' },
+                    { text: 'file_parser - 文件解析', link: '/guide/nbot/core/file_parser.md' },
+                    { text: 'message_middleware - 消息中间件', link: '/guide/nbot/core/message_middleware.md' },
+                    { text: 'message - 统一消息', link: '/guide/nbot/core/message.md' },
+                    { text: 'prompt - 提示词管理', link: '/guide/nbot/core/prompt.md' },
+                    { text: 'switches - 开关管理', link: '/guide/nbot/core/switches.md' },
+                    { text: 'heartbeat - 心跳引擎', link: '/guide/nbot/core/heartbeat.md' },
+                    {
+                      text: '协议详细实现',
+                      collapsed: true,
+                      items: [
+                        { text: 'OpenAI Chat', link: '/guide/nbot/core/protocols/openai_chat.md' },
+                        { text: 'OpenAI Responses', link: '/guide/nbot/core/protocols/openai_responses.md' },
+                        { text: 'Anthropic Messages', link: '/guide/nbot/core/protocols/anthropic_messages.md' },
+                        { text: 'Gemini Native', link: '/guide/nbot/core/protocols/gemini_native.md' },
+                      ]
+                    },
+                  ]
+                },
+                {
+                  text: 'character - 实时情感引擎',
+                  collapsed: true,
+                  items: [
+                    { text: 'index - 概述', link: '/guide/nbot/character/index.md' },
+                    { text: 'models - 数据模型', link: '/guide/nbot/character/models.md' },
+                    { text: 'prompt_stack - 动态提示词栈', link: '/guide/nbot/character/prompt_stack.md' },
+                    { text: 'runtime - 运行时引擎', link: '/guide/nbot/character/runtime.md' },
+                    { text: 'planner - 反应计划生成器', link: '/guide/nbot/character/planner.md' },
+                    { text: 'state_machine - 状态机', link: '/guide/nbot/character/state_machine.md' },
+                    { text: 'policies - 信号分析器', link: '/guide/nbot/character/policies.md' },
+                    { text: 'memory - 角色记忆服务', link: '/guide/nbot/character/memory.md' },
+                    { text: 'repository - 数据仓库', link: '/guide/nbot/character/repository.md' },
+                    { text: 'world_book - 世界书', link: '/guide/nbot/character/world_book.md' },
+                  ]
+                },
+                {
+                  text: 'channels - 频道层',
+                  collapsed: true,
+                  items: [
+                    { text: 'add-channel - 新增频道', link: '/guide/nbot/channels/add-channel.md' },
+                    { text: 'base - 频道基类', link: '/guide/nbot/channels/base.md' },
+                    { text: 'registry - 频道注册', link: '/guide/nbot/channels/registry.md' },
+                    { text: 'qq - QQ适配器', link: '/guide/nbot/channels/qq.md' },
+                    { text: 'web - Web适配器', link: '/guide/nbot/channels/web.md' },
+                    { text: 'telegram - Telegram适配器', link: '/guide/nbot/channels/telegram.md' },
+                  ]
+                },
+                {
+                  text: 'services - 服务层',
+                  collapsed: true,
+                  items: [
+                    { text: 'ai - AI客户端', link: '/guide/nbot/services/ai.md' },
+                    { text: 'tts - 语音合成', link: '/guide/nbot/services/tts.md' },
+                    { text: 'stt - 语音识别', link: '/guide/nbot/services/stt.md' },
+                    { text: 'sticker_service - 表情包服务', link: '/guide/nbot/services/sticker_service.md' },
+                    { text: 'tools - 工具系统', link: '/guide/nbot/services/tools.md' },
+                    { text: 'chat_service - 聊天服务', link: '/guide/nbot/services/chat_service.md' },
+                    { text: 'todo_tools - 待办工具', link: '/guide/nbot/services/todo_tools.md' },
+                    { text: 'feishu - 飞书集成', link: '/guide/nbot/services/feishu.md' },
+                    { text: 'telegram - Telegram集成', link: '/guide/nbot/services/telegram.md' },
+                    { text: 'mcp_bridge - MCP桥接', link: '/guide/nbot/services/mcp_bridge.md' },
+                    { text: 'react - ReAct代理', link: '/guide/nbot/services/react.md' },
+                    { text: 'tts_config - TTS配置', link: '/guide/nbot/services/tts_config.md' },
+                  ]
+                },
+                { 
+                  text: 'plugins - 插件系统',
+                  collapsed: true,
+                  items: [
+                    { text: 'skills - 技能系统', link: '/guide/nbot/plugins/skills.md' },
+                    { text: 'dispatcher - 调度器', link: '/guide/nbot/plugins/dispatcher.md' },
+                  ]
+                },
+                {
+                  text: 'gateway - 消息网关层',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/gateway/index.md' },
+                    { text: '处理管线', link: '/guide/nbot/gateway/pipeline.md' },
+                    { text: '安全认证与限流', link: '/guide/nbot/gateway/security.md' },
+                    { text: '存储与追踪', link: '/guide/nbot/gateway/storage.md' },
+                    { text: '队列与投递', link: '/guide/nbot/gateway/delivery.md' },
+                    { text: '内部任务', link: '/guide/nbot/gateway/internal-tasks.md' },
+                    { text: '节点控制平面', link: '/guide/nbot/gateway/nodes.md' },
+                    { text: '限流策略', link: '/guide/nbot/gateway/rate_limit.md' },
+                    { text: '消息去重', link: '/guide/nbot/gateway/dedupe.md' },
+                    { text: 'TTS处理', link: '/guide/nbot/gateway/tts_handler.md' },
+                    { text: '事件总线', link: '/guide/nbot/gateway/bus.md' },
+                  ]
+                },
+                {
+                  text: 'mcp - AI Agent 接口',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/mcp/index.md' },
+                    { text: 'Gateway Tools', link: '/guide/nbot/mcp/tools.md' },
+                    { text: 'Web Tools', link: '/guide/nbot/mcp/web_tools.md' },
+                    { text: '配置', link: '/guide/nbot/mcp/config.md' },
+                    { text: 'MCP Client', link: '/guide/nbot/mcp/client.md' },
+                  ]
+                },
+                {
+                  text: 'web - Web后台',
+                  collapsed: true,
+                  items: [
+                    { text: 'server - 服务入口', link: '/guide/nbot/web/server.md' },
+                    { text: 'routes - API路由', link: '/guide/nbot/web/routes.md' },
+                    { text: 'file_gateway - 文件网关', link: '/guide/nbot/web/file_gateway.md' },
+                    { text: 'socket_events - Socket事件', link: '/guide/nbot/web/socket_events.md' },
+                    { text: 'sessions_db - 会话数据库', link: '/guide/nbot/web/sessions_db.md' },
+                    { text: 'persistence - 数据持久化', link: '/guide/nbot/web/persistence.md' },
+                    { text: 'secure_store - 安全存储', link: '/guide/nbot/web/secure_store.md' },
+                  ]
+                },
+                {
+                  text: 'cli - 命令行界面',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/cli/index.md' },
+                  ]
+                },
               ]
             },
             {
-              text: 'character - 实时情感引擎',
+              text: '高级指南',
               collapsed: true,
               items: [
-                { text: 'index - 概述', link: '/guide/nbot/character/index.md' },
-                { text: 'models - 数据模型', link: '/guide/nbot/character/models.md' },
-                { text: 'prompt_stack - 动态提示词栈', link: '/guide/nbot/character/prompt_stack.md' },
-                { text: 'runtime - 运行时引擎', link: '/guide/nbot/character/runtime.md' },
-                { text: 'planner - 反应计划生成器', link: '/guide/nbot/character/planner.md' },
-                { text: 'state_machine - 状态机', link: '/guide/nbot/character/state_machine.md' },
-                { text: 'policies - 信号分析器', link: '/guide/nbot/character/policies.md' },
-                { text: 'memory - 角色记忆服务', link: '/guide/nbot/character/memory.md' },
-                { text: 'repository - 数据仓库', link: '/guide/nbot/character/repository.md' },
-                { text: 'world_book - 世界书', link: '/guide/nbot/character/world_book.md' },
+                { text: 'MCP 集成指南', link: '/guide/advanced/mcp-integration.md' },
+                { text: '消息过滤器', link: '/guide/advanced/message-filter.md' },
               ]
             },
             {
-              text: 'channels - 频道层',
+              text: '常见问题',
               collapsed: true,
               items: [
-                { text: 'add-channel - 新增频道', link: '/guide/nbot/channels/add-channel.md' },
-                { text: 'base - 频道基类', link: '/guide/nbot/channels/base.md' },
-                { text: 'registry - 频道注册', link: '/guide/nbot/channels/registry.md' },
-                { text: 'qq - QQ适配器', link: '/guide/nbot/channels/qq.md' },
-                { text: 'web - Web适配器', link: '/guide/nbot/channels/web.md' },
-                { text: 'telegram - Telegram适配器', link: '/guide/nbot/channels/telegram.md' },
+                { text: 'FAQ', link: '/guide/faq/index.md' },
               ]
             },
             {
-              text: 'services - 服务层',
+              text: '远程部署',
               collapsed: true,
               items: [
-                { text: 'ai - AI客户端', link: '/guide/nbot/services/ai.md' },
-                { text: 'tts - 语音合成', link: '/guide/nbot/services/tts.md' },
-                { text: 'stt - 语音识别', link: '/guide/nbot/services/stt.md' },
-                { text: 'sticker_service - 表情包服务', link: '/guide/nbot/services/sticker_service.md' },
-                { text: 'tools - 工具系统', link: '/guide/nbot/services/tools.md' },
-                { text: 'chat_service - 聊天服务', link: '/guide/nbot/services/chat_service.md' },
-                { text: 'todo_tools - 待办工具', link: '/guide/nbot/services/todo_tools.md' },
+                { text: 'Docker 部署指南', link: '/guide/docker-deploy.md' },
               ]
-            },
-            { 
-              text: 'plugins - 插件系统',
-              collapsed: true,
-              items: [
-                { text: 'skills - 技能系统', link: '/guide/nbot/plugins/skills.md' },
-                { text: 'dispatcher - 调度器', link: '/guide/nbot/plugins/dispatcher.md' },
-              ]
-            },
-            {
-              text: 'gateway - 消息网关层',
-              collapsed: true,
-              items: [
-                { text: '概述', link: '/guide/nbot/gateway/index.md' },
-                { text: '处理管线', link: '/guide/nbot/gateway/pipeline.md' },
-                { text: '安全认证与限流', link: '/guide/nbot/gateway/security.md' },
-                { text: '存储与追踪', link: '/guide/nbot/gateway/storage.md' },
-                { text: '队列与投递', link: '/guide/nbot/gateway/delivery.md' },
-                { text: '内部任务', link: '/guide/nbot/gateway/internal-tasks.md' },
-                { text: '节点控制平面', link: '/guide/nbot/gateway/nodes.md' },
-              ]
-            },
-            {
-              text: 'mcp - AI Agent 接口',
-              collapsed: true,
-              items: [
-                { text: '概述', link: '/guide/nbot/mcp/index.md' },
-                { text: 'Gateway Tools', link: '/guide/nbot/mcp/tools.md' },
-                { text: 'Web Tools', link: '/guide/nbot/mcp/web_tools.md' },
-                { text: '配置', link: '/guide/nbot/mcp/config.md' },
-                { text: 'MCP Client', link: '/guide/nbot/mcp/client.md' },
-              ]
-            },
-            {
-              text: 'web - Web后台',
-              collapsed: true,
-              items: [
-                { text: 'server - 服务入口', link: '/guide/nbot/web/server.md' },
-                { text: 'routes - API路由', link: '/guide/nbot/web/routes.md' },
-                { text: 'file_gateway - 文件网关', link: '/guide/nbot/web/file_gateway.md' },
-              ]
-            },
-          ]
-        },
-        {
-          text: '远程部署',
-          collapsed: true,
-          items: [
-            { text: 'Docker 部署指南', link: '/guide/docker-deploy.md' },
-          ]
-        }
+            }
       ],
       '/napcat/':[
         {
