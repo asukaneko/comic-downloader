@@ -115,6 +115,7 @@ class GatewayDelivery:
 
     统一将 AI 回复投递到对应频道。
     支持长文本分片、富文本降级和投递状态记录。
+    支持 TTS 语音合成回调。
     """
 
     def __init__(self, delivery_store: "DeliveryStore | None" = None):
@@ -122,6 +123,7 @@ class GatewayDelivery:
         self._delivery_store = delivery_store
         self._enable_text_split = True
         self._enable_markdown_strip = True
+        self._tts_handler: Any = None  # TTS 回调处理器
 
     @property
     def enable_text_split(self) -> bool:
@@ -149,6 +151,16 @@ class GatewayDelivery:
         """
         self._senders[channel_id] = send_func
         _log.debug("[Delivery] 注册发送器 channel=%s", channel_id)
+
+    def register_tts_handler(self, handler: Any) -> None:
+        """注册 TTS 语音合成回调处理器
+
+        Args:
+            handler: 异步处理函数，签名为：
+                     async def handle_tts(channel_id, conversation_id, content, metadata) -> None
+        """
+        self._tts_handler = handler
+        _log.debug("[Delivery] 注册 TTS 处理器")
 
     async def send_response(
         self,
@@ -260,6 +272,22 @@ class GatewayDelivery:
                 final_status = "partial_failed"
             else:
                 final_status = "partial_failed"
+
+            # TTS 处理：如果注册了 TTS 处理器且文本投递成功，异步生成语音
+            if self._tts_handler and final_status in ("delivered", "built") and content:
+                try:
+                    await self._tts_handler(
+                        channel_id=channel_id,
+                        conversation_id=chat_request.conversation_id,
+                        content=content,
+                        metadata={
+                            "trace_id": trace_id,
+                            "user_id": getattr(chat_request, "user_id", ""),
+                            **dict(metadata or {}),
+                        },
+                    )
+                except Exception as e:
+                    _log.warning("[Delivery] TTS 处理异常 trace=%s error=%s", trace_id, str(e))
 
             if self._delivery_store and delivery_id is not None:
                 try:

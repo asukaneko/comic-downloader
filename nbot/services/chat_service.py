@@ -807,6 +807,56 @@ def _run_qq_chat_request(
     if group_id:
         group_id = str(group_id)
 
+    # === 命令处理（Gateway 上下文）===
+    # 检查是否是命令（以 / 开头）
+    if content and content.startswith("/"):
+        try:
+            from nbot.commands import match_command
+            handler, cmd = match_command(content)
+            if handler:
+                # 创建一个模拟的 msg 对象用于命令处理
+                class MockMsg:
+                    def __init__(self, user_id, group_id, raw_message, conversation_id):
+                        self.user_id = user_id
+                        self.group_id = group_id
+                        self.raw_message = raw_message
+                        self.conversation_id = conversation_id
+                        self._reply_text = None
+
+                    async def reply(self, text=None, **kwargs):
+                        self._reply_text = text
+
+                is_group = bool(group_id)
+                mock_msg = MockMsg(
+                    user_id=group_user_id or user_id,
+                    group_id=group_id,
+                    raw_message=content,
+                    conversation_id=session_id,
+                )
+
+                # 执行命令处理函数
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # 如果事件循环已在运行，使用 ensure_future
+                        import concurrent.futures
+                        with concurrent.futures.ThreadPoolExecutor() as pool:
+                            future = pool.submit(asyncio.run, handler(mock_msg, is_group))
+                            future.result(timeout=30)
+                    else:
+                        loop.run_until_complete(handler(mock_msg, is_group))
+                except Exception as e:
+                    _log.warning(f"[QQ] 命令执行异常 cmd={cmd} error={e}")
+
+                # 返回命令响应
+                if mock_msg._reply_text:
+                    return ChatResponse(final_content=mock_msg._reply_text)
+        except ImportError:
+            _log.debug("[QQ] 无法导入命令模块，跳过命令处理")
+        except Exception as e:
+            _log.warning(f"[QQ] 命令处理异常 error={e}")
+
     # === Gateway 事件记录：开始（QQ 频道）===
     trace_id = ""
     try:

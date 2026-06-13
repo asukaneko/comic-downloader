@@ -1,6 +1,7 @@
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage, BotAPI
 from ncatbot.utils.logger import get_log
 from nbot.core.heartbeat import HeartbeatCore
+from nbot.core.switches import SwitchManager
 
 from nbot.web.utils.config_loader import load_config
 from nbot.web.secure_store import read_secure_json, write_secure_json
@@ -739,18 +740,19 @@ def build_novel_detail_html(title: str, info: dict, filepath: str):
         f.write(html_content)
 
 
-class SwitchManager:
+class LegacySwitchManager:
     """
-    开关管理器，支持群聊和个人开关的批量管理
-    群聊开关以群为整体
+    开关管理器，支持群聊、个人和会话开关的批量管理
+    群聊开关以群为整体，会话开关以 conversation_id 为整体
     """
-    
+
     def __init__(self):
         # 存储所有开关状态
         self.group_switches = {}  # {group_id: {switch_name: bool}}
         self.user_switches = {}   # {user_id: {switch_name: bool}}
+        self.conversation_switches = {}  # {conversation_id: {switch_name: bool}}
         self.switch_configs = {}   # {switch_name: {'default': bool, 'description': str}}
-        
+
         # 初始化默认开关
         self._init_default_switches()
     
@@ -768,30 +770,39 @@ class SwitchManager:
         }
         self.save_switches()
     
-    def get_switch_state(self, switch_name: str, group_id: str = None, user_id: str = None):
+    def get_switch_state(self, switch_name: str, group_id: str = None, user_id: str = None, conversation_id: str = None):
         """获取开关状态"""
         if switch_name not in self.switch_configs:
             raise ValueError(f"未知的开关类型: {switch_name}")
-        
-        # 优先检查用户开关
+
+        # 优先检查会话开关（conversation_id 优先级最高）
+        if conversation_id and conversation_id in self.conversation_switches:
+            if switch_name in self.conversation_switches[conversation_id]:
+                return self.conversation_switches[conversation_id][switch_name]
+
+        # 检查用户开关
         if user_id and user_id in self.user_switches:
             if switch_name in self.user_switches[user_id]:
                 return self.user_switches[user_id][switch_name]
-        
+
         # 检查群聊开关
         if group_id and group_id in self.group_switches:
             if switch_name in self.group_switches[group_id]:
                 return self.group_switches[group_id][switch_name]
-        
+
         # 返回默认值
         return self.switch_configs[switch_name]['default']
     
-    def set_switch_state(self, switch_name: str, state: bool, group_id: str = None, user_id: str = None):
+    def set_switch_state(self, switch_name: str, state: bool, group_id: str = None, user_id: str = None, conversation_id: str = None):
         """设置开关状态"""
         if switch_name not in self.switch_configs:
             raise ValueError(f"未知的开关类型: {switch_name}")
-        
-        if user_id:
+
+        if conversation_id:
+            if conversation_id not in self.conversation_switches:
+                self.conversation_switches[conversation_id] = {}
+            self.conversation_switches[conversation_id][switch_name] = state
+        elif user_id:
             if user_id not in self.user_switches:
                 self.user_switches[user_id] = {}
             self.user_switches[user_id][switch_name] = state
@@ -800,14 +811,14 @@ class SwitchManager:
                 self.group_switches[group_id] = {}
             self.group_switches[group_id][switch_name] = state
         else:
-            raise ValueError("必须提供group_id或user_id")
+            raise ValueError("必须提供conversation_id、group_id或user_id")
         self.save_switches()
     
-    def toggle_switch(self, switch_name: str, group_id: str = None, user_id: str = None):
+    def toggle_switch(self, switch_name: str, group_id: str = None, user_id: str = None, conversation_id: str = None):
         """切换开关状态"""
-        current_state = self.get_switch_state(switch_name, group_id, user_id)
+        current_state = self.get_switch_state(switch_name, group_id, user_id, conversation_id)
         new_state = not current_state
-        self.set_switch_state(switch_name, new_state, group_id, user_id)
+        self.set_switch_state(switch_name, new_state, group_id, user_id, conversation_id)
         self.save_switches()
         return new_state
     
@@ -828,7 +839,8 @@ class SwitchManager:
         """
         data = {
             'group_switches': self.group_switches,
-            'user_switches': self.user_switches
+            'user_switches': self.user_switches,
+            'conversation_switches': self.conversation_switches
         }
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -843,6 +855,7 @@ class SwitchManager:
                 data = json.load(f)
                 self.group_switches = data.get('group_switches', {})
                 self.user_switches = data.get('user_switches', {})
+                self.conversation_switches = data.get('conversation_switches', {})
         except FileNotFoundError:
             # 文件不存在时使用默认值
             pass
@@ -876,8 +889,26 @@ switch.save_switches()
 #     region 命令
 #----------------------
 
-@register_command("/tts",help_text = "/tts -> 开启或关闭TTS(admin)",admin_show = True,category = "4")
+@register_command("/tts",help_text = "/tts -> 开启或关闭TTS语音",admin_show = False,category = "4")
 async def handle_tts(msg, is_group=True):
+    """处理 /tts 命令，支持 QQ 消息和频道上下文
+
+    对于 QQ 消息：使用 group_id 或 user_id 作为开关作用域
+    对于频道上下文：使用 conversation_id 作为开关作用域（单会话有效）
+    """
+    # 检查是否有 conversation_id（频道上下文）
+    conversation_id = getattr(msg, 'conversation_id', None)
+
+    if conversation_id:
+        # 频道上下文：使用 conversation_id 作为作用域
+        if_tts = switch.toggle_switch('tts', conversation_id=conversation_id)
+        text = "已开启TTS喵~" if if_tts else "已关闭TTS喵~"
+        # 通过 Gateway 回复（如果有 reply 方法）
+        if hasattr(msg, 'reply'):
+            await msg.reply(text=text)
+        return
+
+    # QQ 消息上下文：原有逻辑
     if str(msg.user_id) not in admin:
         if is_group:
             await msg.reply(text="你没有权限使用此命令喵~")
@@ -4863,6 +4894,20 @@ async def dispatch_message(msg, is_group: bool):
             if response:
                 _log.info(f"Sending group reply: {response[:50]}...")
                 await msg.reply(text=response)
+
+                # TTS 处理：检查开关并发送语音
+                try:
+                    conversation_id = f"qq:group:{group_id}"
+                    if switch.get_switch_state('tts', conversation_id=conversation_id):
+                        from nbot.services.tts import generate_tts_audio
+                        from ncatbot.core.element import MessageChain, Record
+                        audio_path = generate_tts_audio(response)
+                        if audio_path:
+                            rtf = MessageChain([Record(audio_path)])
+                            await bot.api.post_group_msg(group_id=group_id, rtf=rtf)
+                            _log.info(f"[TTS] 语音已发送到群 {group_id}")
+                except Exception as tts_err:
+                    _log.warning(f"[TTS] 群聊语音发送失败: {tts_err}")
             else:
                 _log.warning("No response from chat service")
         except Exception as e:
@@ -4881,6 +4926,20 @@ async def dispatch_message(msg, is_group: bool):
             if response:
                 _log.info(f"Sending private reply: {response[:50]}...")
                 await msg.reply(text=response)
+
+                # TTS 处理：检查开关并发送语音
+                try:
+                    conversation_id = f"qq:private:{user_id}"
+                    if switch.get_switch_state('tts', conversation_id=conversation_id):
+                        from nbot.services.tts import generate_tts_audio
+                        from ncatbot.core.element import MessageChain, Record
+                        audio_path = generate_tts_audio(response)
+                        if audio_path:
+                            rtf = MessageChain([Record(audio_path)])
+                            await bot.api.post_private_msg(user_id=user_id, rtf=rtf)
+                            _log.info(f"[TTS] 语音已发送到用户 {user_id}")
+                except Exception as tts_err:
+                    _log.warning(f"[TTS] 私聊语音发送失败: {tts_err}")
             else:
                 _log.warning("No response from chat service")
         except Exception as e:
