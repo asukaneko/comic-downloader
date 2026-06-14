@@ -13,6 +13,7 @@ from nbot.plot.graph_manager import PlotGraphManager, get_plot_graph_manager
 from nbot.plot.choice_generator import PlotChoiceGenerator
 from nbot.plot.memory_bridge import PlotMemoryBridge
 from nbot.plot.world_book_bridge import PlotWorldBookBridge
+from nbot.plot.multimedia_bridge import MultimediaBridge
 
 __all__ = [
     "PlotNode",
@@ -23,4 +24,5 @@ __all__ = [
     "PlotChoiceGenerator",
     "PlotMemoryBridge",
     "PlotWorldBookBridge",
+    "MultimediaBridge",
 ]

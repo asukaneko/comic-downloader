@@ -24,6 +24,12 @@ from nbot.core.chat_models import ChatRequest, ChatResponse
 
 _log = logging.getLogger(__name__)
 
+def _level_rank(level: str) -> int:
+    """Rank plot choice levels for comparison."""
+    return {"normal": 0, "important": 1, "turning_point": 2, "ending": 3}.get(level, 0)
+
+
+
 
 def _custom_prompt_stack_key(custom_prompt: Dict[str, Any]) -> str:
     """Build a stable PromptStack key for a session custom prompt."""
@@ -1043,6 +1049,28 @@ class AIPipeline:
                 choice_data["id"] = pc.id
 
             _log.debug("[AIPipeline] generated %d plot choices", len(choices))
+
+            # Trigger multimedia effects for the highest-level choice
+            try:
+                from nbot.plot.multimedia_bridge import MultimediaBridge
+                mm = MultimediaBridge.instance()
+                max_level = "normal"
+                for cd in choices:
+                    lv = cd.get("level", "normal")
+                    if _level_rank(lv) > _level_rank(max_level):
+                        max_level = lv
+                # Build a mock choice object for the bridge
+                mock_choice = type("C", (), {"level": max_level, "text": response_text[:80]})()
+                mm_ctx = {
+                    "mood": ctx.metadata.get("mood", "calm"),
+                    "reply_text": response_text[:200],
+                    "location": ctx.metadata.get("location", ""),
+                }
+                mm_actions = mm.on_plot_choice(mock_choice, mm_ctx)
+                if mm_actions:
+                    result.metadata["multimedia_actions"] = mm_actions
+            except Exception as mm_e:
+                _log.debug("[AIPipeline] multimedia trigger skipped: %s", mm_e)
         except Exception as e:
             _log.debug("[AIPipeline] plot choice generation failed: %s", e)
 
