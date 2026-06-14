@@ -1,3 +1,3 @@
 """NekoBot 版本信息"""
 
-__version__ = "2.7.8"
+__version__ = "3.0.0-preview"
