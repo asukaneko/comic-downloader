@@ -44,7 +44,9 @@ class SpeakerScheduler:
         if strategy == "random":
             return self._random(character_ids)
         if strategy == "relevance":
-            return self._relevance(message, character_ids)
+            return self._relevance(message, character_ids, conversation)
+        if strategy == "narrator_driven":
+            return self._narrator_driven(conversation, character_ids)
 
         _log.warning("unknown speaker strategy: %s, falling back to mention", strategy)
         return self._mention(message, character_ids)
@@ -156,13 +158,30 @@ class SpeakerScheduler:
     def _random(self, character_ids: list[str]) -> str:
         return _random.choice(character_ids)
 
-    def _relevance(self, message: str, character_ids: list[str]) -> str:
-        """基于相关度打分（简化版：关键词匹配）"""
-        # 简单实现：统计消息中出现角色名的次数
-        scores: dict[str, int] = {}
+    def _narrator_driven(self, conversation: GroupConversation, character_ids: list[str]) -> str:
+        """旁白驱动策略：由旁白角色 ID 决定（简化版：返回 narrator_id 或随机）"""
+        narrator_id = conversation.narrator_id
+        if narrator_id and narrator_id in character_ids:
+            return narrator_id
+        # 旁白不在角色列表中时，返回第一个非旁白角色
+        non_narrator = [c for c in character_ids if c != narrator_id]
+        return non_narrator[0] if non_narrator else _random.choice(character_ids)
+
+    def _relevance(self, message: str, character_ids: list[str], conversation=None) -> str:
+        """基于相关度打分：关键词匹配 + 关系加成"""
+        scores: dict[str, float] = {}
         lower_msg = message.lower()
         for cid in character_ids:
-            scores[cid] = lower_msg.count(cid.lower())
+            scores[cid] = lower_msg.count(cid.lower()) * 10.0
+
+        # 关系加成：高 affinity 的角色更容易接话
+        if conversation and hasattr(conversation, 'relations'):
+            for cid in character_ids:
+                for rel in conversation.relations.values():
+                    if rel.char_a == cid or rel.char_b == cid:
+                        scores[cid] = scores.get(cid, 0) + rel.affection * 0.05
+                        scores[cid] = scores.get(cid, 0) + rel.familiarity * 0.03
+
         if max(scores.values()) > 0:
             return max(scores, key=scores.get)
         return _random.choice(character_ids)

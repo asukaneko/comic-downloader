@@ -34,6 +34,7 @@ class ActionExecutor:
         self.register("log", self._action_log)
         self.register("message", self._action_message)
         self.register("workflow", self._action_workflow)
+        self.register("world_book_add", self._action_world_book_add)
 
     def register(self, action_type: str, handler: Callable) -> None:
         self._handlers[action_type] = handler
@@ -181,3 +182,49 @@ class ActionExecutor:
             )
         except Exception as e:
             return ActionResult(False, "workflow", str(e))
+
+    @staticmethod
+    def _action_world_book_add(action, event, ctx):
+        """Add an entry to a world book.
+
+        action structure:
+        {
+            "type": "world_book_add",
+            "book_id": "wb_xxx",
+            "name": "entry name",
+            "content": "entry content",
+            "keywords": ["kw1", "kw2"],
+            "entry_type": "event",
+            "priority": 80
+        }
+        """
+        try:
+            from nbot.character.storage.world_book_store import WorldBookStore
+            store = WorldBookStore()
+        except Exception:
+            return ActionResult(False, "world_book_add", "WorldBookStore unavailable")
+
+        book_id = action.get("book_id", "")
+        if not book_id:
+            return ActionResult(False, "world_book_add", "No book_id")
+
+        entry_data = {
+            "name": action.get("name", ""),
+            "content": action.get("content", ""),
+            "keywords": action.get("keywords", []),
+            "entry_type": action.get("entry_type", "event"),
+            "priority": action.get("priority", 50),
+            "always_on": action.get("always_on", False),
+            "tags": action.get("tags", []),
+        }
+
+        if not entry_data["content"]:
+            return ActionResult(False, "world_book_add", "Empty content")
+
+        try:
+            entry = store.add_entry(book_id, entry_data)
+            if entry:
+                return ActionResult(True, "world_book_add", "added: " + entry.name)
+            return ActionResult(False, "world_book_add", "Book not found: " + book_id)
+        except Exception as e:
+            return ActionResult(False, "world_book_add", str(e))

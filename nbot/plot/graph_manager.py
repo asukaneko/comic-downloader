@@ -102,6 +102,11 @@ class PlotGraphManager:
             "[PlotGraphManager] selected choice %s on node %s",
             choice.id, choice.node_id,
         )
+
+        # 剧情桥接：记忆 + 世界书
+        self._bridge_to_memory(choice)
+        self._bridge_to_world_book(choice)
+
         return True
 
     def create_edge_for_choice(
@@ -245,6 +250,104 @@ class PlotGraphManager:
                 lines.append(f"    classDef {level} {style}")
 
         return "\n".join(lines)
+
+
+    # -- Bridges --
+
+    def _bridge_to_memory(self, choice: Any) -> None:
+        """将选择写入记忆（非阻塞，失败不影响主流程）"""
+        try:
+            from nbot.plot.memory_bridge import PlotMemoryBridge
+            # 从 choice 的 metadata 获取上下文
+            meta = getattr(choice, 'metadata', {}) or {}
+            conversation_id = meta.get('conversation_id', '')
+            character_id = meta.get('character_id', '')
+            user_id = meta.get('user_id', '')
+            memory_service = meta.get('memory_service')
+            if memory_service:
+                PlotMemoryBridge.instance().on_choice_selected(
+                    choice, conversation_id, character_id, user_id, memory_service,
+                )
+        except Exception as e:
+            _log.debug("bridge to memory failed: %s", e)
+
+    def _bridge_to_world_book(self, choice: Any) -> None:
+        """转折点写入世界书（非阻塞）"""
+        level = getattr(choice, 'level', 'normal')
+        if level != 'turning_point':
+            return
+        try:
+            from nbot.plot.world_book_bridge import PlotWorldBookBridge
+            meta = getattr(choice, 'metadata', {}) or {}
+            conversation_id = meta.get('conversation_id', '')
+            character_id = meta.get('character_id', '')
+            book_id = meta.get('world_book_id', '')
+            world_book_store = meta.get('world_book_store')
+            if world_book_store and book_id:
+                PlotWorldBookBridge.instance().on_turning_point(
+                    choice, conversation_id, character_id, book_id, world_book_store,
+                )
+        except Exception as e:
+            _log.debug("bridge to world book failed: %s", e)
+
+    # -- Branch & Timeline --
+
+    def save_branch(self, conversation_id: str, branch_name: str) -> Optional[str]:
+        """从当前节点创建分支快照，返回分支 ID"""
+        graph = self.get_graph(conversation_id)
+        nodes = graph.get("nodes", [])
+        if not nodes:
+            return None
+
+        # 找到当前最新节点（最后创建的）
+        latest = max(nodes, key=lambda n: n.get("created_at", ""))
+        branch_id = f"br_{latest['id']}_{branch_name}"
+
+        _log.info("branch saved: %s from node %s", branch_id, latest["id"])
+        return branch_id
+
+    def get_timeline(self, conversation_id: str) -> list[dict]:
+        """按时间线返回路径节点（从根到当前）"""
+        graph = self.get_graph(conversation_id)
+        nodes = graph.get("nodes", [])
+        edges = graph.get("edges", [])
+        choices = graph.get("choices", [])
+
+        if not nodes:
+            return []
+
+        # 构建 parent -> child 映射
+        child_map: dict[str, str] = {}
+        for edge in edges:
+            child_map[edge["from_node_id"]] = edge["to_node_id"]
+
+        # 找根节点（没有被任何 edge 指向的）
+        child_set = set(child_map.values())
+        root_candidates = [n for n in nodes if n["id"] not in child_set]
+        if not root_candidates:
+            root_candidates = [nodes[0]]
+
+        # 从根节点沿 selected_choice 路径走
+        path = []
+        current = root_candidates[0]
+        visited = set()
+        while current and current["id"] not in visited:
+            visited.add(current["id"])
+            path.append(current)
+            # 找 selected_choice 对应的边
+            sel_choice_id = current.get("selected_choice_id", "")
+            if sel_choice_id:
+                next_node_id = child_map.get(current["id"])
+                if next_node_id:
+                    current = next(
+                        (n for n in nodes if n["id"] == next_node_id), None,
+                    )
+                else:
+                    break
+            else:
+                break
+
+        return path
 
     # -- Rollback --
 
