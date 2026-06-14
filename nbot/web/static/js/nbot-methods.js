@@ -16336,7 +16336,7 @@ def main(params):
 
                 clearNotificationInbox() {
                     this.notificationInbox = [];
-                }
+                },
 
 
     // ============================================================
