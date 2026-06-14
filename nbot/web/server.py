@@ -53,6 +53,7 @@ from nbot.web.routes import (
     register_gateway_routes,
     register_heartbeat_routes,
     register_hook_routes,
+    register_group_routes,
     register_knowledge_routes,
     register_live2d_routes,
     register_login_token_routes,
@@ -2872,6 +2873,7 @@ class WebChatServer:
         register_gateway_routes(self.app)
         register_gateway_log_routes(self.app)
         register_heartbeat_routes(self.app, self)
+        register_group_routes(self.app, self)
         register_hook_routes(self.app, self)
         register_knowledge_routes(self.app, self)
         register_live2d_routes(self.app, self)

@@ -953,7 +953,39 @@ def _run_qq_chat_request(
         hook_runtime = get_hook_manager()
     except Exception:
         pass
-    result = pipeline.process(ctx, callbacks, tools=tools, max_context_chars=100000, hook_runtime=hook_runtime)
+
+    # === 群聊模式检测 ===
+    group_context = None
+    if group_id:
+        try:
+            from nbot.group.manager import get_group_manager
+            gm = get_group_manager()
+            channel_id = f"qq:group:{group_id}"
+            group = gm.get_group_by_channel(channel_id)
+            if group and group.character_ids:
+                # Load character profiles
+                profiles = {}
+                for cid in group.character_ids:
+                    p = _load_json_file(
+                        os.path.join(_get_project_root(), "data", "character", "profiles.json"), {}
+                    )
+                    if isinstance(p, dict) and cid in p:
+                        profiles[cid] = p[cid]
+                # Build group context
+                from nbot.group.scheduler import SpeakerScheduler
+                from nbot.group.narrator import NarratorCharacter
+                group_context = {
+                    "group": group,
+                    "character_profiles": profiles,
+                    "scheduler": SpeakerScheduler.instance(),
+                    "narrator": NarratorCharacter.instance(),
+                    "auto_narrate": group.config.auto_narrate,
+                    "recent_messages": [],
+                }
+        except Exception as e:
+            _log.debug("group context build failed: %s", e)
+
+    result = pipeline.process(ctx, callbacks, tools=tools, max_context_chars=100000, hook_runtime=hook_runtime, group_context=group_context)
 
     # === Gateway 事件记录：完成（QQ 频道）===
     if trace_id:
@@ -974,6 +1006,14 @@ def _run_qq_chat_request(
     # === 后处理 ===
     assistant_response = clean_response_content(result.final_content)
     display_response = extract_display_text(assistant_response)
+
+    # 群聊模式：添加角色名前缀
+    if group_context and group_context.get("group"):
+        group = group_context["group"]
+        speaker = ctx.metadata.get("group_speaker", "")
+        speaker_name = ctx.metadata.get("group_speaker_name", speaker)
+        if speaker_name and display_response:
+            display_response = f"[{speaker_name}] {display_response}"
     if assistant_response and assistant_response.strip().startswith("{"):
         try:
             fixed = assistant_response.replace(chr(8220), '"').replace(chr(8221), '"').replace(chr(65306), ":")

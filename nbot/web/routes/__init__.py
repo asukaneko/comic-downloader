@@ -9,6 +9,7 @@ from nbot.web.routes.config_legacy import register_config_legacy_routes
 from nbot.web.routes.config_transfer import register_config_transfer_routes
 from nbot.web.routes.files import register_file_routes
 from nbot.web.routes.gateway import register_gateway_routes
+from nbot.web.routes.groups import register_group_routes
 from nbot.web.routes.gateway_logs import register_gateway_log_routes
 from nbot.web.routes.heartbeat import register_heartbeat_routes
 from nbot.web.routes.hooks import register_hook_routes
@@ -52,6 +53,7 @@ __all__ = [
     "register_config_transfer_routes",
     "register_file_routes",
     "register_gateway_routes",
+    "register_group_routes",
     "register_gateway_log_routes",
     "register_heartbeat_routes",
     "register_hook_routes",

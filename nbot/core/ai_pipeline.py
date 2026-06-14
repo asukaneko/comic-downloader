@@ -571,6 +571,7 @@ class AIPipeline:
         max_tool_iterations: int = 50,
         max_context_chars: int = 100000,
         hook_runtime=None,
+        group_context: Optional[Dict[str, Any]] = None,
     ) -> PipelineResult:
         """执行完整的 AI 处理管道。
 
@@ -581,12 +582,18 @@ class AIPipeline:
             max_tool_iterations: 工具循环最大迭代次数
             max_context_chars: 上下文最大字符数
             hook_runtime: HookManager 实例（可选，None 时零开销）
+            group_context: 群聊上下文（可选，含 group, scheduler, characters 等）
 
         Returns:
             PipelineResult 可转为 ChatResponse
         """
         self._hook_runtime = hook_runtime
+        self._group_context = group_context
         self._emit_hook("conversation.before_receive", ctx)
+
+        # Phase 0: 群聊发言角色选择（群聊模式下）
+        if group_context:
+            self._phase_group_speaker_select(ctx, group_context)
 
         # === 通用消息预处理（附件下载 + 媒体描述 + 工作区保存） ===
         self._ensure_middleware_initialized()
@@ -606,6 +613,10 @@ class AIPipeline:
         self._phase_knowledge(ctx, callbacks, progress)
         self._emit_hook("pipeline.after_knowledge", ctx)
 
+        # Phase 2.5: 群聊 prompt 注入
+        if self._group_context:
+            self._phase_group_prompt_build(ctx, self._group_context)
+
         # Phase 3: 上下文准备
         self._phase_prepare_context(ctx, callbacks, tools, max_context_chars)
 
@@ -621,6 +632,10 @@ class AIPipeline:
 
         # Phase 6: 剧情选项生成（异步，不阻塞主回复）
         self._generate_plot_choices_if_enabled(ctx, result)
+
+        # Phase 7: 群聊旁白生成（条件触发）
+        if self._group_context and self._group_context.get("auto_narrate"):
+            self._phase_group_narrator(ctx, result, self._group_context)
 
         return result
 
@@ -830,6 +845,111 @@ class AIPipeline:
                     )
             except Exception:
                 pass
+
+
+    # ------------------------------------------------------------------
+    # Group Chat Phases
+    # ------------------------------------------------------------------
+
+    def _phase_group_speaker_select(self, ctx, group_context):
+        """Select the speaking character for group chat."""
+        try:
+            from nbot.group.scheduler import SpeakerScheduler
+            scheduler = group_context.get("scheduler") or SpeakerScheduler.instance()
+            conversation = group_context["group"]
+            message = ctx.chat_request.content or ""
+            character_ids = conversation.character_ids
+            last_speaker = conversation.active_speaker
+
+            speaker = scheduler.decide_next_speaker(
+                conversation, message, character_ids, last_speaker=last_speaker,
+            )
+            conversation.active_speaker = speaker
+            ctx.metadata["group_speaker"] = speaker
+            ctx.metadata["group_id"] = conversation.group_id
+
+            # Build character name mapping
+            profiles = group_context.get("character_profiles", {})
+            speaker_name = profiles.get(speaker, {}).get("name", speaker) if speaker else ""
+            ctx.metadata["group_speaker_name"] = speaker_name
+
+            _log.info("group %s: speaker selected = %s (%s)", conversation.group_id, speaker, speaker_name)
+        except Exception as e:
+            _log.error("group speaker select failed: %s", e)
+
+    def _phase_group_prompt_build(self, ctx, group_context):
+        """Build group chat system prompt and inject into prompt_stack."""
+        try:
+            from nbot.group.scheduler import SpeakerScheduler
+            scheduler = group_context.get("scheduler") or SpeakerScheduler.instance()
+            conversation = group_context["group"]
+            profiles = group_context.get("character_profiles", {})
+            speaker_id = ctx.metadata.get("group_speaker", "")
+
+            if not speaker_id:
+                return
+
+            group_prompt = scheduler.build_group_system_prompt(
+                conversation, profiles, speaker_id,
+            )
+
+            # Inject into prompt_stack
+            ctx.prompt_stack.add(
+                "group.scene",
+                group_prompt,
+                priority=85,
+            )
+
+            # Inject relation matrix as context
+            relations = conversation.get_relation_matrix()
+            if relations:
+                import json
+                ctx.prompt_stack.add(
+                    "group.relations",
+                    "角色间关系数据:" + json.dumps(relations, ensure_ascii=False, indent=2),
+                    priority=60,
+                )
+
+            _log.info("group %s: prompt built for speaker %s", conversation.group_id, speaker_id)
+        except Exception as e:
+            _log.error("group prompt build failed: %s", e)
+
+    def _phase_group_narrator(self, ctx, result, group_context):
+        """Generate narration if conditions are met."""
+        try:
+            from nbot.group.narrator import NarratorCharacter
+            narrator = group_context.get("narrator") or NarratorCharacter.instance()
+            conversation = group_context["group"]
+
+            if not narrator.should_narrate(
+                trigger="interval",
+                turn_count=conversation.turn_count,
+                narrate_interval=conversation.config.narrate_interval,
+            ):
+                return
+
+            profiles = group_context.get("character_profiles", {})
+            char_names = [profiles.get(c, {}).get("name", c) for c in conversation.character_ids]
+            scene_ctx = narrator.build_scene_context(char_names)
+            recent = narrator.build_recent_summary(group_context.get("recent_messages", []))
+
+            narrate_prompt = narrator.build_narrate_prompt(
+                trigger="interval",
+                scene_context=scene_ctx,
+                recent_summary=recent,
+            )
+
+            # Store narrator prompt for async generation
+            if result.metadata is None:
+                result.metadata = {}
+            result.metadata["narrate_prompt"] = narrate_prompt
+            result.metadata["narrate_pending"] = True
+            narrator.mark_narrated()
+            conversation.advance_turn()
+
+            _log.info("group %s: narration triggered at turn %d", conversation.group_id, conversation.turn_count)
+        except Exception as e:
+            _log.error("group narrator failed: %s", e)
 
     def _generate_plot_choices_if_enabled(self, ctx, result):
         """Generate plot choices if plot mode is enabled for this session."""
