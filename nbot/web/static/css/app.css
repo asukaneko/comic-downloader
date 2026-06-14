@@ -5491,7 +5491,7 @@
             position: absolute;
             top: 3px;
             left: 3px;
-            width: calc(50% - 3px);
+            width: calc(33.333% - 2px);
             height: calc(100% - 6px);
             background: rgba(255, 255, 255, 0.08);
             backdrop-filter: blur(8px);
@@ -5505,6 +5505,10 @@
 
         .session-mode-tab-indicator.slide-right {
             transform: translateX(100%);
+        }
+
+        .session-mode-tab-indicator.slide-far-right {
+            transform: translateX(200%);
         }
 
         /* 滑动切换动画 */
@@ -27882,7 +27886,7 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 
 /* 3.x Runtime Side Panel - Floating Modal */
 .runtime-side-panel {
-    position: fixed;
+    position: absolute;
     right: 24px;
     bottom: 120px;
     width: 300px;

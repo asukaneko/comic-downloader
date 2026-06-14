@@ -412,8 +412,13 @@ class WebCallbacks(PipelineCallbacks):
 
     def save_assistant_message(self, ctx: PipelineContext, message: Dict) -> None:
         if not message.get("sender"):
-            session = self.session_store.get_session(self.session_id) or {}
-            message["sender"] = session.get("sender_name") or "AI"
+            # 群聊模式：使用发言角色名称
+            speaker_name = ctx.metadata.get("group_speaker_name", "")
+            if speaker_name:
+                message["sender"] = speaker_name
+            else:
+                session = self.session_store.get_session(self.session_id) or {}
+                message["sender"] = session.get("sender_name") or "AI"
         if not message.get("timestamp"):
             message["timestamp"] = datetime.now().isoformat()
         if not message.get("session_id"):
@@ -1351,10 +1356,48 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
     def run_pipeline():
         try:
             pipeline = AIPipeline()
+
+            # === 群聊模式：构建 group_context ===
+            group_context = None
+            _group_id = (_session_data or {}).get("group_id")
+            if _group_id:
+                try:
+                    from nbot.group.manager import get_group_manager
+                    gm = get_group_manager()
+                    group = gm.get_group(_group_id)
+                    if group and group.character_ids:
+                        # 加载角色档案
+                        profiles = {}
+                        profiles_path = os.path.join(
+                            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                            "data", "character", "profiles.json",
+                        )
+                        if os.path.exists(profiles_path):
+                            import json as _json
+                            with open(profiles_path, "r", encoding="utf-8") as _f:
+                                all_profiles = _json.load(_f)
+                            if isinstance(all_profiles, dict):
+                                for cid in group.character_ids:
+                                    if cid in all_profiles:
+                                        profiles[cid] = all_profiles[cid]
+                        from nbot.group.scheduler import SpeakerScheduler
+                        from nbot.group.narrator import NarratorCharacter
+                        group_context = {
+                            "group": group,
+                            "character_profiles": profiles,
+                            "scheduler": SpeakerScheduler.instance(),
+                            "narrator": NarratorCharacter.instance(),
+                            "auto_narrate": group.config.auto_narrate,
+                            "recent_messages": [],
+                        }
+                except Exception as e:
+                    _log.debug("group context build failed for web session: %s", e)
+
             result = pipeline.process(
                 ctx, callbacks,
                 tools=tools,
                 max_context_chars=context_char_budget,
+                group_context=group_context,
             )
 
             # 更新 token 统计

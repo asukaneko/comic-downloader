@@ -723,15 +723,18 @@
                             <div class="chat-sidebar-header" v-if="chatTab === 'web' || chatTab === 'cli' || selectedSenderFilter">
                                 <div class="session-mode-tabs">
                                     <button class="session-mode-tab" :class="{ active: sessionModeTab === 'character' }" @click="sessionModeTab = 'character'">
-                                        <i class="fas fa-user-circle"></i> 角色会话
+                                        <i class="fas fa-user-circle"></i> 角色
                                     </button>
                                     <button class="session-mode-tab" :class="{ active: sessionModeTab === 'agent' }" @click="sessionModeTab = 'agent'">
-                                        <i class="fas fa-robot"></i> Agent 会话
+                                        <i class="fas fa-robot"></i> Agent
                                     </button>
-                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent' }"></div>
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="sessionModeTab = 'group'">
+                                        <i class="fas fa-users"></i> 群聊
+                                    </button>
+                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent', 'slide-far-right': sessionModeTab === 'group' }"></div>
                                 </div>
-                                <button v-if="chatTab === 'web' && !selectedSenderFilter" class="session-add-btn" @click="sessionModeTab === 'agent' ? createNewAgentSession() : createNewSession()" :disabled="isLoading">
-                                    <i class="fas fa-plus"></i> {{ sessionModeTab === 'agent' ? '新增 Agent 对话' : '新增角色对话' }}
+                                <button v-if="chatTab === 'web' && !selectedSenderFilter" class="session-add-btn" @click="onSessionAddClick()" :disabled="isLoading">
+                                    <i class="fas fa-plus"></i> {{ sessionModeTab === 'agent' ? '新增 Agent' : sessionModeTab === 'group' ? '新增群聊' : '新增对话' }}
                                 </button>
                                 <div class="search-box" style="margin-top: 8px;">
                                     <i class="fas fa-search" style="color: var(--text-muted);"></i>
@@ -756,13 +759,16 @@
                                             <div class="session-icon" :class="{ 'has-portrait': getSessionPortrait(session) }">
                                                 <img v-if="getSessionPortrait(session)" :src="getSessionPortrait(session)" @error="handleSessionPortraitError(session, $event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
                                                 <i v-else-if="getSessionAvatar(session)" :class="getSessionAvatar(session)"></i>
-                                                <i v-else :class="sessionModeTab === 'agent' ? 'fas fa-robot' : (session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment')"></i>
+                                                <i v-else :class="sessionModeTab === 'agent' ? 'fas fa-robot' : (sessionModeTab === 'group' ? 'fas fa-users' : (session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'))"></i>
                                             </div>
                                             <div class="session-info">
                                                 <div class="session-name">{{ session.name }}</div>
                                                 <div class="session-meta">
                                                     {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
-                                                    <span v-if="session.sender_name && sessionModeTab !== 'agent'" style="margin-left: 6px; color: var(--accent-primary);">
+                                                    <span v-if="session.session_mode === 'group' && session.character_ids" style="margin-left: 6px; color: var(--accent-primary);">
+                                                        <i class="fas fa-users" style="font-size: 10px;"></i> {{ session.character_ids.length }} 个角色
+                                                    </span>
+                                                    <span v-else-if="session.sender_name && sessionModeTab !== 'agent'" style="margin-left: 6px; color: var(--accent-primary);">
                                                         <i class="fas fa-user-circle" style="font-size: 10px;"></i> {{ session.sender_name }}
                                                     </span>
                                                 </div>
@@ -1833,6 +1839,7 @@
                                                  type="button"
                                                  class="plot-choice-card"
                                                  :class="'plot-choice-' + choice.level"
+                                                 :title="choice.text"
                                                  @mousedown.prevent
                                                  @click="selectPlotChoice(choice)">
                                                 <div class="plot-choice-main">
@@ -2117,7 +2124,7 @@
                         </div>
                     </div>
                         <!-- Runtime Side Panel (角色状态面板) -->
-                        <div v-if="currentSession && showRuntimePanel" class="runtime-side-panel">
+                        <div v-if="currentPage === 'chat' && currentSession && showRuntimePanel" class="runtime-side-panel">
                             <div class="runtime-panel-header">
                                 <span><i class="fas fa-id-card"></i> 角色状态</span>
                                 <button class="btn btn-ghost btn-xs" @click="showRuntimePanel = false">
@@ -8391,6 +8398,59 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 群聊创建弹窗 -->
+                <div v-if="groupCreateModal.show" class="modal-overlay" @click.self="groupCreateModal.show = false">
+                    <div class="modal-content gc-modal" style="max-width: 480px;">
+                        <div class="modal-header">
+                            <h3><i class="fas fa-users"></i> 创建群聊会话</h3>
+                            <button class="btn-icon-small" @click="groupCreateModal.show = false"><i class="fas fa-times"></i></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label>群聊名称</label>
+                                <input v-model="groupCreateModal.name" class="form-input" placeholder="输入群聊名称">
+                            </div>
+                            <div class="form-group">
+                                <label>选择参与角色 <span class="form-hint">（点击选择）</span></label>
+                                <div class="bind-character-list gc-char-select" style="max-height: 240px; overflow-y: auto;">
+                                    <div v-for="ch in groupCreateModal.characters" :key="ch.name"
+                                         class="bind-character-item"
+                                         :class="{ active: groupCreateModal.character_ids.includes(ch.name) }"
+                                         @click="toggleGroupCharacter(ch.name)">
+                                        <div class="bind-character-portrait">
+                                            <img v-if="ch.portrait" :src="ch.portrait">
+                                            <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                        </div>
+                                        <div class="bind-character-info">
+                                            <div class="bind-character-name">{{ ch.name }}</div>
+                                            <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
+                                        </div>
+                                        <i v-if="groupCreateModal.character_ids.includes(ch.name)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                                    </div>
+                                    <div v-if="!groupCreateModal.characters.length" class="gc-char-empty">
+                                        <i class="fas fa-user-slash"></i> 暂无可用角色，请先创建角色卡
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>发言策略</label>
+                                <select v-model="groupCreateModal.strategy" class="form-select">
+                                    <option value="round_robin">轮流发言</option>
+                                    <option value="mention">@提及</option>
+                                    <option value="relevance">智能推荐</option>
+                                    <option value="random">随机</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="gc-btn gc-btn-ghost" @click="groupCreateModal.show = false">取消</button>
+                            <button class="gc-btn gc-btn-primary" @click="createNewGroupSession()" :disabled="!groupCreateModal.name || !groupCreateModal.character_ids.length">
+                                <i class="fas fa-check"></i> 创建群聊
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
 
@@ -11427,6 +11487,15 @@
                     sessionSwitching: false,
                     sessionSearch: '',
                     sessionModeTab: 'character',
+                    groupCreateModal: {
+                        show: false,
+                        name: '群聊',
+                        character_ids: [],
+                        narrator_id: '',
+                        strategy: 'round_robin',
+                        auto_narrate: true,
+                        characters: [],
+                    },
                     sessionFilter: 'all',
                     sessionSortKey: 'created_at',
                     sessionSortDir: 'desc',
@@ -12924,7 +12993,9 @@
                 },
 
                 currentModeSessions() {
-                    return this.sessionModeTab === 'agent' ? this.filteredAgentSessions : this.filteredCharacterSessions;
+                    if (this.sessionModeTab === 'agent') return this.filteredAgentSessions;
+                    if (this.sessionModeTab === 'group') return this.filteredGroupSessions;
+                    return this.filteredCharacterSessions;
                 },
 
                 filteredCharacterSessions() {
@@ -12934,17 +13005,17 @@
                     if (this.selectedSenderFilter) {
                         if (this.selectedSenderFilter === '*') {
                             sessionPool = this.sessions.filter(s => {
-                                return s.type === 'web' && s.sender_name && s.session_mode !== 'agent';
+                                return s.type === 'web' && s.sender_name && s.session_mode !== 'agent' && s.session_mode !== 'group';
                             }).filter(s => !s.archived);
                         } else {
                             sessionPool = this.sessions.filter(s => {
-                                return s.type === 'web' && s.sender_name === this.selectedSenderFilter && s.session_mode !== 'agent';
+                                return s.type === 'web' && s.sender_name === this.selectedSenderFilter && s.session_mode !== 'agent' && s.session_mode !== 'group';
                             }).filter(s => !s.archived);
                         }
                     } else {
                         sessionPool = this.sessions.filter(s => {
-                            if (this.chatTab === 'cli') return s.type === 'cli' && s.session_mode !== 'agent';
-                            if (this.chatTab === 'web') return s.type === 'web' && s.session_mode !== 'agent';
+                            if (this.chatTab === 'cli') return s.type === 'cli' && s.session_mode !== 'agent' && s.session_mode !== 'group';
+                            if (this.chatTab === 'web') return s.type === 'web' && s.session_mode !== 'agent' && s.session_mode !== 'group';
                             return false;
                         }).filter(s => !s.archived);
                     }
@@ -12978,7 +13049,23 @@
 
                     return sessionPool;
                 },
-                
+
+                filteredGroupSessions() {
+                    if (this.selectedSenderFilter) return [];
+
+                    let sessionPool = this.sessions.filter(s => {
+                        if (this.chatTab === 'web') return s.type === 'web' && s.session_mode === 'group';
+                        return false;
+                    }).filter(s => !s.archived);
+
+                    if (this.sessionSearch) {
+                        const search = this.sessionSearch.toLowerCase();
+                        sessionPool = sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
+                    }
+
+                    return sessionPool;
+                },
+
                 // 获取所有唯一的会话角色名称
                 uniqueSessionSenders() {
                     const senders = new Set();

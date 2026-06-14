@@ -5810,6 +5810,9 @@ def main(params):
                     this.currentSession = session;
                     this.plotMode = !!session.plot_mode || localStorage.getItem('plot_mode_' + session.id) === '1';
                     this.plotChoices = [];
+                    if (this.plotMode) {
+                        this.loadPlotChoices();
+                    }
                     this.messageFavoriteMode = false;
                     this.selectedFavoriteMessageIds = [];
                     this.currentMessageFavorites = [];
@@ -6127,6 +6130,100 @@ def main(params):
                     } catch (e) {
                         console.error('Failed to create agent session:', e);
                         this.showToast('创建 Agent 对话失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                onSessionAddClick() {
+                    if (this.sessionModeTab === 'agent') {
+                        this.createNewAgentSession();
+                    } else if (this.sessionModeTab === 'group') {
+                        this.showGroupCreateModal();
+                    } else {
+                        this.createNewSession();
+                    }
+                },
+
+                showGroupCreateModal() {
+                    this.groupCreateModal = {
+                        show: true,
+                        name: '群聊',
+                        character_ids: [],
+                        narrator_id: '',
+                        strategy: 'round_robin',
+                        auto_narrate: true,
+                        characters: [],
+                    };
+                    this.loadCharactersForGroup();
+                },
+
+                async loadCharactersForGroup() {
+                    try {
+                        const res = await api.get('/api/characters');
+                        // /api/characters 返回数组，格式化为统一结构
+                        const list = Array.isArray(res.data) ? res.data : (res.data.characters || []);
+                        this.groupCreateModal.characters = list.map(ch => ({
+                            id: ch.id || ch.name,
+                            name: ch.name || ch.id || '未知',
+                            portrait: ch.portrait || '',
+                            avatar: ch.avatar || 'fas fa-user-circle',
+                            description: ch.description || '',
+                        }));
+                    } catch (e) {
+                        console.debug('loadCharactersForGroup:', e.message);
+                        this.groupCreateModal.characters = [];
+                    }
+                },
+
+                toggleGroupCharacter(characterName) {
+                    const ids = this.groupCreateModal.character_ids;
+                    const idx = ids.indexOf(characterName);
+                    if (idx >= 0) {
+                        ids.splice(idx, 1);
+                    } else {
+                        ids.push(characterName);
+                    }
+                },
+
+                async createNewGroupSession() {
+                    const modal = this.groupCreateModal;
+                    if (!modal.character_ids.length) {
+                        this.showToast('请至少选择一个角色', 'warning');
+                        return;
+                    }
+                    if (this.isLoading) return;
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post('/api/sessions', {
+                            name: modal.name || '群聊',
+                            type: 'web',
+                            user_id: this.username,
+                            session_mode: 'group',
+                            character_ids: modal.character_ids,
+                            narrator_id: modal.narrator_id || null,
+                            group_config: {
+                                speaker_strategy: modal.strategy,
+                                auto_narrate: modal.auto_narrate,
+                            },
+                        });
+                        const newSession = { ...res.data.session, _isNew: true };
+                        this.sessions = [
+                            ...this.sessions.filter(s => s.id !== newSession.id),
+                            newSession,
+                        ];
+                        this.chatTab = 'web';
+                        this.sessionModeTab = 'group';
+                        await this.selectSession(newSession);
+                        this.groupCreateModal.show = false;
+                        setTimeout(() => {
+                            const s = this.sessions.find(s => s.id === newSession.id);
+                            if (s) s._isNew = false;
+                        }, 1500);
+                        this.showToast('群聊已创建', 'success');
+                    } catch (e) {
+                        console.error('Failed to create group session:', e);
+                        this.showToast('创建群聊失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
                         this.isLoading = false;
                     }
@@ -16397,9 +16494,9 @@ def main(params):
         if (!this.currentSession) return;
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
-            const res = await axios.get('/api/plot/' + sid + '/graph');
+            const res = await axios.get('/api/plot/' + sid + '/latest-choices');
             if (res.data && res.data.choices) {
-                this.plotChoices = this.normalizePlotChoices(res.data.choices.filter(c => !c.selected));
+                this.plotChoices = this.normalizePlotChoices(res.data.choices);
             }
         } catch (e) {
             console.debug('loadPlotChoices:', e.message);
@@ -16800,19 +16897,23 @@ def main(params):
     async enterGroupChat(group) {
         // Create a web group chat session
         try {
-            const res = await axios.post('/api/sessions', {
+            const res = await api.post('/api/sessions', {
                 name: group.name,
-                type: 'group',
+                type: 'web',
+                user_id: this.username,
+                session_mode: 'group',
                 character_ids: group.character_ids,
                 group_id: group.group_id,
-                config: group.config,
             });
-            const session = res.data;
-            if (session) {
-                this.chatTab = 'web';
-                await this.selectSession(session);
-                this.currentPage = 'chat';
-            }
+            const newSession = { ...res.data.session, _isNew: true };
+            this.sessions = [
+                ...this.sessions.filter(s => s.id !== newSession.id),
+                newSession,
+            ];
+            this.chatTab = 'web';
+            this.sessionModeTab = 'group';
+            await this.selectSession(newSession);
+            this.currentPage = 'chat';
         } catch (e) {
             console.error('enterGroupChat:', e);
             this.showToast('进入群聊失败', 'error');

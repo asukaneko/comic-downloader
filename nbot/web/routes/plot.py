@@ -41,6 +41,13 @@ def register_plot_routes(app, server):
         graph = manager.get_graph(conversation_id)
         return jsonify(graph)
 
+    @app.route("/api/plot/<conversation_id>/latest-choices")
+    def get_latest_plot_choices(conversation_id):
+        data_dir = getattr(server, "data_dir", "data/web")
+        manager = get_plot_graph_manager(data_dir=data_dir)
+        choices = manager.get_latest_choices(conversation_id)
+        return jsonify({"choices": choices})
+
     @app.route("/api/plot/<conversation_id>/mermaid")
     def get_plot_mermaid(conversation_id):
         data_dir = getattr(server, "data_dir", "data/web")

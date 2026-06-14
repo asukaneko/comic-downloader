@@ -170,6 +170,32 @@ class PlotGraphManager:
         candidates.sort(key=lambda n: n.created_at, reverse=True)
         return candidates[0]
 
+    def get_latest_choices(self, conversation_id: str) -> List[Dict[str, Any]]:
+        """获取最新节点中未选择的选项。
+
+        只返回最新一个尚未做出选择的节点所关联的选项，
+        避免把历史轮次中所有未选选项都暴露出来。
+        """
+        candidates = [
+            n for n in self._nodes.values()
+            if n.conversation_id == conversation_id
+        ]
+        if not candidates:
+            return []
+        candidates.sort(key=lambda n: n.created_at, reverse=True)
+
+        # 找到最新的、尚未做出选择的节点
+        for node in candidates:
+            if not node.selected_choice_id:
+                return [
+                    c.to_dict()
+                    for c in self._choices.values()
+                    if c.node_id == node.id and not c.selected
+                ]
+
+        # 所有节点都已选择，返回空
+        return []
+
     # -- Mermaid Visualization --
 
     def generate_mermaid(self, conversation_id: str) -> str:
