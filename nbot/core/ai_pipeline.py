@@ -570,6 +570,7 @@ class AIPipeline:
         tools: Optional[List[Dict[str, Any]]] = None,
         max_tool_iterations: int = 50,
         max_context_chars: int = 100000,
+        hook_runtime=None,
     ) -> PipelineResult:
         """执行完整的 AI 处理管道。
 
@@ -579,10 +580,14 @@ class AIPipeline:
             tools: 可用工具定义列表（None = 不启用工具）
             max_tool_iterations: 工具循环最大迭代次数
             max_context_chars: 上下文最大字符数
+            hook_runtime: HookManager 实例（可选，None 时零开销）
 
         Returns:
             PipelineResult 可转为 ChatResponse
         """
+        self._hook_runtime = hook_runtime
+        self._emit_hook("conversation.before_receive", ctx)
+
         # === 通用消息预处理（附件下载 + 媒体描述 + 工作区保存） ===
         self._ensure_middleware_initialized()
         from nbot.core.message_middleware import MessagePreprocessor
@@ -592,21 +597,55 @@ class AIPipeline:
         progress = callbacks.get_progress_reporter(ctx)
 
         # Phase 1: 附件解析
+        self._emit_hook("pipeline.before_attachments", ctx)
         self._phase_attachments(ctx, callbacks, progress)
+        self._emit_hook("pipeline.after_attachments", ctx)
 
         # Phase 2: 知识库检索
+        self._emit_hook("pipeline.before_knowledge", ctx)
         self._phase_knowledge(ctx, callbacks, progress)
+        self._emit_hook("pipeline.after_knowledge", ctx)
 
         # Phase 3: 上下文准备
         self._phase_prepare_context(ctx, callbacks, tools, max_context_chars)
 
         # Phase 4: AI 响应（工具循环 或 直接补全 或 流式）
+        self._emit_hook("model.before_call", ctx)
         self._phase_ai_response(ctx, callbacks, tools, max_tool_iterations, progress)
+        self._emit_hook("model.after_call", ctx)
 
         # Phase 5: 结果组装（内部包含角色运行时 after_turn 和自动记忆）
+        self._emit_hook("reply.before_send", ctx)
         result = self._phase_assemble_result(ctx, callbacks)
+        self._emit_hook("reply.after_send", ctx)
 
         return result
+
+    def _emit_hook(self, event_type, ctx, extra_payload=None):
+        """Emit a hook event if hook_runtime is available. Zero overhead when None."""
+        if not getattr(self, '_hook_runtime', None):
+            return
+        try:
+            from nbot.hooks.models import RuntimeEvent
+            payload = {}
+            if ctx and ctx.chat_request:
+                payload["channel"] = getattr(ctx.chat_request, "channel", "")
+                payload["content_preview"] = getattr(ctx.chat_request, "content", "")[:100]
+            event = RuntimeEvent(
+                type=event_type,
+                source="ai_pipeline",
+                conversation_id=getattr(ctx.chat_request, "conversation_id", "") if ctx and ctx.chat_request else "",
+                user_id=getattr(ctx.chat_request, "user_id", "") if ctx and ctx.chat_request else "",
+                payload=payload,
+            )
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self._hook_runtime.emit_event(event))
+            else:
+                loop.run_until_complete(self._hook_runtime.emit_event(event))
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Phase 1: 附件解析

@@ -940,7 +940,13 @@ def _run_qq_chat_request(
     callbacks = QQCallbacks(qq_store, user_id, group_id, group_user_id)
 
     pipeline = AIPipeline()
-    result = pipeline.process(ctx, callbacks, tools=tools, max_context_chars=100000)
+    hook_runtime = None
+    try:
+        from nbot.hooks.manager import get_hook_manager
+        hook_runtime = get_hook_manager()
+    except Exception:
+        pass
+    result = pipeline.process(ctx, callbacks, tools=tools, max_context_chars=100000, hook_runtime=hook_runtime)
 
     # === Gateway 事件记录：完成（QQ 频道）===
     if trace_id:

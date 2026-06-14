@@ -11,6 +11,7 @@ from nbot.web.routes.files import register_file_routes
 from nbot.web.routes.gateway import register_gateway_routes
 from nbot.web.routes.gateway_logs import register_gateway_log_routes
 from nbot.web.routes.heartbeat import register_heartbeat_routes
+from nbot.web.routes.hooks import register_hook_routes
 from nbot.web.routes.knowledge import register_knowledge_routes
 from nbot.web.routes.live2d import register_live2d_routes
 from nbot.web.routes.login_tokens import register_login_token_routes
