@@ -1,4 +1,3 @@
-![cover](https://img.picui.cn/free/2025/04/19/6803c76d2bbf9.png)
 # 项目贡献指南
 
 欢迎参与 AsukaNeko 项目！以下是贡献代码的指南。
@@ -6,7 +5,7 @@
 ## 开始之前
 
 1. 确保你已阅读并同意遵守 [行为准则](CODE_OF_CONDUCT.md)
-2. 检查 [Issues](https://github.com/yourname/AsukaNeko/issues) 看是否已有相关讨论
+2. 检查 [Issues](https://github.com/asukaneko/nekobot/issues) 看是否已有相关讨论
 
 ## 贡献流程
 
@@ -42,8 +41,8 @@
 ## 环境设置
 ```bash
 # 克隆项目
-git clone https://github.com/yourname/AsukaNeko.git
-cd AsukaNeko
+git clone https://github.com/asukaneko/nekobot.git
+cd nekobot
 
 # 安装依赖
 pip install -r requirements.txt
