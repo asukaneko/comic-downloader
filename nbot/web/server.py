@@ -38,6 +38,7 @@ from nbot.web.persistence import (
     save_data,
 )
 from nbot.web.routes import (
+    register_plot_routes,
     register_admin_misc_routes,
     register_ai_config_routes,
     register_ai_model_routes,
@@ -2877,6 +2878,7 @@ class WebChatServer:
         register_memory_routes(self.app, self)
         register_message_filter_routes(self.app, self)
         register_personality_routes(self.app, self)
+        register_plot_routes(self.app, self)
         register_push_routes(self.app, self)
         register_qq_overview_routes(self.app, self)
         register_qrcode_routes(self.app, self)

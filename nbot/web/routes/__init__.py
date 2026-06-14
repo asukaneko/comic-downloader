@@ -20,6 +20,7 @@ from nbot.web.routes.memory import register_memory_routes
 from nbot.web.routes.message_filter import register_message_filter_routes
 from nbot.web.routes.personality import register_personality_routes
 from nbot.web.routes.public_sessions import register_public_session_routes
+from nbot.web.routes.plot import register_plot_routes
 from nbot.web.routes.push import register_push_routes
 from nbot.web.routes.qq_overview import register_qq_overview_routes
 from nbot.web.routes.qrcode import register_qrcode_routes
@@ -62,6 +63,7 @@ __all__ = [
     "register_message_filter_routes",
     "register_personality_routes",
     "register_public_session_routes",
+    "register_plot_routes",
     "register_push_routes",
     "register_qq_overview_routes",
     "register_qrcode_routes",

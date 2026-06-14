@@ -619,6 +619,9 @@ class AIPipeline:
         result = self._phase_assemble_result(ctx, callbacks)
         self._emit_hook("reply.after_send", ctx)
 
+        # Phase 6: 剧情选项生成（异步，不阻塞主回复）
+        self._generate_plot_choices_if_enabled(ctx, result)
+
         return result
 
     def _emit_hook(self, event_type, ctx, extra_payload=None):
@@ -827,6 +830,101 @@ class AIPipeline:
                     )
             except Exception:
                 pass
+
+    def _generate_plot_choices_if_enabled(self, ctx, result):
+        """Generate plot choices if plot mode is enabled for this session."""
+        if not ctx or not ctx.chat_request:
+            return
+        try:
+            conversation_id = ctx.chat_request.conversation_id
+            if not conversation_id:
+                return
+            # Check if plot mode is enabled
+            from nbot.plot.graph_manager import get_plot_graph_manager
+            from nbot.plot.choice_generator import PlotChoiceGenerator
+            from nbot.plot.models import PlotNode, PlotChoice
+
+            # Check session for plot_mode flag
+            metadata = getattr(ctx.chat_request, 'metadata', {}) or {}
+            session_plot = metadata.get('plot_mode', False)
+
+            # Also check via web session store
+            if not session_plot:
+                try:
+                    from nbot.web.persistence import load_all_data
+                    data = load_all_data()
+                    sessions = data.get('sessions', {})
+                    if isinstance(sessions, dict):
+                        session = sessions.get(conversation_id, {})
+                        session_plot = session.get('plot_mode', False)
+                except Exception:
+                    pass
+
+            if not session_plot:
+                return
+
+            # Generate choices asynchronously
+            import asyncio
+            generator = PlotChoiceGenerator()
+            turn_context = ctx.character_turn
+
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self._do_generate_plot_choices(
+                    generator, result, turn_context, conversation_id, ctx
+                ))
+            else:
+                loop.run_until_complete(self._do_generate_plot_choices(
+                    generator, result, turn_context, conversation_id, ctx
+                ))
+        except Exception as e:
+            _log.debug("[AIPipeline] plot choice generation skipped: %s", e)
+
+    async def _do_generate_plot_choices(self, generator, result, turn_context, conversation_id, ctx):
+        """Async plot choice generation."""
+        try:
+            response_text = result.final_content or ""
+            choices = await generator.generate(response_text, turn_context)
+            if not choices:
+                return
+
+            # Attach to result metadata
+            result.metadata["plot_choices"] = choices
+
+            # Create plot node for important+ choices
+            from nbot.plot.graph_manager import get_plot_graph_manager
+            from nbot.plot.models import PlotNode, PlotChoice as PlotChoiceModel
+
+            graph_mgr = get_plot_graph_manager()
+            char_id = ""
+            if turn_context and hasattr(turn_context, 'profile'):
+                char_id = turn_context.profile.id
+
+            # Create a node for this turn
+            node = PlotNode(
+                conversation_id=conversation_id,
+                character_id=char_id,
+                title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
+                summary=response_text[:100],
+                level="normal",
+            )
+            graph_mgr.add_node(node)
+
+            # Create choice entries
+            for choice_data in choices:
+                level = choice_data.get("level", "normal")
+                pc = PlotChoiceModel(
+                    node_id=node.id,
+                    text=choice_data.get("text", ""),
+                    level=level,
+                    intent=choice_data.get("intent", ""),
+                )
+                graph_mgr.add_choice(pc)
+                choice_data["id"] = pc.id
+
+            _log.debug("[AIPipeline] generated %d plot choices", len(choices))
+        except Exception as e:
+            _log.debug("[AIPipeline] plot choice generation failed: %s", e)
 
         # 角色运行时 before_turn hook
         self._phase_character_runtime_before_turn(ctx, callbacks)
