@@ -670,7 +670,55 @@ def register_session_routes(app, server):
         session_id = str(uuid.uuid4())
         session_mode = data.get("session_mode", "character")
 
-        if session_mode == "agent":
+        if session_mode == "group":
+            # 群聊模式：创建 GroupConversation 并关联到会话
+            system_prompt = data.get("system_prompt", "")
+            user_id = data.get("user_id", "")
+            char_name = ""
+            sender_name = data.get("sender_name") or "群聊"
+            sender_avatar = data.get("sender_avatar") or ""
+            sender_portrait = data.get("sender_portrait") or ""
+            character_id = data.get("character_id") or ""
+
+            # 创建或关联群聊会话
+            group_id = data.get("group_id", "")
+            try:
+                from nbot.group.manager import get_group_manager
+                from nbot.group.models import GroupConfig
+                gm = get_group_manager()
+                character_ids = data.get("character_ids", [])
+                narrator_id = data.get("narrator_id")
+
+                if group_id:
+                    # 使用已有的 GroupConversation
+                    existing = gm.get_group(group_id)
+                    if not existing:
+                        _log.warning("group_id %s not found, creating new group", group_id)
+                        group_id = ""
+                    else:
+                        character_ids = existing.character_ids
+                if not group_id:
+                    config_data = data.get("group_config")
+                    config = GroupConfig.from_dict(config_data) if config_data else None
+                    group = gm.create_group(
+                        data.get("name", "群聊"),
+                        character_ids,
+                        narrator_id=narrator_id,
+                        config=config,
+                    )
+                    group_id = group.group_id
+            except Exception as exc:
+                _log.warning("Failed to create group conversation: %s", exc)
+                group_id = ""
+
+            # 构建群聊系统提示词（列出参与角色）
+            if character_ids and not system_prompt:
+                names = ", ".join(character_ids)
+                system_prompt = (
+                    f"你正在参与一场群聊对话，参与者包括：{names}。"
+                    f"请根据对话内容自然地参与讨论。"
+                )
+        elif session_mode == "agent":
             # Agent 模式：不继承任何角色卡配置
             system_prompt = data.get("system_prompt", "")
             user_id = data.get("user_id", "")
@@ -756,8 +804,13 @@ def register_session_routes(app, server):
             "session_mode": data.get("session_mode", "character"),
         }
 
-        # 如果有开场白，添加为第一条 assistant 消息（agent 模式跳过）
-        if session_mode == "agent":
+        # 群聊模式：附加群聊关联字段
+        if session_mode == "group" and group_id:
+            session["group_id"] = group_id
+            session["character_ids"] = data.get("character_ids", [])
+
+        # 如果有开场白，添加为第一条 assistant 消息（agent / group 模式跳过）
+        if session_mode in ("agent", "group"):
             first_message = data.get("first_message", "")
         else:
             first_message = data.get("first_message") or server.personality.get("firstMessage", "")
@@ -775,8 +828,11 @@ def register_session_routes(app, server):
             })
         
         # 获取背景设定，存储在会话中用于前端展示
-        # 优先使用请求中传入的 scenario（从角色卡创建时），否则使用当前角色的 scenario
-        scenario = data.get("scenario") or server.personality.get("scenario", "")
+        # group 模式不使用当前角色的 scenario
+        if session_mode == "group":
+            scenario = data.get("scenario", "")
+        else:
+            scenario = data.get("scenario") or server.personality.get("scenario", "")
         if scenario:
             # 替换模板变量 {{user}} -> 当前用户名, {{char}} -> 角色名称
             if user_id:

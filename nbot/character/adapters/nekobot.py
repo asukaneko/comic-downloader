@@ -321,6 +321,12 @@ def get_character_runtime_from_server(server):
 
         from nbot.character.storage.world_book_store import WorldBookStore
 
+        _hook_rt = None
+        try:
+            from nbot.hooks.manager import get_hook_manager
+            _hook_rt = get_hook_manager()
+        except Exception:
+            pass
         runtime = CharacterRuntime(
             profile_repo=profile_repo,
             state_repo=CharacterStateRepository(base_dir),
@@ -330,6 +336,7 @@ def get_character_runtime_from_server(server):
             planner=ReactionPlanner(),
             state_machine=StateMachine(),
             world_book_store=WorldBookStore(base_dir),
+            hook_runtime=_hook_rt,
         )
         server.character_runtime = runtime
         _log.info("[CharacterRuntime] initialized lazily from Web adapter")

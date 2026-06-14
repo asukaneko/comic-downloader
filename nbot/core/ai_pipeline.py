@@ -24,6 +24,36 @@ from nbot.core.chat_models import ChatRequest, ChatResponse
 
 _log = logging.getLogger(__name__)
 
+def _level_rank(level: str) -> int:
+    """Rank plot choice levels for comparison."""
+    return {"normal": 0, "important": 1, "turning_point": 2, "ending": 3}.get(level, 0)
+
+
+def _plot_turn_context_dict(turn_context: Any) -> Dict[str, Any]:
+    """Convert CharacterTurnContext to the dict expected by PlotChoiceGenerator."""
+    if isinstance(turn_context, dict):
+        return turn_context
+    if not turn_context:
+        return {}
+
+    state = getattr(turn_context, "state", None)
+    relationship = getattr(turn_context, "relationship", None)
+    context = {
+        "mood": getattr(state, "mood", "") if state else "",
+    }
+    if relationship:
+        context["relationship"] = (
+            f"好感 {getattr(relationship, 'affection', 0)}/100, "
+            f"信任 {getattr(relationship, 'trust', 0)}/100, "
+            f"熟悉 {getattr(relationship, 'familiarity', 0)}/100, "
+            f"依赖 {getattr(relationship, 'dependency', 0)}/100, "
+            f"安全感 {getattr(relationship, 'security', 0)}/100, "
+            f"嫉妒 {getattr(relationship, 'jealousy', 0)}/100"
+        )
+    return context
+
+
+
 
 def _custom_prompt_stack_key(custom_prompt: Dict[str, Any]) -> str:
     """Build a stable PromptStack key for a session custom prompt."""
@@ -570,6 +600,8 @@ class AIPipeline:
         tools: Optional[List[Dict[str, Any]]] = None,
         max_tool_iterations: int = 50,
         max_context_chars: int = 100000,
+        hook_runtime=None,
+        group_context: Optional[Dict[str, Any]] = None,
     ) -> PipelineResult:
         """执行完整的 AI 处理管道。
 
@@ -579,10 +611,20 @@ class AIPipeline:
             tools: 可用工具定义列表（None = 不启用工具）
             max_tool_iterations: 工具循环最大迭代次数
             max_context_chars: 上下文最大字符数
+            hook_runtime: HookManager 实例（可选，None 时零开销）
+            group_context: 群聊上下文（可选，含 group, scheduler, characters 等）
 
         Returns:
             PipelineResult 可转为 ChatResponse
         """
+        self._hook_runtime = hook_runtime
+        self._group_context = group_context
+        self._emit_hook("conversation.before_receive", ctx)
+
+        # Phase 0: 群聊发言角色选择（群聊模式下）
+        if group_context:
+            self._phase_group_speaker_select(ctx, group_context)
+
         # === 通用消息预处理（附件下载 + 媒体描述 + 工作区保存） ===
         self._ensure_middleware_initialized()
         from nbot.core.message_middleware import MessagePreprocessor
@@ -592,21 +634,66 @@ class AIPipeline:
         progress = callbacks.get_progress_reporter(ctx)
 
         # Phase 1: 附件解析
+        self._emit_hook("pipeline.before_attachments", ctx)
         self._phase_attachments(ctx, callbacks, progress)
+        self._emit_hook("pipeline.after_attachments", ctx)
 
         # Phase 2: 知识库检索
+        self._emit_hook("pipeline.before_knowledge", ctx)
         self._phase_knowledge(ctx, callbacks, progress)
+        self._emit_hook("pipeline.after_knowledge", ctx)
+
+        # Phase 2.5: 群聊 prompt 注入
+        if self._group_context:
+            self._phase_group_prompt_build(ctx, self._group_context)
 
         # Phase 3: 上下文准备
         self._phase_prepare_context(ctx, callbacks, tools, max_context_chars)
 
         # Phase 4: AI 响应（工具循环 或 直接补全 或 流式）
+        self._emit_hook("model.before_call", ctx)
         self._phase_ai_response(ctx, callbacks, tools, max_tool_iterations, progress)
+        self._emit_hook("model.after_call", ctx)
 
         # Phase 5: 结果组装（内部包含角色运行时 after_turn 和自动记忆）
+        self._emit_hook("reply.before_send", ctx)
         result = self._phase_assemble_result(ctx, callbacks)
+        self._emit_hook("reply.after_send", ctx)
+
+        # Phase 6: 剧情选项生成（异步，不阻塞主回复）
+        self._generate_plot_choices_if_enabled(ctx, result)
+
+        # Phase 7: 群聊旁白生成（条件触发）
+        if self._group_context and self._group_context.get("auto_narrate"):
+            self._phase_group_narrator(ctx, result, self._group_context)
 
         return result
+
+    def _emit_hook(self, event_type, ctx, extra_payload=None):
+        """Emit a hook event if hook_runtime is available. Zero overhead when None."""
+        if not getattr(self, '_hook_runtime', None):
+            return
+        try:
+            from nbot.hooks.models import RuntimeEvent
+            payload = {}
+            if ctx and ctx.chat_request:
+                payload["channel"] = getattr(ctx.chat_request, "channel", "")
+                payload["content_preview"] = getattr(ctx.chat_request, "content", "")[:100]
+            event = RuntimeEvent(
+                type=event_type,
+                source="ai_pipeline",
+                conversation_id=getattr(ctx.chat_request, "conversation_id", "") if ctx and ctx.chat_request else "",
+                user_id=getattr(ctx.chat_request, "user_id", "") if ctx and ctx.chat_request else "",
+                payload=payload,
+            )
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self._hook_runtime.emit_event(event))
+            else:
+                loop.run_until_complete(self._hook_runtime.emit_event(event))
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Phase 1: 附件解析
@@ -789,6 +876,7 @@ class AIPipeline:
             except Exception:
                 pass
 
+
         # 角色运行时 before_turn hook
         self._phase_character_runtime_before_turn(ctx, callbacks)
         if ctx.character_turn and getattr(ctx.character_turn, "memories", None):
@@ -842,6 +930,243 @@ class AIPipeline:
         )
         ctx.messages = prepared.messages
         ctx.tool_call_history = prepared.tool_call_history
+
+
+    # ------------------------------------------------------------------
+    # Group Chat Phases
+    # ------------------------------------------------------------------
+
+    def _phase_group_speaker_select(self, ctx, group_context):
+        """Select the speaking character for group chat."""
+        try:
+            from nbot.group.scheduler import SpeakerScheduler
+            scheduler = group_context.get("scheduler") or SpeakerScheduler.instance()
+            conversation = group_context["group"]
+            message = ctx.chat_request.content or ""
+            character_ids = conversation.character_ids
+            last_speaker = conversation.active_speaker
+
+            speaker = scheduler.decide_next_speaker(
+                conversation, message, character_ids, last_speaker=last_speaker,
+            )
+            conversation.active_speaker = speaker
+            ctx.metadata["group_speaker"] = speaker
+            ctx.metadata["group_id"] = conversation.group_id
+
+            # Build character name mapping
+            profiles = group_context.get("character_profiles", {})
+            speaker_name = profiles.get(speaker, {}).get("name", speaker) if speaker else ""
+            ctx.metadata["group_speaker_name"] = speaker_name
+
+            _log.info("group %s: speaker selected = %s (%s)", conversation.group_id, speaker, speaker_name)
+        except Exception as e:
+            _log.error("group speaker select failed: %s", e)
+
+    def _phase_group_prompt_build(self, ctx, group_context):
+        """Build group chat system prompt and inject into prompt_stack."""
+        try:
+            from nbot.group.scheduler import SpeakerScheduler
+            scheduler = group_context.get("scheduler") or SpeakerScheduler.instance()
+            conversation = group_context["group"]
+            profiles = group_context.get("character_profiles", {})
+            speaker_id = ctx.metadata.get("group_speaker", "")
+
+            if not speaker_id:
+                return
+
+            group_prompt = scheduler.build_group_system_prompt(
+                conversation, profiles, speaker_id,
+            )
+
+            # Inject into prompt_stack
+            ctx.prompt_stack.add(
+                "group.scene",
+                group_prompt,
+                priority=85,
+            )
+
+            # Inject relation matrix as context
+            relations = conversation.get_relation_matrix()
+            if relations:
+                import json
+                ctx.prompt_stack.add(
+                    "group.relations",
+                    "角色间关系数据:" + json.dumps(relations, ensure_ascii=False, indent=2),
+                    priority=60,
+                )
+
+            _log.info("group %s: prompt built for speaker %s", conversation.group_id, speaker_id)
+        except Exception as e:
+            _log.error("group prompt build failed: %s", e)
+
+    def _phase_group_narrator(self, ctx, result, group_context):
+        """Generate narration if conditions are met."""
+        try:
+            from nbot.group.narrator import NarratorCharacter
+            narrator = group_context.get("narrator") or NarratorCharacter.instance()
+            conversation = group_context["group"]
+
+            if not narrator.should_narrate(
+                trigger="interval",
+                turn_count=conversation.turn_count,
+                narrate_interval=conversation.config.narrate_interval,
+            ):
+                return
+
+            profiles = group_context.get("character_profiles", {})
+            char_names = [profiles.get(c, {}).get("name", c) for c in conversation.character_ids]
+            scene_ctx = narrator.build_scene_context(char_names)
+            recent = narrator.build_recent_summary(group_context.get("recent_messages", []))
+
+            narrate_prompt = narrator.build_narrate_prompt(
+                trigger="interval",
+                scene_context=scene_ctx,
+                recent_summary=recent,
+            )
+
+            # Store narrator prompt for async generation
+            if result.metadata is None:
+                result.metadata = {}
+            result.metadata["narrate_prompt"] = narrate_prompt
+            result.metadata["narrate_pending"] = True
+            narrator.mark_narrated()
+            conversation.advance_turn()
+
+            _log.info("group %s: narration triggered at turn %d", conversation.group_id, conversation.turn_count)
+        except Exception as e:
+            _log.error("group narrator failed: %s", e)
+
+    def _generate_plot_choices_if_enabled(self, ctx, result):
+        """Generate plot choices if plot mode is enabled for this session."""
+        if not ctx or not ctx.chat_request:
+            _log.debug("[PlotMode] skipped: no ctx or chat_request")
+            return
+        try:
+            conversation_id = ctx.chat_request.conversation_id
+            if not conversation_id:
+                _log.debug("[PlotMode] skipped: no conversation_id")
+                return
+            # Check if plot mode is enabled
+            from nbot.plot.graph_manager import get_plot_graph_manager
+            from nbot.plot.choice_generator import PlotChoiceGenerator
+            from nbot.plot.models import PlotNode, PlotChoice
+
+            # Check session for plot_mode flag
+            metadata = getattr(ctx.chat_request, 'metadata', {}) or {}
+            session_plot = metadata.get('plot_mode', False)
+            if not session_plot:
+                return
+
+            # Generate choices asynchronously
+            import asyncio
+            generator = PlotChoiceGenerator()
+            turn_context = ctx.character_turn
+
+            self._run_plot_choice_generation(
+                generator, result, turn_context, conversation_id, ctx
+            )
+        except Exception as e:
+            _log.debug("[AIPipeline] plot choice generation skipped: %s", e)
+
+    def _run_plot_choice_generation(self, generator, result, turn_context, conversation_id, ctx):
+        """Run plot choice generation to completion before Web emits result metadata."""
+        import asyncio
+
+        coro = self._do_generate_plot_choices(
+            generator, result, turn_context, conversation_id, ctx
+        )
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(coro)
+            return
+
+        import threading
+
+        error_holder = []
+
+        def run_in_thread():
+            try:
+                asyncio.run(coro)
+            except Exception as exc:
+                error_holder.append(exc)
+
+        worker = threading.Thread(target=run_in_thread, daemon=True)
+        worker.start()
+        worker.join()
+        if error_holder:
+            raise error_holder[0]
+
+    async def _do_generate_plot_choices(self, generator, result, turn_context, conversation_id, ctx):
+        """Async plot choice generation."""
+        try:
+            response_text = result.final_content or ""
+            choices = await generator.generate(
+                response_text,
+                _plot_turn_context_dict(turn_context),
+            )
+            if not choices:
+                return
+
+            # Attach to result metadata
+            result.metadata["plot_choices"] = choices
+
+            # Create plot node for important+ choices
+            from nbot.plot.graph_manager import get_plot_graph_manager
+            from nbot.plot.models import PlotNode, PlotChoice as PlotChoiceModel
+
+            graph_mgr = get_plot_graph_manager()
+            char_id = ""
+            if turn_context and hasattr(turn_context, 'profile'):
+                char_id = turn_context.profile.id
+
+            # Create a node for this turn
+            node = PlotNode(
+                conversation_id=conversation_id,
+                character_id=char_id,
+                title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
+                summary=response_text[:100],
+                level="normal",
+            )
+            graph_mgr.add_node(node)
+
+            # Create choice entries
+            for choice_data in choices:
+                level = choice_data.get("level", "normal")
+                pc = PlotChoiceModel(
+                    node_id=node.id,
+                    text=choice_data.get("text", ""),
+                    level=level,
+                    intent=choice_data.get("intent", ""),
+                )
+                graph_mgr.add_choice(pc)
+                choice_data["id"] = pc.id
+
+            _log.debug("[AIPipeline] generated %d plot choices", len(choices))
+
+            # Trigger multimedia effects for the highest-level choice
+            try:
+                from nbot.plot.multimedia_bridge import MultimediaBridge
+                mm = MultimediaBridge.instance()
+                max_level = "normal"
+                for cd in choices:
+                    lv = cd.get("level", "normal")
+                    if _level_rank(lv) > _level_rank(max_level):
+                        max_level = lv
+                # Build a mock choice object for the bridge
+                mock_choice = type("C", (), {"level": max_level, "text": response_text[:80]})()
+                mm_ctx = {
+                    "mood": ctx.metadata.get("mood", "calm"),
+                    "reply_text": response_text[:200],
+                    "location": ctx.metadata.get("location", ""),
+                }
+                mm_actions = mm.on_plot_choice(mock_choice, mm_ctx)
+                if mm_actions:
+                    result.metadata["multimedia_actions"] = mm_actions
+            except Exception as mm_e:
+                _log.debug("[AIPipeline] multimedia trigger skipped: %s", mm_e)
+        except Exception as e:
+            _log.error("[PlotMode] choice generation failed: %s", e)
 
     # ------------------------------------------------------------------
     # 角色运行时 hooks
@@ -1272,6 +1597,11 @@ class AIPipeline:
                 callbacks.on_stream_chunk(ctx, chunk, message_id)
         except Exception as e:
             _log.error(f"Streaming failed: {e}")
+            # Debug: log message count and content preview
+            try:
+                _log.warning("[StreamDebug] msg_count=%d msgs=%s", len(ctx.messages), str([{"role": m.get("role"), "len": len(str(m.get("content", "")))} for m in ctx.messages[-3:]])[:300])
+            except Exception:
+                pass
             ctx.error = str(e)
             full_content = full_content or f"流式输出失败: {e}"
 
@@ -1355,9 +1685,13 @@ class AIPipeline:
                 )
                 # 使用模型配置的 failover_timeout，0 表示使用默认 120s
                 request_timeout = config.get("failover_timeout", 0) or 120
+                _log.warning("[FailoverDebug] model=%s msg_count=%d has_tools=%s payload_keys=%s",
+                    model_name, len(messages), str(bool(tools)), str(list(payload.keys())))
                 resp = requests.post(
                     url, json=payload, headers=headers, timeout=request_timeout
                 )
+                if resp.status_code != 200:
+                    _log.warning("[FailoverDebug] url=%s status=%d body=%s", url, resp.status_code, resp.text[:500])
                 resp.raise_for_status()
                 normalized = protocol.parse_response(
                     response_json_utf8(resp),

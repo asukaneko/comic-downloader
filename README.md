@@ -52,6 +52,7 @@ bot.py
     ├── channels/               # QQ, Web, Telegram, Feishu adapters
     ├── services/               # AI client, chat service, tools, TTS/STT
     ├── plugins/                # Plugin and skill system
+    ├── hooks/                  # Hook Runtime (event-driven conversation hooks)
     ├── gateway/                # Message bus, routing, delivery, dedupe
     │   └── facade.py            # Gateway service facade for MCP
     ├── web/                    # Flask blueprints, Socket.IO events, dashboard

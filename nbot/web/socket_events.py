@@ -244,13 +244,19 @@ def register_socket_events(server):
 
             is_edit_resend = data.get("is_edit_resend", False)
 
+            # 从 data 或 session 读取 plot_mode 传入 pipeline
+            req_metadata = {"tempId": temp_id}
+            plot_mode = data.get("plot_mode") or server.sessions.get(session_id, {}).get("plot_mode")
+            if plot_mode:
+                req_metadata["plot_mode"] = True
+
             chat_request = adapter.build_chat_request(
                 conversation_id=session_id,
                 content=content,
                 sender=sender,
                 attachments=processed_attachments,
                 parent_message_id=temp_id,
-                metadata={"tempId": temp_id},
+                metadata=req_metadata,
             )
 
             if not is_edit_resend:
@@ -260,7 +266,7 @@ def register_socket_events(server):
                     sender=chat_request.sender,
                     conversation_id=chat_request.conversation_id,
                     attachments=chat_request.attachments,
-                    metadata={"tempId": temp_id},
+                    metadata=req_metadata,
                 )
 
                 session_store.append_message(session_id, message)
@@ -287,7 +293,7 @@ def register_socket_events(server):
                         default_content=chat_request.content,
                         default_sender=chat_request.sender,
                         default_conversation_id=chat_request.conversation_id,
-                        metadata={"tempId": temp_id},
+                        metadata=req_metadata,
                     )
                     server.message_manager.add_web_message(
                         session_id,
@@ -331,6 +337,7 @@ def register_socket_events(server):
                     chat_request.sender,
                     chat_request.attachments,
                     parent_msg_id,
+                    metadata=chat_request.metadata,
                 )
 
         except Exception as e:

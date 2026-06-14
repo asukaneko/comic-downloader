@@ -38,6 +38,7 @@ class CharacterRuntime:
         prompt_builder=None,
         state_machine=None,
         world_book_store=None,
+        hook_runtime=None,
     ):
         self.profile_repo = profile_repo
         self.state_repo = state_repo
@@ -48,6 +49,31 @@ class CharacterRuntime:
         self.prompt_builder = prompt_builder
         self.state_machine = state_machine
         self._world_book_store = world_book_store
+        self._hook_runtime = hook_runtime
+        self._event_logger = None  # lazy init
+
+    def _emit_hook(self, event_type: str, identity=None, payload=None, context=None):
+        """Emit a hook event if hook_runtime is available. Non-blocking helper."""
+        if not self._hook_runtime:
+            return
+        try:
+            from nbot.hooks.models import RuntimeEvent
+            event = RuntimeEvent(
+                type=event_type,
+                source="character_runtime",
+                character_id=getattr(identity, "character_id", "") if identity else "",
+                user_id=getattr(identity, "target_id", "") if identity else "",
+                conversation_id=getattr(identity, "scope_id", "") if identity else "",
+                payload=payload or {},
+            )
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(self._hook_runtime.emit_event(event, context=context))
+            else:
+                loop.run_until_complete(self._hook_runtime.emit_event(event, context=context))
+        except Exception as e:
+            _log.debug("[CharacterRuntime] hook emit failed: %s", e)
 
     def before_turn(self, chat_request, identity: CharacterIdentity, recent_messages: list = None) -> CharacterTurnContext:
         """每轮对话前的角色模拟编排
@@ -86,6 +112,9 @@ class CharacterRuntime:
 
         # 检索相关记忆
         memories = self._search_memories(identity, chat_request)
+        self._emit_hook("character.after_memory_retrieve", identity, {
+            "memory_count": len(memories),
+        })
 
         # 分析用户输入信号
         signals = self._analyze_signals(chat_request, state, relationship)
@@ -94,15 +123,38 @@ class CharacterRuntime:
         plan = self._plan_reaction(
             profile, state, relationship, memories, signals, chat_request
         )
+        self._emit_hook("character.after_reaction_plan", identity, {
+            "intent": plan.intent if plan else "",
+            "tone": plan.tone if plan else "",
+        })
 
         # 世界书关键词匹配（多源上下文召回）
         world_book_entries = self._match_world_books(identity, chat_request, state=state, recent_messages=recent_messages)
+        self._emit_hook("character.after_world_book_match", identity, {
+            "entry_count": len(world_book_entries) if world_book_entries else 0,
+        })
 
         # 编译提示词
         prompt_text = self._build_prompt(
             profile, state, relationship, memories, plan,
             world_book_entries=world_book_entries,
         )
+
+        self._emit_hook("character.before_turn.finished", identity, {
+            "mood": state.mood if state else "",
+            "affection": relationship.affection if relationship else 0,
+            "trust": relationship.trust if relationship else 0,
+        }, context={
+            "mood": state.mood if state else "",
+            "mood_intensity": state.mood_intensity if state else 0,
+            "energy": state.energy if state else 0,
+            "affection": relationship.affection if relationship else 0,
+            "trust": relationship.trust if relationship else 0,
+            "familiarity": relationship.familiarity if relationship else 0,
+            "dependency": relationship.dependency if relationship else 0,
+            "security": relationship.security if relationship else 0,
+            "jealousy": relationship.jealousy if relationship else 0,
+        })
 
         return CharacterTurnContext(
             profile=profile,
@@ -126,6 +178,13 @@ class CharacterRuntime:
         if not self.state_machine:
             _log.warning("[CharacterRuntime] after_turn skipped: state_machine is None")
             return
+
+        identity = CharacterIdentity(
+            character_id=turn_context.profile.id if turn_context.profile else "",
+            target_id=getattr(chat_request, "user_id", "") or "",
+            scope_id=turn_context.state.scope_id if turn_context.state else "",
+        )
+        self._emit_hook("character.after_turn.started", identity)
 
         old_state = self._refresh_latest_state(turn_context.state)
         old_relationship = self._refresh_latest_relationship(turn_context.relationship)
@@ -189,6 +248,38 @@ class CharacterRuntime:
         if self.relationship_repo and new_relationship:
             self.relationship_repo.save(new_relationship)
 
+        # Emit state/relationship change events
+        if new_state and old_state:
+            if new_state.mood != old_state.mood:
+                self._emit_hook("state.changed", identity, {
+                    "field": "mood", "old": old_state.mood, "new": new_state.mood,
+                })
+        if new_relationship and old_relationship:
+            rel_changes = {}
+            for field in ("affection", "trust", "familiarity", "dependency", "security", "jealousy"):
+                old_val = getattr(old_relationship, field)
+                new_val = getattr(new_relationship, field)
+                if old_val != new_val:
+                    rel_changes[field] = {"old": old_val, "new": new_val}
+            if rel_changes:
+                self._emit_hook("relationship.changed", identity, rel_changes)
+
+        self._emit_hook("character.after_state_update", identity, {
+            "mood": new_state.mood if new_state else "",
+            "mood_intensity": new_state.mood_intensity if new_state else 0,
+            "energy": new_state.energy if new_state else 0,
+        }, context={
+            "mood": new_state.mood if new_state else "",
+            "mood_intensity": new_state.mood_intensity if new_state else 0,
+            "energy": new_state.energy if new_state else 0,
+            "affection": new_relationship.affection if new_relationship else 0,
+            "trust": new_relationship.trust if new_relationship else 0,
+            "familiarity": new_relationship.familiarity if new_relationship else 0,
+            "dependency": new_relationship.dependency if new_relationship else 0,
+            "security": new_relationship.security if new_relationship else 0,
+            "jealousy": new_relationship.jealousy if new_relationship else 0,
+        })
+
         # Web snapshot / timeline are written after after_turn from this context.
         # Keep them on the just-saved values instead of the before_turn baseline.
         if new_state:
@@ -204,8 +295,14 @@ class CharacterRuntime:
                     result=result,
                     turn_context=turn_context,
                 )
+                self._emit_hook("memory.after_extract", identity)
             except Exception as exc:
                 _log.warning("[CharacterRuntime] 记忆抽取异常: %s", exc)
+
+        self._emit_hook("character.after_turn.finished", identity, {
+            "mood": new_state.mood if new_state else "",
+            "affection": new_relationship.affection if new_relationship else 0,
+        })
 
     def _refresh_latest_state(self, state: CharacterState) -> CharacterState:
         if not self.state_repo or not state:

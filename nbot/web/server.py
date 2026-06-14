@@ -38,6 +38,7 @@ from nbot.web.persistence import (
     save_data,
 )
 from nbot.web.routes import (
+    register_plot_routes,
     register_admin_misc_routes,
     register_ai_config_routes,
     register_ai_model_routes,
@@ -51,6 +52,8 @@ from nbot.web.routes import (
     register_gateway_log_routes,
     register_gateway_routes,
     register_heartbeat_routes,
+    register_hook_routes,
+    register_group_routes,
     register_knowledge_routes,
     register_live2d_routes,
     register_login_token_routes,
@@ -2870,11 +2873,14 @@ class WebChatServer:
         register_gateway_routes(self.app)
         register_gateway_log_routes(self.app)
         register_heartbeat_routes(self.app, self)
+        register_group_routes(self.app, self)
+        register_hook_routes(self.app, self)
         register_knowledge_routes(self.app, self)
         register_live2d_routes(self.app, self)
         register_memory_routes(self.app, self)
         register_message_filter_routes(self.app, self)
         register_personality_routes(self.app, self)
+        register_plot_routes(self.app, self)
         register_push_routes(self.app, self)
         register_qq_overview_routes(self.app, self)
         register_qrcode_routes(self.app, self)
@@ -3010,6 +3016,14 @@ class WebChatServer:
         # 将 trace_id 传递给后续处理（Web 异步任务需要用它回补回复内容）
         if metadata is None:
             metadata = {}
+        else:
+            metadata = dict(metadata)
+        try:
+            session_plot_mode = bool((self.sessions.get(session_id) or {}).get("plot_mode"))
+            if session_plot_mode:
+                metadata.setdefault("plot_mode", True)
+        except Exception:
+            pass
         metadata["_gateway_trace_id"] = trace_id
         chat_request.metadata = metadata
 

@@ -539,6 +539,12 @@ def register_character_routes(app, server):
 
             from nbot.character.storage.world_book_store import WorldBookStore
 
+            _hook_rt = None
+            try:
+                from nbot.hooks.manager import get_hook_manager
+                _hook_rt = get_hook_manager()
+            except Exception:
+                pass
             runtime = CharacterRuntime(
                 profile_repo=ProfileRepository(base_dir),
                 state_repo=CharacterStateRepository(base_dir),
@@ -548,6 +554,7 @@ def register_character_routes(app, server):
                 planner=ReactionPlanner(),
                 state_machine=StateMachine(),
                 world_book_store=WorldBookStore(base_dir),
+                hook_runtime=_hook_rt,
             )
 
             server.character_runtime = runtime

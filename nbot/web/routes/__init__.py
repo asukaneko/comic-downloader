@@ -9,8 +9,10 @@ from nbot.web.routes.config_legacy import register_config_legacy_routes
 from nbot.web.routes.config_transfer import register_config_transfer_routes
 from nbot.web.routes.files import register_file_routes
 from nbot.web.routes.gateway import register_gateway_routes
+from nbot.web.routes.groups import register_group_routes
 from nbot.web.routes.gateway_logs import register_gateway_log_routes
 from nbot.web.routes.heartbeat import register_heartbeat_routes
+from nbot.web.routes.hooks import register_hook_routes
 from nbot.web.routes.knowledge import register_knowledge_routes
 from nbot.web.routes.live2d import register_live2d_routes
 from nbot.web.routes.login_tokens import register_login_token_routes
@@ -19,6 +21,7 @@ from nbot.web.routes.memory import register_memory_routes
 from nbot.web.routes.message_filter import register_message_filter_routes
 from nbot.web.routes.personality import register_personality_routes
 from nbot.web.routes.public_sessions import register_public_session_routes
+from nbot.web.routes.plot import register_plot_routes
 from nbot.web.routes.push import register_push_routes
 from nbot.web.routes.qq_overview import register_qq_overview_routes
 from nbot.web.routes.qrcode import register_qrcode_routes
@@ -50,8 +53,10 @@ __all__ = [
     "register_config_transfer_routes",
     "register_file_routes",
     "register_gateway_routes",
+    "register_group_routes",
     "register_gateway_log_routes",
     "register_heartbeat_routes",
+    "register_hook_routes",
     "register_knowledge_routes",
     "register_live2d_routes",
     "register_login_token_routes",
@@ -60,6 +65,7 @@ __all__ = [
     "register_message_filter_routes",
     "register_personality_routes",
     "register_public_session_routes",
+    "register_plot_routes",
     "register_push_routes",
     "register_qq_overview_routes",
     "register_qrcode_routes",
