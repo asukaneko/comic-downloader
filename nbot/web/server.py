@@ -3016,6 +3016,14 @@ class WebChatServer:
         # 将 trace_id 传递给后续处理（Web 异步任务需要用它回补回复内容）
         if metadata is None:
             metadata = {}
+        else:
+            metadata = dict(metadata)
+        try:
+            session_plot_mode = bool((self.sessions.get(session_id) or {}).get("plot_mode"))
+            if session_plot_mode:
+                metadata.setdefault("plot_mode", True)
+        except Exception:
+            pass
         metadata["_gateway_trace_id"] = trace_id
         chat_request.metadata = metadata
 

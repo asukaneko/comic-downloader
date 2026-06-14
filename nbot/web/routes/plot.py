@@ -22,6 +22,10 @@ def register_plot_routes(app, server):
         sessions = getattr(server, "sessions", {})
         if session_id in sessions:
             sessions[session_id]["plot_mode"] = enabled
+            try:
+                server._save_data("sessions")
+            except Exception:
+                _log.debug("[PlotRoutes] failed to persist plot_mode", exc_info=True)
 
         _log.info(
             "[PlotRoutes] plot_mode toggled session=%s enabled=%s",

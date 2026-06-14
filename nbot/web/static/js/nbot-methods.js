@@ -1268,6 +1268,10 @@ const NbotMethods = {
                         if (session) {
                             Object.assign(session, runtimeFields);
                         }
+                        // Reload character status panel if visible
+                        if (this.showRuntimePanel) {
+                            this.loadCharacterStatus();
+                        }
                     } catch (e) {
                         console.error('Failed to refresh character runtime:', e);
                         this.showToast('刷新角色运行时失败', 'error');
@@ -5804,6 +5808,8 @@ def main(params):
 
                     // 切换到新会话，清除所有状态
                     this.currentSession = session;
+                    this.plotMode = !!session.plot_mode || localStorage.getItem('plot_mode_' + session.id) === '1';
+                    this.plotChoices = [];
                     this.messageFavoriteMode = false;
                     this.selectedFavoriteMessageIds = [];
                     this.currentMessageFavorites = [];
@@ -5893,6 +5899,11 @@ def main(params):
                     this.isTyping = (this.loadingSessionId === session.id);
                     // 重新应用聊天背景（切换会话后 sender_portrait 可能不同）
                     this.applyChatBackground();
+
+                    // 加载新会话的角色状态
+                    if (this.showRuntimePanel) {
+                        this.loadCharacterStatus();
+                    }
                 },
                 
                 async switchChatTab(tab) {
@@ -6313,11 +6324,13 @@ def main(params):
 
                 buildPendingMessagePayload(content, files, sessionId) {
                     const clonedFiles = (files || []).map(file => ({ ...file }));
+                    const sessionPlotMode = !!(this.currentSession && this.currentSession.id === sessionId && this.currentSession.plot_mode);
                     return {
                         id: 'queued_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
                         sessionId,
                         content,
                         files: clonedFiles,
+                        plotMode: this.plotMode || sessionPlotMode || localStorage.getItem('plot_mode_' + sessionId) === '1',
                         createdAt: new Date().toISOString()
                     };
                 },
@@ -6444,13 +6457,15 @@ def main(params):
                     this.isTyping = true;
                     this.isLoading = true;
 
+                    const plotMode = payload.plotMode ?? this.plotMode;
                     try {
                         socket.emit('send_message', {
                             session_id: sessionId,
                             content: userMessage.content,
                             sender: this.username,
                             attachments: uploadedFilesInfo,
-                            tempId: tempId
+                            tempId: tempId,
+                            plot_mode: !!plotMode
                         });
                     } catch (e) {
                         this.isTyping = false;
@@ -14689,6 +14704,13 @@ def main(params):
                             this.showToast(data.error || '立绘生成失败', 'error');
                         }
                     });
+
+                    // 监听剧情选项
+                    socket.on('plot_choices', (data) => {
+                        if (data && data.choices && data.session_id === this.currentSession?.id) {
+                            this.plotChoices = this.normalizePlotChoices(data.choices);
+                        }
+                    });
                 },
                 
                 confirmExecCommand() {
@@ -16023,6 +16045,7 @@ def main(params):
                                     content: newContent,
                                     sender: this.username,
                                     attachments: [],
+                                    plot_mode: this.plotMode,
                                     tempId: msg.id,
                                     is_edit_resend: true,
                                 });
@@ -16234,7 +16257,8 @@ def main(params):
                         session_id: this.currentSession.id,
                         content: '继续',
                         sender: 'web_user',
-                        tempId: tempId
+                        tempId: tempId,
+                        plot_mode: this.plotMode
                     });
                 },
                 
@@ -16345,6 +16369,23 @@ def main(params):
 
     async togglePlotMode() {
         this.plotMode = !this.plotMode;
+        const sid = this.currentSession?.id || this.currentSession?.session_id;
+        if (sid) {
+            localStorage.setItem('plot_mode_' + sid, this.plotMode ? '1' : '0');
+            if (this.currentSession) {
+                this.currentSession.plot_mode = this.plotMode;
+            }
+            const sessionInList = this.sessions?.find?.(s => s.id === sid);
+            if (sessionInList) {
+                sessionInList.plot_mode = this.plotMode;
+            }
+            try {
+                await api.post('/api/plot/toggle', { session_id: sid, enabled: this.plotMode });
+            } catch (e) {
+                console.debug('togglePlotMode API:', e.message);
+            }
+        }
+        this.showToast(this.plotMode ? '🎭 剧情模式已开启' : '剧情模式已关闭', 'success');
         if (this.plotMode) {
             await this.loadPlotChoices();
         } else {
@@ -16358,45 +16399,136 @@ def main(params):
             const sid = this.currentSession.id || this.currentSession.session_id;
             const res = await axios.get('/api/plot/' + sid + '/graph');
             if (res.data && res.data.choices) {
-                this.plotChoices = res.data.choices.filter(c => !c.selected);
+                this.plotChoices = this.normalizePlotChoices(res.data.choices.filter(c => !c.selected));
             }
         } catch (e) {
             console.debug('loadPlotChoices:', e.message);
         }
     },
 
-    async selectPlotChoice(choice) {
-        if (!this.currentSession) return;
-        try {
-            const sid = this.currentSession.id || this.currentSession.session_id;
-            await axios.post('/api/plot/' + sid + '/select', { choice_id: choice.id });
-            this.plotChoices = [];
-            this.sendMessage(choice.text);
-        } catch (e) {
-            console.error('selectPlotChoice:', e);
+    normalizePlotChoices(choices) {
+        return (choices || []).map(choice => ({
+            ...choice,
+            text: this.normalizePlotChoiceText(choice?.text || '')
+        }));
+    },
+
+    normalizePlotChoiceText(text) {
+        let value = (text || '').trim();
+        if (!value) return value;
+
+        const firstPersonRemainder = (raw) => {
+            let remainder = (raw || '').replace(/^[：:，,\s]+/, '');
+            if (remainder.startsWith('你的')) {
+                remainder = '我的' + remainder.slice(2);
+            } else if (remainder.startsWith('自己的')) {
+                remainder = '我的' + remainder.slice(3);
+            }
+            return remainder;
+        };
+
+        const replacements = [
+            ['告诉她', '我想告诉你，'],
+            ['告诉他', '我想告诉你，'],
+            ['告知她', '我想告诉你，'],
+            ['告知他', '我想告诉你，'],
+            ['问她是否', '我想问你，是否'],
+            ['问他是否', '我想问你，是否'],
+            ['询问她是否', '我想问你，是否'],
+            ['询问他是否', '我想问你，是否'],
+            ['问她', '我想问你，'],
+            ['问他', '我想问你，'],
+            ['询问她', '我想问你，'],
+            ['询问他', '我想问你，'],
+            ['向她表达', '我想对你说，'],
+            ['向他表达', '我想对你说，'],
+            ['对她说', '我想对你说，'],
+            ['对他说', '我想对你说，'],
+            ['选择', '']
+        ];
+
+        for (const [prefix, replacement] of replacements) {
+            if (value.startsWith(prefix)) {
+                value = replacement + firstPersonRemainder(value.slice(prefix.length));
+                break;
+            }
         }
+
+        value = value
+            .replaceAll('她的', '你的')
+            .replaceAll('他的', '你的')
+            .replaceAll('她', '你')
+            .replaceAll('他', '你');
+
+        const actionPrefixes = [
+            '牵住', '握住', '抱住', '靠近', '安抚', '拥抱', '注视', '拉住',
+            '承认', '坦白', '追问', '询问', '请求', '拒绝', '道歉', '解释'
+        ];
+        if (actionPrefixes.some(prefix => value.startsWith(prefix))) {
+            value = '我' + value;
+        }
+
+        return value;
+    },
+
+    selectPlotChoice(choice) {
+        if (!this.currentSession) return;
+        const choiceText = this.normalizePlotChoiceText(choice?.text || '');
+        if (!choiceText) {
+            this.showToast('剧情选项内容为空', 'warning');
+            return;
+        }
+        this.inputMessage = choiceText;
+        this.plotChoices = [];
+        this.$nextTick(() => {
+            if (this.$refs.chatInput) {
+                this.$refs.chatInput.focus();
+                this.$refs.chatInput.dispatchEvent(new Event('input'));
+            }
+        });
     },
 
     async loadPlotGraph() {
         if (!this.currentSession) return;
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
-            const res = await axios.get('/api/plot/' + sid + '/mermaid');
-            if (res.data && res.data.mermaid) {
-                this.plotGraphMermaid = res.data.mermaid;
-                this.showPlotGraphModal = true;
-                this.$nextTick(() => this.renderMermaid());
+            const graphRes = await axios.get('/api/plot/' + sid + '/graph');
+            this.plotGraphData = {
+                nodes: graphRes.data?.nodes || [],
+                choices: graphRes.data?.choices || [],
+                edges: graphRes.data?.edges || []
+            };
+            this.plotGraphMermaid = '';
+            this.showPlotGraphModal = true;
+
+            try {
+                const mermaidRes = await axios.get('/api/plot/' + sid + '/mermaid');
+                this.plotGraphMermaid = mermaidRes.data?.mermaid || '';
+                if (this.plotGraphMermaid) {
+                    this.$nextTick(() => this.renderMermaid());
+                }
+            } catch (e) {
+                console.debug('loadPlotGraph mermaid:', e.message);
             }
         } catch (e) {
             console.debug('loadPlotGraph:', e.message);
+            this.showToast('故事图加载失败', 'error');
         }
     },
 
     renderMermaid() {
         const el = this.$refs.plotGraphContainer;
         if (el && window.mermaid) {
-            el.innerHTML = this.plotGraphMermaid;
-            window.mermaid.run({ nodes: [el] });
+            el.removeAttribute('data-processed');
+            el.textContent = this.plotGraphMermaid;
+            try {
+                const result = window.mermaid.run({ nodes: [el] });
+                if (result && typeof result.catch === 'function') {
+                    result.catch(e => console.debug('renderMermaid:', e.message));
+                }
+            } catch (e) {
+                console.debug('renderMermaid:', e.message);
+            }
         }
     },
 
@@ -16407,17 +16539,84 @@ def main(params):
     async loadCharacterStatus() {
         if (!this.currentSession) return;
         try {
-            const sid = this.currentSession.id || this.currentSession.session_id;
-            const res = await axios.get('/api/sessions/' + sid);
-            if (res.data) {
-                const sess = res.data.session || res.data;
+            // Use the character_runtime_snapshot from the session (synced with character runtime panel)
+            const snapshot = this.currentSession.character_runtime_snapshot;
+
+            if (snapshot) {
+                // Use runtime snapshot data - this syncs with the character runtime panel
                 this.characterStatus = {
-                    mood: sess.mood || '平静',
-                    energy: sess.energy || 100,
-                    scene: sess.scene || {},
+                    mood: snapshot.mood || '平静',
+                    mood_intensity: snapshot.mood_intensity ?? 0.5,
+                    energy: snapshot.energy ?? 100,
+                    visible_emotion: snapshot.visible_emotion || '',
+                    hidden_emotion: snapshot.hidden_emotion || '',
+                    relationship: {
+                        affection: snapshot.affection ?? 50,
+                        trust: snapshot.trust ?? 50,
+                        familiarity: snapshot.familiarity ?? 50,
+                        dependency: snapshot.dependency ?? 50,
+                        security: snapshot.security ?? 50,
+                        jealousy: snapshot.jealousy ?? 0,
+                    },
                 };
-                this.$nextTick(() => this.renderRelationshipRadar());
+            } else {
+                // Fallback: try to fetch from character state API
+                const sid = this.currentSession.id || this.currentSession.session_id;
+                const characterId = this.currentSession.sender_name || this.currentSession.character_id || '';
+                const targetId = this.currentSession.qq_id || this.username || sid;
+
+                // Default status
+                this.characterStatus = {
+                    mood: '平静',
+                    mood_intensity: 0.5,
+                    energy: 100,
+                    relationship: {
+                        affection: 50,
+                        trust: 50,
+                        familiarity: 50,
+                        dependency: 50,
+                        security: 50,
+                        jealousy: 0,
+                    },
+                };
+
+                if (characterId) {
+                    // Fetch character state
+                    try {
+                        const stateRes = await axios.get(`/api/characters/${encodeURIComponent(characterId)}/state`, {
+                            params: { scope_id: sid }
+                        });
+                        if (stateRes.data) {
+                            this.characterStatus.mood = stateRes.data.mood || '平静';
+                            this.characterStatus.mood_intensity = stateRes.data.mood_intensity || 0.5;
+                            this.characterStatus.energy = stateRes.data.energy ?? 100;
+                        }
+                    } catch (e) {
+                        console.debug('loadCharacterStatus: state fetch failed:', e.message);
+                    }
+
+                    // Fetch relationship
+                    try {
+                        const relRes = await axios.get(`/api/characters/${encodeURIComponent(characterId)}/relationships`, {
+                            params: { target_id: targetId }
+                        });
+                        if (relRes.data) {
+                            this.characterStatus.relationship = {
+                                affection: relRes.data.affection ?? 50,
+                                trust: relRes.data.trust ?? 50,
+                                familiarity: relRes.data.familiarity ?? 50,
+                                dependency: relRes.data.dependency ?? 50,
+                                security: relRes.data.security ?? 50,
+                                jealousy: relRes.data.jealousy ?? 0,
+                            };
+                        }
+                    } catch (e) {
+                        console.debug('loadCharacterStatus: relationship fetch failed:', e.message);
+                    }
+                }
             }
+
+            this.$nextTick(() => this.renderRelationshipRadar());
         } catch (e) {
             console.debug('loadCharacterStatus:', e.message);
         }
@@ -16426,9 +16625,41 @@ def main(params):
     renderRelationshipRadar() {
         const el = this.$refs.relationshipRadar;
         if (!el || !window.echarts) return;
+
+        // Dispose previous chart instance if exists
+        const existingChart = echarts.getInstanceByDom(el);
+        if (existingChart) {
+            existingChart.dispose();
+        }
+
         const chart = echarts.init(el);
         const rel = this.characterStatus.relationship || {};
+
+        // Get computed theme colors
+        const computedStyle = getComputedStyle(document.body);
+        const textColor = computedStyle.getPropertyValue('--text-secondary').trim() || '#8b949e';
+        const borderColor = computedStyle.getPropertyValue('--border-color').trim() || 'rgba(255,255,255,0.1)';
+
         chart.setOption({
+            tooltip: {
+                trigger: 'item',
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                textStyle: {
+                    color: '#e2e8f0',
+                    fontSize: 13,
+                },
+                formatter: function(params) {
+                    if (!params.value) return '';
+                    const names = ['好感', '信任', '熟悉', '依赖', '安全', '嫉妒'];
+                    let result = '<div style="font-weight:600;margin-bottom:6px;">关系数值</div>';
+                    params.value.forEach((val, idx) => {
+                        result += `<div style="display:flex;justify-content:space-between;gap:16px;"><span>${names[idx]}</span><span style="font-weight:600;">${val}</span></div>`;
+                    });
+                    return result;
+                }
+            },
             radar: {
                 indicator: [
                     { name: '好感', max: 100 },
@@ -16438,10 +16669,62 @@ def main(params):
                     { name: '安全', max: 100 },
                     { name: '嫉妒', max: 100 },
                 ],
-                radius: '65%',
+                radius: '60%',
+                center: ['50%', '50%'],
+                shape: 'polygon',
+                splitNumber: 5,
+                axisName: {
+                    color: textColor,
+                    fontSize: 12,
+                    fontWeight: 500,
+                },
+                splitLine: {
+                    lineStyle: {
+                        color: borderColor,
+                        width: 1,
+                    }
+                },
+                splitArea: {
+                    areaStyle: {
+                        color: ['rgba(255,255,255,0.02)', 'rgba(255,255,255,0.04)'],
+                    }
+                },
+                axisLine: {
+                    lineStyle: {
+                        color: borderColor,
+                    }
+                },
             },
             series: [{
                 type: 'radar',
+                symbol: 'circle',
+                symbolSize: 8,
+                lineStyle: {
+                    width: 2,
+                    color: '#8b5cf6',
+                },
+                areaStyle: {
+                    color: {
+                        type: 'linear',
+                        x: 0, y: 0, x2: 0, y2: 1,
+                        colorStops: [
+                            { offset: 0, color: 'rgba(139, 92, 246, 0.4)' },
+                            { offset: 1, color: 'rgba(139, 92, 246, 0.1)' }
+                        ]
+                    }
+                },
+                itemStyle: {
+                    color: '#8b5cf6',
+                    borderColor: '#fff',
+                    borderWidth: 2,
+                },
+                emphasis: {
+                    itemStyle: {
+                        borderWidth: 3,
+                        shadowBlur: 10,
+                        shadowColor: 'rgba(139, 92, 246, 0.5)',
+                    }
+                },
                 data: [{
                     value: [
                         rel.affection || 0,
@@ -16451,10 +16734,15 @@ def main(params):
                         rel.security || 0,
                         rel.jealousy || 0,
                     ],
-                    areaStyle: { opacity: 0.2 },
+                    name: '关系',
                 }],
             }],
         });
+
+        // Handle window resize
+        const resizeHandler = () => chart.resize();
+        window.addEventListener('resize', resizeHandler);
+        chart.on('dispose', () => window.removeEventListener('resize', resizeHandler));
     },
 
     // ============================================================
@@ -16470,9 +16758,21 @@ def main(params):
         }
     },
 
+    toggleGroupCharacter(id) {
+        const idx = this.newGroup.selectedCharacterIds.indexOf(id);
+        if (idx >= 0) {
+            this.newGroup.selectedCharacterIds.splice(idx, 1);
+        } else {
+            this.newGroup.selectedCharacterIds.push(id);
+        }
+    },
+
     async createGroup() {
         try {
-            const ids = this.newGroup.characterIds.split(',').map(s => s.trim()).filter(Boolean);
+            const ids = this.newGroup.selectedCharacterIds.map(id => {
+                const ch = this.characterList.find(c => c.id === id);
+                return ch ? ch.name : id;
+            });
             await axios.post('/api/groups', {
                 name: this.newGroup.name,
                 character_ids: ids,
@@ -16480,7 +16780,7 @@ def main(params):
                 config: { speaker_strategy: this.newGroup.strategy },
             });
             this.showCreateGroupModal = false;
-            this.newGroup = { name: '', characterIds: '', narratorId: '', strategy: 'mention' };
+            this.newGroup = { name: '', characterIds: '', narratorId: '', strategy: 'mention', selectedCharacterIds: [] };
             await this.loadGroupList();
         } catch (e) {
             console.error('createGroup:', e);
@@ -16494,6 +16794,28 @@ def main(params):
             await this.loadGroupList();
         } catch (e) {
             console.error('deleteGroup:', e);
+        }
+    },
+
+    async enterGroupChat(group) {
+        // Create a web group chat session
+        try {
+            const res = await axios.post('/api/sessions', {
+                name: group.name,
+                type: 'group',
+                character_ids: group.character_ids,
+                group_id: group.group_id,
+                config: group.config,
+            });
+            const session = res.data;
+            if (session) {
+                this.chatTab = 'web';
+                await this.selectSession(session);
+                this.currentPage = 'chat';
+            }
+        } catch (e) {
+            console.error('enterGroupChat:', e);
+            this.showToast('进入群聊失败', 'error');
         }
     },
 

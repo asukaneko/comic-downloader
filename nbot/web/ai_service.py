@@ -1424,6 +1424,23 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 except Exception as exc:
                     _log.debug("[Gateway] Web 异步事件记录失败: %s", str(exc))
 
+            # 发送剧情选项到前端
+            if result and getattr(result, 'metadata', None):
+                plot_choices = result.metadata.get("plot_choices")
+                if plot_choices:
+                    server.socketio.emit(
+                        "plot_choices",
+                        {"session_id": session_id, "choices": plot_choices},
+                        room=session_id,
+                    )
+                    server.socketio.sleep(0)
+                elif result.metadata.get("plot_mode"):
+                    _log.info(
+                        "[PlotMode] no choices to emit for session=%s metadata_keys=%s",
+                        session_id,
+                        list(result.metadata.keys()),
+                    )
+
             return result
         finally:
             server.stop_events.pop(session_id, None)

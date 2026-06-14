@@ -29,6 +29,30 @@ def _level_rank(level: str) -> int:
     return {"normal": 0, "important": 1, "turning_point": 2, "ending": 3}.get(level, 0)
 
 
+def _plot_turn_context_dict(turn_context: Any) -> Dict[str, Any]:
+    """Convert CharacterTurnContext to the dict expected by PlotChoiceGenerator."""
+    if isinstance(turn_context, dict):
+        return turn_context
+    if not turn_context:
+        return {}
+
+    state = getattr(turn_context, "state", None)
+    relationship = getattr(turn_context, "relationship", None)
+    context = {
+        "mood": getattr(state, "mood", "") if state else "",
+    }
+    if relationship:
+        context["relationship"] = (
+            f"好感 {getattr(relationship, 'affection', 0)}/100, "
+            f"信任 {getattr(relationship, 'trust', 0)}/100, "
+            f"熟悉 {getattr(relationship, 'familiarity', 0)}/100, "
+            f"依赖 {getattr(relationship, 'dependency', 0)}/100, "
+            f"安全感 {getattr(relationship, 'security', 0)}/100, "
+            f"嫉妒 {getattr(relationship, 'jealousy', 0)}/100"
+        )
+    return context
+
+
 
 
 def _custom_prompt_stack_key(custom_prompt: Dict[str, Any]) -> str:
@@ -853,6 +877,61 @@ class AIPipeline:
                 pass
 
 
+        # 角色运行时 before_turn hook
+        self._phase_character_runtime_before_turn(ctx, callbacks)
+        if ctx.character_turn and getattr(ctx.character_turn, "memories", None):
+            ctx.prompt_stack.remove("character.memories_legacy")
+
+        # 应用会话级提示词栈禁用列表
+        disabled_keys = set(ctx.metadata.get("disabled_prompt_keys", []))
+        if disabled_keys:
+            for item in ctx.prompt_stack.items:
+                if item.key in disabled_keys:
+                    item.enabled = False
+
+        # 注入用户自定义提示词（从会话数据中读取，按 order 排序后逐条加入 PromptStack）
+        custom_prompts = ctx.metadata.get("custom_prompts", [])
+        if isinstance(custom_prompts, list) and custom_prompts:
+            sorted_prompts = sorted(custom_prompts, key=lambda x: x.get("order", 0))
+            for cp in sorted_prompts:
+                content = (cp.get("content") or "").strip()
+                if not content:
+                    continue
+                ctx.prompt_stack.add(
+                    key=_custom_prompt_stack_key(cp),
+                    content=content,
+                    priority=35,  # 在角色卡(30)之后、角色状态(40)之前
+                    scope="session",
+                )
+
+        # PromptStack 合成最终 system prompt
+        composed_system = ctx.prompt_stack.render(base_prompt)
+        messages_for_ai = [
+            {"role": "system", "content": composed_system},
+            *history_messages,
+        ]
+
+        # 将合成后的 system prompt 存入 metadata，供 on_response_complete 回写
+        ctx.metadata["composed_system_prompt"] = composed_system
+        ctx.metadata["prompt_stack_debug"] = ctx.prompt_stack.render_debug()
+
+        # 调试日志
+        _log.debug(
+            "[PromptStack] 本轮注入 keys: %s",
+            ctx.prompt_stack.keys,
+        )
+
+        # 调用现有的上下文准备
+        prepared = prepare_chat_context(
+            messages_for_ai,
+            user_content,
+            knowledge_text="",
+            max_total_chars=max_context_chars,
+        )
+        ctx.messages = prepared.messages
+        ctx.tool_call_history = prepared.tool_call_history
+
+
     # ------------------------------------------------------------------
     # Group Chat Phases
     # ------------------------------------------------------------------
@@ -960,10 +1039,12 @@ class AIPipeline:
     def _generate_plot_choices_if_enabled(self, ctx, result):
         """Generate plot choices if plot mode is enabled for this session."""
         if not ctx or not ctx.chat_request:
+            _log.debug("[PlotMode] skipped: no ctx or chat_request")
             return
         try:
             conversation_id = ctx.chat_request.conversation_id
             if not conversation_id:
+                _log.debug("[PlotMode] skipped: no conversation_id")
                 return
             # Check if plot mode is enabled
             from nbot.plot.graph_manager import get_plot_graph_manager
@@ -973,19 +1054,6 @@ class AIPipeline:
             # Check session for plot_mode flag
             metadata = getattr(ctx.chat_request, 'metadata', {}) or {}
             session_plot = metadata.get('plot_mode', False)
-
-            # Also check via web session store
-            if not session_plot:
-                try:
-                    from nbot.web.persistence import load_all_data
-                    data = load_all_data()
-                    sessions = data.get('sessions', {})
-                    if isinstance(sessions, dict):
-                        session = sessions.get(conversation_id, {})
-                        session_plot = session.get('plot_mode', False)
-                except Exception:
-                    pass
-
             if not session_plot:
                 return
 
@@ -994,23 +1062,49 @@ class AIPipeline:
             generator = PlotChoiceGenerator()
             turn_context = ctx.character_turn
 
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(self._do_generate_plot_choices(
-                    generator, result, turn_context, conversation_id, ctx
-                ))
-            else:
-                loop.run_until_complete(self._do_generate_plot_choices(
-                    generator, result, turn_context, conversation_id, ctx
-                ))
+            self._run_plot_choice_generation(
+                generator, result, turn_context, conversation_id, ctx
+            )
         except Exception as e:
             _log.debug("[AIPipeline] plot choice generation skipped: %s", e)
+
+    def _run_plot_choice_generation(self, generator, result, turn_context, conversation_id, ctx):
+        """Run plot choice generation to completion before Web emits result metadata."""
+        import asyncio
+
+        coro = self._do_generate_plot_choices(
+            generator, result, turn_context, conversation_id, ctx
+        )
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(coro)
+            return
+
+        import threading
+
+        error_holder = []
+
+        def run_in_thread():
+            try:
+                asyncio.run(coro)
+            except Exception as exc:
+                error_holder.append(exc)
+
+        worker = threading.Thread(target=run_in_thread, daemon=True)
+        worker.start()
+        worker.join()
+        if error_holder:
+            raise error_holder[0]
 
     async def _do_generate_plot_choices(self, generator, result, turn_context, conversation_id, ctx):
         """Async plot choice generation."""
         try:
             response_text = result.final_content or ""
-            choices = await generator.generate(response_text, turn_context)
+            choices = await generator.generate(
+                response_text,
+                _plot_turn_context_dict(turn_context),
+            )
             if not choices:
                 return
 
@@ -1072,61 +1166,7 @@ class AIPipeline:
             except Exception as mm_e:
                 _log.debug("[AIPipeline] multimedia trigger skipped: %s", mm_e)
         except Exception as e:
-            _log.debug("[AIPipeline] plot choice generation failed: %s", e)
-
-        # 角色运行时 before_turn hook
-        self._phase_character_runtime_before_turn(ctx, callbacks)
-        if ctx.character_turn and getattr(ctx.character_turn, "memories", None):
-            ctx.prompt_stack.remove("character.memories_legacy")
-
-        # 应用会话级提示词栈禁用列表
-        disabled_keys = set(ctx.metadata.get("disabled_prompt_keys", []))
-        if disabled_keys:
-            for item in ctx.prompt_stack.items:
-                if item.key in disabled_keys:
-                    item.enabled = False
-
-        # 注入用户自定义提示词（从会话数据中读取，按 order 排序后逐条加入 PromptStack）
-        custom_prompts = ctx.metadata.get("custom_prompts", [])
-        if isinstance(custom_prompts, list) and custom_prompts:
-            sorted_prompts = sorted(custom_prompts, key=lambda x: x.get("order", 0))
-            for cp in sorted_prompts:
-                content = (cp.get("content") or "").strip()
-                if not content:
-                    continue
-                ctx.prompt_stack.add(
-                    key=_custom_prompt_stack_key(cp),
-                    content=content,
-                    priority=35,  # 在角色卡(30)之后、角色状态(40)之前
-                    scope="session",
-                )
-
-        # PromptStack 合成最终 system prompt
-        composed_system = ctx.prompt_stack.render(base_prompt)
-        messages_for_ai = [
-            {"role": "system", "content": composed_system},
-            *history_messages,
-        ]
-
-        # 将合成后的 system prompt 存入 metadata，供 on_response_complete 回写
-        ctx.metadata["composed_system_prompt"] = composed_system
-        ctx.metadata["prompt_stack_debug"] = ctx.prompt_stack.render_debug()
-
-        # 调试日志
-        _log.debug(
-            "[PromptStack] 本轮注入 keys: %s",
-            ctx.prompt_stack.keys,
-        )
-
-        # 调用现有的上下文准备
-        prepared = prepare_chat_context(
-            messages_for_ai,
-            user_content,
-            knowledge_text="",
-            max_total_chars=max_context_chars,
-        )
-        ctx.messages = prepared.messages
-        ctx.tool_call_history = prepared.tool_call_history
+            _log.error("[PlotMode] choice generation failed: %s", e)
 
     # ------------------------------------------------------------------
     # 角色运行时 hooks
@@ -1557,6 +1597,11 @@ class AIPipeline:
                 callbacks.on_stream_chunk(ctx, chunk, message_id)
         except Exception as e:
             _log.error(f"Streaming failed: {e}")
+            # Debug: log message count and content preview
+            try:
+                _log.warning("[StreamDebug] msg_count=%d msgs=%s", len(ctx.messages), str([{"role": m.get("role"), "len": len(str(m.get("content", "")))} for m in ctx.messages[-3:]])[:300])
+            except Exception:
+                pass
             ctx.error = str(e)
             full_content = full_content or f"流式输出失败: {e}"
 
@@ -1640,9 +1685,13 @@ class AIPipeline:
                 )
                 # 使用模型配置的 failover_timeout，0 表示使用默认 120s
                 request_timeout = config.get("failover_timeout", 0) or 120
+                _log.warning("[FailoverDebug] model=%s msg_count=%d has_tools=%s payload_keys=%s",
+                    model_name, len(messages), str(bool(tools)), str(list(payload.keys())))
                 resp = requests.post(
                     url, json=payload, headers=headers, timeout=request_timeout
                 )
+                if resp.status_code != 200:
+                    _log.warning("[FailoverDebug] url=%s status=%d body=%s", url, resp.status_code, resp.text[:500])
                 resp.raise_for_status()
                 normalized = protocol.parse_response(
                     response_json_utf8(resp),
