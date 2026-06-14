@@ -33,6 +33,7 @@ class ActionExecutor:
         self.register("memory_write", self._action_memory_write)
         self.register("log", self._action_log)
         self.register("message", self._action_message)
+        self.register("workflow", self._action_workflow)
 
     def register(self, action_type: str, handler: Callable) -> None:
         self._handlers[action_type] = handler
@@ -154,3 +155,29 @@ class ActionExecutor:
         hook_messages = ctx.setdefault("hook_messages", [])
         hook_messages.append(content)
         return ActionResult(True, "message", "marked: " + content[:50])
+
+    @staticmethod
+    async def _action_workflow(action, event, ctx):
+        """Trigger a workflow execution.
+
+        action structure:
+        {
+            "type": "workflow",
+            "workflow": "wf_goodnight_event"
+        }
+        """
+        workflow_name = action.get("workflow", "")
+        if not workflow_name:
+            return ActionResult(False, "workflow", "No workflow name")
+        try:
+            from nbot.core.workflow import get_workflow_engine
+            engine = get_workflow_engine()
+            context = {"event": event.to_dict(), **ctx}
+            instance = await engine.execute_workflow(workflow_name, context)
+            status = getattr(instance, "status", "unknown")
+            return ActionResult(
+                status != "error", "workflow",
+                "ran " + workflow_name + " status=" + str(status),
+            )
+        except Exception as e:
+            return ActionResult(False, "workflow", str(e))

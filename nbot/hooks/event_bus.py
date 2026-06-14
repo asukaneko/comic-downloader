@@ -7,6 +7,7 @@
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import Callable, Coroutine
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -14,6 +15,16 @@ from typing import Any, Dict, List, Optional
 from nbot.hooks.models import RuntimeEvent
 
 _log = logging.getLogger(__name__)
+
+
+def match_event_pattern(pattern: str, event_type: str) -> bool:
+    """Match event type against pattern with wildcard support."""
+    if pattern == "*":
+        return True
+    if pattern.endswith(".*"):
+        prefix = pattern[:-2]
+        return event_type.startswith(prefix + ".")
+    return pattern == event_type
 
 
 class HookEventType(str, Enum):
@@ -90,7 +101,7 @@ class ConversationEventBus:
 
     def __init__(self, *, history_max: int = 200):
         self._subscribers: Dict[str, List[_Subscriber]] = {}
-        self._history: List[RuntimeEvent] = []
+        self._history: deque = deque(maxlen=history_max)
         self._history_max = history_max
         self._total_published = 0
         self._total_delivered = 0
@@ -98,8 +109,6 @@ class ConversationEventBus:
     async def emit(self, event: RuntimeEvent) -> int:
         """发射事件，返回成功投递的订阅者数量"""
         self._history.append(event)
-        if len(self._history) > self._history_max:
-            self._history.pop(0)
         self._total_published += 1
 
         matched = self._match_subscribers(event.type)

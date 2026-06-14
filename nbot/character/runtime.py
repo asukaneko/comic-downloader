@@ -50,8 +50,9 @@ class CharacterRuntime:
         self.state_machine = state_machine
         self._world_book_store = world_book_store
         self._hook_runtime = hook_runtime
+        self._event_logger = None  # lazy init
 
-    def _emit_hook(self, event_type: str, identity=None, payload=None):
+    def _emit_hook(self, event_type: str, identity=None, payload=None, context=None):
         """Emit a hook event if hook_runtime is available. Non-blocking helper."""
         if not self._hook_runtime:
             return
@@ -68,9 +69,9 @@ class CharacterRuntime:
             import asyncio
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                asyncio.ensure_future(self._hook_runtime.emit_event(event))
+                asyncio.ensure_future(self._hook_runtime.emit_event(event, context=context))
             else:
-                loop.run_until_complete(self._hook_runtime.emit_event(event))
+                loop.run_until_complete(self._hook_runtime.emit_event(event, context=context))
         except Exception as e:
             _log.debug("[CharacterRuntime] hook emit failed: %s", e)
 
@@ -143,6 +144,16 @@ class CharacterRuntime:
             "mood": state.mood if state else "",
             "affection": relationship.affection if relationship else 0,
             "trust": relationship.trust if relationship else 0,
+        }, context={
+            "mood": state.mood if state else "",
+            "mood_intensity": state.mood_intensity if state else 0,
+            "energy": state.energy if state else 0,
+            "affection": relationship.affection if relationship else 0,
+            "trust": relationship.trust if relationship else 0,
+            "familiarity": relationship.familiarity if relationship else 0,
+            "dependency": relationship.dependency if relationship else 0,
+            "security": relationship.security if relationship else 0,
+            "jealousy": relationship.jealousy if relationship else 0,
         })
 
         return CharacterTurnContext(
@@ -257,6 +268,16 @@ class CharacterRuntime:
             "mood": new_state.mood if new_state else "",
             "mood_intensity": new_state.mood_intensity if new_state else 0,
             "energy": new_state.energy if new_state else 0,
+        }, context={
+            "mood": new_state.mood if new_state else "",
+            "mood_intensity": new_state.mood_intensity if new_state else 0,
+            "energy": new_state.energy if new_state else 0,
+            "affection": new_relationship.affection if new_relationship else 0,
+            "trust": new_relationship.trust if new_relationship else 0,
+            "familiarity": new_relationship.familiarity if new_relationship else 0,
+            "dependency": new_relationship.dependency if new_relationship else 0,
+            "security": new_relationship.security if new_relationship else 0,
+            "jealousy": new_relationship.jealousy if new_relationship else 0,
         })
 
         # Web snapshot / timeline are written after after_turn from this context.

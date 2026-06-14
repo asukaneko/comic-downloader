@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from nbot.hooks.actions import ActionExecutor
 from nbot.hooks.conditions import ConditionEvaluator
-from nbot.hooks.event_bus import ConversationEventBus
+from nbot.hooks.event_bus import ConversationEventBus, match_event_pattern
 from nbot.hooks.models import ConversationHook, HookExecutionLog, RuntimeEvent
 
 _log = logging.getLogger(__name__)
@@ -24,16 +24,6 @@ _MAX_HOOKS_PER_TURN = 20
 _MAX_EVENT_CHAIN_DEPTH = 5
 
 _hook_manager = None
-
-
-def _match_pattern(pattern: str, event_type: str) -> bool:
-    """Match event type against pattern with wildcard support."""
-    if pattern == "*":
-        return True
-    if pattern.endswith(".*"):
-        prefix = pattern[:-2]
-        return event_type.startswith(prefix + ".")
-    return pattern == event_type
 
 
 class HookManager:
@@ -81,19 +71,27 @@ class HookManager:
         if scope:
             result = [h for h in result if h.scope == scope]
         if event:
-            result = [h for h in result if _match_pattern(h.event, event)]
+            result = [h for h in result if match_event_pattern(h.event, event)]
         if enabled_only:
             result = [h for h in result if h.enabled]
         result.sort(key=lambda h: h.priority)
         return result
+
+    _UPDATABLE_FIELDS = frozenset({
+        "name", "description", "enabled", "scope", "event", "priority",
+        "conditions", "actions", "permissions", "timeout_ms", "max_retries",
+        "character_id", "conversation_id", "user_id",
+    })
 
     def update_hook(self, hook_id: str, **fields) -> bool:
         hook = self._hooks.get(hook_id)
         if hook is None:
             return False
         for key, value in fields.items():
-            if hasattr(hook, key):
-                setattr(hook, key, value)
+            if key not in self._UPDATABLE_FIELDS:
+                _log.warning("[HookManager] ignoring unknown field: %s", key)
+                continue
+            setattr(hook, key, value)
         hook.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self._save_hooks()
         return True
@@ -148,7 +146,7 @@ class HookManager:
         for hook in self._hooks.values():
             if not hook.enabled:
                 continue
-            if not _match_pattern(hook.event, event.type):
+            if not match_event_pattern(hook.event, event.type):
                 continue
             if hook.scope == "character" and hook.character_id:
                 if hook.character_id != event.character_id:

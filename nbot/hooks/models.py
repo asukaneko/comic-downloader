@@ -156,7 +156,7 @@ class HookExecutionLog:
 
     hook_id: str
     event_id: str
-    status: str  # success / failed / skipped / timeout
+    status: str  # success / partial / failed / skipped / timeout
     actions_executed: int = 0
     error: str = ""
     duration_ms: int = 0
