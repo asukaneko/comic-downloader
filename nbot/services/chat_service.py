@@ -408,6 +408,12 @@ class QQCallbacks(PipelineCallbacks):
                     profile.id = profile.name or "default"
                 profile_repo.save(profile)
 
+            _hook_rt = None
+            try:
+                from nbot.hooks.manager import get_hook_manager
+                _hook_rt = get_hook_manager()
+            except Exception:
+                pass
             _qq_character_runtime = CharacterRuntime(
                 profile_repo=profile_repo,
                 state_repo=CharacterStateRepository(base_dir),
@@ -417,6 +423,7 @@ class QQCallbacks(PipelineCallbacks):
                 planner=ReactionPlanner(),
                 state_machine=StateMachine(),
                 world_book_store=WorldBookStore(base_dir),
+                hook_runtime=_hook_rt,
             )
             return _qq_character_runtime
         except Exception as exc:

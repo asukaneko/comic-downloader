@@ -53,6 +53,7 @@ __all__ = [
     "register_gateway_routes",
     "register_gateway_log_routes",
     "register_heartbeat_routes",
+    "register_hook_routes",
     "register_knowledge_routes",
     "register_live2d_routes",
     "register_login_token_routes",
