@@ -16337,4 +16337,197 @@ def main(params):
                 clearNotificationInbox() {
                     this.notificationInbox = [];
                 }
+
+
+    // ============================================================
+    // 3.x Plot Mode (剧情模式)
+    // ============================================================
+
+    async togglePlotMode() {
+        this.plotMode = !this.plotMode;
+        if (this.plotMode) {
+            await this.loadPlotChoices();
+        } else {
+            this.plotChoices = [];
+        }
+    },
+
+    async loadPlotChoices() {
+        if (!this.currentSession) return;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            const res = await axios.get('/api/plot/' + sid + '/graph');
+            if (res.data && res.data.choices) {
+                this.plotChoices = res.data.choices.filter(c => !c.selected);
+            }
+        } catch (e) {
+            console.debug('loadPlotChoices:', e.message);
+        }
+    },
+
+    async selectPlotChoice(choice) {
+        if (!this.currentSession) return;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            await axios.post('/api/plot/' + sid + '/select', { choice_id: choice.id });
+            this.plotChoices = [];
+            this.sendMessage(choice.text);
+        } catch (e) {
+            console.error('selectPlotChoice:', e);
+        }
+    },
+
+    async loadPlotGraph() {
+        if (!this.currentSession) return;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            const res = await axios.get('/api/plot/' + sid + '/mermaid');
+            if (res.data && res.data.mermaid) {
+                this.plotGraphMermaid = res.data.mermaid;
+                this.showPlotGraphModal = true;
+                this.$nextTick(() => this.renderMermaid());
+            }
+        } catch (e) {
+            console.debug('loadPlotGraph:', e.message);
+        }
+    },
+
+    renderMermaid() {
+        const el = this.$refs.plotGraphContainer;
+        if (el && window.mermaid) {
+            el.innerHTML = this.plotGraphMermaid;
+            window.mermaid.run({ nodes: [el] });
+        }
+    },
+
+    // ============================================================
+    // 3.x Character Status (角色状态)
+    // ============================================================
+
+    async loadCharacterStatus() {
+        if (!this.currentSession) return;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            const res = await axios.get('/api/sessions/' + sid);
+            if (res.data) {
+                const sess = res.data.session || res.data;
+                this.characterStatus = {
+                    mood: sess.mood || '平静',
+                    energy: sess.energy || 100,
+                    scene: sess.scene || {},
+                };
+                this.$nextTick(() => this.renderRelationshipRadar());
+            }
+        } catch (e) {
+            console.debug('loadCharacterStatus:', e.message);
+        }
+    },
+
+    renderRelationshipRadar() {
+        const el = this.$refs.relationshipRadar;
+        if (!el || !window.echarts) return;
+        const chart = echarts.init(el);
+        const rel = this.characterStatus.relationship || {};
+        chart.setOption({
+            radar: {
+                indicator: [
+                    { name: '好感', max: 100 },
+                    { name: '信任', max: 100 },
+                    { name: '熟悉', max: 100 },
+                    { name: '依赖', max: 100 },
+                    { name: '安全', max: 100 },
+                    { name: '嫉妒', max: 100 },
+                ],
+                radius: '65%',
+            },
+            series: [{
+                type: 'radar',
+                data: [{
+                    value: [
+                        rel.affection || 0,
+                        rel.trust || 0,
+                        rel.familiarity || 0,
+                        rel.dependency || 0,
+                        rel.security || 0,
+                        rel.jealousy || 0,
+                    ],
+                    areaStyle: { opacity: 0.2 },
+                }],
+            }],
+        });
+    },
+
+    // ============================================================
+    // 3.x Group Chat (群聊模式)
+    // ============================================================
+
+    async loadGroupList() {
+        try {
+            const res = await axios.get('/api/groups');
+            this.groupList = (res.data && res.data.groups) || [];
+        } catch (e) {
+            console.error('loadGroupList:', e);
+        }
+    },
+
+    async createGroup() {
+        try {
+            const ids = this.newGroup.characterIds.split(',').map(s => s.trim()).filter(Boolean);
+            await axios.post('/api/groups', {
+                name: this.newGroup.name,
+                character_ids: ids,
+                narrator_id: this.newGroup.narratorId || null,
+                config: { speaker_strategy: this.newGroup.strategy },
+            });
+            this.showCreateGroupModal = false;
+            this.newGroup = { name: '', characterIds: '', narratorId: '', strategy: 'mention' };
+            await this.loadGroupList();
+        } catch (e) {
+            console.error('createGroup:', e);
+        }
+    },
+
+    async deleteGroup(groupId) {
+        if (!confirm('确定删除此群聊？')) return;
+        try {
+            await axios.delete('/api/groups/' + groupId);
+            await this.loadGroupList();
+        } catch (e) {
+            console.error('deleteGroup:', e);
+        }
+    },
+
+    // ============================================================
+    // 3.x Hook Management (Hook 管理)
+    // ============================================================
+
+    async loadHookList() {
+        try {
+            const res = await axios.get('/api/hooks');
+            this.hookList = (res.data && res.data.hooks) || [];
+        } catch (e) {
+            console.error('loadHookList:', e);
+        }
+    },
+
+    async toggleHook(hookId) {
+        try {
+            await axios.post('/api/hooks/' + hookId + '/toggle');
+            await this.loadHookList();
+        } catch (e) {
+            console.error('toggleHook:', e);
+        }
+    },
+
+    async deleteHook(hookId) {
+        if (!confirm('确定删除此 Hook？')) return;
+        try {
+            await axios.delete('/api/hooks/' + hookId);
+            await this.loadHookList();
+        } catch (e) {
+            console.error('deleteHook:', e);
+        }
+    },
+
+
 };

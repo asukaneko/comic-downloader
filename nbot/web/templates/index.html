@@ -1800,6 +1800,44 @@
                                             </button>
                                         </div>
                                     </div>
+                                    
+                                    <!-- Plot Choices (剧情选项) -->
+                                    <div v-if="plotMode && plotChoices.length > 0" class="plot-choices-group">
+                                        <div class="plot-choices-header">
+                                            <i class="fas fa-book-open"></i>
+                                            <span>剧情选项</span>
+                                            <button class="plot-mode-toggle" @click="togglePlotMode()" title="关闭剧情模式">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                        <div class="plot-choices-list">
+                                            <div v-for="choice in plotChoices" :key="choice.id"
+                                                 class="plot-choice-card"
+                                                 :class="'plot-choice-' + choice.level"
+                                                 @click="selectPlotChoice(choice)">
+                                                <div class="plot-choice-level">
+                                                    <span v-if="choice.level === 'normal'" class="level-badge level-normal">普通</span>
+                                                    <span v-else-if="choice.level === 'important'" class="level-badge level-important">重要</span>
+                                                    <span v-else-if="choice.level === 'turning_point'" class="level-badge level-turning">转折点</span>
+                                                </div>
+                                                <div class="plot-choice-text">{{ choice.text }}</div>
+                                                <div v-if="choice.intent" class="plot-choice-intent">{{ choice.intent }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="plot-choices-free">
+                                            <button class="btn btn-ghost btn-sm" @click="plotChoices = []">
+                                                <i class="fas fa-pen"></i> 不选以上选项，自由行动...
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Plot Mode Toggle (when not active) -->
+                                    <div v-if="!plotMode && currentSession" class="plot-mode-hint">
+                                        <button class="btn btn-ghost btn-xs" @click="togglePlotMode()" title="开启剧情模式">
+                                            <i class="fas fa-book-open"></i> 剧情模式
+                                        </button>
+                                    </div>
+
                                     <div class="chat-input-wrapper" :class="{ 'input-focused': inputFocused || showFileMenu, 'input-multiline': inputMultiline }">
                                         <div class="chat-input-container">
                                             <textarea
@@ -2053,6 +2091,57 @@
                             </template>
                         </div>
                     </div>
+                        <!-- Runtime Side Panel (角色状态面板) -->
+                        <div v-if="currentSession && showRuntimePanel" class="runtime-side-panel">
+                            <div class="runtime-panel-header">
+                                <span><i class="fas fa-id-card"></i> 角色状态</span>
+                                <button class="btn btn-ghost btn-xs" @click="showRuntimePanel = false">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="runtime-panel-body">
+                                <!-- Character Status -->
+                                <div class="runtime-section">
+                                    <div class="runtime-section-title">基本信息</div>
+                                    <div class="status-card">
+                                        <div class="status-row">
+                                            <span class="status-label">心情</span>
+                                            <span class="status-value">{{ characterStatus.mood || '平静' }}</span>
+                                        </div>
+                                        <div class="status-row">
+                                            <span class="status-label">精力</span>
+                                            <div class="status-bar">
+                                                <div class="status-bar-fill" :style="{width: (characterStatus.energy || 100) + '%'}"></div>
+                                            </div>
+                                            <span class="status-num">{{ characterStatus.energy || 100 }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Relationship Radar -->
+                                <div class="runtime-section">
+                                    <div class="runtime-section-title">关系</div>
+                                    <div ref="relationshipRadar" style="width:100%;height:200px;"></div>
+                                </div>
+                                <!-- Plot Status -->
+                                <div v-if="plotMode" class="runtime-section">
+                                    <div class="runtime-section-title">剧情</div>
+                                    <div class="plot-status-card">
+                                        <div v-if="plotCurrentNode" class="plot-node-mini">
+                                            <span class="plot-node-badge">{{ plotCurrentNode.level }}</span>
+                                            {{ plotCurrentNode.title }}
+                                        </div>
+                                        <button class="btn btn-ghost btn-xs" @click="loadPlotGraph()">
+                                            <i class="fas fa-project-diagram"></i> 故事图
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Panel Toggle Button -->
+                        <button v-if="currentSession && !showRuntimePanel" class="runtime-panel-toggle" @click="showRuntimePanel = true; loadCharacterStatus()" title="角色状态">
+                            <i class="fas fa-id-card"></i>
+                        </button>
+
 
                     <!-- Sessions -->
                     <div v-if="currentPage === 'sessions'" class="fade-in">
@@ -3781,6 +3870,81 @@
                                         <div class="empty-state-title">{{ $t('journey.empty_title') }}</div>
                                         <div class="empty-state-subtitle">{{ $t('journey.empty_subtitle') }}</div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- Group Chat Management -->
+                    <div v-if="currentPage === 'group-chat'" class="fade-in" style="padding: 20px;">
+                        <div class="page-header">
+                            <h2><i class="fas fa-users"></i> 群聊模式</h2>
+                            <button class="btn btn-primary" @click="showCreateGroupModal = true"><i class="fas fa-plus"></i> 创建群聊</button>
+                        </div>
+                        <div class="group-list">
+                            <div v-if="groupList.length === 0" class="empty-state">
+                                <i class="fas fa-users" style="font-size: 48px; opacity: 0.3;"></i>
+                                <p>暂无群聊</p>
+                            </div>
+                            <div v-for="g in groupList" :key="g.group_id" class="group-card">
+                                <div class="group-card-header">
+                                    <h3>{{ g.name }}</h3>
+                                    <span class="group-strategy">{{ g.config?.speaker_strategy || 'mention' }}</span>
+                                </div>
+                                <div class="group-card-body">
+                                    <div class="group-characters">
+                                        <span v-for="cid in g.character_ids" :key="cid" class="group-char-tag">{{ cid }}</span>
+                                    </div>
+                                </div>
+                                <div class="group-card-actions">
+                                    <button class="btn btn-ghost btn-xs" @click="deleteGroup(g.group_id)"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="showCreateGroupModal" class="modal-overlay" @click.self="showCreateGroupModal = false">
+                            <div class="modal-content" style="max-width: 500px;">
+                                <div class="modal-header"><h3>创建群聊</h3></div>
+                                <div class="modal-body">
+                                    <div class="form-group"><label>名称</label><input v-model="newGroup.name" class="form-input"></div>
+                                    <div class="form-group"><label>角色ID(逗号分隔)</label><input v-model="newGroup.characterIds" class="form-input"></div>
+                                    <div class="form-group"><label>旁白ID</label><input v-model="newGroup.narratorId" class="form-input"></div>
+                                    <div class="form-group"><label>策略</label>
+                                        <select v-model="newGroup.strategy" class="form-select">
+                                            <option value="mention">提及</option><option value="round_robin">轮流</option>
+                                            <option value="relevance">相关</option><option value="random">随机</option>
+                                        </select></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-ghost" @click="showCreateGroupModal = false">取消</button>
+                                    <button class="btn btn-primary" @click="createGroup()">创建</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hook Management -->
+                    <div v-if="currentPage === 'hooks-nav'" class="fade-in" style="padding: 20px;">
+                        <div class="page-header">
+                            <h2><i class="fas fa-anchor"></i> Hook 管理</h2>
+                            <button class="btn btn-primary" @click="loadHookList()"><i class="fas fa-sync"></i> 刷新</button>
+                        </div>
+                        <div class="hook-list">
+                            <div v-if="hookList.length === 0" class="empty-state">
+                                <i class="fas fa-anchor" style="font-size: 48px; opacity: 0.3;"></i>
+                                <p>暂无 Hook</p>
+                            </div>
+                            <div v-for="h in hookList" :key="h.id" class="hook-card">
+                                <div class="hook-card-header">
+                                    <span class="hook-name"><i class="fas fa-anchor"></i> {{ h.name }}</span>
+                                    <div class="hook-actions">
+                                        <button class="btn btn-ghost btn-xs" @click="toggleHook(h.id)"><i :class="h.enabled ? 'fas fa-pause' : 'fas fa-play'"></i></button>
+                                        <button class="btn btn-ghost btn-xs" @click="deleteHook(h.id)"><i class="fas fa-trash"></i></button>
+                                    </div>
+                                </div>
+                                <div class="hook-card-body">
+                                    <span class="hook-event"><i class="fas fa-bolt"></i> {{ h.event }}</span>
+                                    <span class="hook-scope">{{ h.scope }}</span>
                                 </div>
                             </div>
                         </div>
@@ -10944,7 +11108,9 @@
                             { id: 'characters', labelKey: 'nav.characters', icon: 'fas fa-id-card' },
                             { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
                             { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' },
-                            { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' }
+                            { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' },
+                            { id: 'group-chat', label: '群聊模式', icon: 'fas fa-users' },
+                            { id: 'hooks-nav', label: 'Hook 管理', icon: 'fas fa-anchor' }
                         ],
                         config: [
                             { id: 'task-center', labelKey: 'nav.task_center', icon: 'fas fa-calendar-check' },
@@ -11144,6 +11310,22 @@
                     
                     // 频道下拉菜单
                     showChannelDropdown: false,
+                    // 3.x Plot Mode
+                    plotMode: false,
+                    plotChoices: [],
+                    plotCurrentNode: null,
+                    plotGraphMermaid: '',
+                    showPlotGraphModal: false,
+                    // 3.x Runtime Panel
+                    showRuntimePanel: false,
+                    characterStatus: { mood: '平静', energy: 100, scene: {}, relationship: {} },
+                    // 3.x Group Chat
+                    groupList: [],
+                    showCreateGroupModal: false,
+                    newGroup: { name: '', characterIds: '', narratorId: '', strategy: 'mention' },
+                    // 3.x Hooks
+                    hookList: [],
+                    showCreateHookModal: false,
                     dropdownTab: 'channel',  // 'channel' 或 'role'
                     currentChannelTab: null,  // 当前选中的注册频道
 
