@@ -32,15 +32,15 @@ features:
   - icon: 🧠
     title: 记忆系统
     details: 用户个性化记忆，知识库 RAG 智能问答，支持私有和共享工作区
-  - icon: 🔧
-    title: 工具调用
-    details: 支持文件操作、搜索、代码执行等工具调用，可继续执行中断任务
-  - icon: 😸
-    title: AI 表情包
-    details: 基于角色心情自动匹配二次元表情包，支持 nekos.best 多类别图片
-  - icon: 🔄
-    title: 工作流
-    details: 可视化工作流编排，支持定时任务和自动化流程
+  - icon: 🪝
+    title: Hook 事件驱动
+    details: 对话生命周期事件系统，27 种事件类型，条件触发自动注入提示词、修改状态、写入记忆
+  - icon: 🎬
+    title: 剧情模式
+    details: 分支剧情图系统，AI 自动生成选择项，支持回溯、Mermaid 可视化、记忆与世界书桥接
+  - icon: 👥
+    title: 群聊会话
+    details: 多角色群聊，5 种发言策略，角色间四维关系系统，第三人称旁白叙述
   - icon: 🎛️
     title: Web 后台
     details: 完整的 Web 管理界面，支持会话管理、AI 配置、模型管理、日志监控

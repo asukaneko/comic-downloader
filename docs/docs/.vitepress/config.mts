@@ -249,6 +249,27 @@ export default defineConfig({
                     { text: '概述', link: '/guide/nbot/cli/index.md' },
                   ]
                 },
+                {
+                  text: 'hooks - 钩子事件驱动系统',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/hooks/index.md' },
+                  ]
+                },
+                {
+                  text: 'plot - 剧情图与分支故事',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/plot/index.md' },
+                  ]
+                },
+                {
+                  text: 'group - 群聊会话系统',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/group/index.md' },
+                  ]
+                },
               ]
             },
             {
