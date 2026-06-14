@@ -643,8 +643,8 @@
                                                         <div class="channel-dropdown-desc">QQ 私人消息</div>
                                                     </div>
                                                 </button>
-                                                <button 
-                                                    class="channel-dropdown-item" 
+                                                <button
+                                                    class="channel-dropdown-item"
                                                     :class="{ active: chatTab === 'qq_group' }"
                                                     @click="switchChatTab('qq_group'); selectedSenderFilter = ''; closeChannelDropdown()"
                                                 >
@@ -728,10 +728,11 @@
                                     <button class="session-mode-tab" :class="{ active: sessionModeTab === 'agent' }" @click="sessionModeTab = 'agent'">
                                         <i class="fas fa-robot"></i> Agent
                                     </button>
-                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="sessionModeTab = 'group'">
+                                    <!-- 群聊 tab 暂时隐藏 -->
+                                    <!-- <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="sessionModeTab = 'group'">
                                         <i class="fas fa-users"></i> 群聊
-                                    </button>
-                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent', 'slide-far-right': sessionModeTab === 'group' }"></div>
+                                    </button> -->
+                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent' }"></div>
                                 </div>
                                 <button v-if="chatTab === 'web' && !selectedSenderFilter" class="session-add-btn" @click="onSessionAddClick()" :disabled="isLoading">
                                     <i class="fas fa-plus"></i> {{ sessionModeTab === 'agent' ? '新增 Agent' : sessionModeTab === 'group' ? '新增群聊' : '新增对话' }}
@@ -11341,7 +11342,6 @@
                             { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
                             { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' },
                             { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' },
-                            { id: 'group-chat', labelKey: 'nav.group_chat', icon: 'fas fa-users' },
                             { id: 'hooks-nav', labelKey: 'nav.hooks', icon: 'fas fa-anchor' }
                         ],
                         config: [
