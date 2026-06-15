@@ -1441,7 +1441,7 @@
                                                 <i v-else class="fas fa-user"></i>
                                             </div>
                                             <div class="message-content" :class="{ 'multi-bubble-content': getMessageBubbles(msg).length > 0 }" :style="getMultiBubbleContentStyle(msg)">
-                                                <div v-if="msg.role === 'assistant' && getMessageSenderName(msg)" class="message-sender message-sender-assistant">
+                                                <div v-if="msg.role === 'assistant' && currentSession?.session_mode === 'group' && getMessageSenderName(msg)" class="message-sender message-sender-assistant">
                                                     <i :class="getMessageAvatar(msg) || 'fas fa-user-circle'"></i>
                                                     {{ getMessageSenderName(msg) }}
                                                 </div>
