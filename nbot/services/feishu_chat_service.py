@@ -603,7 +603,15 @@ class FeishuChatService:
 
         try:
             pipeline = AIPipeline()
-            result = pipeline.process(ctx, callbacks, tools=tools)
+
+            hook_runtime = None
+            try:
+                from nbot.hooks.manager import get_hook_manager
+                hook_runtime = get_hook_manager()
+            except Exception:
+                pass
+
+            result = pipeline.process(ctx, callbacks, tools=tools, hook_runtime=hook_runtime)
 
             if result.error:
                 self._send_feishu_reply(

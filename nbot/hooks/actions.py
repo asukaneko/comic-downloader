@@ -78,7 +78,12 @@ class ActionExecutor:
         state = ctx.get("character_state")
         if state is None:
             return ActionResult(False, "state_delta", "State unavailable")
+        # 兼容两种格式：
+        #   文档格式: {"field": "energy", "delta": -5}
+        #   代码格式: {"payload": {"energy": -5}}
         payload = action.get("payload", {})
+        if not payload and "field" in action:
+            payload = {action["field"]: action.get("delta", 0)}
         changes = {}
         for field_name, value in payload.items():
             if not hasattr(state, field_name):
@@ -105,7 +110,10 @@ class ActionExecutor:
         relationship = ctx.get("relationship")
         if relationship is None:
             return ActionResult(False, "relationship_delta", "Relationship unavailable")
+        # 兼容两种格式（同 state_delta）
         payload = action.get("payload", {})
+        if not payload and "field" in action:
+            payload = {action["field"]: action.get("delta", 0)}
         changes = {}
         valid = {"affection", "trust", "familiarity", "dependency", "security", "jealousy"}
         for field_name, delta in payload.items():
@@ -124,7 +132,8 @@ class ActionExecutor:
             return ActionResult(False, "memory_write", "Memory service unavailable")
         title = action.get("title", "")
         content = action.get("content", "")
-        mem_type = action.get("mem_type", "long")
+        # 兼容: 文档用 memory_type，代码用 mem_type
+        mem_type = action.get("mem_type") or action.get("memory_type", "long")
         if not content:
             return ActionResult(False, "memory_write", "Empty content")
         try:
@@ -167,7 +176,8 @@ class ActionExecutor:
             "workflow": "wf_goodnight_event"
         }
         """
-        workflow_name = action.get("workflow", "")
+        # 兼容: 文档用 workflow_id，代码用 workflow
+        workflow_name = action.get("workflow") or action.get("workflow_id", "")
         if not workflow_name:
             return ActionResult(False, "workflow", "No workflow name")
         try:

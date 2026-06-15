@@ -70,7 +70,9 @@ class ConditionEvaluator:
         if key == "user_id":
             return event.user_id == expected
         if key == "channel":
-            return event.metadata.get("channel", "") == expected
+            # Pipeline 放在 payload 里，某些 emit 放在 metadata 里，都检查
+            ch = event.metadata.get("channel") or event.payload.get("channel", "")
+            return ch == expected
         if key == "event_source":
             return event.source == expected
 
@@ -88,9 +90,9 @@ class ConditionEvaluator:
         if key == "time_range":
             return self._evaluate_time_range(expected)
 
-        # 未知条件键默认通过
-        _log.warning("[HookCondition] 未知条件键: %s", key)
-        return True
+        # 未知条件键默认拒绝（安全优先：写错条件不应意外触发）
+        _log.warning("[HookCondition] 未知条件键: %s (拒绝匹配)", key)
+        return False
 
     def _evaluate_threshold(self, key: str, expected: Any, ctx: Dict[str, Any]) -> bool:
         """评估阈值条件（如 affection_gte: 80）"""

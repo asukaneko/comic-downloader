@@ -337,7 +337,15 @@ def answer_feishu_event(
     callbacks = FeishuCallbacks(server, token, parsed)
 
     pipeline = AIPipeline()
-    result = pipeline.process(ctx, callbacks)
+
+    hook_runtime = None
+    try:
+        from nbot.hooks.manager import get_hook_manager
+        hook_runtime = get_hook_manager()
+    except Exception:
+        pass
+
+    result = pipeline.process(ctx, callbacks, hook_runtime=hook_runtime)
 
     return {"ok": True, "result": result.final_content}
 

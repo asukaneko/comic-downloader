@@ -41,9 +41,11 @@ class HookManager:
         self._execution_logs: List[HookExecutionLog] = []
         self._data_dir = data_dir
         self._hooks_file = os.path.join(data_dir, "hooks.json")
+        self._logs_file = os.path.join(data_dir, "hooks_logs.json")
         self._turn_hooks_executed: int = 0
         self._turn_hook_ids_executed: set = set()
         self._load_hooks()
+        self._load_logs()
 
     # -- Hook CRUD --
 
@@ -164,6 +166,34 @@ class HookManager:
     async def _execute_hook(
         self, hook: ConversationHook, event: RuntimeEvent, ctx: Dict[str, Any]
     ) -> HookExecutionLog:
+        # 权限检查
+        if not self._check_permissions(hook, event):
+            log = HookExecutionLog(
+                hook_id=hook.id, event_id=event.id, status="denied",
+                error="Permission denied",
+            )
+            self._append_log(log)
+            return log
+
+        max_attempts = 1 + max(0, hook.max_retries)
+        last_log = None
+
+        for attempt in range(max_attempts):
+            last_log = await self._execute_hook_once(hook, event, ctx)
+            if last_log.status == "success":
+                break
+            if attempt < max_attempts - 1:
+                _log.debug(
+                    "[HookManager] retry %d/%d for hook %s",
+                    attempt + 1, hook.max_retries, hook.id,
+                )
+
+        self._append_log(last_log)
+        return last_log
+
+    async def _execute_hook_once(
+        self, hook: ConversationHook, event: RuntimeEvent, ctx: Dict[str, Any]
+    ) -> HookExecutionLog:
         start = time.time()
         try:
             timeout = hook.timeout_ms / 1000.0
@@ -174,7 +204,7 @@ class HookManager:
             duration = int((time.time() - start) * 1000)
             executed = sum(1 for r in results if r.success)
             failed = [r for r in results if not r.success]
-            log = HookExecutionLog(
+            return HookExecutionLog(
                 hook_id=hook.id,
                 event_id=event.id,
                 status="success" if not failed else "partial",
@@ -184,21 +214,48 @@ class HookManager:
             )
         except asyncio.TimeoutError:
             duration = int((time.time() - start) * 1000)
-            log = HookExecutionLog(
+            return HookExecutionLog(
                 hook_id=hook.id, event_id=event.id, status="timeout",
                 duration_ms=duration, error="Timeout",
             )
         except Exception as e:
             duration = int((time.time() - start) * 1000)
-            log = HookExecutionLog(
+            return HookExecutionLog(
                 hook_id=hook.id, event_id=event.id, status="failed",
                 duration_ms=duration, error=str(e),
             )
 
+    @staticmethod
+    def _check_permissions(hook: ConversationHook, event: RuntimeEvent) -> bool:
+        """检查 Hook 权限限制。
+
+        permissions 示例：
+            {"channels": ["web", "qq"]}       — 只允许特定频道
+            {"deny_channels": ["telegram"]}    — 禁止特定频道
+        """
+        perms = hook.permissions
+        if not perms:
+            return True
+
+        channel = event.payload.get("channel") or event.metadata.get("channel", "")
+
+        # 允许列表
+        allowed = perms.get("channels")
+        if allowed and channel not in allowed:
+            return False
+
+        # 拒绝列表
+        denied = perms.get("deny_channels")
+        if denied and channel in denied:
+            return False
+
+        return True
+
+    def _append_log(self, log: HookExecutionLog):
         self._execution_logs.append(log)
         if len(self._execution_logs) > 500:
             self._execution_logs = self._execution_logs[-250:]
-        return log
+        self._save_logs()
 
     # -- Persistence --
 
@@ -222,6 +279,26 @@ class HookManager:
                 _log.info("[HookManager] loaded %d hooks", len(self._hooks))
         except Exception as e:
             _log.error("[HookManager] load failed: %s", e)
+
+    def _save_logs(self):
+        try:
+            os.makedirs(os.path.dirname(self._logs_file), exist_ok=True)
+            data = [l.to_dict() for l in self._execution_logs]
+            with open(self._logs_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            _log.error("[HookManager] save logs failed: %s", e)
+
+    def _load_logs(self):
+        try:
+            if os.path.exists(self._logs_file):
+                with open(self._logs_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                for item in data:
+                    self._execution_logs.append(HookExecutionLog.from_dict(item))
+                _log.info("[HookManager] loaded %d execution logs", len(self._execution_logs))
+        except Exception as e:
+            _log.error("[HookManager] load logs failed: %s", e)
 
     # -- Query --
 

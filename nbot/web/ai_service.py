@@ -1386,6 +1386,14 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
         try:
             pipeline = AIPipeline()
 
+            # --- Hook runtime（Web 对话路径） ---
+            hook_runtime = None
+            try:
+                from nbot.hooks.manager import get_hook_manager
+                hook_runtime = get_hook_manager(data_dir=getattr(server, "data_dir", "data/web"))
+            except Exception:
+                pass
+
             # === 群聊模式：构建 group_context ===
             group_context = None
             _group_id = (_session_data or {}).get("group_id")
@@ -1504,6 +1512,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                             sp_ctx, callbacks,
                             tools=tools,
                             max_context_chars=context_char_budget,
+                            hook_runtime=hook_runtime,
                             group_context=group_context,
                         )
                         _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
@@ -1539,6 +1548,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     ctx, callbacks,
                     tools=tools,
                     max_context_chars=context_char_budget,
+                    hook_runtime=hook_runtime,
                     group_context=group_context,
                 )
 
