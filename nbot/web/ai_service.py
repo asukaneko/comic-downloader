@@ -1361,7 +1361,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             hook_runtime = None
             try:
                 from nbot.hooks.manager import get_hook_manager
-                hook_runtime = get_hook_manager()
+                hook_runtime = get_hook_manager(data_dir=getattr(server, "data_dir", "data/web"))
             except Exception:
                 pass
 

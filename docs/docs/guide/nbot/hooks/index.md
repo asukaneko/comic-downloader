@@ -114,7 +114,7 @@ hook = ConversationHook(
 | `enabled` | `bool` | `True` | 是否启用 |
 | `priority` | `int` | `0` | 优先级（数值越小越先执行） |
 | `timeout_ms` | `int` | `3000` | 单次执行超时（毫秒） |
-| `max_retries` | `int` | `0` | 失败重试次数（仅对失败/超时重试） |
+| `max_retries` | `int` | `0` | 失败重试次数（失败、超时、部分失败均会重试） |
 | `permissions` | `dict` | `{}` | 权限限制（见下表） |
 
 **permissions 字段说明：**
@@ -274,7 +274,7 @@ history = bus.get_history(event_type="character.before_turn.finished", limit=50)
 | **附件处理** | `pipeline.before_attachments`, `pipeline.after_attachments` | — |
 | **知识检索** | `pipeline.before_knowledge`, `pipeline.after_knowledge` | — |
 | **角色 before_turn** | `character.before_turn.started`, `character.after_profile_load`, `character.after_memory_retrieve`, `character.after_world_book_match`, `character.after_reaction_plan`, `character.before_turn.finished` | `character.before_turn.after_memory_retrieve` 等 |
-| **模型调用** | `model.before_call`, `model.after_call`, `model.on_stream_chunk` | `pipeline.before_model_call`, `pipeline.after_model_call`, `pipeline.stream_chunk` |
+| **模型调用** | `model.before_call`, `model.after_call`, `model.on_stream_chunk`（仅首块） | `pipeline.before_model_call`, `pipeline.after_model_call`, `pipeline.stream_chunk` |
 | **回复发送** | `reply.before_send`, `reply.after_send` | `pipeline.before_reply_send`, `pipeline.after_reply_send` |
 | **提示词渲染** | `prompt.before_render`, `prompt.after_render` | `pipeline.before_prompt_render`, `pipeline.after_prompt_render` |
 | **角色 after_turn** | `character.after_turn.started`, `character.after_state_update`, `character.after_turn.finished` | `character.after_turn.after_state_update` |
