@@ -6160,15 +6160,15 @@ def main(params):
 
                 async loadCharactersForGroup() {
                     try {
-                        const res = await api.get('/api/characters');
-                        // /api/characters 返回数组，格式化为统一结构
-                        const list = Array.isArray(res.data) ? res.data : (res.data.characters || []);
-                        this.groupCreateModal.characters = list.map(ch => ({
-                            id: ch.id || ch.name,
-                            name: ch.name || ch.id || '未知',
-                            portrait: ch.portrait || '',
-                            avatar: ch.avatar || 'fas fa-user-circle',
-                            description: ch.description || '',
+                        if (!this.customPersonalityPresets || this.customPersonalityPresets.length === 0) {
+                            await this.loadCustomPersonalityPresets();
+                        }
+                        this.groupCreateModal.characters = (this.customPersonalityPresets || []).map(c => ({
+                            id: c.id,
+                            name: c.name || c.id,
+                            avatar: c.avatar || '',
+                            portrait: c.portrait || '',
+                            description: c.description || '',
                         }));
                     } catch (e) {
                         console.debug('loadCharactersForGroup:', e.message);
@@ -16845,84 +16845,6 @@ def main(params):
         const resizeHandler = () => chart.resize();
         window.addEventListener('resize', resizeHandler);
         chart.on('dispose', () => window.removeEventListener('resize', resizeHandler));
-    },
-
-    // ============================================================
-    // 3.x Group Chat (群聊模式)
-    // ============================================================
-
-    async loadGroupList() {
-        try {
-            const res = await axios.get('/api/groups');
-            this.groupList = (res.data && res.data.groups) || [];
-        } catch (e) {
-            console.error('loadGroupList:', e);
-        }
-    },
-
-    toggleGroupCharacter(id) {
-        const idx = this.newGroup.selectedCharacterIds.indexOf(id);
-        if (idx >= 0) {
-            this.newGroup.selectedCharacterIds.splice(idx, 1);
-        } else {
-            this.newGroup.selectedCharacterIds.push(id);
-        }
-    },
-
-    async createGroup() {
-        try {
-            const ids = this.newGroup.selectedCharacterIds.map(id => {
-                const ch = this.characterList.find(c => c.id === id);
-                return ch ? ch.name : id;
-            });
-            await axios.post('/api/groups', {
-                name: this.newGroup.name,
-                character_ids: ids,
-                narrator_id: this.newGroup.narratorId || null,
-                config: { speaker_strategy: this.newGroup.strategy },
-            });
-            this.showCreateGroupModal = false;
-            this.newGroup = { name: '', characterIds: '', narratorId: '', strategy: 'mention', selectedCharacterIds: [] };
-            await this.loadGroupList();
-        } catch (e) {
-            console.error('createGroup:', e);
-        }
-    },
-
-    async deleteGroup(groupId) {
-        if (!confirm('确定删除此群聊？')) return;
-        try {
-            await axios.delete('/api/groups/' + groupId);
-            await this.loadGroupList();
-        } catch (e) {
-            console.error('deleteGroup:', e);
-        }
-    },
-
-    async enterGroupChat(group) {
-        // Create a web group chat session
-        try {
-            const res = await api.post('/api/sessions', {
-                name: group.name,
-                type: 'web',
-                user_id: this.username,
-                session_mode: 'group',
-                character_ids: group.character_ids,
-                group_id: group.group_id,
-            });
-            const newSession = { ...res.data.session, _isNew: true };
-            this.sessions = [
-                ...this.sessions.filter(s => s.id !== newSession.id),
-                newSession,
-            ];
-            this.chatTab = 'web';
-            this.sessionModeTab = 'group';
-            await this.selectSession(newSession);
-            this.currentPage = 'chat';
-        } catch (e) {
-            console.error('enterGroupChat:', e);
-            this.showToast('进入群聊失败', 'error');
-        }
     },
 
     // ============================================================

@@ -3915,109 +3915,6 @@
                     </div>
 
 
-                    <!-- Group Chat Management -->
-                    <div v-if="currentPage === 'group-chat'" class="fade-in gc-page">
-                        <div class="gc-header">
-                            <div class="gc-header-left">
-                                <i class="fas fa-users gc-header-icon"></i>
-                                <div>
-                                    <h2 class="gc-title">群聊模式</h2>
-                                    <p class="gc-subtitle">管理多角色群聊对话</p>
-                                </div>
-                            </div>
-                            <button class="gc-btn gc-btn-primary" @click="showCreateGroupModal = true; loadCharacterList()">
-                                <i class="fas fa-plus"></i> 创建群聊
-                            </button>
-                        </div>
-
-                        <div class="gc-content">
-                            <div v-if="groupList.length === 0" class="gc-empty">
-                                <div class="gc-empty-icon"><i class="fas fa-users"></i></div>
-                                <div class="gc-empty-title">暂无群聊</div>
-                                <div class="gc-empty-desc">点击上方按钮创建第一个群聊</div>
-                            </div>
-                            <div v-else class="gc-grid">
-                                <div v-for="g in groupList" :key="g.group_id" class="gc-card" @click="enterGroupChat(g)" style="cursor: pointer;">
-                                    <div class="gc-card-header">
-                                        <div class="gc-card-title">
-                                            <i class="fas fa-users"></i> {{ g.name }}
-                                        </div>
-                                        <span class="gc-badge">{{ g.config?.speaker_strategy || 'mention' }}</span>
-                                    </div>
-                                    <div class="gc-card-body">
-                                        <div class="gc-characters">
-                                            <span v-for="cid in g.character_ids" :key="cid" class="gc-char-tag">
-                                                <i class="fas fa-user"></i> {{ cid }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="gc-card-footer">
-                                        <button class="gc-btn-icon" @click="deleteGroup(g.group_id)" title="删除">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-if="showCreateGroupModal" class="modal-overlay" @click.self="showCreateGroupModal = false">
-                            <div class="modal-content gc-modal">
-                                <div class="modal-header">
-                                    <h3><i class="fas fa-plus-circle"></i> 创建群聊</h3>
-                                    <button class="btn-icon-small" @click="showCreateGroupModal = false"><i class="fas fa-times"></i></button>
-                                </div>
-                                <div class="modal-body">
-                                    <div class="form-group">
-                                        <label>群聊名称</label>
-                                        <input v-model="newGroup.name" class="form-input" placeholder="输入群聊名称">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>选择角色 <span class="form-hint">（点击选择参与群聊的角色）</span></label>
-                                        <div class="bind-character-list gc-char-select">
-                                            <div v-for="ch in characterList" :key="ch.id"
-                                                 class="bind-character-item"
-                                                 :class="{ active: newGroup.selectedCharacterIds.includes(ch.id) }"
-                                                 @click="toggleGroupCharacter(ch.id)">
-                                                <div class="bind-character-portrait">
-                                                    <img v-if="ch.portrait" :src="ch.portrait">
-                                                    <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
-                                                </div>
-                                                <div class="bind-character-info">
-                                                    <div class="bind-character-name">{{ ch.name }}</div>
-                                                    <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
-                                                </div>
-                                                <i v-if="newGroup.selectedCharacterIds.includes(ch.id)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
-                                            </div>
-                                            <div v-if="characterList.length === 0" class="gc-char-empty">
-                                                <i class="fas fa-user-slash"></i>
-                                                <span>暂无可用角色</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>旁白ID <span class="form-hint">（可选）</span></label>
-                                        <input v-model="newGroup.narratorId" class="form-input" placeholder="留空则无旁白">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>发言策略</label>
-                                        <select v-model="newGroup.strategy" class="form-select">
-                                            <option value="mention">提及 (Mention)</option>
-                                            <option value="round_robin">轮流 (Round Robin)</option>
-                                            <option value="relevance">相关 (Relevance)</option>
-                                            <option value="random">随机 (Random)</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button class="gc-btn gc-btn-ghost" @click="showCreateGroupModal = false">取消</button>
-                                    <button class="gc-btn gc-btn-primary" @click="createGroup()" :disabled="!newGroup.name || newGroup.selectedCharacterIds.length === 0">
-                                        <i class="fas fa-check"></i> 创建
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Hook Management -->
                     <div v-if="currentPage === 'hooks-nav'" class="fade-in hk-page">
                         <div class="hk-header">
@@ -11341,7 +11238,6 @@
                             { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
                             { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' },
                             { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' },
-                            { id: 'group-chat', labelKey: 'nav.group_chat', icon: 'fas fa-users' },
                             { id: 'hooks-nav', labelKey: 'nav.hooks', icon: 'fas fa-anchor' }
                         ],
                         config: [
@@ -11561,10 +11457,6 @@
                     // 3.x Runtime Panel
                     showRuntimePanel: false,
                     characterStatus: { mood: '平静', energy: 100, scene: {}, relationship: {} },
-                    // 3.x Group Chat
-                    groupList: [],
-                    showCreateGroupModal: false,
-                    newGroup: { name: '', characterIds: '', narratorId: '', strategy: 'mention', selectedCharacterIds: [] },
                     // 3.x Hooks
                     hookList: [],
                     showCreateHookModal: false,
