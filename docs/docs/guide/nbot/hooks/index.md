@@ -114,7 +114,15 @@ hook = ConversationHook(
 | `enabled` | `bool` | `True` | 是否启用 |
 | `priority` | `int` | `0` | 优先级（数值越小越先执行） |
 | `timeout_ms` | `int` | `3000` | 单次执行超时（毫秒） |
-| `max_retries` | `int` | `0` | 失败重试次数 |
+| `max_retries` | `int` | `0` | 失败重试次数（仅对失败/超时重试） |
+| `permissions` | `dict` | `{}` | 权限限制（见下表） |
+
+**permissions 字段说明：**
+
+| 键 | 类型 | 说明 | 示例 |
+|----|------|------|------|
+| `channels` | `list[str]` | 白名单：只允许这些频道触发 | `["web", "qq"]` |
+| `deny_channels` | `list[str]` | 黑名单：禁止这些频道触发 | `["telegram"]` |
 
 ### HookExecutionLog
 
@@ -209,6 +217,9 @@ stats = manager.get_stats()
 | `workflow` | 触发工作流执行 | `workflow_id`, `params` |
 | `world_book_add` | 添加世界书条目 | `book_id`, `content`, `keywords` |
 
+> **参数兼容**：`state_delta` 和 `relationship_delta` 同时支持 `payload` 格式（如 `{"payload": {"energy": -5}}`）。
+> `memory_write` 同时支持 `mem_type` 字段名。`workflow` 同时支持 `workflow` 字段名。
+
 ### 动作示例
 
 ```json
@@ -252,21 +263,26 @@ delivered = bus.emit(event)
 history = bus.get_history(event_type="character.before_turn.finished", limit=50)
 ```
 
-### 事件类型一览（27 种）
+### 事件类型一览
 
-| 分类 | 事件类型 |
-|------|----------|
-| **会话入口** | `conversation.before_receive` |
-| **附件处理** | `pipeline.before_attachments`, `pipeline.after_attachments` |
-| **知识检索** | `pipeline.before_knowledge`, `pipeline.after_knowledge` |
-| **角色运行时（before_turn）** | `character.before_turn.started`, `character.before_turn.after_profile_load`, `character.before_turn.after_memory_retrieve`, `character.before_turn.after_world_book_match`, `character.before_turn.after_reaction_plan`, `character.before_turn.finished` |
-| **提示词渲染** | `pipeline.before_prompt_render`, `pipeline.after_prompt_render` |
-| **模型调用** | `pipeline.before_model_call`, `pipeline.after_model_call`, `pipeline.stream_chunk` |
-| **回复发送** | `pipeline.before_reply_send`, `pipeline.after_reply_send` |
-| **角色运行时（after_turn）** | `character.after_turn.started`, `character.after_turn.after_state_update`, `character.after_turn.finished` |
-| **记忆抽取** | `memory.after_extract` |
-| **状态变化** | `state.changed`, `relationship.changed` |
-| **工具调用** | `tool.before_call`, `tool.after_call` |
+> **别名兼容**：文档中的 `pipeline.before_model_call` 等名称可直接用于 Hook 的 `event` 字段，
+> 系统会自动映射到代码实际 emit 的事件名（如 `model.before_call`）。两种写法均可生效。
+
+| 分类 | 代码事件名 | 文档别名（也可用） |
+|------|----------|----------|
+| **会话入口** | `conversation.before_receive` | — |
+| **附件处理** | `pipeline.before_attachments`, `pipeline.after_attachments` | — |
+| **知识检索** | `pipeline.before_knowledge`, `pipeline.after_knowledge` | — |
+| **角色 before_turn** | `character.before_turn.started`, `character.after_profile_load`, `character.after_memory_retrieve`, `character.after_world_book_match`, `character.after_reaction_plan`, `character.before_turn.finished` | `character.before_turn.after_memory_retrieve` 等 |
+| **模型调用** | `model.before_call`, `model.after_call`, `model.on_stream_chunk` | `pipeline.before_model_call`, `pipeline.after_model_call`, `pipeline.stream_chunk` |
+| **回复发送** | `reply.before_send`, `reply.after_send` | `pipeline.before_reply_send`, `pipeline.after_reply_send` |
+| **提示词渲染** | `prompt.before_render`, `prompt.after_render` | `pipeline.before_prompt_render`, `pipeline.after_prompt_render` |
+| **角色 after_turn** | `character.after_turn.started`, `character.after_state_update`, `character.after_turn.finished` | `character.after_turn.after_state_update` |
+| **记忆抽取** | `memory.after_extract` | — |
+| **状态变化** | `state.changed`, `relationship.changed` | — |
+| **工具调用** | `tool.before_call`, `tool.after_call` | — |
+
+**当前已实际 emit 的事件**：`conversation.before_receive`、`pipeline.before/after_attachments`、`pipeline.before/after_knowledge`、`prompt.before_render`、`prompt.after_render`、`model.before_call`、`model.on_stream_chunk`（首块）、`model.after_call`、`reply.before_send`、`reply.after_send`、`tool.before_call`、`tool.after_call`，以及 CharacterRuntime 的 `character.after_memory_retrieve`、`character.after_world_book_match`、`character.after_reaction_plan`、`character.before_turn.finished`、`character.after_turn.started`、`character.after_state_update`、`character.after_turn.finished`、`state.changed`、`relationship.changed`、`memory.after_extract`。
 
 ## Web API
 
@@ -301,7 +317,9 @@ nbot/hooks/
 
 ```
 data/web/
-└── hooks.json         # Hook 定义与执行日志
+├── hooks.json         # Hook 定义（持久化）
+└── hooks_logs.json    # 执行日志（持久化，最多 500 条，裁剪到 250 条）
+```
 ```
 
 ## 使用示例
