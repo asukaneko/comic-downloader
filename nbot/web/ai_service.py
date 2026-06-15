@@ -670,9 +670,13 @@ class WebCallbacks(PipelineCallbacks):
         if (session or {}).get("session_mode") == "agent":
             return None
         from nbot.character.adapters.nekobot import get_web_character_context
-        return get_web_character_context(
+        identity = get_web_character_context(
             self.server, self.session_store, self.session_id
         )
+        speaker_id = str(ctx.metadata.get("group_speaker") or "").strip()
+        if identity and speaker_id:
+            identity.character_id = speaker_id
+        return identity
 
     def get_character_runtime(self, ctx):
         """返回 CharacterRuntime 实例（agent 模式跳过）"""
@@ -1335,6 +1339,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     break
     except Exception:
         pass
+    base_metadata = dict(ctx.metadata)
     callbacks = WebCallbacks(
         server=server,
         session_store=session_store,
@@ -1392,6 +1397,61 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         }
                 except Exception as e:
                     _log.debug("group context build failed for web session: %s", e)
+
+            round_robin_speakers = []
+            if group_context:
+                group = group_context.get("group")
+                if (
+                    group
+                    and getattr(group.config, "speaker_strategy", "") == "round_robin"
+                    and len(group.character_ids) > 1
+                ):
+                    scheduler = group_context.get("scheduler")
+                    last_speaker = group.active_speaker
+                    seen = set()
+                    for _ in group.character_ids:
+                        speaker = scheduler.decide_next_speaker(
+                            group,
+                            user_content,
+                            group.character_ids,
+                            last_speaker=last_speaker,
+                        )
+                        if not speaker or speaker in seen:
+                            break
+                        round_robin_speakers.append(speaker)
+                        seen.add(speaker)
+                        last_speaker = speaker
+
+            def _context_for_speaker(speaker_id: str = ""):
+                run_ctx = PipelineContext(
+                    chat_request=chat_request,
+                    adapter=adapter,
+                    stop_event=stop_event,
+                    metadata=dict(base_metadata),
+                )
+                if speaker_id and group_context:
+                    profiles = group_context.get("character_profiles", {})
+                    group = group_context.get("group")
+                    run_ctx.metadata["group_speaker"] = speaker_id
+                    run_ctx.metadata["group_speaker_name"] = (
+                        profiles.get(speaker_id, {}).get("name", speaker_id)
+                    )
+                    if group:
+                        run_ctx.metadata["group_id"] = group.group_id
+                return run_ctx
+
+            if len(round_robin_speakers) > 1:
+                for speaker in round_robin_speakers[:-1]:
+                    pre_ctx = _context_for_speaker(speaker)
+                    pre_result = pipeline.process(
+                        pre_ctx,
+                        callbacks,
+                        tools=tools,
+                        max_context_chars=context_char_budget,
+                        group_context=group_context,
+                    )
+                    _update_web_token_stats(server, pre_result.usage, session_id, pre_result.metadata)
+                ctx.metadata.update(_context_for_speaker(round_robin_speakers[-1]).metadata)
 
             result = pipeline.process(
                 ctx, callbacks,

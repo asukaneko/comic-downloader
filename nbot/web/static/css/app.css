@@ -6929,6 +6929,25 @@
             display: none;
         }
 
+        .message-sender-assistant {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            line-height: 1.2;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.86);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+        }
+
+        .message-sender-assistant i {
+            font-size: 11px;
+            color: var(--accent-primary);
+        }
+
         /* Markdown 样式 */
         .message-body {
             font-size: 14px;

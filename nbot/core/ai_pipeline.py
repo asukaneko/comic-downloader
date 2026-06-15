@@ -64,6 +64,26 @@ def _custom_prompt_stack_key(custom_prompt: Dict[str, Any]) -> str:
     return f"custom:{order}"
 
 
+def _annotate_group_message_senders(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Make sender names visible to the model in group-chat history."""
+    annotated = copy.deepcopy(messages)
+    for message in annotated:
+        role = message.get("role", "")
+        if role not in ("assistant", "user"):
+            continue
+        sender = str(message.get("sender") or "").strip()
+        content = str(message.get("content") or "")
+        if not sender or not content:
+            continue
+        if role == "assistant" and sender == "AI":
+            continue
+        prefix = f"【{sender}】"
+        if content.startswith(prefix):
+            continue
+        message["content"] = f"{prefix}{content}"
+    return annotated
+
+
 # ============================================================================
 # 公共 Token 统计
 # ============================================================================
@@ -844,6 +864,9 @@ class AIPipeline:
                     break
 
         # 分离原有 system prompt 和历史消息
+        if ctx.metadata.get("group_id"):
+            messages_for_ai = _annotate_group_message_senders(messages_for_ai)
+
         base_prompt, history_messages = split_system_prompt(messages_for_ai)
 
         # 知识库注入 → PromptStack
@@ -946,9 +969,13 @@ class AIPipeline:
             character_ids = conversation.character_ids
             last_speaker = conversation.active_speaker
 
-            speaker = scheduler.decide_next_speaker(
-                conversation, message, character_ids, last_speaker=last_speaker,
-            )
+            preset_speaker = str(ctx.metadata.get("group_speaker") or "")
+            if preset_speaker and preset_speaker in character_ids:
+                speaker = preset_speaker
+            else:
+                speaker = scheduler.decide_next_speaker(
+                    conversation, message, character_ids, last_speaker=last_speaker,
+                )
             conversation.active_speaker = speaker
             ctx.metadata["group_speaker"] = speaker
             ctx.metadata["group_id"] = conversation.group_id

@@ -11695,6 +11695,44 @@ def main(params):
                     return this.getCharacterPortraitByName(session.sender_name).avatar || '';
                 },
 
+                getMessageSenderName(msg) {
+                    if (!msg || msg.role !== 'assistant') return '';
+                    const sender = String(msg.sender || '').trim();
+                    if (sender && sender !== 'AI') return sender;
+                    return this.currentSession?.sender_name || this.personality?.name || 'AI';
+                },
+
+                getMessagePortrait(msg) {
+                    if (!msg || msg.role !== 'assistant') return '';
+                    const senderName = this.getMessageSenderName(msg);
+                    const directPortrait = senderName
+                        ? this.getCharacterPortraitByName(senderName).portrait || ''
+                        : '';
+                    if (directPortrait && !this.failedPortraitUrls[directPortrait]) {
+                        return directPortrait;
+                    }
+                    return this.getSessionPortrait(this.currentSession);
+                },
+
+                getMessageAvatar(msg) {
+                    if (!msg || msg.role !== 'assistant') return '';
+                    const senderName = this.getMessageSenderName(msg);
+                    const directAvatar = senderName
+                        ? this.getCharacterPortraitByName(senderName).avatar || ''
+                        : '';
+                    return directAvatar || this.getSessionAvatar(this.currentSession) || '';
+                },
+
+                handleMessagePortraitError(event) {
+                    const failedUrl = event?.target?.currentSrc || event?.target?.src || '';
+                    if (!failedUrl) return;
+                    this.failedPortraitUrls[failedUrl] = true;
+                    try {
+                        const parsed = new URL(failedUrl, window.location.origin);
+                        this.failedPortraitUrls[parsed.pathname] = true;
+                    } catch (_) {}
+                },
+
                 handleSessionPortraitError(session, event) {
                     const failedUrl = event?.target?.currentSrc || event?.target?.src || '';
                     if (failedUrl) {

@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260609-italic';
+        window.__nbotAssetVersion = '20260615-group-speakers';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260609-italic">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260615-group-speakers">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         // PWA install prompt - must be captured before Vue mounts
@@ -1421,11 +1421,11 @@
                                             >
                                                 <i v-if="isMessageSelectedForFavorite(msg)" class="fas fa-check"></i>
                                             </button>
-                                            <div class="message-avatar" :class="{ 'has-portrait': msg.role === 'assistant' && getSessionPortrait(currentSession), 'user-avatar': msg.role === 'user' }" @click="msg.role === 'assistant' && getSessionPortrait(currentSession) ? viewPortrait(getSessionPortrait(currentSession)) : null">
+                                            <div class="message-avatar" :class="{ 'has-portrait': msg.role === 'assistant' && getMessagePortrait(msg), 'user-avatar': msg.role === 'user' }" @click="msg.role === 'assistant' && getMessagePortrait(msg) ? viewPortrait(getMessagePortrait(msg)) : null">
                                                 <!-- AI消息显示立绘或头像 -->
                                                 <template v-if="msg.role === 'assistant'">
-                                                    <img v-if="getSessionPortrait(currentSession)" :src="getSessionPortrait(currentSession)" @error="handleSessionPortraitError(currentSession, $event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
-                                                    <i v-else :class="getSessionAvatar(currentSession) || 'fas fa-robot'"></i>
+                                                    <img v-if="getMessagePortrait(msg)" :src="getMessagePortrait(msg)" @error="handleMessagePortraitError($event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                                    <i v-else :class="getMessageAvatar(msg) || 'fas fa-robot'"></i>
                                                 </template>
                                                 <!-- 用户消息显示用户名首字母或自定义头像 -->
                                                 <template v-else-if="msg.role === 'user'">
@@ -1441,6 +1441,10 @@
                                                 <i v-else class="fas fa-user"></i>
                                             </div>
                                             <div class="message-content" :class="{ 'multi-bubble-content': getMessageBubbles(msg).length > 0 }" :style="getMultiBubbleContentStyle(msg)">
+                                                <div v-if="msg.role === 'assistant' && getMessageSenderName(msg)" class="message-sender message-sender-assistant">
+                                                    <i :class="getMessageAvatar(msg) || 'fas fa-user-circle'"></i>
+                                                    {{ getMessageSenderName(msg) }}
+                                                </div>
                                                 <div v-if="isStreamAwaiting(msg)" class="stream-waiting-body dragon-bone-loading">
                                                     <div class="bone-row">
                                                         <div class="bone-avatar"></div>
@@ -11177,7 +11181,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260609-italic"></script>
+    <script src="/static/js/nbot-methods.js?v=20260615-group-speakers"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
