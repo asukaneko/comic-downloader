@@ -1620,13 +1620,30 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 except Exception as exc:
                     _log.debug("[Gateway] Web 异步事件记录失败: %s", str(exc))
 
-            # 发送剧情选项到前端
+            # 发送剧情选项到前端（附带故事图数据）
             if result and getattr(result, 'metadata', None):
                 plot_choices = result.metadata.get("plot_choices")
                 if plot_choices:
+                    mermaid = ""
+                    graph = None
+                    try:
+                        from nbot.plot.graph_manager import get_plot_graph_manager
+                        plot_mgr = get_plot_graph_manager(
+                            data_dir=getattr(server, "data_dir", "data/web"),
+                        )
+                        mermaid = plot_mgr.generate_mermaid(session_id)
+                        graph = plot_mgr.get_graph(session_id)
+                    except Exception:
+                        pass
+
                     server.socketio.emit(
                         "plot_choices",
-                        {"session_id": session_id, "choices": plot_choices},
+                        {
+                            "session_id": session_id,
+                            "choices": plot_choices,
+                            "mermaid": mermaid,
+                            "graph": graph,
+                        },
                         room=session_id,
                     )
                     server.socketio.sleep(0)

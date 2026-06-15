@@ -1172,6 +1172,12 @@ class AIPipeline:
             if turn_context and hasattr(turn_context, 'profile'):
                 char_id = turn_context.profile.id
 
+            # Find previous node and its pending selected choice
+            prev_node = graph_mgr.get_latest_node(conversation_id)
+            pending_choice_id = ""
+            if prev_node and getattr(prev_node, "selected_choice_id", ""):
+                pending_choice_id = prev_node.selected_choice_id
+
             # Create a node for this turn
             node = PlotNode(
                 conversation_id=conversation_id,
@@ -1179,8 +1185,15 @@ class AIPipeline:
                 title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
                 summary=response_text[:100],
                 level="normal",
+                parent_node_id=prev_node.id if pending_choice_id else "",
             )
             graph_mgr.add_node(node)
+
+            # If the previous node had a selected choice, create an edge
+            if pending_choice_id:
+                existing_edges = graph_mgr.get_graph(conversation_id).get("edges", [])
+                if not any(e.get("choice_id") == pending_choice_id for e in existing_edges):
+                    graph_mgr.create_edge_for_choice(pending_choice_id, node.id)
 
             # Create choice entries
             for choice_data in choices:

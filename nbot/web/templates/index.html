@@ -21,6 +21,10 @@
     <script src="/static/vendor/marked.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/styles/highlight-github-dark.min.css">
     <script src="/static/vendor/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
+    </script>
     <link rel="stylesheet" href="/static/vendor/styles/font-awesome.min.css">
     <script src="/static/js/i18n.js?v=20260525"></script>
     <script src="/static/js/push.js"></script>
@@ -2181,6 +2185,15 @@
                                         <button class="btn btn-ghost btn-xs" @click="loadPlotGraph()">
                                             <i class="fas fa-project-diagram"></i> 故事图
                                         </button>
+                                    </div>
+                                    <!-- Inline Mermaid Graph -->
+                                    <div v-if="plotGraphMermaid" class="plot-inline-graph">
+                                        <div class="plot-inline-graph-header" @click="showInlinePlotGraph = !showInlinePlotGraph">
+                                            <i class="fas fa-diagram-project"></i>
+                                            <span>剧情路径</span>
+                                            <i :class="showInlinePlotGraph ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="plot-inline-graph-toggle"></i>
+                                        </div>
+                                        <div v-show="showInlinePlotGraph" ref="inlinePlotGraphContainer" class="plot-inline-graph-body"></div>
                                     </div>
                                 </div>
                             </div>
@@ -11514,6 +11527,7 @@
                     plotGraphMermaid: '',
                     plotGraphData: { nodes: [], choices: [], edges: [] },
                     showPlotGraphModal: false,
+                    showInlinePlotGraph: true,
                     // 3.x Runtime Panel
                     showRuntimePanel: false,
                     characterStatus: { mood: '平静', energy: 100, scene: {}, relationship: {} },

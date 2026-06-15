@@ -28122,6 +28122,58 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     display: none;
 }
 
+/* Inline Plot Graph (剧情选项区内联故事图) */
+.plot-inline-graph {
+    margin: 8px 12px 4px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.plot-inline-graph-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary, #e0e0e0);
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.plot-inline-graph-header:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.plot-inline-graph-toggle {
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0.5;
+}
+
+.plot-inline-graph-body {
+    padding: 8px 14px 12px;
+    overflow-x: auto;
+    min-height: 80px;
+}
+
+.plot-inline-graph-body svg {
+    max-width: 100%;
+    height: auto;
+}
+
+[data-theme="light"] .plot-inline-graph {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .plot-inline-graph-header:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
 @media (max-width: 640px) {
     .plot-choices-group {
         width: 100%;
