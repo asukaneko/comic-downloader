@@ -6,14 +6,16 @@ import os
 import sys
 import tempfile
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from nbot.group.models import GroupConfig, GroupConversation, InterCharacterRelation
-from nbot.group.scheduler import SpeakerScheduler
-from nbot.group.narrator import NarratorCharacter
+from nbot.channels.web import WebChannelAdapter
+from nbot.core.ai_pipeline import PipelineResult, _annotate_group_message_senders
+from nbot.core.chat_models import ChatRequest
 from nbot.group.manager import GroupManager
+from nbot.group.models import GroupConfig, GroupConversation, InterCharacterRelation
+from nbot.group.narrator import NarratorCharacter
+from nbot.group.scheduler import SpeakerScheduler
+from nbot.web.ai_service import trigger_ai_response_for_request
 
 
 class TestGroupConfig:
@@ -174,3 +176,150 @@ class TestGroupManager:
         g = self.mgr.create_group('t', ['a'])
         mgr2 = GroupManager(file_path=self.fp)
         assert mgr2.get_group(g.group_id) is not None
+
+
+class _ImmediateSocket:
+    def start_background_task(self, target, *args, **kwargs):
+        return target(*args, **kwargs)
+
+    def emit(self, *_args, **_kwargs):
+        return None
+
+    def sleep(self, *_args, **_kwargs):
+        return None
+
+
+class _PipelineWebServer:
+    def __init__(self):
+        self.socketio = _ImmediateSocket()
+        self.sessions = {
+            "session-group": {
+                "id": "session-group",
+                "name": "Group Session",
+                "group_id": "group-1",
+                "messages": [],
+            }
+        }
+        self.web_channel_adapter = WebChannelAdapter()
+        self.stop_events = {}
+        self.PROGRESS_CARD_AVAILABLE = False
+        self.progress_card_manager = None
+        self.ai_config = {"max_context_length": 100000, "supports_tools": False}
+        self.active_model_id = None
+        self.ai_models = []
+
+    def _save_data(self, _name):
+        return None
+
+    def log_message(self, _level, _message):
+        return None
+
+
+def test_web_round_robin_group_runs_each_character_once(monkeypatch):
+    server = _PipelineWebServer()
+    group = GroupConversation(
+        group_id="group-1",
+        name="party",
+        character_ids=["alice", "bob", "carol"],
+        config=GroupConfig(speaker_strategy="round_robin", auto_narrate=False),
+    )
+
+    class FakeGroupManager:
+        def get_group(self, group_id):
+            return group if group_id == "group-1" else None
+
+    monkeypatch.setattr(GroupManager, "_instance", FakeGroupManager())
+
+    speakers = []
+
+    def fake_process(self, ctx, callbacks, **kwargs):
+        group_context = kwargs.get("group_context") or {}
+        current_group = group_context.get("group")
+        speakers.append(ctx.metadata.get("group_speaker") or current_group.active_speaker)
+        return PipelineResult(
+            final_content=f"reply from {speakers[-1]}",
+            usage={},
+            metadata=dict(ctx.metadata),
+        )
+
+    monkeypatch.setattr("nbot.web.ai_service.AIPipeline.process", fake_process)
+
+    response = trigger_ai_response_for_request(
+        server,
+        ChatRequest.for_web("session-group", "hello", "tester"),
+        adapter=server.web_channel_adapter,
+    )
+
+    assert response.error is None
+    assert speakers == ["alice", "bob", "carol"]
+
+
+def test_web_round_robin_speakers_see_previous_speaker_messages(monkeypatch):
+    server = _PipelineWebServer()
+    group = GroupConversation(
+        group_id="group-1",
+        name="party",
+        character_ids=["alice", "bob", "carol"],
+        config=GroupConfig(speaker_strategy="round_robin", auto_narrate=False),
+    )
+    server.sessions["session-group"]["messages"] = [
+        {"role": "user", "content": "hello", "sender": "tester"}
+    ]
+
+    class FakeGroupManager:
+        def get_group(self, group_id):
+            return group if group_id == "group-1" else None
+
+    monkeypatch.setattr(GroupManager, "_instance", FakeGroupManager())
+
+    visible_assistant_senders = []
+
+    def fake_process(self, ctx, callbacks, **kwargs):
+        visible_assistant_senders.append([
+            msg.get("sender")
+            for msg in callbacks.load_messages(ctx)
+            if msg.get("role") == "assistant"
+        ])
+        speaker = ctx.metadata.get("group_speaker")
+        message = {
+            "role": "assistant",
+            "content": f"reply from {speaker}",
+            "sender": speaker,
+        }
+        callbacks.save_assistant_message(ctx, message)
+        return PipelineResult(
+            final_content=message["content"],
+            assistant_message=message,
+            usage={},
+            metadata=dict(ctx.metadata),
+        )
+
+    monkeypatch.setattr("nbot.web.ai_service.AIPipeline.process", fake_process)
+
+    response = trigger_ai_response_for_request(
+        server,
+        ChatRequest.for_web("session-group", "hello", "tester"),
+        adapter=server.web_channel_adapter,
+    )
+
+    assert response.error is None
+    assert visible_assistant_senders == [
+        [],
+        ["alice"],
+        ["alice", "bob"],
+    ]
+
+
+def test_group_history_includes_sender_names_for_model_context():
+    messages = [
+        {"role": "user", "content": "hello", "sender": "tester"},
+        {"role": "assistant", "content": "hi", "sender": "alice"},
+        {"role": "assistant", "content": "already", "sender": "AI"},
+    ]
+
+    annotated = _annotate_group_message_senders(messages)
+
+    assert annotated[0]["content"] == "【tester】hello"
+    assert annotated[1]["content"] == "【alice】hi"
+    assert annotated[2]["content"] == "already"
+    assert messages[1]["content"] == "hi"

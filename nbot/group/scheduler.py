@@ -74,8 +74,13 @@ class SpeakerScheduler:
         speaker_id: str,
         *,
         extra_context: str = "",
+        full_profile: Any = None,
     ) -> str:
-        """构建群聊 system prompt"""
+        """构建群聊 system prompt
+
+        Args:
+            full_profile: 当前发言角色的完整 CharacterProfile 对象（可选）
+        """
         lines = [
             "# 群聊场景",
             f"群聊名称: {conversation.name}",
@@ -91,6 +96,30 @@ class SpeakerScheduler:
             lines.append(f"- **{name}** ({cid}): {desc[:80]}")
             if personality:
                 lines.append(f"  性格: {personality[:60]}")
+
+        # 当前发言角色的完整角色卡
+        if full_profile:
+            lines.extend(["", "## 当前发言角色设定"])
+            system_prompt = getattr(full_profile, "system_prompt", "")
+            if system_prompt:
+                # system_prompt 已包含完整设定，直接使用
+                lines.append(system_prompt)
+            else:
+                # 没有 system_prompt 时，单独添加各字段
+                if getattr(full_profile, "basic_info", ""):
+                    lines.append(f"【基本信息】\n{full_profile.basic_info}")
+                if getattr(full_profile, "personality", ""):
+                    lines.append(f"【性格特点】\n{full_profile.personality}")
+                if getattr(full_profile, "scenario", ""):
+                    lines.append(f"【场景设定】\n{full_profile.scenario}")
+                if getattr(full_profile, "first_message", ""):
+                    lines.append(f"【开场白】\n{full_profile.first_message}")
+                if getattr(full_profile, "example_dialogues", ""):
+                    lines.append(f"【对话示例】\n{full_profile.example_dialogues}")
+                if getattr(full_profile, "rules", []):
+                    lines.append(f"【行为规则】\n{'；'.join(full_profile.rules)}")
+                if getattr(full_profile, "response_format", ""):
+                    lines.append(f"【回复格式】\n{full_profile.response_format}")
 
         # 关系矩阵
         relations = conversation.get_relation_matrix()

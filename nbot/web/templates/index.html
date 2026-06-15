@@ -28,10 +28,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260609-italic';
+        window.__nbotAssetVersion = '20260615-group-speakers';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260609-italic">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260615-group-speakers">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         // PWA install prompt - must be captured before Vue mounts
@@ -643,8 +643,8 @@
                                                         <div class="channel-dropdown-desc">QQ 私人消息</div>
                                                     </div>
                                                 </button>
-                                                <button
-                                                    class="channel-dropdown-item"
+                                                <button 
+                                                    class="channel-dropdown-item" 
                                                     :class="{ active: chatTab === 'qq_group' }"
                                                     @click="switchChatTab('qq_group'); selectedSenderFilter = ''; closeChannelDropdown()"
                                                 >
@@ -728,11 +728,10 @@
                                     <button class="session-mode-tab" :class="{ active: sessionModeTab === 'agent' }" @click="sessionModeTab = 'agent'">
                                         <i class="fas fa-robot"></i> Agent
                                     </button>
-                                    <!-- 群聊 tab 暂时隐藏 -->
-                                    <!-- <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="sessionModeTab = 'group'">
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="sessionModeTab = 'group'">
                                         <i class="fas fa-users"></i> 群聊
-                                    </button> -->
-                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent' }"></div>
+                                    </button>
+                                    <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent', 'slide-far-right': sessionModeTab === 'group' }"></div>
                                 </div>
                                 <button v-if="chatTab === 'web' && !selectedSenderFilter" class="session-add-btn" @click="onSessionAddClick()" :disabled="isLoading">
                                     <i class="fas fa-plus"></i> {{ sessionModeTab === 'agent' ? '新增 Agent' : sessionModeTab === 'group' ? '新增群聊' : '新增对话' }}
@@ -1422,11 +1421,11 @@
                                             >
                                                 <i v-if="isMessageSelectedForFavorite(msg)" class="fas fa-check"></i>
                                             </button>
-                                            <div class="message-avatar" :class="{ 'has-portrait': msg.role === 'assistant' && getSessionPortrait(currentSession), 'user-avatar': msg.role === 'user' }" @click="msg.role === 'assistant' && getSessionPortrait(currentSession) ? viewPortrait(getSessionPortrait(currentSession)) : null">
+                                            <div class="message-avatar" :class="{ 'has-portrait': msg.role === 'assistant' && getMessagePortrait(msg), 'user-avatar': msg.role === 'user' }" @click="msg.role === 'assistant' && getMessagePortrait(msg) ? viewPortrait(getMessagePortrait(msg)) : null">
                                                 <!-- AI消息显示立绘或头像 -->
                                                 <template v-if="msg.role === 'assistant'">
-                                                    <img v-if="getSessionPortrait(currentSession)" :src="getSessionPortrait(currentSession)" @error="handleSessionPortraitError(currentSession, $event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
-                                                    <i v-else :class="getSessionAvatar(currentSession) || 'fas fa-robot'"></i>
+                                                    <img v-if="getMessagePortrait(msg)" :src="getMessagePortrait(msg)" @error="handleMessagePortraitError($event)" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+                                                    <i v-else :class="getMessageAvatar(msg) || 'fas fa-robot'"></i>
                                                 </template>
                                                 <!-- 用户消息显示用户名首字母或自定义头像 -->
                                                 <template v-else-if="msg.role === 'user'">
@@ -1442,6 +1441,10 @@
                                                 <i v-else class="fas fa-user"></i>
                                             </div>
                                             <div class="message-content" :class="{ 'multi-bubble-content': getMessageBubbles(msg).length > 0 }" :style="getMultiBubbleContentStyle(msg)">
+                                                <div v-if="msg.role === 'assistant' && currentSession?.session_mode === 'group' && getMessageSenderName(msg)" class="message-sender message-sender-assistant">
+                                                    <i :class="getMessageAvatar(msg) || 'fas fa-user-circle'"></i>
+                                                    {{ getMessageSenderName(msg) }}
+                                                </div>
                                                 <div v-if="isStreamAwaiting(msg)" class="stream-waiting-body dragon-bone-loading">
                                                     <div class="bone-row">
                                                         <div class="bone-avatar"></div>
@@ -3915,109 +3918,6 @@
                         </div>
                     </div>
 
-
-                    <!-- Group Chat Management -->
-                    <div v-if="currentPage === 'group-chat'" class="fade-in gc-page">
-                        <div class="gc-header">
-                            <div class="gc-header-left">
-                                <i class="fas fa-users gc-header-icon"></i>
-                                <div>
-                                    <h2 class="gc-title">群聊模式</h2>
-                                    <p class="gc-subtitle">管理多角色群聊对话</p>
-                                </div>
-                            </div>
-                            <button class="gc-btn gc-btn-primary" @click="showCreateGroupModal = true; loadCharacterList()">
-                                <i class="fas fa-plus"></i> 创建群聊
-                            </button>
-                        </div>
-
-                        <div class="gc-content">
-                            <div v-if="groupList.length === 0" class="gc-empty">
-                                <div class="gc-empty-icon"><i class="fas fa-users"></i></div>
-                                <div class="gc-empty-title">暂无群聊</div>
-                                <div class="gc-empty-desc">点击上方按钮创建第一个群聊</div>
-                            </div>
-                            <div v-else class="gc-grid">
-                                <div v-for="g in groupList" :key="g.group_id" class="gc-card" @click="enterGroupChat(g)" style="cursor: pointer;">
-                                    <div class="gc-card-header">
-                                        <div class="gc-card-title">
-                                            <i class="fas fa-users"></i> {{ g.name }}
-                                        </div>
-                                        <span class="gc-badge">{{ g.config?.speaker_strategy || 'mention' }}</span>
-                                    </div>
-                                    <div class="gc-card-body">
-                                        <div class="gc-characters">
-                                            <span v-for="cid in g.character_ids" :key="cid" class="gc-char-tag">
-                                                <i class="fas fa-user"></i> {{ cid }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="gc-card-footer">
-                                        <button class="gc-btn-icon" @click="deleteGroup(g.group_id)" title="删除">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div v-if="showCreateGroupModal" class="modal-overlay" @click.self="showCreateGroupModal = false">
-                            <div class="modal-content gc-modal">
-                                <div class="modal-header">
-                                    <h3><i class="fas fa-plus-circle"></i> 创建群聊</h3>
-                                    <button class="btn-icon-small" @click="showCreateGroupModal = false"><i class="fas fa-times"></i></button>
-                                </div>
-                                <div class="modal-body">
-                                    <div class="form-group">
-                                        <label>群聊名称</label>
-                                        <input v-model="newGroup.name" class="form-input" placeholder="输入群聊名称">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>选择角色 <span class="form-hint">（点击选择参与群聊的角色）</span></label>
-                                        <div class="bind-character-list gc-char-select">
-                                            <div v-for="ch in characterList" :key="ch.id"
-                                                 class="bind-character-item"
-                                                 :class="{ active: newGroup.selectedCharacterIds.includes(ch.id) }"
-                                                 @click="toggleGroupCharacter(ch.id)">
-                                                <div class="bind-character-portrait">
-                                                    <img v-if="ch.portrait" :src="ch.portrait">
-                                                    <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
-                                                </div>
-                                                <div class="bind-character-info">
-                                                    <div class="bind-character-name">{{ ch.name }}</div>
-                                                    <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
-                                                </div>
-                                                <i v-if="newGroup.selectedCharacterIds.includes(ch.id)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
-                                            </div>
-                                            <div v-if="characterList.length === 0" class="gc-char-empty">
-                                                <i class="fas fa-user-slash"></i>
-                                                <span>暂无可用角色</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>旁白ID <span class="form-hint">（可选）</span></label>
-                                        <input v-model="newGroup.narratorId" class="form-input" placeholder="留空则无旁白">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>发言策略</label>
-                                        <select v-model="newGroup.strategy" class="form-select">
-                                            <option value="mention">提及 (Mention)</option>
-                                            <option value="round_robin">轮流 (Round Robin)</option>
-                                            <option value="relevance">相关 (Relevance)</option>
-                                            <option value="random">随机 (Random)</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button class="gc-btn gc-btn-ghost" @click="showCreateGroupModal = false">取消</button>
-                                    <button class="gc-btn gc-btn-primary" @click="createGroup()" :disabled="!newGroup.name || newGroup.selectedCharacterIds.length === 0">
-                                        <i class="fas fa-check"></i> 创建
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- Hook Management -->
                     <div v-if="currentPage === 'hooks-nav'" class="fade-in hk-page">
@@ -9832,6 +9732,37 @@
                         </div>
                     </div>
 
+                    <!-- 群聊角色编辑 -->
+                    <div class="form-section" v-if="viewingSession.session_mode === 'group' && viewingSession.group_id">
+                        <div class="form-section-title">
+                            <i class="fas fa-users" style="color: var(--accent-primary);"></i> 群聊参与角色
+                        </div>
+                        <div class="bind-character-list gc-char-select" style="max-height: 200px; overflow-y: auto;">
+                            <div v-for="ch in (groupEditCharacters || [])" :key="ch.id"
+                                 class="bind-character-item"
+                                 :class="{ active: (viewingSession.character_ids || []).includes(ch.name) }"
+                                 @click="toggleEditGroupCharacter(ch.name)">
+                                <div class="bind-character-portrait">
+                                    <img v-if="ch.portrait" :src="ch.portrait">
+                                    <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                </div>
+                                <div class="bind-character-info">
+                                    <div class="bind-character-name">{{ ch.name }}</div>
+                                    <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
+                                </div>
+                                <i v-if="(viewingSession.character_ids || []).includes(ch.name)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                            </div>
+                            <div v-if="!(groupEditCharacters || []).length" class="gc-char-empty">
+                                <i class="fas fa-user-slash"></i> 暂无可用角色
+                            </div>
+                        </div>
+                        <button class="gc-btn gc-btn-primary" style="margin-top: 8px; width: 100%;"
+                                @click="saveGroupCharacters()"
+                                :disabled="!(viewingSession.character_ids || []).length">
+                            <i class="fas fa-save"></i> 保存角色变更
+                        </button>
+                    </div>
+
                     <!-- 系统提示词 -->
                     <div class="form-section" v-if="viewingSession.type === 'web' && !viewingSession.read_only && !viewingSession.is_archive">
                         <div class="form-section-title">
@@ -10199,6 +10130,32 @@
                                     </button>
                                 </div>
                             </div>
+                            <!-- 群聊角色编辑 -->
+                            <div v-if="editingSession.session_mode === 'group' && editingSession.group_id" class="form-section" style="margin-top: 16px;">
+                                <div class="form-section-title">
+                                    <i class="fas fa-users" style="color: var(--accent-primary);"></i> 群聊参与角色
+                                </div>
+                                <div class="bind-character-list gc-char-select" style="max-height: 200px; overflow-y: auto;">
+                                    <div v-for="ch in (groupEditCharacters || [])" :key="ch.id"
+                                         class="bind-character-item"
+                                         :class="{ active: (editingSession.character_ids || []).includes(ch.name) }"
+                                         @click="toggleEditGroupCharacter(ch.name)">
+                                        <div class="bind-character-portrait">
+                                            <img v-if="ch.portrait" :src="ch.portrait">
+                                            <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                        </div>
+                                        <div class="bind-character-info">
+                                            <div class="bind-character-name">{{ ch.name }}</div>
+                                            <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
+                                        </div>
+                                        <i v-if="(editingSession.character_ids || []).includes(ch.name)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                                    </div>
+                                    <div v-if="!(groupEditCharacters || []).length" class="gc-char-empty">
+                                        <i class="fas fa-user-slash"></i> 暂无可用角色
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- TTS 语音合成设置 -->
                             <div class="form-section-title" style="margin-top: 16px;">
                                 <i class="fas fa-volume-up"></i> TTS 语音合成
@@ -11275,7 +11232,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260523"></script>
-    <script src="/static/js/nbot-methods.js?v=20260609-italic"></script>
+    <script src="/static/js/nbot-methods.js?v=20260615-group-speakers"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -11555,10 +11512,6 @@
                     // 3.x Runtime Panel
                     showRuntimePanel: false,
                     characterStatus: { mood: '平静', energy: 100, scene: {}, relationship: {} },
-                    // 3.x Group Chat
-                    groupList: [],
-                    showCreateGroupModal: false,
-                    newGroup: { name: '', characterIds: '', narratorId: '', strategy: 'mention', selectedCharacterIds: [] },
                     // 3.x Hooks
                     hookList: [],
                     showCreateHookModal: false,

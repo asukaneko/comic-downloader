@@ -499,6 +499,11 @@ class WebCallbacks(PipelineCallbacks):
         self._try_send_push(message)
 
     def on_stream_start(self, ctx: PipelineContext, message: Dict) -> None:
+        # 群聊模式：在消息中附加 sender 以便前端区分不同角色的气泡
+        if ctx and ctx.metadata:
+            speaker_name = ctx.metadata.get("group_speaker_name", "")
+            if speaker_name and not message.get("sender"):
+                message["sender"] = speaker_name
         self.server.socketio.emit(
             "ai_stream_start",
             {"session_id": self.session_id, "message": message},
@@ -507,14 +512,20 @@ class WebCallbacks(PipelineCallbacks):
         self.server.socketio.sleep(0)
 
     def on_stream_chunk(self, ctx: PipelineContext, chunk: str, message_id: str) -> None:
+        payload = {
+            "session_id": self.session_id,
+            "message_id": message_id,
+            "chunk": chunk,
+            "is_end": False,
+        }
+        # 群聊模式：附加 sender 以便前端匹配到正确的流式气泡
+        if ctx and ctx.metadata:
+            speaker_name = ctx.metadata.get("group_speaker_name", "")
+            if speaker_name:
+                payload["sender"] = speaker_name
         self.server.socketio.emit(
             "ai_stream_chunk",
-            {
-                "session_id": self.session_id,
-                "message_id": message_id,
-                "chunk": chunk,
-                "is_end": False,
-            },
+            payload,
             room=self.session_id,
         )
         self.server.socketio.sleep(0)
@@ -533,13 +544,19 @@ class WebCallbacks(PipelineCallbacks):
                 room=self.session_id,
             )
             return
+        end_payload = {
+            "session_id": self.session_id,
+            "message_id": message_id,
+            "is_end": True,
+        }
+        # 群聊模式：附加 sender 以便前端匹配到正确的流式气泡
+        if ctx and ctx.metadata:
+            speaker_name = ctx.metadata.get("group_speaker_name", "")
+            if speaker_name:
+                end_payload["sender"] = speaker_name
         self.server.socketio.emit(
             "ai_stream_end",
-            {
-                "session_id": self.session_id,
-                "message_id": message_id,
-                "is_end": True,
-            },
+            end_payload,
             room=self.session_id,
         )
         self.server.socketio.sleep(0)
@@ -646,6 +663,13 @@ class WebCallbacks(PipelineCallbacks):
         if session:
             character_name = _resolve_session_character_name(self.server, session)
             target_id = session.get("user_id") or session.get("qq_id") or ""
+
+        # 群聊模式：优先使用当前发言角色名，避免记忆混用"群聊"角色名
+        if ctx and ctx.metadata:
+            speaker_name = str(ctx.metadata.get("group_speaker_name") or "").strip()
+            if speaker_name:
+                character_name = speaker_name
+
         # 只有拿不到会话时才回退到全局角色，避免旧会话被当前设置污染。
         if not session and not character_name:
             character_name = getattr(self.server, "personality", {}).get("name", "")
@@ -670,9 +694,13 @@ class WebCallbacks(PipelineCallbacks):
         if (session or {}).get("session_mode") == "agent":
             return None
         from nbot.character.adapters.nekobot import get_web_character_context
-        return get_web_character_context(
+        identity = get_web_character_context(
             self.server, self.session_store, self.session_id
         )
+        speaker_id = str(ctx.metadata.get("group_speaker") or "").strip()
+        if identity and speaker_id:
+            identity.character_id = speaker_id
+        return identity
 
     def get_character_runtime(self, ctx):
         """返回 CharacterRuntime 实例（agent 模式跳过）"""
@@ -1335,6 +1363,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     break
     except Exception:
         pass
+    base_metadata = dict(ctx.metadata)
     callbacks = WebCallbacks(
         server=server,
         session_store=session_store,
@@ -1374,25 +1403,53 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     gm = get_group_manager()
                     group = gm.get_group(_group_id)
                     if group and group.character_ids:
-                        # 加载角色档案
+                        # 加载角色档案 - 同时从 ProfileRepository 和 custom_personality_presets 查找
                         profiles = {}
-                        profiles_path = os.path.join(
-                            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                            "data", "character", "profiles.json",
-                        )
-                        if os.path.exists(profiles_path):
-                            import json as _json
-                            with open(profiles_path, "r", encoding="utf-8") as _f:
-                                all_profiles = _json.load(_f)
-                            if isinstance(all_profiles, dict):
-                                for cid in group.character_ids:
-                                    if cid in all_profiles:
-                                        profiles[cid] = all_profiles[cid]
+                        valid_character_ids = []
+                        from nbot.character.repository import ProfileRepository
+                        _base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                        repo = ProfileRepository(_base_dir)
+
+                        # 预加载 custom_personality_presets 作为备选数据源
+                        custom_presets_map = {}
+                        try:
+                            custom_presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
+                            if os.path.exists(custom_presets_file):
+                                with open(custom_presets_file, "r", encoding="utf-8") as f:
+                                    custom_presets = json.load(f)
+                                if isinstance(custom_presets, list):
+                                    for preset in custom_presets:
+                                        if isinstance(preset, dict):
+                                            pid = preset.get("id", "")
+                                            pname = preset.get("name", "")
+                                            if pid:
+                                                custom_presets_map[pid] = preset
+                                            if pname and pname not in custom_presets_map:
+                                                custom_presets_map[pname] = preset
+                        except Exception as e:
+                            _log.debug("Failed to load custom_personality_presets: %s", e)
+
+                        for cid in group.character_ids:
+                            profile = repo.get(cid)
+                            if profile:
+                                profiles[cid] = profile.to_personality_dict()
+                                valid_character_ids.append(cid)
+                            elif cid in custom_presets_map:
+                                # 从 custom_personality_presets 中找到，使用它
+                                profiles[cid] = custom_presets_map[cid]
+                                valid_character_ids.append(cid)
+                                _log.info("group %s: loaded character '%s' from custom_personality_presets", _group_id, cid)
+                            else:
+                                _log.warning("group %s: character profile not found for '%s', skipping", _group_id, cid)
+                        # 过滤掉没有档案的角色ID，避免发言角色无法加载设定
+                        if valid_character_ids and set(valid_character_ids) != set(group.character_ids):
+                            group.character_ids = valid_character_ids
                         from nbot.group.scheduler import SpeakerScheduler
                         from nbot.group.narrator import NarratorCharacter
                         group_context = {
                             "group": group,
                             "character_profiles": profiles,
+                            "custom_presets_map": custom_presets_map,  # 供 prompt_build 使用
                             "scheduler": SpeakerScheduler.instance(),
                             "narrator": NarratorCharacter.instance(),
                             "auto_narrate": group.config.auto_narrate,
@@ -1401,16 +1458,103 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 except Exception as e:
                     _log.debug("group context build failed for web session: %s", e)
 
-            result = pipeline.process(
-                ctx, callbacks,
-                tools=tools,
-                max_context_chars=context_char_budget,
-                hook_runtime=hook_runtime,
-                group_context=group_context,
-            )
+            round_robin_speakers = []
+            if group_context:
+                group = group_context.get("group")
+                if (
+                    group
+                    and getattr(group.config, "speaker_strategy", "") == "round_robin"
+                    and len(group.character_ids) > 1
+                ):
+                    scheduler = group_context.get("scheduler")
+                    last_speaker = group.active_speaker
+                    seen = set()
+                    for _ in group.character_ids:
+                        speaker = scheduler.decide_next_speaker(
+                            group,
+                            user_content,
+                            group.character_ids,
+                            last_speaker=last_speaker,
+                        )
+                        if not speaker or speaker in seen:
+                            break
+                        round_robin_speakers.append(speaker)
+                        seen.add(speaker)
+                        last_speaker = speaker
 
-            # 更新 token 统计
-            _update_web_token_stats(server, result.usage, session_id, result.metadata)
+            def _context_for_speaker(speaker_id: str = ""):
+                run_ctx = PipelineContext(
+                    chat_request=chat_request,
+                    adapter=adapter,
+                    stop_event=stop_event,
+                    metadata=dict(base_metadata),
+                )
+                if speaker_id and group_context:
+                    profiles = group_context.get("character_profiles", {})
+                    group = group_context.get("group")
+                    run_ctx.metadata["group_speaker"] = speaker_id
+                    run_ctx.metadata["group_speaker_name"] = (
+                        profiles.get(speaker_id, {}).get("name", speaker_id)
+                    )
+                    if group:
+                        run_ctx.metadata["group_id"] = group.group_id
+                return run_ctx
+
+            if len(round_robin_speakers) > 1:
+                # 并行发送所有角色的请求，同步流式加载气泡
+                import threading as _threading
+                _speaker_errors = []
+
+                def _run_speaker(speaker_id):
+                    try:
+                        sp_ctx = _context_for_speaker(speaker_id)
+                        sp_result = pipeline.process(
+                            sp_ctx, callbacks,
+                            tools=tools,
+                            max_context_chars=context_char_budget,
+                            hook_runtime=hook_runtime,
+                            group_context=group_context,
+                        )
+                        _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
+                    except Exception as sp_err:
+                        _speaker_errors.append((speaker_id, sp_err))
+                        _log.error("group parallel speaker %s failed: %s", speaker_id, sp_err)
+
+                threads = []
+                for speaker in round_robin_speakers:
+                    t = _threading.Thread(target=_run_speaker, args=(speaker,), daemon=True)
+                    threads.append(t)
+                    t.start()
+                for t in threads:
+                    t.join()
+                # 使用最后一个 speaker 的 metadata 更新 ctx，并标记轮次完成
+                ctx.metadata.update(_context_for_speaker(round_robin_speakers[-1]).metadata)
+                ctx.metadata["group_round_complete"] = True
+                # 同时设置到 chat_request.metadata 中，供 auto_state 使用
+                if not chat_request.metadata:
+                    chat_request.metadata = {}
+                chat_request.metadata["group_round_complete"] = True
+                # 并行发送已完成，跳过后续单独处理
+                result = None
+            else:
+                # 单角色群聊或非群聊模式：单次回复即为一轮
+                if group_context:
+                    ctx.metadata["group_round_complete"] = True
+                    # 同时设置到 chat_request.metadata 中，供 auto_state 使用
+                    if not chat_request.metadata:
+                        chat_request.metadata = {}
+                    chat_request.metadata["group_round_complete"] = True
+                result = pipeline.process(
+                    ctx, callbacks,
+                    tools=tools,
+                    max_context_chars=context_char_budget,
+                    hook_runtime=hook_runtime,
+                    group_context=group_context,
+                )
+
+            # 更新 token 统计（并行发送模式下 result 为 None）
+            if result:
+                _update_web_token_stats(server, result.usage, session_id, result.metadata)
 
             # === AI 完成后，记录 Gateway 事件（Web 异步场景）===
             if result and hasattr(result, 'final_content') and result.final_content:
