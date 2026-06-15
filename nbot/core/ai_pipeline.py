@@ -679,6 +679,8 @@ class AIPipeline:
             if ctx and ctx.chat_request:
                 payload["channel"] = getattr(ctx.chat_request, "channel", "")
                 payload["content_preview"] = getattr(ctx.chat_request, "content", "")[:100]
+            if extra_payload:
+                payload.update(extra_payload)
             event = RuntimeEvent(
                 type=event_type,
                 source="ai_pipeline",
@@ -905,7 +907,9 @@ class AIPipeline:
                 )
 
         # PromptStack 合成最终 system prompt
+        self._emit_hook("prompt.before_render", ctx)
         composed_system = ctx.prompt_stack.render(base_prompt)
+        self._emit_hook("prompt.after_render", ctx)
         messages_for_ai = [
             {"role": "system", "content": composed_system},
             *history_messages,
@@ -1474,10 +1478,12 @@ class AIPipeline:
         def on_tool_start(tool_call, thinking, iteration, messages):
             name = tool_call.get("name", "")
             args = tool_call.get("arguments", {})
+            self._emit_hook("tool.before_call", ctx, extra_payload={"tool_name": name, "tool_args": args})
             progress.on_tool_start(ctx, name, args, thinking)
 
         def on_tool_result(tool_call, result, thinking, iteration, messages):
             name = tool_call.get("name", "")
+            self._emit_hook("tool.after_call", ctx, extra_payload={"tool_name": name, "tool_result": str(result)[:200]})
             progress.on_tool_done(ctx, name, result, thinking)
             # 处理特殊工具结果
             if result.get("_send_message"):
@@ -1590,6 +1596,7 @@ class AIPipeline:
                 if not full_content:
                     # 首块
                     msg = {"role": "assistant", "content": "", "id": message_id}
+                    self._emit_hook("model.on_stream_chunk", ctx)
                     callbacks.on_stream_start(ctx, msg)
                     ctx.streamed_message = msg
 

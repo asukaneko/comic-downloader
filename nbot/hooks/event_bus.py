@@ -17,6 +17,41 @@ from nbot.hooks.models import RuntimeEvent
 _log = logging.getLogger(__name__)
 
 
+# 文档事件名 → 代码实际事件名 的别名映射
+# 用户在 Hook 里写文档名，也能匹配到代码实际 emit 的事件
+_EVENT_ALIASES: Dict[str, List[str]] = {
+    "pipeline.before_model_call": ["model.before_call"],
+    "pipeline.after_model_call": ["model.after_call"],
+    "pipeline.before_reply_send": ["reply.before_send"],
+    "pipeline.after_reply_send": ["reply.after_send"],
+    "pipeline.before_prompt_render": ["prompt.before_render"],
+    "pipeline.after_prompt_render": ["prompt.after_render"],
+    "pipeline.stream_chunk": ["model.on_stream_chunk"],
+    "character.before_turn.after_memory_retrieve": ["character.after_memory_retrieve"],
+    "character.before_turn.after_world_book_match": ["character.after_world_book_match"],
+    "character.before_turn.after_reaction_plan": ["character.after_reaction_plan"],
+    "character.after_turn.after_state_update": ["character.after_state_update"],
+}
+
+# 反向映射：代码名 → 文档名（用于展示）
+_CODE_TO_DOC: Dict[str, str] = {}
+for _doc_name, _code_names in _EVENT_ALIASES.items():
+    for _code_name in _code_names:
+        _CODE_TO_DOC[_code_name] = _doc_name
+
+
+def normalize_event_alias(event_name: str) -> str:
+    """将事件名归一化为代码实际使用的名称。
+
+    如果传入的是文档别名（如 pipeline.before_model_call），返回代码名（如 model.before_call）。
+    如果传入的已经是代码名，原样返回。
+    """
+    code_names = _EVENT_ALIASES.get(event_name)
+    if code_names:
+        return code_names[0]
+    return event_name
+
+
 def match_event_pattern(pattern: str, event_type: str) -> bool:
     """Match event type against pattern with wildcard support."""
     if pattern == "*":
@@ -24,7 +59,18 @@ def match_event_pattern(pattern: str, event_type: str) -> bool:
     if pattern.endswith(".*"):
         prefix = pattern[:-2]
         return event_type.startswith(prefix + ".")
-    return pattern == event_type
+    # 直接匹配
+    if pattern == event_type:
+        return True
+    # 别名匹配：用户写的文档名 → 代码实际事件名
+    aliases = _EVENT_ALIASES.get(pattern, [])
+    if event_type in aliases:
+        return True
+    # 反向别名匹配：代码名做 pattern，文档名做 event_type
+    reverse_aliases = _EVENT_ALIASES.get(event_type, [])
+    if pattern in reverse_aliases:
+        return True
+    return False
 
 
 class HookEventType(str, Enum):

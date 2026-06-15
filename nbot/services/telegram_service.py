@@ -369,7 +369,15 @@ def answer_telegram_update(
     callbacks = TelegramCallbacks(server, token, parsed)
 
     pipeline = AIPipeline()
-    result = pipeline.process(ctx, callbacks)
+
+    hook_runtime = None
+    try:
+        from nbot.hooks.manager import get_hook_manager
+        hook_runtime = get_hook_manager()
+    except Exception:
+        pass
+
+    result = pipeline.process(ctx, callbacks, hook_runtime=hook_runtime)
 
     # 返回飞书格式兼容的结果（调用方期望 Dict）
     return {"ok": True, "result": result.final_content}
