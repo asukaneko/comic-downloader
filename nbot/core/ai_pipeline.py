@@ -1001,8 +1001,29 @@ class AIPipeline:
             if not speaker_id:
                 return
 
+            # 加载当前发言角色的完整角色卡
+            full_profile = None
+            try:
+                from nbot.character.repository import ProfileRepository
+                import os
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                repo = ProfileRepository(base_dir)
+                full_profile = repo.get(speaker_id)
+            except Exception as e:
+                _log.debug("group prompt: failed to load full profile for %s: %s", speaker_id, e)
+
+            # 如果 ProfileRepository 找不到，尝试从 custom_presets_map 中查找
+            if not full_profile:
+                custom_presets_map = group_context.get("custom_presets_map", {})
+                preset_data = custom_presets_map.get(speaker_id)
+                if preset_data:
+                    from nbot.character.models import CharacterProfile
+                    full_profile = CharacterProfile.from_personality_dict(preset_data)
+                    _log.info("group prompt: loaded full profile for '%s' from custom_presets_map", speaker_id)
+
             group_prompt = scheduler.build_group_system_prompt(
                 conversation, profiles, speaker_id,
+                full_profile=full_profile,
             )
 
             # Inject into prompt_stack

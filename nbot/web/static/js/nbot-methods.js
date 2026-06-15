@@ -5907,6 +5907,11 @@ def main(params):
                     if (this.showRuntimePanel) {
                         this.loadCharacterStatus();
                     }
+
+                    // 群聊模式：加载可用角色列表（供会话详情视图使用）
+                    if (session.session_mode === 'group' && session.group_id) {
+                        this.loadGroupEditCharacters();
+                    }
                 },
                 
                 async switchChatTab(tab) {
@@ -6226,6 +6231,72 @@ def main(params):
                         this.showToast('创建群聊失败: ' + (e.response?.data?.error || e.message), 'error');
                     } finally {
                         this.isLoading = false;
+                    }
+                },
+
+                // 群聊角色编辑
+                groupEditCharacters: [],
+
+                async loadGroupEditCharacters() {
+                    try {
+                        console.debug('[GroupEdit] Loading group edit characters...');
+                        console.debug('[GroupEdit] customPersonalityPresets exists:', !!this.customPersonalityPresets);
+                        console.debug('[GroupEdit] customPersonalityPresets length:', this.customPersonalityPresets?.length || 0);
+                        if (!this.customPersonalityPresets || this.customPersonalityPresets.length === 0) {
+                            console.debug('[GroupEdit] customPersonalityPresets empty, loading...');
+                            await this.loadCustomPersonalityPresets();
+                            console.debug('[GroupEdit] After load, customPersonalityPresets length:', this.customPersonalityPresets?.length || 0);
+                        }
+                        this.groupEditCharacters = (this.customPersonalityPresets || []).map(c => ({
+                            id: c.id,
+                            name: c.name || c.id,
+                            avatar: c.avatar || '',
+                            portrait: c.portrait || '',
+                            description: c.description || '',
+                        }));
+                        console.debug('[GroupEdit] groupEditCharacters loaded:', this.groupEditCharacters.length);
+                    } catch (e) {
+                        console.error('[GroupEdit] Error:', e);
+                        this.groupEditCharacters = [];
+                    }
+                },
+
+                toggleEditGroupCharacter(characterId) {
+                    // 支持 editingSession（编辑弹窗）和 viewingSession（会话详情）
+                    const session = this.showEditSessionModal ? this.editingSession : this.viewingSession;
+                    if (!session) return;
+                    if (!session.character_ids) {
+                        session.character_ids = [];
+                    }
+                    const ids = session.character_ids;
+                    const idx = ids.indexOf(characterId);
+                    if (idx >= 0) {
+                        ids.splice(idx, 1);
+                    } else {
+                        ids.push(characterId);
+                    }
+                },
+
+                async saveGroupCharacters() {
+                    if (!this.viewingSession?.id) return;
+                    const charIds = this.viewingSession.character_ids || [];
+                    if (!charIds.length) {
+                        this.showToast('请至少保留一个角色', 'warning');
+                        return;
+                    }
+                    try {
+                        await api.put(`/api/sessions/${this.viewingSession.id}`, {
+                            character_ids: charIds,
+                        });
+                        // 同步到本地 sessions 列表
+                        const idx = this.sessions.findIndex(s => s.id === this.viewingSession.id);
+                        if (idx >= 0) {
+                            this.sessions[idx].character_ids = [...charIds];
+                        }
+                        this.showToast('群聊角色已更新', 'success');
+                    } catch (e) {
+                        console.error('Failed to save group characters:', e);
+                        this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
                     }
                 },
 
@@ -8205,9 +8276,12 @@ def main(params):
                                     timestamp: msg.timestamp || msg.created_at || msg.updated_at || fallbackSessionTime,
                                 };
                             });
+                        // 保留 character_ids：优先用 fullSession 的，其次用 baseSession 的
+                        const mergedCharacterIds = fullSession.character_ids || baseSession.character_ids || [];
                         this.editingSession = {
                             ...this.editingSession,
                             ...fullSession,
+                            character_ids: mergedCharacterIds,
                             tags: [...(fullSession.tags || this.editingSession.tags || [])],
                             tagsText: (fullSession.tags || this.editingSession.tags || []).join(', '),
                             favorite: !!fullSession.favorite,
@@ -8225,6 +8299,10 @@ def main(params):
                                 ])
                             ),
                         };
+                        // 群聊模式：加载可用角色列表（在 editingSession 完整数据就绪后）
+                        if (this.editingSession.session_mode === 'group' && this.editingSession.group_id) {
+                            await this.loadGroupEditCharacters();
+                        }
                         this.editingNewMessage.insertTarget = editableMessages.length
                             ? editableMessages.length
                             : 0;
@@ -14549,10 +14627,12 @@ def main(params):
                         if (this.currentSession && data.session_id === this.currentSession.id) {
                             const existingIdx = this.currentMessages.findIndex(m => m.id === data.message.id);
                             const msg = { ...data.message, content: '', is_streaming: true };
-                            this.activeStreamMessages[data.session_id] = data.message.id;
-                            delete this.completedStreamMessages[data.session_id];
+                            // 群聊并行流：用 sender 区分不同角色的流
+                            const streamKey = data.message?.sender ? `${data.session_id}:${data.message.sender}` : data.session_id;
+                            this.activeStreamMessages[streamKey] = data.message.id;
+                            delete this.completedStreamMessages[streamKey];
                             if (!this.streamMessageSessions) this.streamMessageSessions = {};
-                            this.streamMessageSessions[data.message.id] = data.session_id;
+                            this.streamMessageSessions[data.message.id] = streamKey;
                             this.streamTypeQueues[data.message.id] = [];
                             this.streamEndPending[data.message.id] = false;
                             if (this.streamTypeTimers[data.message.id]) {
@@ -14574,7 +14654,9 @@ def main(params):
 
                     socket.on('ai_stream_chunk', (data) => {
                         if (this.currentSession && data.session_id === this.currentSession.id) {
-                            const activeMessageId = this.activeStreamMessages[data.session_id];
+                            // 群聊并行流：优先用 sender 匹配，再 fallback 到 session_id
+                            const senderKey = data.sender ? `${data.session_id}:${data.sender}` : data.session_id;
+                            const activeMessageId = this.activeStreamMessages[senderKey] || this.activeStreamMessages[data.session_id];
                             const hasEventMessage = this.currentMessages.some(m => m.id === data.message_id);
                             const targetMessageId = hasEventMessage ? data.message_id : activeMessageId;
                             const msgIdx = this.currentMessages.findIndex(m => m.id === targetMessageId);
@@ -14583,13 +14665,13 @@ def main(params):
                             } else {
                                 console.log('[Stream] 未找到消息，创建占位消息:', data.message_id);
                                 const fallbackMessageId = data.message_id || `stream-${Date.now()}`;
-                                this.activeStreamMessages[data.session_id] = fallbackMessageId;
+                                this.activeStreamMessages[senderKey] = fallbackMessageId;
                                 if (!this.streamMessageSessions) this.streamMessageSessions = {};
-                                this.streamMessageSessions[fallbackMessageId] = data.session_id;
+                                this.streamMessageSessions[fallbackMessageId] = senderKey;
                                 this.currentMessages.push({
                                     id: fallbackMessageId,
                                     role: 'assistant',
-                                    sender: 'AI',
+                                    sender: data.sender || 'AI',
                                     content: '',
                                     is_streaming: true,
                                     timestamp: new Date().toISOString(),
@@ -14605,9 +14687,11 @@ def main(params):
                     socket.on('ai_stream_end', (data) => {
                         console.log('[Stream] AI stream end:', data);
                         const finishedSessionId = data?.session_id || this.loadingSessionId || this.currentSession?.id;
+                        // 群聊并行流：优先用 sender 匹配
+                        const senderKey = data?.sender ? `${finishedSessionId}:${data.sender}` : finishedSessionId;
                         const finishedMessageId = data?.message_id && this.currentMessages.some(m => m.id === data.message_id)
                             ? data.message_id
-                            : this.activeStreamMessages[finishedSessionId];
+                            : (this.activeStreamMessages[senderKey] || this.activeStreamMessages[finishedSessionId]);
                         if (finishedMessageId) {
                             this.streamEndPending[finishedMessageId] = true;
                             this.isTyping = false;

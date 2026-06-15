@@ -9738,6 +9738,37 @@
                         </div>
                     </div>
 
+                    <!-- 群聊角色编辑 -->
+                    <div class="form-section" v-if="viewingSession.session_mode === 'group' && viewingSession.group_id">
+                        <div class="form-section-title">
+                            <i class="fas fa-users" style="color: var(--accent-primary);"></i> 群聊参与角色
+                        </div>
+                        <div class="bind-character-list gc-char-select" style="max-height: 200px; overflow-y: auto;">
+                            <div v-for="ch in (groupEditCharacters || [])" :key="ch.id"
+                                 class="bind-character-item"
+                                 :class="{ active: (viewingSession.character_ids || []).includes(ch.name) }"
+                                 @click="toggleEditGroupCharacter(ch.name)">
+                                <div class="bind-character-portrait">
+                                    <img v-if="ch.portrait" :src="ch.portrait">
+                                    <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                </div>
+                                <div class="bind-character-info">
+                                    <div class="bind-character-name">{{ ch.name }}</div>
+                                    <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
+                                </div>
+                                <i v-if="(viewingSession.character_ids || []).includes(ch.name)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                            </div>
+                            <div v-if="!(groupEditCharacters || []).length" class="gc-char-empty">
+                                <i class="fas fa-user-slash"></i> 暂无可用角色
+                            </div>
+                        </div>
+                        <button class="gc-btn gc-btn-primary" style="margin-top: 8px; width: 100%;"
+                                @click="saveGroupCharacters()"
+                                :disabled="!(viewingSession.character_ids || []).length">
+                            <i class="fas fa-save"></i> 保存角色变更
+                        </button>
+                    </div>
+
                     <!-- 系统提示词 -->
                     <div class="form-section" v-if="viewingSession.type === 'web' && !viewingSession.read_only && !viewingSession.is_archive">
                         <div class="form-section-title">
@@ -10105,6 +10136,32 @@
                                     </button>
                                 </div>
                             </div>
+                            <!-- 群聊角色编辑 -->
+                            <div v-if="editingSession.session_mode === 'group' && editingSession.group_id" class="form-section" style="margin-top: 16px;">
+                                <div class="form-section-title">
+                                    <i class="fas fa-users" style="color: var(--accent-primary);"></i> 群聊参与角色
+                                </div>
+                                <div class="bind-character-list gc-char-select" style="max-height: 200px; overflow-y: auto;">
+                                    <div v-for="ch in (groupEditCharacters || [])" :key="ch.id"
+                                         class="bind-character-item"
+                                         :class="{ active: (editingSession.character_ids || []).includes(ch.name) }"
+                                         @click="toggleEditGroupCharacter(ch.name)">
+                                        <div class="bind-character-portrait">
+                                            <img v-if="ch.portrait" :src="ch.portrait">
+                                            <i v-else :class="ch.avatar || 'fas fa-user-circle'"></i>
+                                        </div>
+                                        <div class="bind-character-info">
+                                            <div class="bind-character-name">{{ ch.name }}</div>
+                                            <div class="bind-character-desc" v-if="ch.description">{{ ch.description }}</div>
+                                        </div>
+                                        <i v-if="(editingSession.character_ids || []).includes(ch.name)" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                                    </div>
+                                    <div v-if="!(groupEditCharacters || []).length" class="gc-char-empty">
+                                        <i class="fas fa-user-slash"></i> 暂无可用角色
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- TTS 语音合成设置 -->
                             <div class="form-section-title" style="margin-top: 16px;">
                                 <i class="fas fa-volume-up"></i> TTS 语音合成

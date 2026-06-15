@@ -326,7 +326,11 @@ def update_state_from_recent_turns(
         conversation_id=conversation_id,
         session_id=session_id,
     )
-    _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0) + 1
+
+    # 群聊模式：只有当一轮完整对话（用户提问 + 所有角色回复）完成后才增加计数器
+    is_group_round_complete = bool(metadata.get("group_round_complete", False))
+
+    # 添加到缓冲区（无论是否完成一轮）
     _STATE_TURN_BUFFER.setdefault(key, []).append(
         {
             "user": user_message,
@@ -334,6 +338,12 @@ def update_state_from_recent_turns(
         }
     )
     _STATE_TURN_BUFFER[key] = _STATE_TURN_BUFFER[key][-_STATE_TURN_WINDOW:]
+
+    # 群聊模式下，只有轮次完成才增加计数器；普通模式每次都增加
+    if is_group_round_complete:
+        _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0) + 1
+    else:
+        _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0)
 
     if _STATE_TURN_COUNTERS[key] < _STATE_TURN_INTERVAL:
         return state, relationship, False

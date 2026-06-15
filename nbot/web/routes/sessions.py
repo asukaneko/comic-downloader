@@ -653,6 +653,8 @@ def register_session_routes(app, server):
                     "proactive_chat": _normalize_proactive_chat_config(session.get("proactive_chat")),
                     "tts_config": _normalize_tts_config(session.get("tts_config")),
                     "session_mode": session.get("session_mode", "character"),
+                    "group_id": session.get("group_id", ""),
+                    "character_ids": session.get("character_ids", []),
                     "character_runtime_snapshot": session.get("character_runtime_snapshot"),
                     "character_runtime_timeline": timeline,
                     "custom_prompts": session.get("custom_prompts", []),
@@ -945,6 +947,24 @@ def register_session_routes(app, server):
             session["disabled_prompt_keys"] = data.get("disabled_prompt_keys") or []
         if "tts_config" in data:
             session["tts_config"] = _normalize_tts_config(data.get("tts_config"))
+
+        # 群聊模式：更新参与角色列表
+        if "character_ids" in data and session.get("session_mode") == "group":
+            new_ids = data["character_ids"]
+            if isinstance(new_ids, list):
+                session["character_ids"] = new_ids
+                # 同步到 GroupManager
+                group_id = session.get("group_id")
+                if group_id:
+                    try:
+                        from nbot.group.manager import get_group_manager
+                        gm = get_group_manager()
+                        group = gm.get_group(group_id)
+                        if group:
+                            group.character_ids = list(new_ids)
+                            gm._save()
+                    except Exception as exc:
+                        _log.warning("Failed to sync group character_ids: %s", exc)
 
         new_prompt = data.get("system_prompt", session.get("system_prompt", ""))
         if new_prompt != session.get("system_prompt", ""):

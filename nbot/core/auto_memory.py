@@ -305,6 +305,13 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
     character_name = memory_context.get("character_name", "")
     target_id = memory_context.get("target_id", "")
     session_id = memory_context.get("session_id", "")
+
+    # 群聊模式：优先使用当前发言角色名，避免记忆混用"群聊"角色名
+    if hasattr(ctx, 'metadata') and ctx.metadata:
+        speaker_name = str(ctx.metadata.get("group_speaker_name") or "").strip()
+        if speaker_name:
+            character_name = speaker_name
+
     if not character_name and not target_id:
         _log.warning("[AutoMemory] 跳过: character_name和target_id都为空，无法建立记忆关联")
         return 0
@@ -313,15 +320,26 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
     # session_id 用于区分 Web 端同一角色的不同会话
     parts = [p for p in (character_name, target_id, session_id) if p]
     counter_key = ":".join(parts) if parts else "default"
-    turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0) + 1
-    _MEMORY_TURN_COUNTERS[counter_key] = turn_count
 
+    # 群聊模式：只有当一轮完整对话（用户提问 + 所有角色回复）完成后才增加计数器
+    is_group_round_complete = False
+    if hasattr(ctx, 'metadata') and ctx.metadata:
+        is_group_round_complete = bool(ctx.metadata.get("group_round_complete", False))
+
+    # 添加到缓冲区（无论是否完成一轮）
     if counter_key not in _MEMORY_TURN_BUFFER:
         _MEMORY_TURN_BUFFER[counter_key] = []
     _MEMORY_TURN_BUFFER[counter_key].append({
         "user": user_message,
         "assistant": assistant_message,
     })
+
+    # 群聊模式下，只有轮次完成才增加计数器；普通模式每次都增加
+    if is_group_round_complete:
+        turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0) + 1
+        _MEMORY_TURN_COUNTERS[counter_key] = turn_count
+    else:
+        turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0)
 
     if turn_count < _MEMORY_TURN_INTERVAL:
         return 0
