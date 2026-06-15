@@ -27524,7 +27524,7 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     position: relative;
     display: flex;
     flex-direction: row;
-    gap: 6px;
+    gap: 8px;
     flex: 1 1 auto;
     min-width: 0;
     max-height: none;
@@ -27541,13 +27541,13 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 .plot-choice-card {
     position: relative;
     display: grid;
-    flex: 0 1 220px;
+    flex: 0 1 450px;
     grid-template-columns: minmax(0, 1fr) 12px;
     gap: 6px;
     align-items: center;
-    min-width: 150px;
+    min-width: 300px;
     min-height: 34px;
-    padding: 6px 8px 6px 10px;
+    padding: 8px 10px 8px 12px;
     border: 1px solid rgba(190, 206, 230, 0.12);
     border-radius: 999px;
     background: rgba(7, 13, 22, 0.38);
@@ -27616,10 +27616,9 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 .plot-choice-text {
     margin: 0;
     color: rgba(248, 251, 255, 0.96);
-    display: -webkit-box;
     overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 12px;
     font-weight: 650;
     line-height: 1.35;

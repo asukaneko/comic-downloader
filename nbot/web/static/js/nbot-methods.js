@@ -14804,8 +14804,13 @@ def main(params):
 
                     // 监听剧情选项
                     socket.on('plot_choices', (data) => {
+                        console.log('[PlotChoices] 收到剧情选项事件:', data);
+                        console.log('[PlotChoices] 当前会话ID:', this.currentSession?.id);
                         if (data && data.choices && data.session_id === this.currentSession?.id) {
+                            console.log('[PlotChoices] 更新选项:', data.choices);
                             this.plotChoices = this.normalizePlotChoices(data.choices);
+                        } else {
+                            console.log('[PlotChoices] 条件不满足，未更新选项');
                         }
                     });
                 },
@@ -16575,8 +16580,8 @@ def main(params):
             this.showToast('剧情选项内容为空', 'warning');
             return;
         }
+        // 点击选项后填入输入框，但不隐藏选项（可点击其他选项覆盖）
         this.inputMessage = choiceText;
-        this.plotChoices = [];
         this.$nextTick(() => {
             if (this.$refs.chatInput) {
                 this.$refs.chatInput.focus();
