@@ -7914,20 +7914,14 @@
 
                     <!-- TTS Playground -->
                     <div v-if="currentPage === 'tts-playground'" class="fade-in">
-                        <!-- Hero Header -->
-                        <div class="ai-config-hero" style="margin-bottom: 24px;">
-                            <div class="ai-config-hero-content">
-                                <div class="ai-config-hero-text">
-                                    <h2 class="ai-config-hero-title">
-                                        <i class="fas fa-headphones" style="color: var(--primary-color);"></i>
-                                        {{ $t('tts_playground.title') }}
-                                    </h2>
-                                    <p class="ai-config-hero-subtitle">{{ $t('tts_playground.subtitle') }}</p>
+                        <div v-if="ttsPlayground.models && ttsPlayground.models.length" class="card tts-glass-card" style="margin-bottom: 16px;">
+                            <div class="tts-card-header" style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fas fa-headphones" style="color: var(--accent-primary); font-size: 18px;"></i>
+                                <div>
+                                    <div class="card-title" style="font-size: 17px; font-weight: 700;">{{ $t('tts_playground.title') }}</div>
+                                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">{{ $t('tts_playground.subtitle') }}</div>
                                 </div>
                             </div>
-                        </div>
-
-                        <div v-if="ttsPlayground.models && ttsPlayground.models.length" class="card tts-glass-card" style="margin-bottom: 16px;">
                             <div class="card-body">
                                 <div class="form-group" style="margin-bottom: 0;">
                                     <label class="form-label">

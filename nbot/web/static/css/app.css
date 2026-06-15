@@ -2427,6 +2427,10 @@
         .chat-empty-state {
             gap: 12px;
             padding: 32px;
+            background: transparent !important;
+            border-radius: 0 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
         }
 
         .chat-empty-state .empty-state-icon {
@@ -2476,6 +2480,7 @@
             height: 100%;
             padding: 32px;
             overflow-y: auto;
+            background: transparent;
         }
 
         .chat-home-character-section {
@@ -9797,6 +9802,20 @@
             box-shadow: 0 18px 38px rgba(15, 23, 42, 0.14);
         }
 
+        [data-theme="light"] .file-menu-context-panel {
+            background: linear-gradient(180deg, rgba(241, 245, 249, 0.6), transparent);
+            border-bottom-color: rgba(203, 213, 225, 0.5);
+        }
+
+        [data-theme="light"] .file-menu-context-ring span {
+            color: #1f2937;
+        }
+
+        [data-theme="light"] .file-menu-context-stats > div {
+            background: rgba(241, 245, 249, 0.5);
+            border-color: rgba(203, 213, 225, 0.5);
+        }
+
         /* 工作区浏览器模态框 */
         .workspace-browser-modal {
             width: 600px;
@@ -10250,6 +10269,26 @@
         .context-tooltip .compress-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        /* Context Indicator — Light Theme */
+        [data-theme="light"] .context-indicator .progress-ring-bg {
+            stroke: #cbd5e1;
+            opacity: 0.5;
+        }
+
+        [data-theme="light"] .context-indicator .percentage {
+            color: #1f2937;
+        }
+
+        [data-theme="light"] .context-tooltip {
+            background: rgba(255, 255, 255, 0.96);
+            border-color: rgba(203, 213, 225, 0.7);
+            box-shadow: 0 8px 28px rgba(71, 85, 105, 0.12);
+        }
+
+        [data-theme="light"] .context-tooltip .stat-item {
+            background: rgba(241, 245, 249, 0.6);
         }
 
         /* Tables */
@@ -26566,6 +26605,10 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
             margin-bottom: 24px;
             gap: 16px;
             flex-wrap: wrap;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px 24px;
         }
         .settings-header-left {
             flex: 1;
@@ -26662,6 +26705,10 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
         }
         .settings-section-header {
             margin-bottom: 18px;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            padding: 20px 24px;
         }
         .settings-section-title {
             font-size: 17px;
@@ -27215,6 +27262,130 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
             color: var(--text-secondary);
         }
 
+        /* --- Settings Light Theme --- */
+        [data-theme="light"] .settings-header,
+        [data-theme="light"] .settings-section-header {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.74);
+            box-shadow: 0 18px 48px rgba(71, 85, 105, 0.1);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+
+        [data-theme="light"] .settings-card {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.74);
+            box-shadow: 0 18px 48px rgba(71, 85, 105, 0.1);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+
+        [data-theme="light"] .settings-tabs {
+            background: rgba(248, 251, 255, 0.88);
+            border-color: rgba(203, 213, 225, 0.72);
+        }
+
+        [data-theme="light"] .settings-tab.active {
+            background: var(--accent-primary);
+            color: #fff;
+        }
+
+        [data-theme="light"] .settings-section-title {
+            color: #1f2937;
+        }
+
+        [data-theme="light"] .settings-section-desc {
+            color: #526173;
+        }
+
+        [data-theme="light"] .settings-header-title {
+            color: #1f2937;
+        }
+
+        [data-theme="light"] .settings-header-desc {
+            color: #526173;
+        }
+
+        /* --- Settings Sub-components Light Theme --- */
+
+        /* Feature Toggle Cards */
+        [data-theme="light"] .setting-toggle-card {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.7);
+        }
+
+        [data-theme="light"] .setting-toggle-card.is-on {
+            background: rgba(243, 240, 255, 0.92);
+            border-color: rgba(139, 92, 246, 0.25);
+        }
+
+        [data-theme="light"] .setting-toggle-icon {
+            background: rgba(0, 0, 0, 0.04);
+        }
+
+        [data-theme="light"] .setting-toggle-card.is-on .setting-toggle-icon {
+            background: rgba(139, 92, 246, 0.12);
+        }
+
+        /* Toggle Switch */
+        [data-theme="light"] .toggle-slider {
+            background: #cbd5e1;
+        }
+
+        [data-theme="light"] .toggle-switch input:checked + .toggle-slider {
+            background: var(--accent-primary);
+        }
+
+        /* Data Maintenance */
+        [data-theme="light"] .maintenance-summary {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.7);
+        }
+
+        [data-theme="light"] .sticker-prob-row {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.7);
+        }
+
+        /* Config Transfer */
+        [data-theme="light"] .config-transfer-side {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.7);
+        }
+
+        [data-theme="light"] .config-transfer-note {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(203, 213, 225, 0.6);
+        }
+
+        /* SSL Section */
+        [data-theme="light"] .ssl-file-item {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.7);
+        }
+
+        [data-theme="light"] .ssl-editor {
+            background: rgba(248, 251, 255, 0.9);
+            border-color: rgba(203, 213, 225, 0.7);
+        }
+
+        [data-theme="light"] .upload-zone {
+            background: rgba(241, 245, 249, 0.6);
+            border-color: rgba(203, 213, 225, 0.6);
+        }
+
+        /* Danger Zone */
+        [data-theme="light"] .danger-zone-card {
+            background: rgba(255, 252, 252, 0.92);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        /* Update Release Notes */
+        [data-theme="light"] .update-release-notes {
+            background: rgba(241, 245, 249, 0.8);
+            border-color: rgba(203, 213, 225, 0.6);
+        }
+
         /* --- Responsive adjustments --- */
         @media (max-width: 768px) {
             .settings-header {
@@ -27672,6 +27843,76 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 }
 
 .plot-mode-hint { text-align: center; padding: 4px 16px; }
+
+/* Plot Mode — Light Theme */
+[data-theme="light"] .plot-choices-group {
+    background: rgba(248, 251, 255, 0.92);
+    border-color: rgba(203, 213, 225, 0.7);
+    box-shadow: 0 8px 28px rgba(71, 85, 105, 0.1);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+[data-theme="light"] .plot-choices-group::before {
+    background:
+        radial-gradient(circle at 18% 0%, rgba(99, 102, 241, 0.08), transparent 32%),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.5), transparent 36%);
+}
+
+[data-theme="light"] .plot-choices-header {
+    color: #1f2937;
+}
+
+[data-theme="light"] .plot-choices-title {
+    background: rgba(0, 0, 0, 0.05);
+    color: #374151;
+}
+
+[data-theme="light"] .plot-mode-toggle {
+    border-color: rgba(0, 0, 0, 0.1);
+    background: rgba(0, 0, 0, 0.04);
+    color: #6b7280;
+}
+
+[data-theme="light"] .plot-mode-toggle:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: #1f2937;
+}
+
+[data-theme="light"] .plot-choice-card {
+    border-color: rgba(203, 213, 225, 0.6);
+    background: rgba(255, 255, 255, 0.7);
+    color: #1f2937;
+}
+
+[data-theme="light"] .plot-choice-card:hover {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: color-mix(in srgb, var(--plot-accent, #6b7280) 62%, transparent);
+    box-shadow: 0 6px 20px rgba(71, 85, 105, 0.12);
+}
+
+[data-theme="light"] .plot-choice-text {
+    color: #1f2937;
+}
+
+[data-theme="light"] .plot-choice-normal { --plot-accent: #4a7c8f; }
+[data-theme="light"] .plot-choice-important { --plot-accent: #c25560; }
+[data-theme="light"] .plot-choice-turning,
+[data-theme="light"] .plot-choice-turning_point {
+    --plot-accent: #7c3aed;
+}
+
+[data-theme="light"] .plot-free-action {
+    border-color: rgba(0, 0, 0, 0.12);
+    background: rgba(0, 0, 0, 0.03);
+    color: #6b7280;
+}
+
+[data-theme="light"] .plot-free-action:hover {
+    border-color: rgba(0, 0, 0, 0.2);
+    background: rgba(0, 0, 0, 0.06);
+    color: #1f2937;
+}
 
 /* Plot Graph Modal */
 .plot-graph-overlay {
