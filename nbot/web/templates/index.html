@@ -8650,43 +8650,6 @@
             </div>
         </div>
 
-        <!-- 绑定角色模态框 -->
-        <div v-if="showBindCharacterModal" class="modal-overlay" :class="{ 'modal-overlay-top': bindingFromEdit }" @click.self="showBindCharacterModal = false">
-            <div class="modal" style="max-width: 480px;">
-                <div class="modal-header">
-                    <span class="modal-title"><i class="fas fa-user-plus"></i> 绑定角色</span>
-                    <button class="modal-close" @click="showBindCharacterModal = false"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="modal-body">
-                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">选择一个角色绑定到当前会话，绑定后 AI 将使用该角色的设定进行对话。</p>
-                    <div class="bind-character-list">
-                        <div v-for="preset in customPersonalityPresets" :key="preset.id"
-                             class="bind-character-item"
-                             :class="{ active: bindCharacterSelectedId === preset.id }"
-                             @click="bindCharacterSelectedId = preset.id">
-                            <div class="bind-character-portrait">
-                                <img v-if="preset.portrait" :src="preset.portrait">
-                                <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
-                            </div>
-                            <div class="bind-character-info">
-                                <div class="bind-character-name">{{ preset.name }}</div>
-                                <div class="bind-character-desc">{{ preset.description || '自定义角色卡' }}</div>
-                            </div>
-                            <i v-if="bindCharacterSelectedId === preset.id" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
-                        </div>
-                        <div v-if="customPersonalityPresets.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
-                            暂无角色卡，请先创建
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @click="showBindCharacterModal = false">取消</button>
-                    <button class="btn btn-primary" @click="bindCharacterToSession" :disabled="!bindCharacterSelectedId || isBindingCharacter">
-                        <i class="fas fa-link" :class="{ 'fa-spin': isBindingCharacter }"></i> 绑定
-                    </button>
-                </div>
-            </div>
-        </div>
 
         <!-- AI总结弹窗 -->
         <div v-if="showAiSummaryModal" class="modal-overlay" @click.self="showAiSummaryModal = false">
@@ -10114,7 +10077,7 @@
                                 <label class="form-label">系统提示词</label>
                                 <textarea v-model="editingSession.system_prompt" class="form-textarea edit-session-system-prompt" rows="6"></textarea>
                             </div>
-                            <div class="form-group">
+                            <div v-if="editingSession.session_mode !== 'group'" class="form-group">
                                 <label class="form-label">绑定角色</label>
                                 <div class="edit-session-character-card">
                                     <div class="bind-character-portrait">
@@ -10154,6 +10117,9 @@
                                         <i class="fas fa-user-slash"></i> 暂无可用角色
                                     </div>
                                 </div>
+                                <button class="btn btn-primary btn-small" style="margin-top: 10px; align-self: flex-start;" @click="saveGroupCharacters" :disabled="isSavingGroupCharacters">
+                                    <i class="fas fa-save" :class="{ 'fa-spin': isSavingGroupCharacters }"></i> 保存角色
+                                </button>
                             </div>
 
                             <!-- TTS 语音合成设置 -->
@@ -10264,6 +10230,44 @@
                     <button class="btn btn-primary" @click="saveSessionEdit" :disabled="isLoading">
                         <span v-if="isLoading"><div class="spinner" style="display: inline-block; margin-right: 8px;"></div>保存中...</span>
                         <span v-else>保存</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 绑定角色模态框 -->
+        <div v-if="showBindCharacterModal" class="modal-overlay" :class="{ 'modal-overlay-top': bindingFromEdit }" @click.self="showBindCharacterModal = false">
+            <div class="modal" style="max-width: 480px;">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-user-plus"></i> 绑定角色</span>
+                    <button class="modal-close" @click="showBindCharacterModal = false"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="modal-body">
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 12px;">选择一个角色绑定到当前会话，绑定后 AI 将使用该角色的设定进行对话。</p>
+                    <div class="bind-character-list">
+                        <div v-for="preset in customPersonalityPresets" :key="preset.id"
+                             class="bind-character-item"
+                             :class="{ active: bindCharacterSelectedId === preset.id }"
+                             @click="bindCharacterSelectedId = preset.id">
+                            <div class="bind-character-portrait">
+                                <img v-if="preset.portrait" :src="preset.portrait">
+                                <i v-else :class="preset.avatar || 'fas fa-user-circle'"></i>
+                            </div>
+                            <div class="bind-character-info">
+                                <div class="bind-character-name">{{ preset.name }}</div>
+                                <div class="bind-character-desc">{{ preset.description || '自定义角色卡' }}</div>
+                            </div>
+                            <i v-if="bindCharacterSelectedId === preset.id" class="fas fa-check-circle" style="color: var(--accent-primary);"></i>
+                        </div>
+                        <div v-if="customPersonalityPresets.length === 0" style="text-align: center; padding: 20px; color: var(--text-muted);">
+                            暂无角色卡，请先创建
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="showBindCharacterModal = false">取消</button>
+                    <button class="btn btn-primary" @click="bindCharacterToSession" :disabled="!bindCharacterSelectedId || isBindingCharacter">
+                        <i class="fas fa-link" :class="{ 'fa-spin': isBindingCharacter }"></i> 绑定
                     </button>
                 </div>
             </div>
@@ -11410,6 +11414,7 @@
                     showBindCharacterModal: false,
                     bindCharacterSelectedId: null,
                     isBindingCharacter: false,
+                    isSavingGroupCharacters: false,
                     isSyncingCharacterCard: false,
                     thinkingCards: [],  // 进度卡片列表
                     showThinkingCard: localStorage.getItem('showThinkingCard') === 'true',  // 是否显示进度卡片（默认关闭）

@@ -16564,7 +16564,7 @@
         }
 
         .modal-overlay-top {
-            z-index: 1500;
+            z-index: 2000;
         }
 
         .confirm-modal {
@@ -16855,24 +16855,24 @@
             display: flex;
             flex-direction: column;
             min-height: 0;
+            min-width: 0;
             margin-bottom: 0;
+            overflow: hidden;
         }
 
         .edit-session-basic-section {
             overflow-y: auto;
-            max-height: 100%;
+            overflow-x: hidden;
         }
 
         .edit-session-system-prompt {
             min-height: 100px;
-            flex: 1;
+            max-height: 200px;
         }
 
         .edit-session-system-prompt-group {
-            flex: 1;
             display: flex;
             flex-direction: column;
-            min-height: 0;
         }
 
         /* 自定义提示词样式（会话详情页） */

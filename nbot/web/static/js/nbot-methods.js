@@ -6278,18 +6278,21 @@ def main(params):
                 },
 
                 async saveGroupCharacters() {
-                    if (!this.viewingSession?.id) return;
-                    const charIds = this.viewingSession.character_ids || [];
+                    // 支持 editingSession（编辑弹窗）和 viewingSession（会话详情）
+                    const session = this.showEditSessionModal ? this.editingSession : this.viewingSession;
+                    if (!session?.id) return;
+                    const charIds = session.character_ids || [];
                     if (!charIds.length) {
                         this.showToast('请至少保留一个角色', 'warning');
                         return;
                     }
+                    this.isSavingGroupCharacters = true;
                     try {
-                        await api.put(`/api/sessions/${this.viewingSession.id}`, {
+                        await api.put(`/api/sessions/${session.id}`, {
                             character_ids: charIds,
                         });
                         // 同步到本地 sessions 列表
-                        const idx = this.sessions.findIndex(s => s.id === this.viewingSession.id);
+                        const idx = this.sessions.findIndex(s => s.id === session.id);
                         if (idx >= 0) {
                             this.sessions[idx].character_ids = [...charIds];
                         }
@@ -6297,6 +6300,8 @@ def main(params):
                     } catch (e) {
                         console.error('Failed to save group characters:', e);
                         this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isSavingGroupCharacters = false;
                     }
                 },
 
