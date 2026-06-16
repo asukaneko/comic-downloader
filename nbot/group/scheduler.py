@@ -144,8 +144,12 @@ class SpeakerScheduler:
             "## 群聊规则",
             f"- 你现在扮演 {speaker_id}，以该角色的身份和口吻回复",
             "- 回复要简洁自然，符合角色性格",
-            "- 可以引用其他角色的话，但不要代替其他角色发言",
+            "- 【严禁】代替其他角色发言、回答或行动。你只能控制你自己扮演的角色，绝不能写出其他角色的台词、动作或心理活动",
+            "- 如果需要其他角色回应，请使用 @角色名 让该角色自己来回答",
             "- 保持角色一致性，不要跳出设定",
+            "- 如果你想引起某个角色的注意，可以在回复中写 @角色名，该角色会随后回应你",
+            "- 只在有需要时才 @其他角色，不要滥用此功能",
+            "- 你只能 @群聊中已列出的角色，不要 @不存在的角色",
         ])
 
         if extra_context:
@@ -183,6 +187,51 @@ class SpeakerScheduler:
         if character_id.lower() in lower_msg:
             return True
         return False
+
+    @staticmethod
+    def parse_mentions(
+        text: str,
+        character_ids: list[str],
+        character_profiles: dict[str, dict[str, Any]],
+    ) -> list[str]:
+        """从文本中解析 @角色名，返回有序去重的角色ID列表。
+
+        同时匹配 @character_id 和 @character_name（中文名）。
+        返回首次出现顺序、去重后的角色 ID 列表。
+
+        Args:
+            text: 要解析的文本内容
+            character_ids: 群聊中所有有效角色 ID
+            character_profiles: 角色档案字典 {id: profile_dict}
+
+        Returns:
+            被 @ 的角色 ID 列表（有序去重）
+        """
+        if not text or not character_ids:
+            return []
+
+        # 构建查找表：lowered_id -> id, lowered_name -> id
+        lookup: dict[str, str] = {}
+        for cid in character_ids:
+            lookup[cid.lower()] = cid
+            profile = character_profiles.get(cid, {})
+            name = str(profile.get("name", "")).strip()
+            if name:
+                lookup[name.lower()] = cid
+
+        # 匹配所有 @xxx 模式（支持中文、英文、数字、下划线）
+        pattern = re.compile(r"@([\w一-鿿]+)")
+        matches = pattern.findall(text)
+
+        result: list[str] = []
+        seen: set[str] = set()
+        for match in matches:
+            cid = lookup.get(match.lower())
+            if cid and cid not in seen:
+                seen.add(cid)
+                result.append(cid)
+
+        return result
 
     def _random(self, character_ids: list[str]) -> str:
         return _random.choice(character_ids)

@@ -82,6 +82,23 @@ except ImportError:
 last_log_entry = {}
 _log = logging.getLogger(__name__)
 
+# 群聊 @mention 跨角色对话消息队列
+# _run_qq_chat_request 产生跨角色对话后存入此队列，
+# 由 commands.py 在发送主回复后逐条发送
+_cross_talk_queue: List[Dict[str, str]] = []
+
+
+def pop_cross_talk_messages() -> List[Dict[str, str]]:
+    """取出并清空跨角色对话消息队列。
+
+    Returns:
+        消息列表，每条含 {speaker_name, content}
+    """
+    global _cross_talk_queue
+    messages = list(_cross_talk_queue)
+    _cross_talk_queue = []
+    return messages
+
 
 def _get_project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -986,6 +1003,67 @@ def _run_qq_chat_request(
             _log.debug("group context build failed: %s", e)
 
     result = pipeline.process(ctx, callbacks, tools=tools, max_context_chars=100000, hook_runtime=hook_runtime, group_context=group_context)
+
+    # === 群聊 @mention 跨角色对话 ===
+    global _cross_talk_queue
+    _cross_talk_queue = []
+    if group_context and group_context.get("group") and not ctx.metadata.get("cross_talk_triggered"):
+        _group = group_context["group"]
+        if _group.config.allow_character_cross_talk:
+            try:
+                from nbot.group.cross_talk import collect_mentions_from_round, process_cross_talk
+                _speaker_name = ctx.metadata.get("group_speaker_name", "")
+                _round_msgs = [{
+                    "role": "assistant",
+                    "content": result.final_content or "",
+                    "sender": _speaker_name,
+                }]
+                _mentions = collect_mentions_from_round(
+                    _round_msgs,
+                    _group.character_ids,
+                    group_context.get("character_profiles", {}),
+                )
+                if _mentions:
+                    _max_mentions = getattr(_group.config, "cross_talk_max_mentions", 5)
+
+                    def _build_qq_cross_talk_ctx(speaker_id=""):
+                        cross_ctx = PipelineContext(
+                            chat_request=chat_request,
+                            adapter=adapter,
+                            metadata=dict(ctx.metadata),
+                        )
+                        cross_ctx.metadata["group_speaker"] = speaker_id
+                        cross_ctx.metadata["group_speaker_name"] = (
+                            group_context.get("character_profiles", {}).get(speaker_id, {}).get("name", speaker_id)
+                        )
+                        cross_ctx.metadata["cross_talk_triggered"] = True
+                        return cross_ctx
+
+                    def _enqueue_cross_talk_msg(msg_dict):
+                        name = msg_dict.get("sender", "")
+                        content = msg_dict.get("content", "")
+                        if name and content:
+                            display = clean_response_content(content)
+                            display = extract_display_text(display)
+                            if display:
+                                _cross_talk_queue.append({"speaker_name": name, "content": display})
+
+                    process_cross_talk(
+                        _mentions, _max_mentions,
+                        pipeline=pipeline,
+                        callbacks=callbacks,
+                        group_context=group_context,
+                        base_metadata=dict(ctx.metadata),
+                        chat_request=chat_request,
+                        adapter=adapter,
+                        tools=tools,
+                        max_context_chars=100000,
+                        hook_runtime=hook_runtime,
+                        build_cross_talk_context=_build_qq_cross_talk_ctx,
+                        send_cross_talk_message=_enqueue_cross_talk_msg,
+                    )
+            except Exception as ct_err:
+                _log.error("QQ cross-talk failed: %s", ct_err)
 
     # === Gateway 事件记录：完成（QQ 频道）===
     if trace_id:

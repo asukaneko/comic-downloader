@@ -8350,6 +8350,17 @@
                                     <option value="random">随机</option>
                                 </select>
                             </div>
+                            <div class="form-group" v-if="groupCreateModal.strategy === 'round_robin'">
+                                <label>回复模式</label>
+                                <select v-model="groupCreateModal.round_robin_mode" class="form-select">
+                                    <option value="async">异步回复（同时生成，速度快）</option>
+                                    <option value="sequential">顺序回复（逐个生成，更自然）</option>
+                                </select>
+                                <div class="form-hint" style="margin-top: 4px; font-size: 12px; color: var(--text-secondary);">
+                                    <span v-if="groupCreateModal.round_robin_mode === 'async'">所有角色同时生成回复，速度快但角色之间看不到彼此的回复</span>
+                                    <span v-else>角色逐个生成回复，每个角色能看到前面角色的回复后再回答，对话更连贯</span>
+                                </div>
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button class="gc-btn gc-btn-ghost" @click="groupCreateModal.show = false">取消</button>
@@ -11462,6 +11473,7 @@
                         character_ids: [],
                         narrator_id: '',
                         strategy: 'round_robin',
+                        round_robin_mode: 'async',
                         auto_narrate: true,
                         characters: [],
                     },

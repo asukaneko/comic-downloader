@@ -4895,6 +4895,20 @@ async def dispatch_message(msg, is_group: bool):
                 _log.info(f"Sending group reply: {response[:50]}...")
                 await msg.reply(text=response)
 
+                # @mention 跨角色对话：逐条发送被 @ 角色的回复
+                try:
+                    from nbot.services.chat_service import pop_cross_talk_messages
+                    cross_talk_msgs = pop_cross_talk_messages()
+                    for ct_msg in cross_talk_msgs:
+                        ct_name = ct_msg.get("speaker_name", "")
+                        ct_content = ct_msg.get("content", "")
+                        if ct_name and ct_content:
+                            ct_display = f"[{ct_name}] {ct_content}"
+                            _log.info(f"Sending cross-talk reply from {ct_name}: {ct_display[:50]}...")
+                            await msg.reply(text=ct_display)
+                except Exception as ct_err:
+                    _log.warning(f"Failed to send cross-talk messages: {ct_err}")
+
                 # TTS 处理：检查开关并发送语音
                 try:
                     conversation_id = f"qq:group:{group_id}"

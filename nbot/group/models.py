@@ -19,6 +19,8 @@ class GroupConfig:
     token_budget: int = 4000
     auto_narrate: bool = True
     narrate_interval: int = 3  # 每 N 轮对话触发一次旁白
+    cross_talk_max_mentions: int = 5  # 每轮最多处理的 @mention 跨角色对话数量
+    round_robin_mode: str = "async"  # "async"（异步并行）或 "sequential"（顺序回复）
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -29,6 +31,8 @@ class GroupConfig:
             "token_budget": self.token_budget,
             "auto_narrate": self.auto_narrate,
             "narrate_interval": self.narrate_interval,
+            "cross_talk_max_mentions": self.cross_talk_max_mentions,
+            "round_robin_mode": self.round_robin_mode,
         }
 
     @classmethod
@@ -41,6 +45,8 @@ class GroupConfig:
             token_budget=data.get("token_budget", 4000),
             auto_narrate=data.get("auto_narrate", True),
             narrate_interval=data.get("narrate_interval", 3),
+            cross_talk_max_mentions=data.get("cross_talk_max_mentions", 5),
+            round_robin_mode=data.get("round_robin_mode", "async"),
         )
 
 

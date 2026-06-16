@@ -6209,6 +6209,7 @@ def main(params):
                             narrator_id: modal.narrator_id || null,
                             group_config: {
                                 speaker_strategy: modal.strategy,
+                                round_robin_mode: modal.round_robin_mode || 'async',
                                 auto_narrate: modal.auto_narrate,
                             },
                         });

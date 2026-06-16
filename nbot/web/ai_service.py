@@ -1501,32 +1501,65 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 return run_ctx
 
             if len(round_robin_speakers) > 1:
-                # 并行发送所有角色的请求，同步流式加载气泡
-                import threading as _threading
-                _speaker_errors = []
+                _speaker_results = []
+                _rr_mode = getattr(group_context.get("group").config, "round_robin_mode", "async") if group_context and group_context.get("group") else "async"
 
-                def _run_speaker(speaker_id):
-                    try:
-                        sp_ctx = _context_for_speaker(speaker_id)
-                        sp_result = pipeline.process(
-                            sp_ctx, callbacks,
-                            tools=tools,
-                            max_context_chars=context_char_budget,
-                            hook_runtime=hook_runtime,
-                            group_context=group_context,
-                        )
-                        _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
-                    except Exception as sp_err:
-                        _speaker_errors.append((speaker_id, sp_err))
-                        _log.error("group parallel speaker %s failed: %s", speaker_id, sp_err)
+                if _rr_mode == "sequential":
+                    # === 顺序回复：逐个执行，每个角色能看到前面角色的回复 ===
+                    _log.info("group round_robin: sequential mode, %d speakers", len(round_robin_speakers))
+                    for speaker in round_robin_speakers:
+                        try:
+                            sp_ctx = _context_for_speaker(speaker)
+                            sp_result = pipeline.process(
+                                sp_ctx, callbacks,
+                                tools=tools,
+                                max_context_chars=context_char_budget,
+                                hook_runtime=hook_runtime,
+                                group_context=group_context,
+                            )
+                            _speaker_results.append({
+                                "speaker_id": speaker,
+                                "speaker_name": sp_ctx.metadata.get("group_speaker_name", speaker),
+                                "content": sp_result.final_content or "",
+                                "assistant_message": sp_result.assistant_message,
+                            })
+                            _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
+                        except Exception as sp_err:
+                            _log.error("group sequential speaker %s failed: %s", speaker, sp_err)
+                else:
+                    # === 异步回复：并行发送所有角色的请求 ===
+                    import threading as _threading
+                    _speaker_errors = []
 
-                threads = []
-                for speaker in round_robin_speakers:
-                    t = _threading.Thread(target=_run_speaker, args=(speaker,), daemon=True)
-                    threads.append(t)
-                    t.start()
-                for t in threads:
-                    t.join()
+                    def _run_speaker(speaker_id):
+                        try:
+                            sp_ctx = _context_for_speaker(speaker_id)
+                            sp_result = pipeline.process(
+                                sp_ctx, callbacks,
+                                tools=tools,
+                                max_context_chars=context_char_budget,
+                                hook_runtime=hook_runtime,
+                                group_context=group_context,
+                            )
+                            _speaker_results.append({
+                                "speaker_id": speaker_id,
+                                "speaker_name": sp_ctx.metadata.get("group_speaker_name", speaker_id),
+                                "content": sp_result.final_content or "",
+                                "assistant_message": sp_result.assistant_message,
+                            })
+                            _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
+                        except Exception as sp_err:
+                            _speaker_errors.append((speaker_id, sp_err))
+                            _log.error("group parallel speaker %s failed: %s", speaker_id, sp_err)
+
+                    threads = []
+                    for speaker in round_robin_speakers:
+                        t = _threading.Thread(target=_run_speaker, args=(speaker,), daemon=True)
+                        threads.append(t)
+                        t.start()
+                    for t in threads:
+                        t.join()
+
                 # 使用最后一个 speaker 的 metadata 更新 ctx，并标记轮次完成
                 ctx.metadata.update(_context_for_speaker(round_robin_speakers[-1]).metadata)
                 ctx.metadata["group_round_complete"] = True
@@ -1534,7 +1567,42 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 if not chat_request.metadata:
                     chat_request.metadata = {}
                 chat_request.metadata["group_round_complete"] = True
-                # 并行发送已完成，跳过后续单独处理
+
+                # === @mention 跨角色对话（轮次结束后）===
+                if group_context and _speaker_results:
+                    _group = group_context.get("group")
+                    if _group and getattr(_group.config, "allow_character_cross_talk", True):
+                        try:
+                            from nbot.group.cross_talk import collect_mentions_from_round, process_cross_talk
+                            _round_msgs = [
+                                {"role": "assistant", "content": r["content"], "sender": r["speaker_name"]}
+                                for r in _speaker_results
+                            ]
+                            _mentions = collect_mentions_from_round(
+                                _round_msgs,
+                                _group.character_ids,
+                                group_context.get("character_profiles", {}),
+                            )
+                            if _mentions:
+                                _max_mentions = getattr(_group.config, "cross_talk_max_mentions", 5)
+                                _base_ctx = _context_for_speaker(round_robin_speakers[0])
+                                process_cross_talk(
+                                    _mentions, _max_mentions,
+                                    pipeline=pipeline,
+                                    callbacks=callbacks,
+                                    group_context=group_context,
+                                    base_metadata=dict(_base_ctx.metadata),
+                                    chat_request=chat_request,
+                                    adapter=adapter,
+                                    stop_event=stop_event,
+                                    tools=tools,
+                                    max_context_chars=context_char_budget,
+                                    hook_runtime=hook_runtime,
+                                )
+                        except Exception as ct_err:
+                            _log.error("cross-talk after round failed: %s", ct_err)
+
+                # 轮次已完成，跳过后续单独处理
                 result = None
             else:
                 # 单角色群聊或非群聊模式：单次回复即为一轮
