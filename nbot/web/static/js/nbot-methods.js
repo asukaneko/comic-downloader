@@ -17037,5 +17037,108 @@ def main(params):
         }
     },
 
+    resetHookForm() {
+        this.newHook = {
+            name: '', event: '', scope: 'global', priority: 100,
+            enabled: true, description: '', character_id: '',
+            conversation_id: '', user_id: '',
+            conditionsStr: '', actions: [], actionsStr: [],
+            permissionsStr: ''
+        };
+    },
+
+    openCreateHookModal() {
+        this.resetHookForm();
+        this.showCreateHookModal = true;
+    },
+
+    insertConditionKey(key) {
+        let cond = {};
+        try { cond = this.newHook.conditionsStr ? JSON.parse(this.newHook.conditionsStr) : {}; } catch (_) { cond = {}; }
+        if (key === 'time_range') {
+            cond[key] = ['08:00', '22:00'];
+        } else if (key.endsWith('_gte') || key.endsWith('_lte')) {
+            cond[key] = 50;
+        } else {
+            cond[key] = '';
+        }
+        this.newHook.conditionsStr = JSON.stringify(cond, null, 2);
+    },
+
+    addActionPreset(type) {
+        const presets = {
+            prompt_inject: { type: 'prompt_inject', key: 'hint', content: '本轮更主动一点', priority: 50, scope: 'turn' },
+            state_delta: { type: 'state_delta', field: 'energy', delta: -5 },
+            relationship_delta: { type: 'relationship_delta', field: 'affection', delta: 1 },
+            log: { type: 'log', level: 'info', message: 'Hook 触发' },
+            message: { type: 'message', content: '' },
+            memory_write: { type: 'memory_write', title: '', content: '', mem_type: 'short' },
+            custom: { type: '' }
+        };
+        const action = JSON.parse(JSON.stringify(presets[type] || presets.custom));
+        this.newHook.actions.push(action);
+        this.newHook.actionsStr.push(JSON.stringify(action, null, 2));
+    },
+
+    removeAction(idx) {
+        this.newHook.actions.splice(idx, 1);
+        this.newHook.actionsStr.splice(idx, 1);
+    },
+
+    syncActionFromStr(idx) {
+        try {
+            this.newHook.actions[idx] = JSON.parse(this.newHook.actionsStr[idx]);
+        } catch (_) { /* ignore parse errors while typing */ }
+    },
+
+    async createHook() {
+        if (!this.newHook.name || !this.newHook.event) return;
+        const payload = {
+            name: this.newHook.name,
+            event: this.newHook.event,
+            scope: this.newHook.scope,
+            priority: this.newHook.priority,
+            enabled: this.newHook.enabled,
+            description: this.newHook.description,
+            actions: this.newHook.actions.filter(a => a && a.type),
+        };
+        if (this.newHook.scope === 'character' && this.newHook.character_id) {
+            payload.character_id = this.newHook.character_id;
+        }
+        if (this.newHook.scope === 'user' && this.newHook.user_id) {
+            payload.user_id = this.newHook.user_id;
+        }
+        if (this.newHook.scope === 'conversation' && this.newHook.conversation_id) {
+            payload.conversation_id = this.newHook.conversation_id;
+        }
+        // Parse conditions
+        if (this.newHook.conditionsStr && this.newHook.conditionsStr.trim()) {
+            try {
+                payload.conditions = JSON.parse(this.newHook.conditionsStr);
+            } catch (e) {
+                alert('条件 JSON 格式错误：' + e.message);
+                return;
+            }
+        }
+        // Parse permissions
+        if (this.newHook.permissionsStr && this.newHook.permissionsStr.trim()) {
+            try {
+                payload.permissions = JSON.parse(this.newHook.permissionsStr);
+            } catch (e) {
+                alert('权限 JSON 格式错误：' + e.message);
+                return;
+            }
+        }
+        try {
+            await axios.post('/api/hooks', payload);
+            this.showCreateHookModal = false;
+            this.resetHookForm();
+            await this.loadHookList();
+        } catch (e) {
+            const msg = (e.response && e.response.data && e.response.data.error) || e.message;
+            alert('创建失败：' + msg);
+        }
+    },
+
 
 };

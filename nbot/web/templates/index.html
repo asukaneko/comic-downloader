@@ -3942,9 +3942,14 @@
                                     <p class="hk-subtitle">管理事件钩子和自动化流程</p>
                                 </div>
                             </div>
-                            <button class="hk-btn hk-btn-primary" @click="loadHookList()">
-                                <i class="fas fa-sync"></i> 刷新
-                            </button>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="hk-btn hk-btn-primary" @click="openCreateHookModal()">
+                                    <i class="fas fa-plus"></i> 创建 Hook
+                                </button>
+                                <button class="hk-btn hk-btn-primary" @click="loadHookList()">
+                                    <i class="fas fa-sync"></i> 刷新
+                                </button>
+                            </div>
                         </div>
 
                         <div class="hk-content">
@@ -3982,6 +3987,187 @@
                                             <span class="hk-status-text">{{ h.enabled ? '运行中' : '已暂停' }}</span>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Create Hook Modal -->
+                        <div v-if="showCreateHookModal" class="modal-overlay" @click.self="showCreateHookModal = false">
+                            <div class="modal hk-modal">
+                                <div class="modal-header">
+                                    <span class="modal-title"><i class="fas fa-anchor" style="color: #f59e0b; margin-right: 8px;"></i> 创建 Hook</span>
+                                    <button class="modal-close" @click="showCreateHookModal = false">&times;</button>
+                                </div>
+                                <div class="modal-body">
+                                    <!-- 基本信息 -->
+                                    <div class="hk-form-section">
+                                        <div class="hk-form-section-title"><i class="fas fa-info-circle"></i> 基本信息</div>
+                                        <div class="form-row">
+                                            <div class="form-group" style="flex: 2;">
+                                                <label class="form-label">名称 <span style="color: #ef4444;">*</span></label>
+                                                <input type="text" v-model="newHook.name" class="form-input" placeholder="给 Hook 起个名字">
+                                            </div>
+                                            <div class="form-group" style="flex: 1;">
+                                                <label class="form-label">优先级</label>
+                                                <input type="number" v-model.number="newHook.priority" min="0" max="999" class="form-input" placeholder="100">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">监听事件 <span style="color: #ef4444;">*</span></label>
+                                            <select v-model="newHook.event" class="form-select">
+                                                <option value="" disabled>选择事件类型...</option>
+                                                <optgroup label="对话入口">
+                                                    <option value="conversation.before_receive">conversation.before_receive</option>
+                                                </optgroup>
+                                                <optgroup label="Pipeline 阶段">
+                                                    <option value="pipeline.before_attachments">pipeline.before_attachments</option>
+                                                    <option value="pipeline.after_attachments">pipeline.after_attachments</option>
+                                                    <option value="pipeline.before_knowledge">pipeline.before_knowledge</option>
+                                                    <option value="pipeline.after_knowledge">pipeline.after_knowledge</option>
+                                                    <option value="pipeline.before_model_call">pipeline.before_model_call</option>
+                                                    <option value="pipeline.after_model_call">pipeline.after_model_call</option>
+                                                    <option value="pipeline.before_reply_send">pipeline.before_reply_send</option>
+                                                    <option value="pipeline.after_reply_send">pipeline.after_reply_send</option>
+                                                    <option value="pipeline.before_prompt_render">pipeline.before_prompt_render</option>
+                                                    <option value="pipeline.after_prompt_render">pipeline.after_prompt_render</option>
+                                                    <option value="pipeline.stream_chunk">pipeline.stream_chunk</option>
+                                                </optgroup>
+                                                <optgroup label="角色 before_turn">
+                                                    <option value="character.before_turn.started">character.before_turn.started</option>
+                                                    <option value="character.after_profile_load">character.after_profile_load</option>
+                                                    <option value="character.after_memory_retrieve">character.after_memory_retrieve</option>
+                                                    <option value="character.after_world_book_match">character.after_world_book_match</option>
+                                                    <option value="character.after_reaction_plan">character.after_reaction_plan</option>
+                                                    <option value="character.before_turn.finished">character.before_turn.finished</option>
+                                                </optgroup>
+                                                <optgroup label="角色 after_turn">
+                                                    <option value="character.after_turn.started">character.after_turn.started</option>
+                                                    <option value="character.after_state_update">character.after_state_update</option>
+                                                    <option value="character.after_turn.finished">character.after_turn.finished</option>
+                                                </optgroup>
+                                                <optgroup label="记忆 & 状态">
+                                                    <option value="memory.after_extract">memory.after_extract</option>
+                                                    <option value="state.changed">state.changed</option>
+                                                    <option value="relationship.changed">relationship.changed</option>
+                                                </optgroup>
+                                                <optgroup label="工具调用">
+                                                    <option value="tool.before_call">tool.before_call</option>
+                                                    <option value="tool.after_call">tool.after_call</option>
+                                                </optgroup>
+                                                <optgroup label="通配">
+                                                    <option value="*">* (所有事件)</option>
+                                                    <option value="character.*">character.* (所有角色事件)</option>
+                                                    <option value="pipeline.*">pipeline.* (所有 Pipeline 事件)</option>
+                                                </optgroup>
+                                            </select>
+                                        </div>
+                                        <div class="form-row">
+                                            <div class="form-group" style="flex: 1;">
+                                                <label class="form-label">作用域</label>
+                                                <select v-model="newHook.scope" class="form-select">
+                                                    <option value="global">global (全局)</option>
+                                                    <option value="character">character (角色)</option>
+                                                    <option value="conversation">conversation (会话)</option>
+                                                    <option value="user">user (用户)</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group" style="flex: 1;" v-if="newHook.scope === 'character'">
+                                                <label class="form-label">角色 ID</label>
+                                                <input type="text" v-model="newHook.character_id" class="form-input" placeholder="绑定的角色 ID">
+                                            </div>
+                                            <div class="form-group" style="flex: 1;" v-if="newHook.scope === 'user'">
+                                                <label class="form-label">用户 ID</label>
+                                                <input type="text" v-model="newHook.user_id" class="form-input" placeholder="绑定的用户 ID">
+                                            </div>
+                                            <div class="form-group" style="flex: 1;" v-if="newHook.scope === 'conversation'">
+                                                <label class="form-label">会话 ID</label>
+                                                <input type="text" v-model="newHook.conversation_id" class="form-input" placeholder="绑定的会话 ID">
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">描述</label>
+                                            <textarea v-model="newHook.description" class="form-textarea" rows="2" placeholder="可选，描述这个 Hook 的用途"></textarea>
+                                        </div>
+                                        <div class="form-group">
+                                            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text-secondary);" @click="newHook.enabled = !newHook.enabled">
+                                                <span>启用</span>
+                                                <span class="hk-toggle" :class="{ active: newHook.enabled }">
+                                                    <span class="hk-toggle-knob"></span>
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- 触发条件 -->
+                                    <div class="hk-form-section">
+                                        <div class="hk-form-section-title">
+                                            <i class="fas fa-filter"></i> 触发条件
+                                            <span class="hk-form-hint">（AND 逻辑，全部满足才触发）</span>
+                                        </div>
+                                        <div class="form-group">
+                                            <textarea v-model="newHook.conditionsStr" class="form-textarea hk-code-textarea" rows="3" placeholder='留空表示无条件触发&#10;示例: { "channel": "web", "mood_is": "happy", "affection_gte": 70 }'></textarea>
+                                        </div>
+                                        <div class="hk-condition-keys">
+                                            <span class="hk-cond-key" v-for="k in conditionKeys" :key="k" @click="insertConditionKey(k)">{{ k }}</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- 执行动作 -->
+                                    <div class="hk-form-section">
+                                        <div class="hk-form-section-title">
+                                            <i class="fas fa-play-circle"></i> 执行动作
+                                        </div>
+                                        <div v-for="(action, idx) in newHook.actions" :key="idx" class="hk-action-item">
+                                            <div class="hk-action-header">
+                                                <span class="hk-action-type">{{ action.type }}</span>
+                                                <button class="hk-btn-icon hk-btn-danger" @click="removeAction(idx)" title="移除">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                            <textarea v-model="newHook.actionsStr[idx]" class="form-textarea hk-code-textarea" rows="2" @input="syncActionFromStr(idx)"></textarea>
+                                        </div>
+                                        <div class="hk-action-presets">
+                                            <span class="hk-preset-label">快速添加：</span>
+                                            <button class="hk-preset-btn" @click="addActionPreset('prompt_inject')">
+                                                <i class="fas fa-comment-dots"></i> 注入提示词
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('state_delta')">
+                                                <i class="fas fa-heart"></i> 状态变更
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('relationship_delta')">
+                                                <i class="fas fa-link"></i> 关系变更
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('log')">
+                                                <i class="fas fa-list"></i> 日志
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('message')">
+                                                <i class="fas fa-envelope"></i> 发送消息
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('memory_write')">
+                                                <i class="fas fa-brain"></i> 写入记忆
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('custom')">
+                                                <i class="fas fa-code"></i> 自定义 JSON
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 权限控制 -->
+                                    <div class="hk-form-section">
+                                        <div class="hk-form-section-title">
+                                            <i class="fas fa-shield-alt"></i> 权限控制
+                                            <span class="hk-form-hint">（可选，限制频道）</span>
+                                        </div>
+                                        <div class="form-group">
+                                            <textarea v-model="newHook.permissionsStr" class="form-textarea hk-code-textarea" rows="2" placeholder='留空不限制&#10;示例: { "channels": ["web", "qq"] }'></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button class="btn btn-secondary" @click="showCreateHookModal = false">取消</button>
+                                    <button class="btn btn-primary" @click="createHook()" :disabled="!newHook.name || !newHook.event">
+                                        <i class="fas fa-plus"></i> 创建
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -11546,6 +11732,22 @@
                     // 3.x Hooks
                     hookList: [],
                     showCreateHookModal: false,
+                    newHook: {
+                        name: '', event: '', scope: 'global', priority: 100,
+                        enabled: true, description: '', character_id: '',
+                        conversation_id: '', user_id: '',
+                        conditionsStr: '', actions: [], actionsStr: [],
+                        permissionsStr: ''
+                    },
+                    conditionKeys: [
+                        'channel', 'character_id', 'user_id', 'event_source',
+                        'mood_is', 'mood_is_not',
+                        'affection_gte', 'affection_lte',
+                        'trust_gte', 'trust_lte',
+                        'familiarity_gte', 'familiarity_lte',
+                        'energy_gte', 'energy_lte',
+                        'time_range'
+                    ],
                     dropdownTab: 'channel',  // 'channel' 或 'role'
                     currentChannelTab: null,  // 当前选中的注册频道
 
