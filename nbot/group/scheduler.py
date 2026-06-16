@@ -220,7 +220,8 @@ class SpeakerScheduler:
                 lookup[name.lower()] = cid
 
         # 匹配所有 @xxx 模式（支持中文、英文、数字、下划线）
-        pattern = re.compile(r"@([\w一-鿿]+)")
+        # 使用 (?<!\w) 前向否定断言，防止中文字符紧贴 @ 时被误匹配
+        pattern = re.compile(r"(?<![一-鿿\w])@([\w一-鿿]+)")
         matches = pattern.findall(text)
 
         result: list[str] = []
