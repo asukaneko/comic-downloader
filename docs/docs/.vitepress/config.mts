@@ -254,6 +254,12 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/hooks/index.md' },
+                    { text: '事件参考', link: '/guide/nbot/hooks/events.md' },
+                    { text: '条件参考', link: '/guide/nbot/hooks/conditions.md' },
+                    { text: '动作参考', link: '/guide/nbot/hooks/actions.md' },
+                    { text: 'Web API 参考', link: '/guide/nbot/hooks/web-api.md' },
+                    { text: 'Web 管理界面', link: '/guide/nbot/hooks/web-ui.md' },
+                    { text: '使用示例', link: '/guide/nbot/hooks/examples.md' },
                   ]
                 },
                 {
