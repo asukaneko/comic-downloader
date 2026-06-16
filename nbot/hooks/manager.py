@@ -11,12 +11,17 @@ import json
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from nbot.hooks.actions import ActionExecutor
 from nbot.hooks.conditions import ConditionEvaluator
 from nbot.hooks.event_bus import ConversationEventBus, match_event_pattern
-from nbot.hooks.models import ConversationHook, HookExecutionLog, RuntimeEvent
+from nbot.hooks.models import (
+    VALID_TRIGGER_MODES,
+    ConversationHook,
+    HookExecutionLog,
+    RuntimeEvent,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -39,13 +44,17 @@ class HookManager:
         self._condition_evaluator = ConditionEvaluator()
         self._action_executor = ActionExecutor()
         self._execution_logs: List[HookExecutionLog] = []
-        self._data_dir = data_dir
-        self._hooks_file = os.path.join(data_dir, "hooks.json")
-        self._logs_file = os.path.join(data_dir, "hooks_logs.json")
+        self._data_dir = os.path.abspath(data_dir)
+        self._hooks_file = os.path.join(self._data_dir, "hooks.json")
+        self._logs_file = os.path.join(self._data_dir, "hooks_logs.json")
+        self._trigger_state_file = os.path.join(self._data_dir, "hooks_trigger_state.json")
         self._turn_hooks_executed: int = 0
         self._turn_hook_ids_executed: set = set()
+        self._trigger_state: Dict[str, Set[str]] = {}
+        self._event_notifier = None  # callback for frontend notifications
         self._load_hooks()
         self._load_logs()
+        self._load_trigger_state()
 
     # -- Hook CRUD --
 
@@ -59,7 +68,9 @@ class HookManager:
         if hook_id not in self._hooks:
             return False
         del self._hooks[hook_id]
+        self._trigger_state.pop(hook_id, None)
         self._save_hooks()
+        self._save_trigger_state()
         _log.info("[HookManager] removed hook id=%s", hook_id)
         return True
 
@@ -82,7 +93,7 @@ class HookManager:
     _UPDATABLE_FIELDS = frozenset({
         "name", "description", "enabled", "scope", "event", "priority",
         "conditions", "actions", "permissions", "timeout_ms", "max_retries",
-        "character_id", "conversation_id", "user_id",
+        "trigger_mode", "character_id", "conversation_id", "user_id",
     })
 
     def update_hook(self, hook_id: str, **fields) -> bool:
@@ -93,6 +104,8 @@ class HookManager:
             if key not in self._UPDATABLE_FIELDS:
                 _log.warning("[HookManager] ignoring unknown field: %s", key)
                 continue
+            if key == "trigger_mode" and value not in VALID_TRIGGER_MODES:
+                value = "always"
             setattr(hook, key, value)
         hook.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self._save_hooks()
@@ -100,6 +113,40 @@ class HookManager:
 
     def toggle_hook(self, hook_id: str, enabled: bool) -> bool:
         return self.update_hook(hook_id, enabled=enabled)
+
+    def set_event_notifier(self, callback) -> None:
+        """Set a callback invoked when a hook fires successfully.
+
+        callback receives a dict: {hook_id, hook_name, event_type, conversation_id, status}
+        """
+        self._event_notifier = callback
+
+    @staticmethod
+    def _extract_display_message(hook: ConversationHook) -> str:
+        for action in hook.actions:
+            if not isinstance(action, dict):
+                continue
+            if action.get("type") == "log" and action.get("message"):
+                return str(action.get("message"))
+            if action.get("type") == "message" and action.get("content"):
+                return str(action.get("content"))
+        return hook.name
+
+    def _notify_frontend(self, hook: ConversationHook, event: RuntimeEvent, log: HookExecutionLog) -> None:
+        """Send hook trigger notification via callback if registered."""
+        if not self._event_notifier:
+            return
+        try:
+            self._event_notifier({
+                "hook_id": hook.id,
+                "hook_name": hook.name,
+                "event_type": event.type,
+                "conversation_id": event.conversation_id,
+                "status": log.status,
+                "display_message": self._extract_display_message(hook),
+            })
+        except Exception as e:
+            _log.debug("[HookManager] notify frontend failed: %s", e)
 
     # -- Event Emission --
 
@@ -130,6 +177,8 @@ class HookManager:
             if hook.id in self._turn_hook_ids_executed:
                 continue
             if not self._condition_evaluator.evaluate(hook.conditions, event, ctx):
+                continue
+            if self._has_triggered_for_conversation(hook, event):
                 continue
             log = await self._execute_hook(hook, event, ctx)
             logs.append(log)
@@ -171,6 +220,8 @@ class HookManager:
             log = HookExecutionLog(
                 hook_id=hook.id, event_id=event.id, status="denied",
                 error="Permission denied",
+                conversation_id=event.conversation_id,
+                event_type=event.type,
             )
             self._append_log(log)
             return log
@@ -189,6 +240,9 @@ class HookManager:
                 )
 
         self._append_log(last_log)
+        if last_log.status in ("success", "partial"):
+            self._mark_triggered_for_conversation(hook, event)
+            self._notify_frontend(hook, event, last_log)
         return last_log
 
     async def _execute_hook_once(
@@ -211,19 +265,47 @@ class HookManager:
                 actions_executed=executed,
                 error="; ".join(r.detail for r in failed) if failed else "",
                 duration_ms=duration,
+                conversation_id=event.conversation_id,
+                event_type=event.type,
             )
         except asyncio.TimeoutError:
             duration = int((time.time() - start) * 1000)
             return HookExecutionLog(
                 hook_id=hook.id, event_id=event.id, status="timeout",
                 duration_ms=duration, error="Timeout",
+                conversation_id=event.conversation_id,
+                event_type=event.type,
             )
         except Exception as e:
             duration = int((time.time() - start) * 1000)
             return HookExecutionLog(
                 hook_id=hook.id, event_id=event.id, status="failed",
                 duration_ms=duration, error=str(e),
+                conversation_id=event.conversation_id,
+                event_type=event.type,
             )
+
+    def _has_triggered_for_conversation(
+        self, hook: ConversationHook, event: RuntimeEvent
+    ) -> bool:
+        if hook.trigger_mode != "once_per_conversation":
+            return False
+        if not event.conversation_id:
+            return False
+        return event.conversation_id in self._trigger_state.get(hook.id, set())
+
+    def _mark_triggered_for_conversation(
+        self, hook: ConversationHook, event: RuntimeEvent
+    ) -> None:
+        if hook.trigger_mode != "once_per_conversation":
+            return
+        if not event.conversation_id:
+            return
+        seen = self._trigger_state.setdefault(hook.id, set())
+        if event.conversation_id in seen:
+            return
+        seen.add(event.conversation_id)
+        self._save_trigger_state()
 
     @staticmethod
     def _check_permissions(hook: ConversationHook, event: RuntimeEvent) -> bool:
@@ -299,6 +381,28 @@ class HookManager:
                 _log.info("[HookManager] loaded %d execution logs", len(self._execution_logs))
         except Exception as e:
             _log.error("[HookManager] load logs failed: %s", e)
+
+    def _save_trigger_state(self):
+        try:
+            os.makedirs(os.path.dirname(self._trigger_state_file), exist_ok=True)
+            data = {hook_id: sorted(conversations) for hook_id, conversations in self._trigger_state.items()}
+            with open(self._trigger_state_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            _log.error("[HookManager] save trigger state failed: %s", e)
+
+    def _load_trigger_state(self):
+        try:
+            if os.path.exists(self._trigger_state_file):
+                with open(self._trigger_state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                self._trigger_state = {
+                    str(hook_id): {str(conv_id) for conv_id in conversation_ids}
+                    for hook_id, conversation_ids in data.items()
+                    if isinstance(conversation_ids, list)
+                }
+        except Exception as e:
+            _log.error("[HookManager] load trigger state failed: %s", e)
 
     # -- Query --
 

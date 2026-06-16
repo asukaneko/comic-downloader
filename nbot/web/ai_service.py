@@ -1391,6 +1391,14 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             try:
                 from nbot.hooks.manager import get_hook_manager
                 hook_runtime = get_hook_manager(data_dir=getattr(server, "data_dir", "data/web"))
+                # Register Socket.IO notifier for hook trigger events
+                if hook_runtime and hasattr(server, 'socketio') and not hook_runtime._event_notifier:
+                    _sio = server.socketio
+                    def _hook_notifier(info, _sio=_sio):
+                        cid = info.get("conversation_id", "")
+                        if cid:
+                            _sio.emit("hook_notification", info, room=cid)
+                    hook_runtime.set_event_notifier(_hook_notifier)
             except Exception:
                 pass
 

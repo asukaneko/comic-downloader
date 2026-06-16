@@ -2,13 +2,27 @@
 
 import asyncio
 import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 
-from nbot.hooks.models import ConversationHook, HookExecutionLog, RuntimeEvent
-from nbot.hooks.event_bus import ConversationEventBus, match_event_pattern
-from nbot.hooks.conditions import ConditionEvaluator
+from nbot.character.models import (
+    CharacterIdentity,
+    CharacterProfile,
+    CharacterState,
+    CharacterTurnContext,
+    ReactionPlan,
+    RelationshipState,
+)
+from nbot.character.runtime import CharacterRuntime
+from nbot.core.ai_pipeline import AIPipeline, PipelineCallbacks, PipelineContext, PipelineResult
+from nbot.core.chat_models import ChatRequest
 from nbot.hooks.actions import ActionExecutor
+from nbot.hooks.conditions import ConditionEvaluator
+from nbot.hooks.event_bus import ConversationEventBus, match_event_pattern
 from nbot.hooks.manager import HookManager
+from nbot.hooks.models import ConversationHook, HookExecutionLog, RuntimeEvent
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _loop():
@@ -49,6 +63,7 @@ def test_conversation_hook_defaults():
     assert h.priority == 100
     assert h.conditions == {}
     assert h.timeout_ms == 3000
+    assert h.trigger_mode == "always"
 
 
 def test_conversation_hook_roundtrip_with_conditions():
@@ -59,18 +74,40 @@ def test_conversation_hook_roundtrip_with_conditions():
     assert h2.conditions == cond
     assert h2.id == h.id
     assert h2.name == h.name
+    assert h2.trigger_mode == "always"
+
+
+def test_conversation_hook_trigger_mode_roundtrip():
+    h = ConversationHook(name="n", event="e", trigger_mode="once_per_conversation")
+    d = h.to_dict()
+    h2 = ConversationHook.from_dict(d)
+    assert h2.trigger_mode == "once_per_conversation"
+
+
+def test_conversation_hook_invalid_trigger_mode_defaults_to_always():
+    h = ConversationHook(name="n", event="e", trigger_mode="bad")
+    assert h.trigger_mode == "always"
 
 
 # ── HookExecutionLog ──────────────────────────────────────────
 
 
 def test_hook_execution_log_roundtrip():
-    log = HookExecutionLog(hook_id="hk_1", event_id="evt_1", status="success", actions_executed=2)
+    log = HookExecutionLog(
+        hook_id="hk_1",
+        event_id="evt_1",
+        status="success",
+        actions_executed=2,
+        conversation_id="conv_1",
+        event_type="e",
+    )
     d = log.to_dict()
     assert d["status"] == "success"
     log2 = HookExecutionLog.from_dict(d)
     assert log2.hook_id == "hk_1"
     assert log2.actions_executed == 2
+    assert log2.conversation_id == "conv_1"
+    assert log2.event_type == "e"
 
 
 # ── match_event_pattern ───────────────────────────────────────
@@ -427,6 +464,89 @@ def test_hook_manager_reset_turn():
         assert len(count) == 2
 
 
+def test_hook_manager_trigger_mode_once_per_conversation():
+    with tempfile.TemporaryDirectory() as tmp:
+        mgr = HookManager(data_dir=tmp)
+        count = []
+
+        h = ConversationHook(
+            name="n",
+            event="e",
+            trigger_mode="once_per_conversation",
+            actions=[{"type": "log", "message": "hit"}],
+        )
+        mgr.add_hook(h)
+
+        orig = mgr._action_executor._handlers["log"]
+
+        def spy(action, event, ctx):
+            count.append(event.conversation_id)
+            return orig(action, event, ctx)
+
+        mgr._action_executor._handlers["log"] = spy
+
+        logs = _loop().run_until_complete(
+            mgr.emit_event(RuntimeEvent(type="e", conversation_id="conv_1"))
+        )
+        assert len(logs) == 1
+        assert logs[0].conversation_id == "conv_1"
+
+        mgr.reset_turn()
+        logs = _loop().run_until_complete(
+            mgr.emit_event(RuntimeEvent(type="e", conversation_id="conv_1"))
+        )
+        assert logs == []
+
+        mgr.reset_turn()
+        logs = _loop().run_until_complete(
+            mgr.emit_event(RuntimeEvent(type="e", conversation_id="conv_2"))
+        )
+        assert len(logs) == 1
+        assert count == ["conv_1", "conv_2"]
+
+
+def test_hook_manager_once_per_conversation_survives_reload():
+    with tempfile.TemporaryDirectory() as tmp:
+        mgr = HookManager(data_dir=tmp)
+        h = ConversationHook(
+            name="n",
+            event="e",
+            trigger_mode="once_per_conversation",
+            actions=[{"type": "log", "message": "hit"}],
+        )
+        mgr.add_hook(h)
+
+        logs = _loop().run_until_complete(
+            mgr.emit_event(RuntimeEvent(type="e", conversation_id="conv_1"))
+        )
+        assert len(logs) == 1
+        mgr._execution_logs = []
+        mgr._save_logs()
+
+        mgr2 = HookManager(data_dir=tmp)
+        logs = _loop().run_until_complete(
+            mgr2.emit_event(RuntimeEvent(type="e", conversation_id="conv_1"))
+        )
+        assert logs == []
+
+
+def test_hook_template_presets_are_available_in_create_form():
+    script = (ROOT / "nbot/web/static/js/nbot-methods.js").read_text(encoding="utf-8")
+    template = (ROOT / "nbot/web/templates/index.html").read_text(encoding="utf-8")
+
+    assert "__nbotHookTemplates" in script
+    assert "hookTemplates: window.__nbotHookTemplates" in template
+    assert "applyHookTemplate(key)" in script
+    assert "applyHookTemplate(t.key)" in template
+    for key in (
+        "high_affection_notice",
+        "low_energy_notice",
+        "relationship_gain_memory",
+        "model_call_logger",
+    ):
+        assert key in script
+
+
 # ── 别名兼容（文档事件名 → 代码事件名）──────────────────────────
 
 
@@ -662,3 +782,241 @@ def test_hook_log_persistence():
         mgr2 = HookManager(data_dir=tmp)
         assert len(mgr2._execution_logs) == 1
         assert mgr2._execution_logs[0].status == "success"
+
+
+def test_hook_frontend_notification_uses_action_message():
+    """Hook notifications should include a user-facing action message."""
+    with tempfile.TemporaryDirectory() as tmp:
+        mgr = HookManager(data_dir=tmp)
+        seen = []
+        mgr.set_event_notifier(seen.append)
+        mgr.add_hook(ConversationHook(
+            name="high affection",
+            event="e",
+            actions=[{"type": "log", "message": "affection over 80"}],
+        ))
+
+        _loop().run_until_complete(mgr.emit_event(RuntimeEvent(type="e", conversation_id="web-1")))
+
+        assert len(seen) == 1
+        assert seen[0]["conversation_id"] == "web-1"
+        assert seen[0]["display_message"] == "affection over 80"
+
+
+def test_character_hook_event_prefers_chat_request_conversation_id():
+    """Character hook events should notify the active Web session room."""
+    seen = []
+
+    class FakeHookRuntime:
+        async def emit_event(self, event, context=None):
+            seen.append(event)
+            return []
+
+    runtime = CharacterRuntime(
+        profile_repo=None,
+        state_repo=None,
+        relationship_repo=None,
+        memory_service=None,
+        signal_analyzer=None,
+        planner=None,
+        prompt_builder=None,
+        state_machine=None,
+        hook_runtime=FakeHookRuntime(),
+    )
+
+    runtime._emit_hook(
+        "character.before_turn.finished",
+        identity=SimpleNamespace(character_id="c1", target_id="u1", scope_id="character-scope"),
+        chat_request=SimpleNamespace(conversation_id="web-session-1"),
+    )
+
+    assert seen[0].conversation_id == "web-session-1"
+
+
+def test_pipeline_injects_current_hook_runtime_into_cached_character_runtime(monkeypatch):
+    """A cached CharacterRuntime should receive the per-request HookManager."""
+    hook_runtime = object()
+    seen = {}
+
+    class AllowDispatcher:
+        def __init__(self, runtime, config):
+            pass
+
+        def is_enabled(self, runtime_ctx):
+            return True
+
+        def get_trigger_strategy(self, runtime_ctx):
+            return "always"
+
+        def _should_trigger(self, trigger, runtime_ctx, chat_request):
+            return True
+
+        def get_memory_scope(self, runtime_ctx):
+            return ""
+
+    import nbot.character.dispatcher as dispatcher_mod
+
+    monkeypatch.setattr(
+        dispatcher_mod,
+        "CharacterRuntimeContextDispatcher",
+        AllowDispatcher,
+    )
+
+    class FakeRuntime:
+        _hook_runtime = None
+
+        def before_turn(self, chat_request, identity, recent_messages=None):
+            seen["hook_runtime"] = self._hook_runtime
+            return CharacterTurnContext(
+                profile=CharacterProfile(name="test"),
+                state=CharacterState(mood="calm", energy=70),
+                relationship=RelationshipState(affection=80),
+                plan=ReactionPlan(),
+            )
+
+    runtime = FakeRuntime()
+
+    class FakeCallbacks(PipelineCallbacks):
+        def get_character_runtime(self, ctx):
+            return runtime
+
+        def get_character_context(self, ctx):
+            return CharacterIdentity(
+                character_id="test",
+                target_id="user",
+                scope_id="web:session-1",
+                channel="web",
+            )
+
+        def load_messages(self, ctx):
+            return []
+
+    pipeline = AIPipeline()
+    pipeline._hook_runtime = hook_runtime
+    ctx = PipelineContext(
+        chat_request=ChatRequest.for_web(
+            session_id="session-1",
+            content="hello",
+            sender="user",
+        ),
+        metadata={"source": "web", "channel_type": "private"},
+    )
+
+    pipeline._phase_character_runtime_before_turn(ctx, FakeCallbacks())
+
+    assert seen["hook_runtime"] is hook_runtime
+
+
+def test_character_hook_emit_runs_when_thread_has_no_event_loop(monkeypatch):
+    """Character hook emission should work in Flask-SocketIO background threads."""
+    seen = []
+
+    def raise_no_loop():
+        raise RuntimeError("There is no current event loop in thread")
+
+    monkeypatch.setattr(asyncio, "get_running_loop", raise_no_loop)
+
+    class FakeHookRuntime:
+        async def emit_event(self, event, context=None):
+            seen.append((event, context))
+            return []
+
+    runtime = CharacterRuntime(
+        profile_repo=None,
+        state_repo=None,
+        relationship_repo=None,
+        memory_service=None,
+        signal_analyzer=None,
+        planner=None,
+        prompt_builder=None,
+        state_machine=None,
+        hook_runtime=FakeHookRuntime(),
+    )
+
+    runtime._emit_hook(
+        "character.before_turn.finished",
+        identity=SimpleNamespace(character_id="c1", target_id="u1", scope_id="character-scope"),
+        chat_request=SimpleNamespace(conversation_id="web-session-1"),
+        context={"affection": 80},
+    )
+
+    assert len(seen) == 1
+    assert seen[0][0].conversation_id == "web-session-1"
+
+
+def test_pipeline_hook_emit_runs_when_thread_has_no_event_loop(monkeypatch):
+    """Pipeline hook emission should work in background worker threads."""
+    seen = []
+
+    def raise_no_loop():
+        raise RuntimeError("There is no current event loop in thread")
+
+    monkeypatch.setattr(asyncio, "get_running_loop", raise_no_loop)
+
+    class FakeHookRuntime:
+        async def emit_event(self, event):
+            seen.append(event)
+            return []
+
+    pipeline = AIPipeline()
+    pipeline._hook_runtime = FakeHookRuntime()
+    ctx = PipelineContext(
+        chat_request=ChatRequest.for_web(
+            session_id="session-1",
+            content="hello",
+            sender="user",
+        ),
+        metadata={"source": "web"},
+    )
+
+    pipeline._emit_hook("conversation.before_receive", ctx)
+
+    assert len(seen) == 1
+    assert seen[0].conversation_id == "session-1"
+
+
+def test_pipeline_process_resets_hook_turn_before_first_event(monkeypatch):
+    """Each pipeline request should allow the same hook to run again."""
+    calls = []
+
+    class FakeHookRuntime:
+        def reset_turn(self):
+            calls.append("reset")
+
+        async def emit_event(self, event):
+            calls.append("emit:" + event.type)
+            return []
+
+    class FakeCallbacks(PipelineCallbacks):
+        def get_workspace_context(self, ctx):
+            return {}
+
+    from nbot.core import message_middleware
+
+    monkeypatch.setattr(
+        message_middleware.MessagePreprocessor,
+        "process",
+        staticmethod(lambda chat_request, workspace_context=None: None),
+    )
+
+    pipeline = AIPipeline()
+    monkeypatch.setattr(pipeline, "_ensure_middleware_initialized", lambda: None)
+    monkeypatch.setattr(pipeline, "_phase_attachments", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline, "_phase_knowledge", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline, "_phase_prepare_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline, "_phase_ai_response", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pipeline, "_phase_assemble_result", lambda *args, **kwargs: PipelineResult())
+    monkeypatch.setattr(pipeline, "_generate_plot_choices_if_enabled", lambda *args, **kwargs: None)
+
+    ctx = PipelineContext(
+        chat_request=ChatRequest.for_web(
+            session_id="session-1",
+            content="hello",
+            sender="user",
+        ),
+        metadata={"source": "web"},
+    )
+
+    pipeline.process(ctx, FakeCallbacks(), hook_runtime=FakeHookRuntime())
+
+    assert calls[:2] == ["reset", "emit:conversation.before_receive"]

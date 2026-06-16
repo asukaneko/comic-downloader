@@ -67,11 +67,13 @@ def register_hook_routes(app, server):
 
     @app.route("/api/hooks/<hook_id>/toggle", methods=["POST"])
     def toggle_hook(hook_id):
-        data = request.get_json(silent=True) or {}
-        enabled = data.get("enabled", True)
         manager = _get_hook_manager()
-        if not manager.toggle_hook(hook_id, enabled):
+        hook = manager.get_hook(hook_id)
+        if not hook:
             return jsonify({"error": "Hook not found"}), 404
+        data = request.get_json(silent=True) or {}
+        new_enabled = data.get("enabled", not hook.enabled)
+        manager.toggle_hook(hook_id, new_enabled)
         hook = manager.get_hook(hook_id)
         return jsonify({"hook": hook.to_dict()})
 

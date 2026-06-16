@@ -7,7 +7,9 @@ Hook Runtime 数据模型
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
+VALID_TRIGGER_MODES = frozenset({"always", "once_per_conversation"})
 
 
 def _new_id(prefix: str = "hook") -> str:
@@ -89,6 +91,7 @@ class ConversationHook:
     permissions: Dict[str, Any] = field(default_factory=dict)
     timeout_ms: int = 3000
     max_retries: int = 0
+    trigger_mode: str = "always"  # always / once_per_conversation
 
     # 关联
     character_id: str = ""  # scope=character 时绑定的角色 ID
@@ -105,6 +108,8 @@ class ConversationHook:
             self.created_at = _now_iso()
         if not self.updated_at:
             self.updated_at = self.created_at
+        if self.trigger_mode not in VALID_TRIGGER_MODES:
+            self.trigger_mode = "always"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -120,6 +125,7 @@ class ConversationHook:
             "permissions": self.permissions,
             "timeout_ms": self.timeout_ms,
             "max_retries": self.max_retries,
+            "trigger_mode": self.trigger_mode,
             "character_id": self.character_id,
             "conversation_id": self.conversation_id,
             "user_id": self.user_id,
@@ -142,6 +148,7 @@ class ConversationHook:
             permissions=data.get("permissions", {}),
             timeout_ms=data.get("timeout_ms", 3000),
             max_retries=data.get("max_retries", 0),
+            trigger_mode=data.get("trigger_mode", "always"),
             character_id=data.get("character_id", ""),
             conversation_id=data.get("conversation_id", ""),
             user_id=data.get("user_id", ""),
@@ -160,6 +167,8 @@ class HookExecutionLog:
     actions_executed: int = 0
     error: str = ""
     duration_ms: int = 0
+    conversation_id: str = ""
+    event_type: str = ""
 
     id: str = ""
     created_at: str = ""
@@ -179,6 +188,8 @@ class HookExecutionLog:
             "actions_executed": self.actions_executed,
             "error": self.error,
             "duration_ms": self.duration_ms,
+            "conversation_id": self.conversation_id,
+            "event_type": self.event_type,
             "created_at": self.created_at,
         }
 
@@ -192,5 +203,7 @@ class HookExecutionLog:
             actions_executed=data.get("actions_executed", 0),
             error=data.get("error", ""),
             duration_ms=data.get("duration_ms", 0),
+            conversation_id=data.get("conversation_id", ""),
+            event_type=data.get("event_type", ""),
             created_at=data.get("created_at", ""),
         )

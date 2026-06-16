@@ -9,7 +9,7 @@ CharacterRuntime 是角色模拟的编排中心，负责：
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import List
 
 from nbot.character.models import (
     CharacterIdentity,
@@ -52,26 +52,27 @@ class CharacterRuntime:
         self._hook_runtime = hook_runtime
         self._event_logger = None  # lazy init
 
-    def _emit_hook(self, event_type: str, identity=None, payload=None, context=None):
+    def _emit_hook(self, event_type: str, identity=None, payload=None, context=None, chat_request=None):
         """Emit a hook event if hook_runtime is available. Non-blocking helper."""
         if not self._hook_runtime:
             return
         try:
             from nbot.hooks.models import RuntimeEvent
+            conversation_id = ""
+            if chat_request is not None:
+                conversation_id = getattr(chat_request, "conversation_id", "") or ""
+            if not conversation_id:
+                conversation_id = getattr(identity, "scope_id", "") if identity else ""
             event = RuntimeEvent(
                 type=event_type,
                 source="character_runtime",
                 character_id=getattr(identity, "character_id", "") if identity else "",
                 user_id=getattr(identity, "target_id", "") if identity else "",
-                conversation_id=getattr(identity, "scope_id", "") if identity else "",
+                conversation_id=conversation_id,
                 payload=payload or {},
             )
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(self._hook_runtime.emit_event(event, context=context))
-            else:
-                loop.run_until_complete(self._hook_runtime.emit_event(event, context=context))
+            from nbot.hooks.async_utils import run_hook_coro
+            run_hook_coro(self._hook_runtime.emit_event(event, context=context))
         except Exception as e:
             _log.debug("[CharacterRuntime] hook emit failed: %s", e)
 
@@ -114,7 +115,7 @@ class CharacterRuntime:
         memories = self._search_memories(identity, chat_request)
         self._emit_hook("character.after_memory_retrieve", identity, {
             "memory_count": len(memories),
-        })
+        }, chat_request=chat_request)
 
         # 分析用户输入信号
         signals = self._analyze_signals(chat_request, state, relationship)
@@ -126,13 +127,13 @@ class CharacterRuntime:
         self._emit_hook("character.after_reaction_plan", identity, {
             "intent": plan.intent if plan else "",
             "tone": plan.tone if plan else "",
-        })
+        }, chat_request=chat_request)
 
         # 世界书关键词匹配（多源上下文召回）
         world_book_entries = self._match_world_books(identity, chat_request, state=state, recent_messages=recent_messages)
         self._emit_hook("character.after_world_book_match", identity, {
             "entry_count": len(world_book_entries) if world_book_entries else 0,
-        })
+        }, chat_request=chat_request)
 
         # 编译提示词
         prompt_text = self._build_prompt(
@@ -154,7 +155,7 @@ class CharacterRuntime:
             "dependency": relationship.dependency if relationship else 0,
             "security": relationship.security if relationship else 0,
             "jealousy": relationship.jealousy if relationship else 0,
-        })
+        }, chat_request=chat_request)
 
         return CharacterTurnContext(
             profile=profile,

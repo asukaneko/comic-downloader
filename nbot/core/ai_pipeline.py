@@ -639,6 +639,7 @@ class AIPipeline:
         """
         self._hook_runtime = hook_runtime
         self._group_context = group_context
+        self._reset_hook_runtime_turn()
         self._emit_hook("conversation.before_receive", ctx)
 
         # Phase 0: 群聊发言角色选择（群聊模式下）
@@ -708,14 +709,19 @@ class AIPipeline:
                 user_id=getattr(ctx.chat_request, "user_id", "") if ctx and ctx.chat_request else "",
                 payload=payload,
             )
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(self._hook_runtime.emit_event(event))
-            else:
-                loop.run_until_complete(self._hook_runtime.emit_event(event))
+            from nbot.hooks.async_utils import run_hook_coro
+            run_hook_coro(self._hook_runtime.emit_event(event))
         except Exception:
             pass
+
+    def _reset_hook_runtime_turn(self) -> None:
+        hook_runtime = getattr(self, "_hook_runtime", None)
+        if not hook_runtime or not hasattr(hook_runtime, "reset_turn"):
+            return
+        try:
+            hook_runtime.reset_turn()
+        except Exception as exc:
+            _log.debug("[HookRuntime] reset_turn failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Phase 1: 附件解析
@@ -1249,6 +1255,7 @@ class AIPipeline:
         if not runtime:
             _log.debug("[CharacterRuntime] before_turn skipped: runtime is None")
             return
+        self._attach_hook_runtime_to_character_runtime(runtime)
         if not identity:
             _log.debug("[CharacterRuntime] before_turn skipped: identity is None")
             return
@@ -1380,6 +1387,7 @@ class AIPipeline:
         if not runtime:
             _log.debug("[CharacterRuntime] after_turn skipped: runtime is None")
             return
+        self._attach_hook_runtime_to_character_runtime(runtime)
         if not identity:
             _log.debug("[CharacterRuntime] after_turn skipped: identity is None")
             return
@@ -1402,6 +1410,15 @@ class AIPipeline:
             _log.warning(
                 "[CharacterRuntime] after_turn 异常: %s", exc, exc_info=True
             )
+
+    def _attach_hook_runtime_to_character_runtime(self, runtime) -> None:
+        hook_runtime = getattr(self, "_hook_runtime", None)
+        if not hook_runtime or runtime is None:
+            return
+        try:
+            runtime._hook_runtime = hook_runtime
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] hook runtime attach skipped: %s", exc)
 
     def _phase_auto_memory(
         self,

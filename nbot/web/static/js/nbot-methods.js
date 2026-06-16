@@ -1,6 +1,120 @@
 const api = window.__nbotApi;
 const socket = window.__nbotSocket;
 const copyCodeBlock = window.__nbotCopyCodeBlock;
+
+window.__nbotHookTemplates = [
+    {
+        key: 'high_affection_notice',
+        title: '高好感提示',
+        icon: 'fas fa-heart',
+        desc: '好感度达到 80 后，在聊天中显示亲近提示。',
+        values: {
+            name: '高好感度提示',
+            event: 'character.before_turn.finished',
+            scope: 'global',
+            priority: 10,
+            trigger_mode: 'always',
+            conditions: { affection_gte: 80 },
+            actions: [
+                {
+                    type: 'log',
+                    level: 'info',
+                    message: '好感度超过80，角色对用户更加亲近',
+                },
+            ],
+        },
+    },
+    {
+        key: 'high_affection_once_notice',
+        title: '高好感首次提示',
+        icon: 'fas fa-bell',
+        desc: '每个会话第一次达到高好感时提醒一次。',
+        values: {
+            name: '高好感度首次提示',
+            event: 'character.before_turn.finished',
+            scope: 'global',
+            priority: 10,
+            trigger_mode: 'once_per_conversation',
+            conditions: { affection_gte: 80 },
+            actions: [
+                {
+                    type: 'log',
+                    level: 'info',
+                    message: '好感度超过80，角色对用户更加亲近',
+                },
+            ],
+        },
+    },
+    {
+        key: 'low_energy_notice',
+        title: '低精力提醒',
+        icon: 'fas fa-battery-quarter',
+        desc: '角色精力较低时提示当前状态。',
+        values: {
+            name: '低精力提醒',
+            event: 'character.before_turn.finished',
+            scope: 'global',
+            priority: 20,
+            trigger_mode: 'always',
+            conditions: { energy_lte: 30 },
+            actions: [
+                {
+                    type: 'log',
+                    level: 'info',
+                    message: '角色精力较低，回复会更疲惫或克制',
+                },
+            ],
+        },
+    },
+    {
+        key: 'relationship_gain_memory',
+        title: '关系升温记忆',
+        icon: 'fas fa-brain',
+        desc: '关系达到阈值后写入一条短期记忆。',
+        values: {
+            name: '关系升温记忆',
+            event: 'character.after_turn.finished',
+            scope: 'global',
+            priority: 30,
+            trigger_mode: 'once_per_conversation',
+            conditions: { affection_gte: 60, trust_gte: 50 },
+            actions: [
+                {
+                    type: 'memory_write',
+                    title: '关系升温',
+                    content: '用户与角色的关系正在升温，角色会更自然地表达亲近。',
+                    mem_type: 'short',
+                },
+                {
+                    type: 'log',
+                    level: 'info',
+                    message: '已记录关系升温记忆',
+                },
+            ],
+        },
+    },
+    {
+        key: 'model_call_logger',
+        title: '模型调用日志',
+        icon: 'fas fa-terminal',
+        desc: '模型响应完成后记录一次调试日志。',
+        values: {
+            name: '模型调用日志',
+            event: 'model.after_call',
+            scope: 'global',
+            priority: 100,
+            trigger_mode: 'always',
+            conditions: {},
+            actions: [
+                {
+                    type: 'log',
+                    level: 'info',
+                    message: '模型调用完成',
+                },
+            ],
+        },
+    },
+];
 const connectSocketWithAuth = window.__nbotConnectSocketWithAuth;
 
 const NbotMethods = {
@@ -1900,6 +2014,9 @@ const NbotMethods = {
                             break;
                         case 'channels':
                             await this.loadChannels();
+                            break;
+                        case 'hooks-nav':
+                            await this.loadHookList();
                             break;
                         case 'message-filter':
                             await this.loadChannels();
@@ -14949,8 +15066,26 @@ def main(params):
                             }
                         }
                     });
+
+                    // 监听 Hook 触发通知
+                    socket.on('hook_notification', (data) => {
+                        if (!data || this.currentPage !== 'chat') return;
+                        if (data.conversation_id && this.currentSession?.id && data.conversation_id !== this.currentSession.id) return;
+                        const notif = {
+                            id: 'hn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+                            hook_name: data.hook_name || data.hook_id || 'Hook',
+                            event_type: data.event_type || '',
+                            status: data.status || 'success',
+                            display_message: data.display_message || data.message || data.hook_name || data.hook_id || 'Hook 已触发',
+                        };
+                        this.hookNotifications.push(notif);
+                        this.$nextTick(() => this.scrollToBottom(false));
+                        setTimeout(() => {
+                            this.hookNotifications = this.hookNotifications.filter(n => n.id !== notif.id);
+                        }, 5000);
+                    });
                 },
-                
+
                 confirmExecCommand() {
                     console.log('[DEBUG] User confirmed exec command:', this.execConfirmData.requestId);
                     if (!(socket && socket.connected)) {
@@ -17028,18 +17163,30 @@ def main(params):
     },
 
     async deleteHook(hookId) {
-        if (!confirm('确定删除此 Hook？')) return;
-        try {
-            await axios.delete('/api/hooks/' + hookId);
-            await this.loadHookList();
-        } catch (e) {
-            console.error('deleteHook:', e);
-        }
+        const hook = this.hookList.find(h => h.id === hookId);
+        this.showConfirm({
+            title: '删除 Hook',
+            messageBefore: '确定要删除 Hook',
+            highlight: (hook && hook.name) || hookId,
+            messageAfter: '吗？',
+            impact: '删除后不可恢复',
+            confirmText: '删除',
+            danger: true,
+            onConfirm: async () => {
+                try {
+                    await axios.delete('/api/hooks/' + hookId);
+                    await this.loadHookList();
+                } catch (e) {
+                    console.error('deleteHook:', e);
+                }
+            },
+        });
     },
 
     resetHookForm() {
         this.newHook = {
             name: '', event: '', scope: 'global', priority: 100,
+            trigger_mode: 'always',
             enabled: true, description: '', character_id: '',
             conversation_id: '', user_id: '',
             conditionsStr: '', actions: [], actionsStr: [],
@@ -17048,8 +17195,56 @@ def main(params):
     },
 
     openCreateHookModal() {
+        this.editingHookId = null;
         this.resetHookForm();
         this.showCreateHookModal = true;
+    },
+
+    editHook(hook) {
+        this.editingHookId = hook.id;
+        this.newHook = {
+            name: hook.name || '',
+            event: hook.event || '',
+            scope: hook.scope || 'global',
+            priority: hook.priority != null ? hook.priority : 100,
+            trigger_mode: hook.trigger_mode || 'always',
+            enabled: hook.enabled !== false,
+            description: hook.description || '',
+            character_id: hook.character_id || '',
+            conversation_id: hook.conversation_id || '',
+            user_id: hook.user_id || '',
+            conditionsStr: hook.conditions && Object.keys(hook.conditions).length ? JSON.stringify(hook.conditions, null, 2) : '',
+            actions: JSON.parse(JSON.stringify(hook.actions || [])),
+            actionsStr: (hook.actions || []).map(a => JSON.stringify(a, null, 2)),
+            permissionsStr: hook.permissions && Object.keys(hook.permissions).length ? JSON.stringify(hook.permissions, null, 2) : '',
+        };
+        this.showCreateHookModal = true;
+    },
+
+    applyHookTemplate(key) {
+        const template = (this.hookTemplates || []).find(t => t.key === key);
+        if (!template) return;
+        const values = JSON.parse(JSON.stringify(template.values || {}));
+        const actions = Array.isArray(values.actions) ? values.actions : [];
+        const conditions = values.conditions || {};
+        const permissions = values.permissions || {};
+
+        this.newHook = {
+            name: values.name || '',
+            event: values.event || '',
+            scope: values.scope || 'global',
+            priority: values.priority != null ? values.priority : 100,
+            trigger_mode: values.trigger_mode || 'always',
+            enabled: values.enabled !== false,
+            description: values.description || template.desc || '',
+            character_id: values.character_id || '',
+            conversation_id: values.conversation_id || '',
+            user_id: values.user_id || '',
+            conditionsStr: Object.keys(conditions).length ? JSON.stringify(conditions, null, 2) : '',
+            actions,
+            actionsStr: actions.map(a => JSON.stringify(a, null, 2)),
+            permissionsStr: Object.keys(permissions).length ? JSON.stringify(permissions, null, 2) : '',
+        };
     },
 
     insertConditionKey(key) {
@@ -17098,6 +17293,7 @@ def main(params):
             event: this.newHook.event,
             scope: this.newHook.scope,
             priority: this.newHook.priority,
+            trigger_mode: this.newHook.trigger_mode || 'always',
             enabled: this.newHook.enabled,
             description: this.newHook.description,
             actions: this.newHook.actions.filter(a => a && a.type),
@@ -17130,13 +17326,18 @@ def main(params):
             }
         }
         try {
-            await axios.post('/api/hooks', payload);
+            if (this.editingHookId) {
+                await axios.put('/api/hooks/' + this.editingHookId, payload);
+            } else {
+                await axios.post('/api/hooks', payload);
+            }
             this.showCreateHookModal = false;
+            this.editingHookId = null;
             this.resetHookForm();
             await this.loadHookList();
         } catch (e) {
             const msg = (e.response && e.response.data && e.response.data.error) || e.message;
-            alert('创建失败：' + msg);
+            alert((this.editingHookId ? '更新失败：' : '创建失败：') + msg);
         }
     },
 

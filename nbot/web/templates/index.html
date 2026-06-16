@@ -1735,6 +1735,18 @@
                                             </div>
                                         </div>
                                     </div>
+
+                                    <!-- Hook 触发通知 -->
+                                    <div v-for="hn in hookNotifications" :key="hn.id" class="hook-notif-card">
+                                        <div class="hook-notif-icon"><i class="fas fa-anchor"></i></div>
+                                        <div class="hook-notif-body">
+                                            <div class="hook-notif-name">{{ hn.display_message }}</div>
+                                            <div class="hook-notif-event">{{ hn.hook_name }} · {{ hn.event_type }}</div>
+                                        </div>
+                                        <button class="hook-notif-close" @click="hookNotifications = hookNotifications.filter(n => n.id !== hn.id)">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 
                                 <!-- 滚动到底部按钮 -->
@@ -3956,19 +3968,19 @@
                             <div v-if="hookList.length === 0" class="hk-empty">
                                 <div class="hk-empty-icon"><i class="fas fa-anchor"></i></div>
                                 <div class="hk-empty-title">暂无 Hook</div>
-                                <div class="hk-empty-desc">通过配置文件或 API 添加 Hook</div>
+                                <div class="hk-empty-desc">点击「创建 Hook」添加你的第一个 Hook</div>
                             </div>
                             <div v-else class="hk-grid">
-                                <div v-for="h in hookList" :key="h.id" class="hk-card">
+                                <div v-for="h in hookList" :key="h.id" class="hk-card" @click="editHook(h)">
                                     <div class="hk-card-header">
                                         <div class="hk-card-title">
                                             <i class="fas fa-anchor"></i> {{ h.name }}
                                         </div>
                                         <div class="hk-card-actions">
-                                            <button class="hk-btn-icon" :class="{ 'hk-btn-success': !h.enabled }" @click="toggleHook(h.id)" :title="h.enabled ? '暂停' : '启用'">
+                                            <button class="hk-btn-icon" :class="{ 'hk-btn-success': !h.enabled }" @click.stop="toggleHook(h.id)" :title="h.enabled ? '暂停' : '启用'">
                                                 <i :class="h.enabled ? 'fas fa-pause' : 'fas fa-play'"></i>
                                             </button>
-                                            <button class="hk-btn-icon hk-btn-danger" @click="deleteHook(h.id)" title="删除">
+                                            <button class="hk-btn-icon hk-btn-danger" @click.stop="deleteHook(h.id)" title="删除">
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         </div>
@@ -3981,6 +3993,9 @@
                                             <span class="hk-meta-item">
                                                 <i class="fas fa-scope"></i> {{ h.scope || 'global' }}
                                             </span>
+                                            <span class="hk-meta-item">
+                                                <i class="fas fa-repeat"></i> {{ (h.trigger_mode || 'always') === 'once_per_conversation' ? '每会话一次' : '持续触发' }}
+                                            </span>
                                         </div>
                                         <div class="hk-status">
                                             <span class="hk-status-dot" :class="{ active: h.enabled }"></span>
@@ -3992,13 +4007,37 @@
                         </div>
 
                         <!-- Create Hook Modal -->
-                        <div v-if="showCreateHookModal" class="modal-overlay" @click.self="showCreateHookModal = false">
+                        <div v-if="showCreateHookModal" class="modal-overlay" @click.self="showCreateHookModal = false; editingHookId = null">
                             <div class="modal hk-modal">
                                 <div class="modal-header">
-                                    <span class="modal-title"><i class="fas fa-anchor" style="color: #f59e0b; margin-right: 8px;"></i> 创建 Hook</span>
-                                    <button class="modal-close" @click="showCreateHookModal = false">&times;</button>
+                                    <span class="modal-title"><i class="fas fa-anchor" style="color: #f59e0b; margin-right: 8px;"></i> {{ editingHookId ? '编辑 Hook' : '创建 Hook' }}</span>
+                                    <button class="modal-close" @click="showCreateHookModal = false; editingHookId = null">&times;</button>
                                 </div>
                                 <div class="modal-body">
+                                    <!-- 预设模板 -->
+                                    <div class="hk-form-section">
+                                        <div class="hk-form-section-title">
+                                            <i class="fas fa-layer-group"></i> 预设模板
+                                            <span class="hk-form-hint">点击后立即填充，可继续修改</span>
+                                        </div>
+                                        <div class="hk-template-grid">
+                                            <button
+                                                v-for="t in hookTemplates"
+                                                :key="t.key"
+                                                type="button"
+                                                class="hk-template-btn"
+                                                @click="applyHookTemplate(t.key)"
+                                                :title="t.desc"
+                                            >
+                                                <span class="hk-template-icon"><i :class="t.icon"></i></span>
+                                                <span class="hk-template-copy">
+                                                    <span class="hk-template-title">{{ t.title }}</span>
+                                                    <span class="hk-template-desc">{{ t.desc }}</span>
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <!-- 基本信息 -->
                                     <div class="hk-form-section">
                                         <div class="hk-form-section-title"><i class="fas fa-info-circle"></i> 基本信息</div>
@@ -4085,6 +4124,13 @@
                                             </div>
                                         </div>
                                         <div class="form-group">
+                                            <label class="form-label">触发策略</label>
+                                            <select v-model="newHook.trigger_mode" class="form-select">
+                                                <option value="always">持续触发（每次满足条件都触发）</option>
+                                                <option value="once_per_conversation">每个会话只触发一次</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
                                             <label class="form-label">描述</label>
                                             <textarea v-model="newHook.description" class="form-textarea" rows="2" placeholder="可选，描述这个 Hook 的用途"></textarea>
                                         </div>
@@ -4164,9 +4210,9 @@
                                     </div>
                                 </div>
                                 <div class="modal-footer">
-                                    <button class="btn btn-secondary" @click="showCreateHookModal = false">取消</button>
+                                    <button class="btn btn-secondary" @click="showCreateHookModal = false; editingHookId = null">取消</button>
                                     <button class="btn btn-primary" @click="createHook()" :disabled="!newHook.name || !newHook.event">
-                                        <i class="fas fa-plus"></i> 创建
+                                        <i :class="editingHookId ? 'fas fa-save' : 'fas fa-plus'"></i> {{ editingHookId ? '保存' : '创建' }}
                                     </button>
                                 </div>
                             </div>
@@ -11732,8 +11778,12 @@
                     // 3.x Hooks
                     hookList: [],
                     showCreateHookModal: false,
+                    hookNotifications: [],
+                    editingHookId: null,
+                    hookTemplates: window.__nbotHookTemplates || [],
                     newHook: {
                         name: '', event: '', scope: 'global', priority: 100,
+                        trigger_mode: 'always',
                         enabled: true, description: '', character_id: '',
                         conversation_id: '', user_id: '',
                         conditionsStr: '', actions: [], actionsStr: [],
