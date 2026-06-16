@@ -292,13 +292,6 @@ export default defineConfig({
               items: [
                 { text: 'FAQ', link: '/guide/faq/index.md' },
               ]
-            },
-            {
-              text: '远程部署',
-              collapsed: true,
-              items: [
-                { text: 'Docker 部署指南', link: '/guide/docker-deploy.md' },
-              ]
             }
       ],
       '/napcat/':[
