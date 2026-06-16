@@ -10,6 +10,17 @@
 - 安全限制：每轮最多触发 20 个 Hook，事件链最大深度 5 层，防止失控
 - 可扩展：内置 8 种动作类型，支持通过 `register()` 注册自定义动作
 
+## 文档导航
+
+| 文档 | 说明 |
+|------|------|
+| [事件参考](events.md) | 27 种事件类型详解、通配符匹配、事件别名映射 |
+| [条件参考](conditions.md) | 身份匹配、心情条件、关系阈值、时间范围等条件详解 |
+| [动作参考](actions.md) | 8 种内置动作类型参数详解、扩展自定义动作 |
+| [Web API 参考](web-api.md) | RESTful API 端点、请求/响应格式 |
+| [Web 管理界面](web-ui.md) | 可视化管理界面使用指南 |
+| [使用示例](examples.md) | 常见场景的 Hook 配置示例 |
+
 ## 架构总览
 
 ```
@@ -21,10 +32,10 @@ AIPipeline
   │
   ├── CharacterRuntime.before_turn
   │   ├── character.before_turn.started
-  │   ├── character.before_turn.after_profile_load
-  │   ├── character.before_turn.after_memory_retrieve
-  │   ├── character.before_turn.after_world_book_match
-  │   ├── character.before_turn.after_reaction_plan
+  │   ├── character.after_profile_load
+  │   ├── character.after_memory_retrieve
+  │   ├── character.after_world_book_match
+  │   ├── character.after_reaction_plan
   │   └── character.before_turn.finished
   │
   ├── pipeline.before_prompt_render / after
@@ -82,6 +93,8 @@ event = RuntimeEvent(
 | `payload` | `dict` | 事件负载数据 |
 | `metadata` | `dict` | 附加元数据 |
 
+详细字段说明见 [事件参考](events.md#runtimeevent-字段定义)。
+
 ### ConversationHook
 
 钩子定义，监听特定事件并执行一组动作。
@@ -112,10 +125,18 @@ hook = ConversationHook(
 | `conditions` | `dict` | `{}` | 触发条件（AND 逻辑） |
 | `actions` | `list[dict]` | - | 要执行的动作列表 |
 | `enabled` | `bool` | `True` | 是否启用 |
-| `priority` | `int` | `0` | 优先级（数值越小越先执行） |
+| `priority` | `int` | `100` | 优先级（数值越小越先执行） |
 | `timeout_ms` | `int` | `3000` | 单次执行超时（毫秒） |
 | `max_retries` | `int` | `0` | 失败重试次数（失败、超时、部分失败均会重试） |
+| `trigger_mode` | `str` | `"always"` | 触发模式：`always` / `once_per_conversation` |
 | `permissions` | `dict` | `{}` | 权限限制（见下表） |
+
+**trigger_mode 字段说明：**
+
+| 值 | 说明 |
+|----|------|
+| `always` | 每次条件满足都会触发 |
+| `once_per_conversation` | 每个会话最多触发一次，状态持久化到磁盘，重启后仍有效 |
 
 **permissions 字段说明：**
 
@@ -123,6 +144,8 @@ hook = ConversationHook(
 |----|------|------|------|
 | `channels` | `list[str]` | 白名单：只允许这些频道触发 | `["web", "qq"]` |
 | `deny_channels` | `list[str]` | 黑名单：禁止这些频道触发 | `["telegram"]` |
+
+详细字段说明见 [Web 管理界面 - ConversationHook 模型](web-ui.md#conversationhook-模型)。
 
 ### HookExecutionLog
 
@@ -132,10 +155,12 @@ hook = ConversationHook(
 |------|------|------|
 | `hook_id` | `str` | 触发的 Hook ID |
 | `event_id` | `str` | 触发事件 ID |
-| `status` | `str` | `success` / `partial` / `failed` / `skipped` / `timeout` |
+| `status` | `str` | `success` / `partial` / `failed` / `skipped` / `timeout` / `denied` |
 | `actions_executed` | `int` | 已执行的动作数 |
 | `error` | `str` | 错误信息（可选） |
 | `duration_ms` | `int` | 执行耗时（毫秒） |
+| `conversation_id` | `str` | 会话 ID |
+| `event_type` | `str` | 事件类型 |
 
 ### HookManager
 
@@ -177,6 +202,7 @@ stats = manager.get_stats()
 | `character_id` | `str` | 匹配角色 ID |
 | `user_id` | `str` | 匹配用户 ID |
 | `channel` | `str` | 匹配频道（`qq` / `web` / `telegram`） |
+| `event_source` | `str` | 匹配事件来源 |
 | `mood_is` | `str` | 角色心情等于指定值 |
 | `mood_is_not` | `str` | 角色心情不等于指定值 |
 | `affection_gte` / `affection_lte` | `float` | 好感度阈值 |
@@ -187,7 +213,8 @@ stats = manager.get_stats()
 | `jealousy_gte` / `jealousy_lte` | `float` | 嫉妒度阈值 |
 | `energy_gte` / `energy_lte` | `float` | 精力阈值 |
 | `time_range` | `[str, str]` | 时间段限制，格式 `["HH:MM", "HH:MM"]`，支持跨午夜 |
-| `event_source` | `str` | 匹配事件来源 |
+
+详细说明见 [条件参考](conditions.md)。
 
 ### 条件示例
 
@@ -214,11 +241,13 @@ stats = manager.get_stats()
 | `memory_write` | 写入角色记忆 | `content`, `memory_type` |
 | `log` | 写入日志 | `message`, `level` |
 | `message` | 追加消息到上下文 | `content` |
-| `workflow` | 触发工作流执行 | `workflow_id`, `params` |
+| `workflow` | 触发工作流执行 | `workflow_id` |
 | `world_book_add` | 添加世界书条目 | `book_id`, `content`, `keywords` |
 
 > **参数兼容**：`state_delta` 和 `relationship_delta` 同时支持 `payload` 格式（如 `{"payload": {"energy": -5}}`）。
 > `memory_write` 同时支持 `mem_type` 字段名。`workflow` 同时支持 `workflow` 字段名。
+
+详细参数说明见 [动作参考](actions.md)。
 
 ### 动作示例
 
@@ -282,7 +311,7 @@ history = bus.get_history(event_type="character.before_turn.finished", limit=50)
 | **状态变化** | `state.changed`, `relationship.changed` | — |
 | **工具调用** | `tool.before_call`, `tool.after_call` | — |
 
-**当前已实际 emit 的事件**：`conversation.before_receive`、`pipeline.before/after_attachments`、`pipeline.before/after_knowledge`、`prompt.before_render`、`prompt.after_render`、`model.before_call`、`model.on_stream_chunk`（首块）、`model.after_call`、`reply.before_send`、`reply.after_send`、`tool.before_call`、`tool.after_call`，以及 CharacterRuntime 的 `character.after_memory_retrieve`、`character.after_world_book_match`、`character.after_reaction_plan`、`character.before_turn.finished`、`character.after_turn.started`、`character.after_state_update`、`character.after_turn.finished`、`state.changed`、`relationship.changed`、`memory.after_extract`。
+详细的事件说明、payload 结构和发射位置见 [事件参考](events.md)。
 
 ## Web API
 
@@ -301,6 +330,12 @@ Hook 系统通过 Web 后台提供完整的管理接口：
 | GET | `/api/hooks/events` | 查询事件总线历史 |
 | GET | `/api/hooks/stats` | 查询统计信息 |
 
+详细的请求/响应格式见 [Web API 参考](web-api.md)。
+
+## 前端通知
+
+Hook 成功触发时，Web 管理界面会弹出实时 Toast 通知，通过 Socket.IO 的 `hook_notification` 事件推送。通知内容包含 Hook 名称、事件类型和 `display_message`（从第一个 `log` 或 `message` 动作中提取）。
+
 ## 目录结构
 
 ```
@@ -317,16 +352,14 @@ nbot/hooks/
 
 ```
 data/web/
-├── hooks.json         # Hook 定义（持久化）
-└── hooks_logs.json    # 执行日志（持久化，最多 500 条，裁剪到 250 条）
-```
+├── hooks.json                # Hook 定义（持久化）
+├── hooks_logs.json           # 执行日志（持久化，最多 500 条，裁剪到 250 条）
+└── hooks_trigger_state.json  # once_per_conversation 触发状态（持久化）
 ```
 
 ## 使用示例
 
 ### 自动情绪联动
-
-当角色心情变为伤心时，自动注入安慰提示词并降低精力：
 
 ```json
 {
@@ -340,33 +373,4 @@ data/web/
 }
 ```
 
-### 好感度里程碑
-
-当好感度超过 80 时，写入长期记忆并触发世界书更新：
-
-```json
-{
-  "name": "好感度突破80",
-  "event": "relationship.changed",
-  "conditions": {"affection_gte": 80},
-  "actions": [
-    {"type": "memory_write", "content": "好感度达到了80，关系进入亲密阶段", "memory_type": "long"},
-    {"type": "world_book_add", "content": "用户与角色关系亲密", "keywords": "亲密,好感"}
-  ]
-}
-```
-
-### 定时晚安
-
-在晚间时段自动注入睡前提示：
-
-```json
-{
-  "name": "晚间睡前模式",
-  "event": "character.before_turn.finished",
-  "conditions": {"time_range": ["22:00", "06:00"]},
-  "actions": [
-    {"type": "prompt_inject", "key": "night_mode", "content": "现在是深夜，角色可能困倦，语气温柔", "priority": 20}
-  ]
-}
-```
+更多示例见 [使用示例](examples.md)。

@@ -25238,6 +25238,18 @@
     color: #f59e0b;
 }
 
+.hk-doc-link {
+    color: #6b7280;
+    font-size: 12px;
+    margin-left: 4px;
+    transition: color 0.2s;
+    text-decoration: none;
+}
+
+.hk-doc-link:hover {
+    color: #3b82f6;
+}
+
 .hk-template-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

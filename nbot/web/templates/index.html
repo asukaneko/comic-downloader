@@ -4019,6 +4019,7 @@
                                         <div class="hk-form-section-title">
                                             <i class="fas fa-layer-group"></i> 预设模板
                                             <span class="hk-form-hint">点击后立即填充，可继续修改</span>
+                                            <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/examples.html" target="_blank" class="hk-doc-link" title="查看使用示例"><i class="fas fa-book"></i></a>
                                         </div>
                                         <div class="hk-template-grid">
                                             <button
@@ -4040,7 +4041,7 @@
 
                                     <!-- 基本信息 -->
                                     <div class="hk-form-section">
-                                        <div class="hk-form-section-title"><i class="fas fa-info-circle"></i> 基本信息</div>
+                                        <div class="hk-form-section-title"><i class="fas fa-info-circle"></i> 基本信息 <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/#conversationhook" target="_blank" class="hk-doc-link" title="查看字段说明"><i class="fas fa-book"></i></a></div>
                                         <div class="form-row">
                                             <div class="form-group" style="flex: 2;">
                                                 <label class="form-label">名称 <span style="color: #ef4444;">*</span></label>
@@ -4052,7 +4053,7 @@
                                             </div>
                                         </div>
                                         <div class="form-group">
-                                            <label class="form-label">监听事件 <span style="color: #ef4444;">*</span></label>
+                                            <label class="form-label">监听事件 <span style="color: #ef4444;">*</span> <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/events.html" target="_blank" class="hk-doc-link" title="查看事件参考"><i class="fas fa-book"></i></a></label>
                                             <select v-model="newHook.event" class="form-select">
                                                 <option value="" disabled>选择事件类型...</option>
                                                 <optgroup label="对话入口">
@@ -4124,7 +4125,7 @@
                                             </div>
                                         </div>
                                         <div class="form-group">
-                                            <label class="form-label">触发策略</label>
+                                            <label class="form-label">触发策略 <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/web-ui.html#触发模式说明" target="_blank" class="hk-doc-link" title="查看触发模式说明"><i class="fas fa-book"></i></a></label>
                                             <select v-model="newHook.trigger_mode" class="form-select">
                                                 <option value="always">持续触发（每次满足条件都触发）</option>
                                                 <option value="once_per_conversation">每个会话只触发一次</option>
@@ -4149,6 +4150,7 @@
                                         <div class="hk-form-section-title">
                                             <i class="fas fa-filter"></i> 触发条件
                                             <span class="hk-form-hint">（AND 逻辑，全部满足才触发）</span>
+                                            <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/conditions.html" target="_blank" class="hk-doc-link" title="查看条件参考"><i class="fas fa-book"></i></a>
                                         </div>
                                         <div class="form-group">
                                             <textarea v-model="newHook.conditionsStr" class="form-textarea hk-code-textarea" rows="3" placeholder='留空表示无条件触发&#10;示例: { "channel": "web", "mood_is": "happy", "affection_gte": 70 }'></textarea>
@@ -4162,6 +4164,7 @@
                                     <div class="hk-form-section">
                                         <div class="hk-form-section-title">
                                             <i class="fas fa-play-circle"></i> 执行动作
+                                            <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/actions.html" target="_blank" class="hk-doc-link" title="查看动作参考"><i class="fas fa-book"></i></a>
                                         </div>
                                         <div v-for="(action, idx) in newHook.actions" :key="idx" class="hk-action-item">
                                             <div class="hk-action-header">
@@ -4203,6 +4206,7 @@
                                         <div class="hk-form-section-title">
                                             <i class="fas fa-shield-alt"></i> 权限控制
                                             <span class="hk-form-hint">（可选，限制频道）</span>
+                                            <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/web-ui.html" target="_blank" class="hk-doc-link" title="查看权限说明"><i class="fas fa-book"></i></a>
                                         </div>
                                         <div class="form-group">
                                             <textarea v-model="newHook.permissionsStr" class="form-textarea hk-code-textarea" rows="2" placeholder='留空不限制&#10;示例: { "channels": ["web", "qq"] }'></textarea>
