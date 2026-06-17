@@ -6,6 +6,7 @@ NekoBot 的频道层把 Web、QQ、Telegram 等入口统一成频道配置。每
 
 - **`web`** - Web 控制台频道
 - **`qq`** - NapCat / ncatbot QQ 频道
+- **`qqbot`** - QQ 官方机器人（Lobster Bot）频道
 
 ## Web 界面管理
 

@@ -170,11 +170,12 @@ MODEL=gpt-4o
 
 ### Q: 支持哪些消息频道？
 
-**A:** 当前支持 4 种频道：
+**A:** 当前支持 5 种频道：
 
 | 频道 | 类型 | 传输方式 | 配置 |
 |------|------|----------|------|
-| QQ | qq | WebSocket (NapCat) | `.env` 中配置 |
+| QQ (NapCat) | qq | WebSocket (NapCat) | `.env` 中配置 |
+| QQ 官方机器人 | qqbot | WebSocket (官方 API) | 频道管理页面或 `.env` 配置 |
 | Web | web | HTTP + SocketIO | 内置，无需额外配置 |
 | Telegram | telegram | Webhook | 频道管理页面配置 |
 | Feishu | feishu | Webhook / WebSocket | `.env` 中配置 |
@@ -206,6 +207,39 @@ FEISHU_VERIFICATION_TOKEN=可选
 ```
 
 4. 在飞书开放平台配置 Event 订阅和 Webhook 地址
+
+### Q: 如何配置 QQ 官方机器人？
+
+**A:**
+
+1. 在 [QQ 开放平台](https://q.qq.com/) 创建机器人应用
+2. 获取 AppID 和 AppSecret
+3. 进入 Web 后台 → 频道管理 → 从预设添加 → 选择 **QQ Lobster Bot**
+4. 填写 AppID 和 AppSecret，保存
+5. WebSocket 连接会自动建立
+
+也可以通过环境变量配置：
+
+```env
+QQBOT_APP_ID=你的AppID
+QQBOT_APP_SECRET=你的AppSecret
+```
+
+详见 [QQ 官方机器人适配器文档](./nbot/channels/qqbot.md)。
+
+### Q: QQ 官方机器人和 NapCat QQ 有什么区别？
+
+**A:** 两者是完全独立的 QQ 接入方式：
+
+| 对比项 | QQ 官方机器人 (qqbot) | NapCat QQ (qq) |
+|--------|----------------------|----------------|
+| 账号类型 | 机器人应用（需申请） | 个人 QQ 号 |
+| 部署方式 | 直连官方 API | 需部署 NapCat |
+| 消息限制 | 2000 字符 | 4500 字符 |
+| 文件发送 | 不支持 | 支持 |
+| 群聊触发 | 需 @机器人 | 支持主动接收 |
+
+可以根据需求选择，两者可以同时启用。
 
 ### Q: QQ 和 Web 频道的会话是否共享？
 

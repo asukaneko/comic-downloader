@@ -28,6 +28,7 @@ Pipeline（AI 调用、after_turn、token 统计）
 |------|-------------|-------------|--------------|------|
 | Web | 未实现协议 | always | conversation | Web 有独立运行路径，不经过 dispatcher |
 | QQ | ✅ `QQChannelAdapter` | mention_or_private | group (群) / user (私) | `is_mentioned` 从 CQ 码 `at` 段检测 |
+| QQ 官方 Bot | ✅ `QQBotChannelAdapter` | mention_or_private | group (群) / user (私) | `is_mentioned` 从事件类型和 mentions 数组检测 |
 | 飞书 | ✅ `FeishuChannelAdapter` | always | group (群) / user (私) | 暂无 `is_mentioned` 检测 |
 | Telegram | ✅ `TelegramChannelAdapter` | private_or_reply | group (群) / user (私) | `is_reply_to_bot` 从 `reply_to_message.from.is_bot` 检测 |
 
@@ -51,6 +52,12 @@ trigger = mention_or_private
 memory_scope = group_user
 # 是否启用旧版 personality.json prompt（过渡期使用）
 legacy_prompt_enabled = false
+
+[character_runtime_qqbot]
+# QQ 官方机器人频道是否启用角色运行时
+enabled = true
+trigger = mention_or_private
+memory_scope = group
 
 [character_runtime_feishu]
 enabled = true
@@ -98,7 +105,7 @@ memory_scope = group
 
 Pipeline 中有两个关键概念容易混淆：
 
-- **channel**（频道标识）：`qq` / `telegram` / `feishu` / `web` — 决定读取哪个频道的配置
+- **channel**（频道标识）：`qq` / `qqbot` / `telegram` / `feishu` / `web` — 决定读取哪个频道的配置
 - **scene**（场景类型）：`private` / `group` / `thread` — 决定触发策略和记忆作用域
 
 Pipeline 通过 `ctx.metadata["source"]` 获取 channel，通过 `ctx.metadata["channel_type"]` 获取 scene。
@@ -150,6 +157,7 @@ class ChannelRenderPolicy:
 | 频道 | markdown | image | max_text_length | split_strategy |
 |------|----------|-------|-----------------|----------------|
 | QQ | ❌ | ✅ | 4500 | paragraph |
+| QQ 官方 Bot | ❌ | ✅ | 2000 | paragraph |
 | Telegram | ✅ | ✅ | 4096 | paragraph |
 | 飞书 | ✅ | ✅ | 4000 | paragraph |
 
@@ -178,6 +186,7 @@ Pipeline 在 `_phase_character_runtime_before_turn` 中优先调用 `ctx.adapter
 | 字段 | 写入位置 | 检测方式 |
 |------|---------|---------|
 | `is_mentioned` | QQ `parse_event()` → 返回 dict + `metadata["is_mentioned"]` | CQ 码 `at` 段匹配 `bot_uin` 或 `self_id` 或 `at_all` |
+| `is_mentioned` | QQBot `parse_event()` → 返回 dict + `metadata["is_mentioned"]` | 事件类型 `GROUP_AT_MESSAGE_CREATE` 或 mentions 数组匹配 `bot_appid` |
 | `is_reply_to_bot` | Telegram `parse_update()` → 返回 dict + `metadata["is_reply_to_bot"]` | `reply_to_message.from.is_bot` |
 
 Dispatcher 通过 `_get_meta_field()` 同时检查 `chat_request` 属性和 `metadata` 字典，确保无论 adapter 如何传递数据都能正确读取。

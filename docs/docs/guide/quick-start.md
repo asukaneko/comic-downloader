@@ -57,6 +57,10 @@ WS_URI=ws://localhost:3001
 TOKEN=napcat_token
 WEBUI_URI=http://localhost:6099
 
+# QQ 官方机器人配置（可选，与上面的 NapCat QQ 二选一或同时启用）
+QQBOT_APP_ID=你的AppID
+QQBOT_APP_SECRET=你的AppSecret
+
 # Telegram 配置（可选）
 TELEGRAM_BOT_TOKEN=你的Telegram_Bot_Token
 TELEGRAM_WEBHOOK_SECRET=你的Webhook_Secret

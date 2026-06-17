@@ -171,6 +171,7 @@ export default defineConfig({
                     { text: 'base - 频道基类', link: '/guide/nbot/channels/base.md' },
                     { text: 'registry - 频道注册', link: '/guide/nbot/channels/registry.md' },
                     { text: 'qq - QQ适配器', link: '/guide/nbot/channels/qq.md' },
+                    { text: 'qqbot - QQ官方机器人', link: '/guide/nbot/channels/qqbot.md' },
                     { text: 'web - Web适配器', link: '/guide/nbot/channels/web.md' },
                     { text: 'telegram - Telegram适配器', link: '/guide/nbot/channels/telegram.md' },
                   ]
