@@ -5765,6 +5765,15 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .session-pin-icon {
+            font-size: 10px;
+            color: #fbbf24;
+            flex-shrink: 0;
+            transform: rotate(35deg);
         }
         .session-meta {
             font-size: 12px;

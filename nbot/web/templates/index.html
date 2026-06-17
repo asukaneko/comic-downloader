@@ -766,7 +766,10 @@
                                                 <i v-else :class="sessionModeTab === 'agent' ? 'fas fa-robot' : (sessionModeTab === 'group' ? 'fas fa-users' : (session.type === 'qq' ? 'fab fa-qq' : 'fas fa-comment'))"></i>
                                             </div>
                                             <div class="session-info">
-                                                <div class="session-name">{{ session.name }}</div>
+                                                <div class="session-name">
+                                                    <i v-if="session.pinned" class="fas fa-thumbtack session-pin-icon" title="已置顶"></i>
+                                                    {{ session.name }}
+                                                </div>
                                                 <div class="session-meta">
                                                     {{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}
                                                     <span v-if="session.session_mode === 'group' && session.character_ids" style="margin-left: 6px; color: var(--accent-primary);">
@@ -13259,6 +13262,12 @@
                         sessionPool = sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
                     }
 
+                    // 置顶会话排在最前
+                    sessionPool.sort((a, b) => {
+                        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                        return 0;
+                    });
+
                     return sessionPool;
                 },
 
@@ -13281,6 +13290,12 @@
                         sessionPool = sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
                     }
 
+                    // 置顶会话排在最前
+                    sessionPool.sort((a, b) => {
+                        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                        return 0;
+                    });
+
                     return sessionPool;
                 },
 
@@ -13296,6 +13311,12 @@
                         const search = this.sessionSearch.toLowerCase();
                         sessionPool = sessionPool.filter(s => (s.name || '').toLowerCase().includes(search));
                     }
+
+                    // 置顶会话排在最前
+                    sessionPool.sort((a, b) => {
+                        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                        return 0;
+                    });
 
                     return sessionPool;
                 },
