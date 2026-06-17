@@ -20,6 +20,10 @@ from nbot.services.feishu_ws_service import (
     handle_feishu_message,
     resolve_feishu_ws_credentials,
 )
+from nbot.services.qqbot_service import (
+    qqbot_ws_service,
+    resolve_qqbot_credentials,
+)
 
 CHANNEL_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{2,64}$")
 
@@ -77,6 +81,27 @@ FEISHU_WS_PRESET = {
         "app_secret": "",
         "encrypt_key": "",
         "verification_token": "",
+    },
+    "capabilities": {
+        "supports_stream": False,
+        "supports_progress_updates": False,
+        "supports_file_send": False,
+        "supports_stop": False,
+    },
+}
+
+QQBOT_PRESET = {
+    "id": "qqbot",
+    "name": "QQ Lobster Bot",
+    "type": "qqbot",
+    "transport": "websocket",
+    "description": "QQ official Lobster Bot channel. Fill AppID and AppSecret to connect directly.",
+    "enabled": True,
+    "config": {
+        "app_id": "",
+        "app_secret": "",
+        "sandbox": False,
+        "api_base": "",
     },
     "capabilities": {
         "supports_stream": False,
@@ -235,6 +260,47 @@ def auto_start_feishu_ws_clients(server):
                 started_count += 1
 
 
+def _start_qqbot_client(server, channel):
+    try:
+        channel_id = channel.get("id")
+        config = channel.get("config") or {}
+        credentials = resolve_qqbot_credentials(config)
+        if not credentials["app_id"] or not credentials["app_secret"]:
+            print(f"[QQBot] Channel {channel_id} missing AppID or AppSecret, skip startup")
+            return False
+        if qqbot_ws_service.is_running(channel_id):
+            return True
+        if not qqbot_ws_service._server:
+            qqbot_ws_service.set_server(server)
+        return qqbot_ws_service.start_client(channel_id, channel)
+    except Exception as e:
+        print(f"[QQBot] Failed to start client: {e}")
+        return False
+
+
+def _stop_qqbot_client(channel_id):
+    try:
+        return qqbot_ws_service.stop_client(channel_id)
+    except Exception as e:
+        print(f"[QQBot] Failed to stop client: {e}")
+        return False
+
+
+def auto_start_qqbot_clients(server):
+    started_count = 0
+    if not qqbot_ws_service._server:
+        qqbot_ws_service.set_server(server)
+    for channel in server.channels_config:
+        if channel.get("type") != "qqbot" or not channel.get("enabled"):
+            continue
+        if qqbot_ws_service.is_running(channel.get("id")):
+            continue
+        if _start_qqbot_client(server, channel):
+            started_count += 1
+    if started_count:
+        print(f"[QQBot] Auto-started {started_count} QQ Lobster Bot channel(s)")
+
+
 def _public_preset(preset):
     item = dict(preset)
     item["config"] = dict(preset.get("config") or {})
@@ -248,6 +314,7 @@ def register_channel_routes(app, server):
             _public_preset(TELEGRAM_PRESET),
             _public_preset(FEISHU_PRESET),
             _public_preset(FEISHU_WS_PRESET),
+            _public_preset(QQBOT_PRESET),
         ]})
 
     @app.route("/api/channels/presets/<preset_id>", methods=["POST"])
@@ -258,6 +325,8 @@ def register_channel_routes(app, server):
             preset = FEISHU_PRESET
         elif preset_id == "feishu_ws":
             preset = FEISHU_WS_PRESET
+        elif preset_id == "qqbot":
+            preset = QQBOT_PRESET
         else:
             return jsonify({"error": "频道预设不存在"}), 404
 
@@ -280,6 +349,8 @@ def register_channel_routes(app, server):
         # 如果是飞书长连接预设，自动启动 WebSocket 客户端
         if preset_id == "feishu_ws" and channel.get("enabled"):
             _start_feishu_ws_client(server, channel)
+        elif preset_id == "qqbot" and channel.get("enabled"):
+            _start_qqbot_client(server, channel)
 
         return jsonify({"success": True, "channel": channel})
 
@@ -297,6 +368,8 @@ def register_channel_routes(app, server):
             elif item.get("type") == "feishu_ws":
                 # 飞书长连接模式显示连接状态
                 item["ws_connected"] = feishu_ws_service.is_running(item.get("id"))
+            elif item.get("type") == "qqbot":
+                item["ws_connected"] = qqbot_ws_service.is_running(item.get("id"))
             channels.append(item)
         return jsonify(
             {
@@ -304,6 +377,7 @@ def register_channel_routes(app, server):
                 "registered_adapters": sorted(registered),
                 "registered_handlers": channel_registry.list_handlers(),
                 "feishu_ws_running": feishu_ws_service.list_running_clients(),
+                "qqbot_running": qqbot_ws_service.list_running_clients(),
             }
         )
 
@@ -324,6 +398,8 @@ def register_channel_routes(app, server):
         # 如果是飞书长连接频道且已启用，自动启动 WebSocket 客户端
         if channel.get("type") == "feishu_ws" and channel.get("enabled"):
             _start_feishu_ws_client(server, channel)
+        elif channel.get("type") == "qqbot" and channel.get("enabled"):
+            _start_qqbot_client(server, channel)
 
         return jsonify({"success": True, "channel": channel})
 
@@ -343,6 +419,8 @@ def register_channel_routes(app, server):
         # 如果是飞书长连接频道，先停止现有的 WebSocket 客户端
         if channel.get("type") == "feishu_ws" and feishu_ws_service.is_running(channel_id):
             _stop_feishu_ws_client(channel_id)
+        if channel.get("type") == "qqbot" and qqbot_ws_service.is_running(channel_id):
+            _stop_qqbot_client(channel_id)
 
         channel.clear()
         channel.update(updated)
@@ -351,6 +429,8 @@ def register_channel_routes(app, server):
         # 如果是飞书长连接频道且已启用，重新启动 WebSocket 客户端
         if channel.get("type") == "feishu_ws" and channel.get("enabled"):
             _start_feishu_ws_client(server, channel)
+        elif channel.get("type") == "qqbot" and channel.get("enabled"):
+            _start_qqbot_client(server, channel)
 
         return jsonify({"success": True, "channel": channel})
 
@@ -365,6 +445,8 @@ def register_channel_routes(app, server):
         # 如果是飞书长连接频道，先停止 WebSocket 客户端
         if channel.get("type") == "feishu_ws":
             _stop_feishu_ws_client(channel_id)
+        elif channel.get("type") == "qqbot":
+            _stop_qqbot_client(channel_id)
 
         server.channels_config = [
             item for item in server.channels_config if item.get("id") != channel_id
@@ -387,8 +469,44 @@ def register_channel_routes(app, server):
                 _start_feishu_ws_client(server, channel)
             else:
                 _stop_feishu_ws_client(channel_id)
+        elif channel.get("type") == "qqbot":
+            if channel["enabled"]:
+                _start_qqbot_client(server, channel)
+            else:
+                _stop_qqbot_client(channel_id)
 
         return jsonify({"success": True, "enabled": channel["enabled"]})
+
+    @app.route("/api/channels/qqbot/<channel_id>/start", methods=["POST"])
+    def qqbot_start(channel_id):
+        channel = _find_channel(server, channel_id)
+        if not channel or channel.get("type") != "qqbot":
+            return jsonify({"error": "QQ Lobster Bot channel not found"}), 404
+        if channel.get("enabled") is False:
+            return jsonify({"error": "QQ Lobster Bot channel is disabled"}), 403
+        if _start_qqbot_client(server, channel):
+            return jsonify({"success": True, "message": "QQ Bot WebSocket client started"})
+        return jsonify({"error": "Failed to start QQ Bot WebSocket client"}), 500
+
+    @app.route("/api/channels/qqbot/<channel_id>/stop", methods=["POST"])
+    def qqbot_stop(channel_id):
+        channel = _find_channel(server, channel_id)
+        if not channel or channel.get("type") != "qqbot":
+            return jsonify({"error": "QQ Lobster Bot channel not found"}), 404
+        _stop_qqbot_client(channel_id)
+        return jsonify({"success": True, "message": "QQ Bot WebSocket client stopped"})
+
+    @app.route("/api/channels/qqbot/<channel_id>/status", methods=["GET"])
+    def qqbot_status(channel_id):
+        channel = _find_channel(server, channel_id)
+        if not channel or channel.get("type") != "qqbot":
+            return jsonify({"error": "QQ Lobster Bot channel not found"}), 404
+        return jsonify({
+            "success": True,
+            "channel_id": channel_id,
+            "connected": qqbot_ws_service.is_running(channel_id),
+            "enabled": channel.get("enabled", True),
+        })
 
     @app.route("/api/channels/telegram/<channel_id>/webhook", methods=["POST"])
     def telegram_webhook(channel_id):

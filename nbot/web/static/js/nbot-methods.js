@@ -4111,8 +4111,28 @@ def main(params):
                             supports_stop: false
                         }
                     };
+                    const fallbackQQBotPreset = {
+                        id: 'qqbot',
+                        name: 'QQ Lobster Bot',
+                        type: 'qqbot',
+                        transport: 'websocket',
+                        description: 'QQ official Lobster Bot channel. Fill AppID and AppSecret to connect directly.',
+                        config: {
+                            app_id: '',
+                            app_secret: '',
+                            sandbox: false,
+                            api_base: ''
+                        },
+                        capabilities: {
+                            supports_stream: false,
+                            supports_progress_updates: false,
+                            supports_file_send: false,
+                            supports_stop: false
+                        }
+                    };
                     const preset = this.channelPresets.find(item => item.id === presetId)
-                        || (presetId === 'telegram' ? fallbackTelegramPreset : null);
+                        || (presetId === 'telegram' ? fallbackTelegramPreset : null)
+                        || (presetId === 'qqbot' ? fallbackQQBotPreset : null);
                     if (!preset) return;
 
                     this.editingChannel = null;

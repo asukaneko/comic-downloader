@@ -133,9 +133,10 @@ def _reset_canonical_qq_session_messages(
         if not server or not hasattr(server, "sessions"):
             return
 
+        save_callback = getattr(server, "_save_data", lambda _name: None)
         session_store = WebSessionStore(
             server.sessions,
-            save_callback=lambda: server._save_data("sessions"),
+            save_callback=lambda: save_callback("sessions"),
         )
         session = session_store.get_session(session_id)
         if not session:
@@ -180,9 +181,10 @@ def _replace_canonical_qq_session_messages(
         if not server or not hasattr(server, "sessions"):
             return
 
+        save_callback = getattr(server, "_save_data", lambda _name: None)
         session_store = WebSessionStore(
             server.sessions,
-            save_callback=lambda: server._save_data("sessions"),
+            save_callback=lambda: save_callback("sessions"),
         )
         session = session_store.get_session(session_id)
         if not session:
@@ -217,19 +219,27 @@ def _replace_canonical_qq_session_messages(
         return
 
 
-def _replace_direct_session_messages(session_id, messages, system_prompt=None, character=None):
+def _replace_direct_session_messages(
+    session_id,
+    messages,
+    system_prompt=None,
+    character=None,
+    server=None,
+):
     """直接按 session_id 更新 session store（用于飞书/Web 等非 QQ 渠道）"""
     try:
         from nbot.core.session_store import WebSessionStore
-        from nbot.web.server import WebChatServer
+        if server is None:
+            from nbot.web.server import WebChatServer
 
-        server = WebChatServer.get_instance()
+            server = WebChatServer.get_instance()
         if not server or not hasattr(server, "sessions"):
             return
 
+        save_callback = getattr(server, "_save_data", lambda _name: None)
         session_store = WebSessionStore(
             server.sessions,
-            save_callback=lambda: server._save_data("sessions"),
+            save_callback=lambda: save_callback("sessions"),
         )
         session = session_store.get_session(session_id)
         if not session:
@@ -317,6 +327,23 @@ def register_ai_commands(
             else:
                 await msg.reply(text=text)
 
+    def is_direct_channel_context(msg):
+        session_id = str(getattr(msg, "session_id", "") or "").strip()
+        return bool(session_id and getattr(msg, "server", None) is not None)
+
+    def needs_legacy_group_admin(msg, is_group):
+        return (
+            bool(is_group)
+            and not is_direct_channel_context(msg)
+            and str(getattr(msg, "user_id", "")) not in admin
+        )
+
+    def needs_legacy_admin(msg):
+        return (
+            not is_direct_channel_context(msg)
+            and str(getattr(msg, "user_id", "")) not in admin
+        )
+
     def resolve_current_session_id(msg, is_group):
         session_id = str(getattr(msg, "session_id", "") or "").strip()
         if session_id:
@@ -385,16 +412,19 @@ def register_ai_commands(
         return compile_personality_prompt(character)
 
     def resolve_character_session(msg, is_group):
+        session_id = (
+            getattr(msg, "session_id", None)
+            or getattr(msg, "conversation_id", None)
+        )
+        if session_id:
+            return "channel", str(session_id)
+
         if is_group and getattr(msg, "group_id", None):
             return "group", str(msg.group_id)
         if not is_group and getattr(msg, "user_id", None):
             return "user", str(msg.user_id)
 
-        session_id = (
-            getattr(msg, "session_id", None)
-            or getattr(msg, "chat_id", None)
-            or getattr(msg, "conversation_id", None)
-        )
+        session_id = getattr(msg, "chat_id", None)
         if session_id:
             return "channel", str(session_id)
 
@@ -489,12 +519,13 @@ def register_ai_commands(
             raise ValueError("无法识别当前会话")
 
         prefix = "group" if scope == "group" else "user" if scope == "user" else "channel"
-        prompt_dir = os.path.join(base_dir, "resources", "prompts", prefix)
-        prompt_file = os.path.join(prompt_dir, f"{prefix}_{target_id}.txt")
+        if scope != "channel":
+            prompt_dir = os.path.join(base_dir, "resources", "prompts", prefix)
+            prompt_file = os.path.join(prompt_dir, f"{prefix}_{target_id}.txt")
 
-        os.makedirs(prompt_dir, exist_ok=True)
-        with open(prompt_file, "w", encoding="utf-8") as f:
-            f.write(prompt)
+            os.makedirs(prompt_dir, exist_ok=True)
+            with open(prompt_file, "w", encoding="utf-8") as f:
+                f.write(prompt)
 
         if scope in {"group", "user"}:
             messages = group_messages if scope == "group" else user_messages
@@ -521,9 +552,10 @@ def register_ai_commands(
             if server and hasattr(server, "sessions"):
                 from nbot.core.session_store import WebSessionStore
 
+                save_callback = getattr(server, "_save_data", lambda _name: None)
                 session_store = WebSessionStore(
                     server.sessions,
-                    save_callback=lambda: server._save_data("sessions"),
+                    save_callback=lambda: save_callback("sessions"),
                 )
                 session = session_store.get_session(str(session_id))
                 if session is not None:
@@ -560,6 +592,8 @@ def register_ai_commands(
                 "store": None,
                 "history_key": direct_session_id,
                 "session_id": direct_session_id,
+                "direct": True,
+                "server": getattr(msg, "server", None),
                 "user_id": "" if is_group else user_id,
                 "group_id": group_id if is_group else "",
                 "group_user_id": user_id if is_group else "",
@@ -596,6 +630,22 @@ def register_ai_commands(
         return [dict(message) for message in messages or [] if isinstance(message, dict)]
 
     def load_current_qq_session_messages(info):
+        session_id = str(info.get("session_id") or "")
+        if info.get("direct") and session_id:
+            server = info.get("server")
+            if server and hasattr(server, "sessions"):
+                session = server.sessions.get(session_id) or {}
+                return copy_chat_messages(session.get("messages", []))
+            try:
+                from nbot.web.server import WebChatServer
+
+                server = WebChatServer.get_instance()
+                if server and hasattr(server, "sessions"):
+                    session = server.sessions.get(session_id) or {}
+                    return copy_chat_messages(session.get("messages", []))
+            except Exception:
+                return []
+
         return load_canonical_qq_messages(
             user_id=info.get("user_id"),
             group_id=info.get("group_id"),
@@ -610,6 +660,16 @@ def register_ai_commands(
             save_qq_histories()
 
         session_id = str(info.get("session_id") or "")
+        if session_id and info.get("direct"):
+            _replace_direct_session_messages(
+                session_id,
+                messages,
+                system_prompt,
+                character,
+                server=info.get("server"),
+            )
+            return
+
         # 飞书/Web 直接 session_id（非 qq_ 前缀），直接更新 session store
         if session_id and not session_id.startswith("qq_"):
             _replace_direct_session_messages(session_id, messages, system_prompt, character)
@@ -623,6 +683,24 @@ def register_ai_commands(
             system_prompt=system_prompt,
             character=character,
         )
+
+    def delete_current_session_workspace(info):
+        if not workspace_available:
+            return
+        try:
+            if info.get("direct") and info.get("session_id"):
+                from nbot.core.workspace import workspace_manager
+
+                workspace_manager.delete_workspace(str(info["session_id"]))
+                return
+
+            delete_session_workspace(
+                user_id=info.get("user_id"),
+                group_id=info.get("group_id"),
+                group_user_id=info.get("group_user_id"),
+            )
+        except Exception as exc:
+            log.debug(f"Delete current session workspace skipped: {exc}")
 
     def session_system_prompt(session, messages):
         prompt = str((session or {}).get("system_prompt") or "")
@@ -716,9 +794,10 @@ def register_ai_commands(
             if server and hasattr(server, "sessions"):
                 from nbot.core.session_store import WebSessionStore
 
+                save_callback = getattr(server, "_save_data", lambda _name: None)
                 session_store = WebSessionStore(
                     server.sessions,
-                    save_callback=lambda: server._save_data("sessions"),
+                    save_callback=lambda: save_callback("sessions"),
                 )
                 session_store.set_session(session_id, session)
                 if workspace_available:
@@ -748,11 +827,22 @@ def register_ai_commands(
         # 飞书/Web 适配器：使用 channel 作用域
         direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
         if direct_session_id:
-            prefix = "channel"
-            id_str = direct_session_id
-        else:
-            id_str = str(msg.group_id if is_group else msg.user_id)
-            prefix = "group" if is_group else "user"
+            _replace_direct_session_messages(
+                direct_session_id,
+                [{"role": "system", "content": prompt}],
+                system_prompt=prompt,
+                server=getattr(msg, "server", None),
+            )
+            try:
+                from nbot.core.prompt import prompt_manager
+
+                prompt_manager._prompt_cache = {}
+            except Exception:
+                pass
+            return
+
+        id_str = str(msg.group_id if is_group else msg.user_id)
+        prefix = "group" if is_group else "user"
         os.makedirs(f"resources/prompts/{prefix}", exist_ok=True)
         with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
             file.write(prompt)
@@ -769,15 +859,19 @@ def register_ai_commands(
         if not session_id:
             return
         try:
-            from nbot.web.server import WebChatServer
             from nbot.core.session_store import WebSessionStore
 
-            server = WebChatServer.get_instance()
+            server = info.get("server") if info.get("direct") else None
+            if server is None:
+                from nbot.web.server import WebChatServer
+
+                server = WebChatServer.get_instance()
             if not server or not hasattr(server, "sessions"):
                 return
+            save_callback = getattr(server, "_save_data", lambda _name: None)
             session_store = WebSessionStore(
                 server.sessions,
-                save_callback=lambda: server._save_data("sessions"),
+                save_callback=lambda: save_callback("sessions"),
             )
             session = session_store.get_session(session_id)
             if not session:
@@ -1306,7 +1400,7 @@ def register_ai_commands(
         category="2",
     )
     async def handle_show_chat(msg, is_group=True):
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限发送聊天记录喔~")
             return
 
@@ -1355,7 +1449,7 @@ def register_ai_commands(
         category="2",
     )
     async def handle_set_prompt(msg, is_group=True):
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
@@ -1367,32 +1461,35 @@ def register_ai_commands(
 
         direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
         if direct_session_id:
-            id_str = direct_session_id
-            prefix = "channel"
-        else:
-            id_str = str(msg.group_id if is_group else msg.user_id)
-            prefix = "group" if is_group else "user"
-        os.makedirs(f"resources/prompts/{prefix}", exist_ok=True)
-        with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
-            file.write(prompt_content)
-
-        if direct_session_id:
-            # 飞书/Web：直接更新 session store
             _replace_direct_session_messages(
                 direct_session_id,
                 [{"role": "system", "content": prompt_content}],
                 system_prompt=prompt_content,
+                server=getattr(msg, "server", None),
             )
-        else:
-            messages = group_messages if is_group else user_messages
-            messages[id_str] = [{"role": "system", "content": prompt_content}]
-            save_qq_histories()
-            _replace_canonical_qq_session_messages(
-                group_id=id_str if is_group else None,
-                user_id=id_str if not is_group else None,
-                messages=[{"role": "system", "content": prompt_content}],
-                system_prompt=prompt_content,
+            reply_text = (
+                "群组提示词已更新，对话记录已清除喔~"
+                if is_group
+                else "个人提示词已更新，对话记录已清除喔~"
             )
+            await reply_current_channel(msg, is_group, reply_text)
+            return
+
+        id_str = str(msg.group_id if is_group else msg.user_id)
+        prefix = "group" if is_group else "user"
+        os.makedirs(f"resources/prompts/{prefix}", exist_ok=True)
+        with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "w", encoding="utf-8") as file:
+            file.write(prompt_content)
+
+        messages = group_messages if is_group else user_messages
+        messages[id_str] = [{"role": "system", "content": prompt_content}]
+        save_qq_histories()
+        _replace_canonical_qq_session_messages(
+            group_id=id_str if is_group else None,
+            user_id=id_str if not is_group else None,
+            messages=[{"role": "system", "content": prompt_content}],
+            system_prompt=prompt_content,
+        )
 
         reply_text = "群组提示词已更新，对话记录已清除喔~" if is_group else "个人提示词已更新，对话记录已清除喔~"
         await reply_current_channel(msg, is_group, reply_text)
@@ -1404,17 +1501,30 @@ def register_ai_commands(
         category="2",
     )
     async def handle_del_prompt(msg, is_group=True):
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
         direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
         if direct_session_id:
-            id_str = direct_session_id
-            prefix = "channel"
-        else:
-            id_str = str(msg.group_id if is_group else msg.user_id)
-            prefix = "group" if is_group else "user"
+            try:
+                from nbot.core.prompt import prompt_manager
+
+                prompt = prompt_manager.load_base_prompt()
+            except Exception as e:
+                log.warning(f"Reload base prompt failed: {e}")
+                prompt = ""
+            _replace_direct_session_messages(
+                direct_session_id,
+                [{"role": "system", "content": prompt}],
+                system_prompt=prompt,
+                server=getattr(msg, "server", None),
+            )
+            await reply_current_channel(msg, is_group, "提示词已删除喔~")
+            return
+
+        id_str = str(msg.group_id if is_group else msg.user_id)
+        prefix = "group" if is_group else "user"
         messages = group_messages if is_group else user_messages
         prompt_path = f"resources/prompts/{prefix}/{prefix}_{id_str}.txt"
 
@@ -1459,17 +1569,20 @@ def register_ai_commands(
         category="2",
     )
     async def handle_get_prompt(msg, is_group=True):
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
         direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
         if direct_session_id:
-            id_str = direct_session_id
-            prefix = "channel"
-        else:
-            id_str = str(msg.group_id if is_group else msg.user_id)
-            prefix = "group" if is_group else "user"
+            prompt = get_session_prompt("channel", direct_session_id, msg)
+            if not prompt:
+                prompt = "没有找到提示词喔~"
+            await reply_current_channel(msg, is_group, prompt)
+            return
+
+        id_str = str(msg.group_id if is_group else msg.user_id)
+        prefix = "group" if is_group else "user"
         try:
             with open(f"resources/prompts/{prefix}/{prefix}_{id_str}.txt", "r", encoding="utf-8") as file:
                 prompt = file.read()
@@ -1484,46 +1597,58 @@ def register_ai_commands(
         admin_show=True,
     )
     async def handle_new_session(msg, is_group=True):
+        direct_session_id = str(getattr(msg, "session_id", "") or "").strip()
+        direct_server = getattr(msg, "server", None)
+        if direct_session_id and direct_server is not None:
+            if not hasattr(direct_server, "sessions"):
+                await msg.reply(text="当前平台不支持会话重置喔~")
+                return
+
+            from nbot.core.session_store import WebSessionStore
+
+            save_callback = getattr(direct_server, "_save_data", lambda _name: None)
+            session_store = WebSessionStore(
+                direct_server.sessions,
+                save_callback=lambda: save_callback("sessions"),
+            )
+            session = session_store.get_session(direct_session_id)
+            if session:
+                msg_count_before = len(session.get("messages", []))
+                system_msg = next(
+                    (m for m in session.get("messages", []) if m.get("role") == "system"),
+                    None,
+                )
+                new_msgs = [system_msg] if system_msg else []
+                session_store.replace_messages(direct_session_id, new_msgs)
+                session["updated_at"] = datetime.now().isoformat()
+                session["last_message"] = ""
+                log.info(
+                    "[ChannelChat] /new cleared session %s: %s -> %s messages",
+                    direct_session_id,
+                    msg_count_before,
+                    len(new_msgs),
+                )
+            else:
+                log.info("[ChannelChat] /new session not found: %s", direct_session_id)
+
+            if workspace_available:
+                try:
+                    from nbot.core.workspace import workspace_manager
+
+                    workspace_manager.delete_workspace(direct_session_id)
+                except Exception as exc:
+                    log.debug(f"Delete channel workspace skipped: {exc}")
+            await msg.reply(text="已创建新会话喔，之前的对话历史已清空")
+            return
+
         # 权限检查：仅管理员可使用
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
         if is_group:
             group_id = getattr(msg, "group_id", None)
-            chat_id = getattr(msg, "chat_id", None)
-            session_id = getattr(msg, "session_id", None)
-            # 飞书/Web 适配器：优先使用 session_id 直接操作 session store
-            if session_id and hasattr(msg, "server"):
-                server = msg.server
-                if hasattr(server, "sessions"):
-                    from nbot.core.session_store import WebSessionStore
-
-                    session_store = WebSessionStore(
-                        server.sessions,
-                        save_callback=lambda: server._save_data("sessions"),
-                    )
-                    session = session_store.get_session(session_id)
-                    if session:
-                        msg_count_before = len(session.get("messages", []))
-                        system_msg = next(
-                            (m for m in session.get("messages", []) if m.get("role") == "system"),
-                            None,
-                        )
-                        new_msgs = [system_msg] if system_msg else []
-                        session_store.replace_messages(session_id, new_msgs)
-                        session["updated_at"] = datetime.now().isoformat()
-                        # 再次验证是否真的清除了
-                        verify_session = session_store.get_session(session_id)
-                        msg_count_after = len(verify_session.get("messages", [])) if verify_session else -1
-                        print(f"[FeishuChat] /new 清除会话 {session_id}: {msg_count_before} -> {msg_count_after} 条消息")
-                    else:
-                        print(f"[FeishuChat] /new 找不到会话: {session_id}")
-                    delete_session_workspace(user_id=str(msg.user_id))
-                else:
-                    await msg.reply(text="当前平台不支持会话重置喔~")
-                    return
-            elif group_id:
+            if group_id:
                 info = current_qq_session_info(msg, True)
                 gid = str(group_id)
                 history_key = str(info.get("history_key") or gid)
@@ -1556,7 +1681,7 @@ def register_ai_commands(
         admin_show=True,
     )
     async def handle_new_agent_session(msg, is_group=True):
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
@@ -1591,14 +1716,7 @@ def register_ai_commands(
         }
         save_resume_bindings(bindings)
 
-        try:
-            delete_session_workspace(
-                user_id=info["user_id"],
-                group_id=info["group_id"],
-                group_user_id=info["group_user_id"],
-            )
-        except Exception:
-            pass
+        delete_current_session_workspace(info)
 
         await reply_current_channel(
             msg,
@@ -1613,7 +1731,7 @@ def register_ai_commands(
         admin_show=True,
     )
     async def handle_new_character_session(msg, is_group=True):
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
@@ -1659,7 +1777,7 @@ def register_ai_commands(
     )
     async def handle_character_switch(msg, is_group=True):
         # 权限检查：仅管理员可使用
-        if (str(msg.user_id) not in admin) and is_group:
+        if needs_legacy_group_admin(msg, is_group):
             await msg.reply(text="你没有权限喔~")
             return
 
@@ -1806,7 +1924,7 @@ def register_ai_commands(
     )
     async def handle_resume_session(msg, is_group=True):
         # 权限检查：仅管理员可使用
-        if str(msg.user_id) not in admin:
+        if needs_legacy_admin(msg):
             await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
             return
 
@@ -1857,14 +1975,7 @@ def register_ai_commands(
         }
         save_resume_bindings(bindings)
 
-        try:
-            delete_session_workspace(
-                user_id=info["user_id"],
-                group_id=info["group_id"],
-                group_user_id=info["group_user_id"],
-            )
-        except Exception:
-            pass
+        delete_current_session_workspace(info)
 
         await reply_current_channel(
             msg,
@@ -1880,7 +1991,7 @@ def register_ai_commands(
     )
     async def handle_push_session(msg, is_group=True):
         # 权限检查：仅管理员可使用
-        if str(msg.user_id) not in admin:
+        if needs_legacy_admin(msg):
             await reply_current_channel(msg, is_group, "你没有权限使用该命令喔~")
             return
 

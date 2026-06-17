@@ -1,6 +1,7 @@
 from nbot.channels.base import BaseChannelAdapter, ChannelCapabilities, ChannelEnvelope
 from nbot.channels.feishu import FeishuChannelAdapter
 from nbot.channels.qq import QQChannelAdapter
+from nbot.channels.qqbot import QQBotChannelAdapter
 from nbot.channels.registry import (
     ChannelRegistry,
     channel_registry,
@@ -16,6 +17,7 @@ from nbot.channels.registry import (
 from nbot.channels.web import WebChannelAdapter
 
 register_channel_adapter(QQChannelAdapter.channel_name, QQChannelAdapter)
+register_channel_adapter(QQBotChannelAdapter.channel_name, QQBotChannelAdapter)
 register_channel_adapter(WebChannelAdapter.channel_name, WebChannelAdapter)
 register_channel_adapter(FeishuChannelAdapter.channel_name, FeishuChannelAdapter)
 
@@ -26,6 +28,7 @@ __all__ = [
     "ChannelRegistry",
     "FeishuChannelAdapter",
     "QQChannelAdapter",
+    "QQBotChannelAdapter",
     "WebChannelAdapter",
     "channel_registry",
     "get_channel_adapter",

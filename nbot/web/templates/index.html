@@ -32,10 +32,10 @@
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260615-group-speakers';
+        window.__nbotAssetVersion = '20260618-ws-auth';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260615-group-speakers">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260617-switch-fix">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         // PWA install prompt - must be captured before Vue mounts
@@ -7840,6 +7840,9 @@
                                     <button class="btn btn-secondary" @click="applyChannelPresetById('telegram')" :disabled="isLoading">
                                         <i class="fab fa-telegram"></i> Telegram 预设
                                     </button>
+                                    <button class="btn btn-secondary" @click="applyChannelPresetById('qqbot')" :disabled="isLoading">
+                                        <i class="fab fa-qq"></i> QQ Bot Preset
+                                    </button>
                                     <button class="btn btn-primary" @click="openChannelModal()" :disabled="isLoading">
                                         <i class="fas fa-plus"></i> 新增频道
                                     </button>
@@ -7863,6 +7866,9 @@
                                                         <span v-if="channel.builtin" class="badge badge-info">内置</span>
                                                         <span v-if="channel.registered" class="badge badge-success">已注册适配器</span>
                                                         <span v-else class="badge badge-warning">仅配置</span>
+                                                        <span v-if="channel.type === 'qqbot' || channel.type === 'feishu_ws'" class="badge" :class="channel.ws_connected ? 'badge-success' : 'badge-secondary'">
+                                                            {{ channel.ws_connected ? '已连接' : '未连接' }}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div style="display: flex; gap: 8px;">
@@ -11498,7 +11504,7 @@
         </div>
     </div>
 
-    <script src="/static/js/nbot-shared.js?v=20260523"></script>
+    <script src="/static/js/nbot-shared.js?v=20260618-ws-auth"></script>
     <script src="/static/js/nbot-methods.js?v=20260615-group-speakers"></script>
     <script>
         (async function () {
@@ -13732,11 +13738,9 @@
                         // 不清除 token，让用户稍后可以重试或重新登录
                     }
                 } else if (this.username) {
-                    // 兼容旧版本：使用 sessionStorage 的情况
-                    this.isLoggedIn = true;
-                    connectSocketWithAuth();
-                    await this.loadHomeData();
-                    setTimeout(() => this.initCharts(), 100);
+                    // 旧版本可能只保存了 username，没有登录 token；保留用户名但不自动登录。
+                    sessionStorage.removeItem('username');
+                    this.isLoggedIn = false;
                 }
                 
                 this.initSocket();

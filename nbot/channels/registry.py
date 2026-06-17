@@ -110,6 +110,11 @@ def register_configured_channel(channel_config: dict) -> None:
 
         channel_registry.register_adapter(channel_id, FeishuChannelAdapter)
         return
+    if channel_type == "qqbot":
+        from nbot.channels.qqbot import QQBotChannelAdapter
+
+        channel_registry.register_adapter(channel_id, QQBotChannelAdapter)
+        return
     if channel_type == "feishu_ws":
         # 飞书长连接模式使用 WebSocket，不需要注册适配器
         # 由 feishu_ws_service 直接处理

@@ -1,7 +1,11 @@
 // Shared variables for NbotMethods
+window.__nbotGetAuthToken = function getAuthToken() {
+    return (localStorage.getItem('auth_token') || '').trim();
+};
+
 window.__nbotApi = axios.create({ baseURL: '', timeout: 60000 });
 window.__nbotApi.interceptors.request.use((config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = window.__nbotGetAuthToken();
     if (token) {
         config.headers = config.headers || {};
         config.headers.Authorization = 'Bearer ' + token;
@@ -13,7 +17,7 @@ window.__nbotSocket = io(window.location.origin, {
     path: '/socket.io',
     transports: ['websocket', 'polling'],
     autoConnect: false,
-    auth: function (cb) { cb({ token: localStorage.getItem('auth_token') || '' }); },
+    auth: function (cb) { cb({ token: window.__nbotGetAuthToken() }); },
     upgrade: false,
     reconnection: true,
     reconnectionAttempts: Infinity,
@@ -65,8 +69,16 @@ window.__nbotFallbackCopyText = function fallbackCopyText(text, btn) {
 };
 
 window.__nbotConnectSocketWithAuth = function connectSocketWithAuth() {
-    window.__nbotSocket.auth = { token: localStorage.getItem('auth_token') || '' };
+    const token = window.__nbotGetAuthToken();
+    window.__nbotSocket.auth = { token: token };
+    if (!token) {
+        if (window.__nbotSocket.connected || window.__nbotSocket.active) {
+            window.__nbotSocket.disconnect();
+        }
+        return false;
+    }
     if (!window.__nbotSocket.connected) {
         window.__nbotSocket.connect();
     }
+    return true;
 };

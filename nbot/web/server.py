@@ -602,6 +602,17 @@ class WebChatServer:
         except Exception as e:
             _log.error(f"自动启动飞书长连接频道失败: {e}")
 
+    def _auto_start_qqbot_channels(self):
+        """Auto-start enabled QQ official Lobster Bot channels."""
+        try:
+            from nbot.services.qqbot_service import qqbot_ws_service
+            from nbot.web.routes.channels import auto_start_qqbot_clients
+
+            qqbot_ws_service.set_server(self)
+            auto_start_qqbot_clients(self)
+        except Exception as e:
+            _log.error("Failed to auto-start QQ Lobster Bot channels: %s", e)
+
     def _auto_connect_mcp_servers(self):
         """启动时自动连接所有 auto_connect=True 的 MCP 服务器（独立后台线程，不阻塞初始化）"""
         try:
@@ -680,6 +691,7 @@ class WebChatServer:
                 self._check_knowledge_index()
                 # 自动启动飞书长连接频道
                 self._auto_start_feishu_ws_channels()
+                self._auto_start_qqbot_channels()
                 # 自动连接 MCP 服务器
                 self._auto_connect_mcp_servers()
                 self.startup_ready = True
