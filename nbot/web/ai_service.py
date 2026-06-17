@@ -1633,12 +1633,36 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 _update_web_token_stats(server, result.usage, session_id, result.metadata)
 
             # === AI 完成后，记录 Gateway 事件（Web 异步场景）===
+            reply_text = ""
+            reply_metadata = {}
             if result and hasattr(result, 'final_content') and result.final_content:
+                reply_text = str(result.final_content)
+                reply_metadata = getattr(result, 'metadata', None) or {}
+            elif group_context and _speaker_results:
+                reply_parts = []
+                speaker_names = []
+                for item in _speaker_results:
+                    content = str(item.get("content") or "").strip()
+                    if not content:
+                        continue
+                    speaker_name = str(item.get("speaker_name") or "").strip()
+                    if speaker_name:
+                        speaker_names.append(speaker_name)
+                        reply_parts.append(f"[{speaker_name}] {content}")
+                    else:
+                        reply_parts.append(content)
+                reply_text = "\n".join(reply_parts)
+                reply_metadata = {
+                    "group_reply_count": len(reply_parts),
+                    "group_speakers": speaker_names,
+                }
+
+            if reply_text:
                 try:
                     from nbot.gateway.gateway import get_gateway as _get_gw
                     gw = _get_gw()
                     if gw and gw.event_store:
-                        reply_text = result.final_content[:200]
+                        reply_preview = reply_text[:200]
                         trace_id = (ctx.chat_request.metadata or {}).get('_gateway_trace_id', '') or ''
                         # 获取会话名称
                         session_name = ""
@@ -1648,7 +1672,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         except Exception:
                             pass
                         # 记录模型信息事件
-                        result_metadata = getattr(result, 'metadata', None) or {}
+                        result_metadata = reply_metadata
                         used_model_id = result_metadata.get("model_id", "")
                         used_model_name = result_metadata.get("model_name", "")
                         # 先记录故障转移事件（发生在模型选择之前）
@@ -1690,8 +1714,15 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                             channel_id="web",
                             status="delivered",
                             conversation_id=session_id,
-                            raw_event={"reply_preview": reply_text} if reply_text else None,
-                            metadata={"reply_length": len(reply_text), "session_name": session_name},
+                            raw_event={"reply_preview": reply_preview} if reply_preview else None,
+                            metadata={
+                                k: v for k, v in {
+                                    "reply_length": len(reply_text),
+                                    "session_name": session_name,
+                                    "group_reply_count": result_metadata.get("group_reply_count"),
+                                    "group_speakers": result_metadata.get("group_speakers"),
+                                }.items() if v not in (None, "", [])
+                            },
                         )
                 except Exception as exc:
                     _log.debug("[Gateway] Web 异步事件记录失败: %s", str(exc))
