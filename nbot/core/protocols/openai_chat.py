@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from nbot.core.model_adapter import (
     NormalizedModelResponse,
+    _stringify_message_content,
     infer_provider_profile,
     normalize_chat_completion_data,
     normalize_messages_for_provider,
@@ -122,7 +123,10 @@ class OpenAIChatProtocol(ModelProtocol):
         if not choices:
             return None
         delta = choices[0].get("delta", {})
-        content = delta.get("content", "")
+        raw_content = delta.get("content")
+        if raw_content in (None, ""):
+            raw_content = delta.get("text") or choices[0].get("text")
+        content = _stringify_message_content(raw_content)
         if content:
             content = repair_mojibake_text(content)
             return {"type": "content", "content": content}

@@ -16158,6 +16158,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
             gap: 14px;
             width: 100%;
         }
@@ -16165,8 +16166,10 @@
         .switch-copy {
             display: flex;
             flex-direction: column;
+            flex: 1 1 320px;
             gap: 4px;
             min-width: 0;
+            overflow-wrap: anywhere;
         }
 
         .switch-label {
@@ -16179,13 +16182,18 @@
             font-size: 12px;
             line-height: 1.6;
             color: var(--text-secondary);
+            overflow-wrap: anywhere;
         }
 
         .switch-control {
             position: relative;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
+            width: 52px;
+            height: 30px;
             flex-shrink: 0;
+            margin-left: auto;
             cursor: pointer;
         }
 
@@ -16197,17 +16205,23 @@
 
         .switch-slider {
             position: relative;
+            display: block;
             width: 52px;
             height: 30px;
+            min-width: 52px;
+            box-sizing: border-box;
             border-radius: 999px;
+            background: rgba(148, 163, 184, 0.32);
+            border: 1px solid rgba(148, 163, 184, 0.35);
             background: color-mix(in srgb, var(--text-muted) 28%, transparent);
-            border: 1px solid color-mix(in srgb, var(--text-muted) 26%, transparent);
+            border-color: color-mix(in srgb, var(--text-muted) 26%, transparent);
             transition: background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
         }
 
         .switch-slider::after {
             content: '';
             position: absolute;
+            display: block;
             top: 3px;
             left: 3px;
             width: 22px;
@@ -17513,6 +17527,7 @@
         .modal-body {
             padding: 20px;
             overflow-y: auto;
+            overflow-x: hidden;
             flex: 1;
         }
 
@@ -28676,3 +28691,21 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border-color, #e0e0e0); display: flex; justify-content: flex-end; gap: 8px; }
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary, #666); }
+.form-group .switch-control {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 52px;
+    width: 52px;
+    height: 30px;
+    margin-left: auto;
+    margin-bottom: 0;
+    cursor: pointer;
+}
+.form-group .switch-slider {
+    display: block;
+    width: 52px;
+    height: 30px;
+    min-width: 52px;
+}

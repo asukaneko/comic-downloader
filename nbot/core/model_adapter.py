@@ -436,7 +436,10 @@ def normalize_chat_completion_data(
     choice = choices[0] or {}
     message = choice.get("message") or {}
     finish_reason = choice.get("finish_reason") or ""
-    content = repair_mojibake_text(message.get("content") or "")
+    raw_content = message.get("content")
+    if raw_content in (None, ""):
+        raw_content = message.get("text") or message.get("output_text") or choice.get("text")
+    content = repair_mojibake_text(_stringify_message_content(raw_content))
     tool_calls = parse_tool_calls(message)
     thinking_content = repair_mojibake_text(extract_reasoning_content(message, profile))
 
