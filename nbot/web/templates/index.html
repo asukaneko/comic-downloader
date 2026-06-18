@@ -2265,7 +2265,7 @@
                                                  :class="{ current: idx === plotMainPath.length - 1 }"
                                                  :title="node.title"
                                                  @click="loadPlotGraph()">
-                                                <span class="plot-path-dot" :style="{ background: plotLevelColor(node.level) }"></span>
+                                                <span class="plot-path-dot" :style="{ background: plotLevelColor(plotNodeLevel(node)) }"></span>
                                                 <span class="plot-path-label">{{ node.title || '剧情节点' }}</span>
                                             </div>
                                         </div>
@@ -8705,11 +8705,30 @@
                             </div>
                             <template v-else>
                                 <div class="plot-detail-head">
-                                    <span class="plot-detail-badge" :style="{ background: plotLevelColor(plotSelectedNode.level) }">{{ plotLevelLabel(plotSelectedNode.level) }}</span>
+                                    <span class="plot-detail-badge" :style="{ background: plotLevelColor(plotNodeLevel(plotSelectedNode)) }">{{ plotLevelLabel(plotNodeLevel(plotSelectedNode)) }}</span>
                                     <span class="plot-detail-title">{{ plotSelectedNode.title || '剧情节点' }}</span>
                                     <span v-if="plotSelectedNode.id === plotActiveNodeId" class="plot-detail-here"><i class="fas fa-location-dot"></i> 当前位置</span>
                                 </div>
-                                <div v-if="plotSelectedNode.summary" class="plot-detail-summary">{{ plotSelectedNode.summary }}</div>
+                                <!-- 一问一答：先展示触发本节点 AI 回复的"用户这一问" -->
+                                <div v-if="plotNodeUserTurn(plotSelectedNode)" class="plot-detail-qa-user">
+                                    <div class="plot-detail-qa-label">
+                                        <i class="fas fa-user"></i><span>我</span>
+                                        <span class="plot-detail-qa-tag" :class="plotNodeUserTurn(plotSelectedNode).kind">
+                                            {{ plotUserTurnLabel(plotNodeUserTurn(plotSelectedNode).kind) }}
+                                        </span>
+                                    </div>
+                                    <div class="plot-detail-qa-text">{{ plotNodeUserTurn(plotSelectedNode).content }}</div>
+                                    <div v-if="plotNodeUserTurn(plotSelectedNode).kind === 'edited' && plotNodeUserTurn(plotSelectedNode).choiceText"
+                                         class="plot-detail-qa-origin">
+                                        <i class="fas fa-pen"></i> 原选项：{{ plotNodeUserTurn(plotSelectedNode).choiceText }}
+                                    </div>
+                                </div>
+                                <div v-if="plotSelectedNode.summary" class="plot-detail-summary">
+                                    <div v-if="plotNodeUserTurn(plotSelectedNode)" class="plot-detail-qa-label ai">
+                                        <i class="fas fa-robot"></i><span>{{ plotSelectedNode.title ? 'AI' : 'AI 回复' }}</span>
+                                    </div>
+                                    {{ plotSelectedNode.summary }}
+                                </div>
                                 <div v-if="plotSelectedNode.relationship_snapshot && Object.keys(plotSelectedNode.relationship_snapshot).length" class="plot-detail-section">
                                     <div class="plot-detail-section-title">当时关系</div>
                                     <div class="plot-detail-rel">
@@ -8770,21 +8789,26 @@
                         </div>
 
                     </div>
-                    <!-- 时间线视图 -->
+                    <!-- 时间线视图：仅展示当前分支（与图谱高亮的当前分支一致） -->
                     <div v-show="plotGraphView === 'timeline'" class="plot-map-timeline-view">
                         <div class="plot-graph-summary">
                             <div class="plot-graph-stat"><span>{{ plotGraphData.nodes.length }}</span><label>节点</label></div>
                             <div class="plot-graph-stat"><span>{{ plotGraphData.choices.length }}</span><label>分支</label></div>
-                            <div class="plot-graph-stat"><span>{{ plotMainPath.length }}</span><label>主线</label></div>
+                            <div class="plot-graph-stat"><span>{{ plotMainPath.length }}</span><label>当前线</label></div>
                         </div>
                         <div class="plot-graph-timeline">
-                            <div v-for="node in plotGraphData.nodes" :key="node.id" class="plot-graph-node"
+                            <div v-for="node in plotMainPath" :key="node.id" class="plot-graph-node"
                                  @click="selectPlotGraphNode(node.id)">
-                                <div class="plot-graph-node-dot" :style="{ background: plotLevelColor(node.level) }"></div>
+                                <div class="plot-graph-node-dot" :style="{ background: plotLevelColor(plotNodeLevel(node)) }"></div>
                                 <div class="plot-graph-node-card" :class="{ active: plotSelectedNode && plotSelectedNode.id === node.id }">
                                     <div class="plot-graph-node-head">
                                         <span class="plot-graph-node-title">{{ node.title || '剧情节点' }}</span>
-                                        <span class="plot-graph-node-level" :style="{ color: plotLevelColor(node.level) }">{{ plotLevelLabel(node.level) }}</span>
+                                        <span class="plot-graph-node-level" :style="{ color: plotLevelColor(plotNodeLevel(node)) }">{{ plotLevelLabel(plotNodeLevel(node)) }}</span>
+                                    </div>
+                                    <div v-if="plotNodeUserTurn(node)" class="plot-graph-node-userturn" :class="plotNodeUserTurn(node).kind">
+                                        <i class="fas fa-user"></i>
+                                        <span class="plot-graph-node-userturn-text">{{ plotNodeUserTurn(node).content }}</span>
+                                        <span class="plot-graph-node-userturn-tag">{{ plotUserTurnLabel(plotNodeUserTurn(node).kind) }}</span>
                                     </div>
                                     <div v-if="node.summary" class="plot-graph-node-summary">{{ node.summary }}</div>
                                     <div v-if="plotChoicesForNode(node.id).length" class="plot-graph-choice-list">

@@ -1926,7 +1926,19 @@ def register_session_routes(app, server):
         if "timestamp" in data:
             messages[target_idx]["timestamp"] = data.get("timestamp") or datetime.now().isoformat()
         if "audio_url" in data:
-            messages[target_idx]["audio_url"] = data.get("audio_url") or ""
+            audio_url = data.get("audio_url") or ""
+            messages[target_idx]["audio_url"] = audio_url
+            # 同步写入剧情节点快照，使分支切换/回溯后 TTS 不丢失
+            if messages[target_idx].get("role") == "assistant":
+                try:
+                    from nbot.plot.graph_manager import get_plot_graph_manager
+
+                    data_dir = getattr(server, "data_dir", "data/web")
+                    get_plot_graph_manager(data_dir=data_dir).update_assistant_audio(
+                        str(message_id), audio_url, conversation_id=session_id,
+                    )
+                except Exception:
+                    _log.debug("[Sessions] plot snapshot audio sync skipped", exc_info=True)
 
         # 截断该消息之后的所有消息
         if data.get("truncate_after"):

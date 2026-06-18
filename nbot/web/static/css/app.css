@@ -28966,6 +28966,102 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     font-size: 13px;
     line-height: 1.65;
 }
+
+/* 一问一答：用户这一问 */
+.plot-detail-qa-user {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border-left: 3px solid rgba(99, 179, 237, 0.7);
+    background: rgba(99, 179, 237, 0.08);
+}
+
+.plot-detail-qa-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    color: rgba(150, 197, 240, 0.95);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.plot-detail-qa-label.ai {
+    color: rgba(190, 200, 215, 0.9);
+    margin-bottom: 4px;
+}
+
+.plot-detail-qa-tag {
+    margin-left: auto;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    background: rgba(99, 179, 237, 0.22);
+    color: rgba(190, 222, 250, 0.95);
+}
+
+.plot-detail-qa-tag.edited {
+    background: rgba(240, 168, 62, 0.22);
+    color: #f6c177;
+}
+
+.plot-detail-qa-tag.manual {
+    background: rgba(236, 72, 153, 0.2);
+    color: #f4a8d0;
+}
+
+.plot-detail-qa-text {
+    color: rgba(225, 235, 248, 0.92);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.plot-detail-qa-origin {
+    margin-top: 6px;
+    color: rgba(246, 193, 119, 0.85);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+
+/* 时间线节点上的用户这一问 */
+.plot-graph-node-userturn {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin: 6px 0 4px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    border-left: 2px solid rgba(99, 179, 237, 0.6);
+    background: rgba(99, 179, 237, 0.07);
+    font-size: 12px;
+    color: rgba(200, 220, 240, 0.88);
+}
+
+.plot-graph-node-userturn.edited { border-left-color: rgba(240, 168, 62, 0.7); background: rgba(240, 168, 62, 0.07); }
+.plot-graph-node-userturn.manual { border-left-color: rgba(236, 72, 153, 0.6); background: rgba(236, 72, 153, 0.06); }
+
+.plot-graph-node-userturn > i { flex: 0 0 auto; opacity: 0.7; }
+
+.plot-graph-node-userturn-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.plot-graph-node-userturn-tag {
+    flex: 0 0 auto;
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(210, 222, 238, 0.8);
+}
 .plot-detail-section { margin-bottom: 16px; }
 
 .plot-detail-section-title {

@@ -16963,6 +16963,79 @@ def main(params):
         return (this.plotGraphData.choices || []).filter(c => c.node_id === nodeId);
     },
 
+    // 找到进入该节点的入口边（记录是从父节点哪个选项走过来的）
+    plotIncomingEdge(nodeId) {
+        return (this.plotGraphData.edges || []).find(e => e.to_node_id === nodeId) || null;
+    },
+
+    // 节点展示级别：优先继承"到达本节点所选选项"的级别（修正历史节点级别恒为
+    // normal 的问题），回退到节点自身存储的 level。
+    // 选项来源有二：1) 入口边的 choice_id；2) 父节点的 selected_choice_id
+    // （历史节点常缺显式边，用父节点已选选项兜底）。
+    plotNodeLevel(node) {
+        if (!node) return 'normal';
+        const choices = this.plotGraphData.choices || [];
+        const levelOf = (cid) => {
+            if (!cid) return '';
+            const c = choices.find(x => x.id === cid);
+            if (!c || !c.level) return '';
+            return c.level === 'hidden' ? 'important' : c.level;
+        };
+        // 1) 入口边
+        const edge = this.plotIncomingEdge(node.id);
+        let lv = edge ? levelOf(edge.choice_id) : '';
+        // 2) 父节点已选选项兜底
+        if (!lv) {
+            const parent = this.plotParentNode(node);
+            if (parent) lv = levelOf(parent.selected_choice_id);
+        }
+        return lv || node.level || 'normal';
+    },
+
+    // 解析节点父节点：优先 parent_node_id，回退到 buildPlotChildMap 的推断
+    plotParentNode(node) {
+        if (!node) return null;
+        const byId = {};
+        (this.plotGraphData.nodes || []).forEach(n => { byId[n.id] = n; });
+        if (node.parent_node_id && byId[node.parent_node_id]) return byId[node.parent_node_id];
+        const { parentOf } = this.buildPlotChildMap();
+        const pid = parentOf[node.id];
+        return pid ? byId[pid] : null;
+    },
+
+    // 解析“触发本节点 AI 回复的用户这一问”：还原一问一答，并如实区分
+    // 用户是直接选了某个选项、选后又改了、还是完全手动回复。
+    // 返回 { content, kind: 'selected'|'edited'|'manual', choiceText } 或 null。
+    plotNodeUserTurn(node) {
+        if (!node) return null;
+        const um = node.user_message || {};
+        const content = (um.content || '').trim();
+        if (!content) return null;
+
+        // 入口边的 choice_id -> 父节点上被点击的那个选项
+        const edge = this.plotIncomingEdge(node.id);
+        const choiceId = edge && edge.choice_id;
+        let choiceText = '';
+        if (choiceId) {
+            const choice = (this.plotGraphData.choices || []).find(c => c.id === choiceId);
+            choiceText = choice ? (choice.text || '').trim() : '';
+        }
+
+        let kind = 'manual';
+        if (choiceText) {
+            kind = (content === choiceText) ? 'selected' : 'edited';
+        }
+        return { content, kind, choiceText };
+    },
+
+    plotUserTurnLabel(kind) {
+        return ({
+            selected: '选择',
+            edited: '选项改写',
+            manual: '手动回复',
+        })[kind] || '回复';
+    },
+
     // 当前激活分支(根→激活节点→其叶子)的节点 id 集合，用于"当前位置"高亮与
     // 限制同分支切换：在这条线上的节点视为"同一分支"，不允许"切换分支"。
     plotActivePathIds() {
@@ -17061,7 +17134,7 @@ def main(params):
             const onMain = mainIds.has(node.id);
             const isSel = node.id === selId;
             const isActive = node.id === activeId;
-            const color = this.plotLevelColor(node.level);
+            const color = this.plotLevelColor(this.plotNodeLevel(node));
             const title = (node.title || '剧情节点').replace(/\.\.\.$/, '');
             const prefix = isActive ? '📍 ' : '';
             return {
@@ -17105,7 +17178,7 @@ def main(params):
                 formatter: (p) => {
                     const n = (this.plotGraphData.nodes || []).find(x => x.id === p.value);
                     if (!n) return p.name;
-                    return `<b>${n.title || '剧情节点'}</b><br/>${this.plotLevelLabel(n.level)}`;
+                    return `<b>${n.title || '剧情节点'}</b><br/>${this.plotLevelLabel(this.plotNodeLevel(n))}`;
                 } },
             series: [{
                 type: 'tree', data: [treeData], top: '4%', left: '8%', bottom: '4%', right: '14%',

@@ -61,6 +61,48 @@ class PlotGraphManager:
         """获取单个节点。"""
         return self._nodes.get(node_id)
 
+    def update_assistant_audio(
+        self,
+        message_id: str,
+        audio_url: str,
+        conversation_id: str = "",
+    ) -> bool:
+        """把 TTS 音频 URL 写入"该助手消息所属节点"的快照。
+
+        分支切换/回溯时 materialize_path 会从节点快照重建消息，若快照不含
+        audio_url，TTS 会丢失。此方法让快照成为音频的单一真相来源。
+
+        匹配两种 id：
+        1) 快照中存储的真实消息 id（assistant_message.id == message_id）
+        2) 物化兜底 id：pm_a_<node_id>（历史节点切换后再生成 TTS 的情况）
+        """
+        if not message_id:
+            return False
+        target = None
+        # 1) 按快照存储的真实消息 id 匹配
+        for node in self._nodes.values():
+            if conversation_id and node.conversation_id != conversation_id:
+                continue
+            am = node.assistant_message or {}
+            if am.get("id") and str(am.get("id")) == str(message_id):
+                target = node
+                break
+        # 2) 物化兜底 id：pm_a_<node_id>
+        if target is None and message_id.startswith("pm_a_"):
+            target = self._nodes.get(message_id[len("pm_a_"):])
+        if target is None:
+            return False
+        am = dict(target.assistant_message or {})
+        am["audio_url"] = audio_url or ""
+        am.setdefault("role", "assistant")
+        target.assistant_message = am
+        self._save()
+        _log.info(
+            "[PlotGraphManager] updated assistant audio node=%s msg=%s",
+            target.id, message_id,
+        )
+        return True
+
     # -- Choice CRUD --
 
     def add_choice(self, choice: PlotChoice) -> PlotChoice:

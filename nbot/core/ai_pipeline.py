@@ -1184,6 +1184,22 @@ class AIPipeline:
             _log.debug("[PlotMode] runtime snapshot build skipped: %s", e)
         return state_snapshot, relationship_snapshot
 
+    @staticmethod
+    def _resolve_plot_node_level(graph_mgr, choice_id: str) -> str:
+        """节点级别继承"到达本节点所选选项"的级别。
+
+        手动回复 / 根节点（无 choice_id）或选项缺失时回退 normal；
+        hidden 级别按 important 展示（hidden 仅用于选项可见性，节点不该是隐藏态）。
+        """
+        if not choice_id:
+            return "normal"
+        try:
+            choice = graph_mgr.get_choice(choice_id)
+        except Exception:
+            choice = None
+        level = getattr(choice, "level", "") or "normal"
+        return "important" if level == "hidden" else level
+
     async def _do_generate_plot_choices(self, generator, result, turn_context, conversation_id, ctx):
         """Async plot choice generation."""
         try:
@@ -1217,18 +1233,28 @@ class AIPipeline:
             user_content = getattr(ctx.chat_request, "content", "") or ""
             user_snapshot = {"role": "user", "content": user_content}
             assistant_snapshot = {"role": "assistant", "content": response_text}
+            # 记录助手消息真实 id：分支切换/回溯后仍能把后到的 TTS 音频
+            # 回填到本节点快照（TTS 是异步的，建节点时往往还没有 audio_url）。
+            am_obj = getattr(result, "assistant_message", None)
+            if isinstance(am_obj, dict):
+                if am_obj.get("id"):
+                    assistant_snapshot["id"] = am_obj["id"]
+                if am_obj.get("audio_url"):
+                    assistant_snapshot["audio_url"] = am_obj["audio_url"]
 
             # 捕获本轮结束后的角色运行时状态快照（用于切换/回溯时定位状态）
             state_snapshot, relationship_snapshot = self._build_plot_runtime_snapshots(turn_context)
 
             if branch_from_node_id and branch_choice_id:
                 # 分支模式：父节点 = branch_from_node_id
+                # 节点级别继承"到达本节点所选选项"的级别
+                node_level = self._resolve_plot_node_level(graph_mgr, branch_choice_id)
                 node = PlotNode(
                     conversation_id=conversation_id,
                     character_id=char_id,
                     title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
                     summary=response_text[:100],
-                    level="normal",
+                    level=node_level,
                     parent_node_id=branch_from_node_id,
                     user_message=user_snapshot,
                     assistant_message=assistant_snapshot,
@@ -1247,12 +1273,14 @@ class AIPipeline:
                 if prev_node and getattr(prev_node, "selected_choice_id", ""):
                     pending_choice_id = prev_node.selected_choice_id
 
+                # 节点级别继承"到达本节点所选选项"的级别（手动回复/根节点回退 normal）
+                node_level = self._resolve_plot_node_level(graph_mgr, pending_choice_id)
                 node = PlotNode(
                     conversation_id=conversation_id,
                     character_id=char_id,
                     title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
                     summary=response_text[:100],
-                    level="normal",
+                    level=node_level,
                     parent_node_id=prev_node.id if prev_node else "",
                     user_message=user_snapshot,
                     assistant_message=assistant_snapshot,
