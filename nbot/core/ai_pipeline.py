@@ -1155,6 +1155,35 @@ class AIPipeline:
         if error_holder:
             raise error_holder[0]
 
+    def _build_plot_runtime_snapshots(self, turn_context):
+        """从 turn_context 提取角色运行时状态/关系快照，供分支切换与回溯定位。
+
+        返回 (state_snapshot, relationship_snapshot)；缺失时返回空 dict。
+        """
+        state_snapshot: dict = {}
+        relationship_snapshot: dict = {}
+        try:
+            state = getattr(turn_context, "state", None)
+            if state is not None:
+                state_snapshot = {
+                    "mood": getattr(state, "mood", ""),
+                    "mood_intensity": getattr(state, "mood_intensity", 0.5),
+                    "energy": getattr(state, "energy", 70),
+                }
+            rel = getattr(turn_context, "relationship", None)
+            if rel is not None:
+                relationship_snapshot = {
+                    "affection": getattr(rel, "affection", 50),
+                    "trust": getattr(rel, "trust", 50),
+                    "familiarity": getattr(rel, "familiarity", 30),
+                    "dependency": getattr(rel, "dependency", 30),
+                    "security": getattr(rel, "security", 50),
+                    "jealousy": getattr(rel, "jealousy", 0),
+                }
+        except Exception as e:
+            _log.debug("[PlotMode] runtime snapshot build skipped: %s", e)
+        return state_snapshot, relationship_snapshot
+
     async def _do_generate_plot_choices(self, generator, result, turn_context, conversation_id, ctx):
         """Async plot choice generation."""
         try:
@@ -1178,28 +1207,77 @@ class AIPipeline:
             if turn_context and hasattr(turn_context, 'profile'):
                 char_id = turn_context.profile.id
 
-            # Find previous node and its pending selected choice
-            prev_node = graph_mgr.get_latest_node(conversation_id)
-            pending_choice_id = ""
-            if prev_node and getattr(prev_node, "selected_choice_id", ""):
-                pending_choice_id = prev_node.selected_choice_id
+            # 读取分支元数据：若本轮是从某节点的某个选择"创建分支"触发，
+            # 则父节点用 branch_from_node，并对该 choice 建边。
+            req_meta = getattr(ctx.chat_request, "metadata", {}) or {}
+            branch_from_node_id = req_meta.get("plot_branch_from_node_id", "")
+            branch_choice_id = req_meta.get("plot_branch_choice_id", "")
 
-            # Create a node for this turn
-            node = PlotNode(
-                conversation_id=conversation_id,
-                character_id=char_id,
-                title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
-                summary=response_text[:100],
-                level="normal",
-                parent_node_id=prev_node.id if pending_choice_id else "",
-            )
-            graph_mgr.add_node(node)
+            # 构造本轮消息快照（用于会话内分支物化）
+            user_content = getattr(ctx.chat_request, "content", "") or ""
+            user_snapshot = {"role": "user", "content": user_content}
+            assistant_snapshot = {"role": "assistant", "content": response_text}
 
-            # If the previous node had a selected choice, create an edge
-            if pending_choice_id:
-                existing_edges = graph_mgr.get_graph(conversation_id).get("edges", [])
-                if not any(e.get("choice_id") == pending_choice_id for e in existing_edges):
-                    graph_mgr.create_edge_for_choice(pending_choice_id, node.id)
+            # 捕获本轮结束后的角色运行时状态快照（用于切换/回溯时定位状态）
+            state_snapshot, relationship_snapshot = self._build_plot_runtime_snapshots(turn_context)
+
+            if branch_from_node_id and branch_choice_id:
+                # 分支模式：父节点 = branch_from_node_id
+                node = PlotNode(
+                    conversation_id=conversation_id,
+                    character_id=char_id,
+                    title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
+                    summary=response_text[:100],
+                    level="normal",
+                    parent_node_id=branch_from_node_id,
+                    user_message=user_snapshot,
+                    assistant_message=assistant_snapshot,
+                    state_snapshot=state_snapshot,
+                    relationship_snapshot=relationship_snapshot,
+                )
+                graph_mgr.branch_from(branch_choice_id, node)
+            else:
+                # 正常模式：沿"当前激活节点"延伸（切换/回溯后能正确续接），
+                # 回退到最新节点。
+                active_id = graph_mgr.get_active_node_id(conversation_id)
+                prev_node = graph_mgr.get_node(active_id) if active_id else None
+                if prev_node is None:
+                    prev_node = graph_mgr.get_latest_node(conversation_id)
+                pending_choice_id = ""
+                if prev_node and getattr(prev_node, "selected_choice_id", ""):
+                    pending_choice_id = prev_node.selected_choice_id
+
+                node = PlotNode(
+                    conversation_id=conversation_id,
+                    character_id=char_id,
+                    title=response_text[:30] + "..." if len(response_text) > 30 else response_text,
+                    summary=response_text[:100],
+                    level="normal",
+                    parent_node_id=prev_node.id if prev_node else "",
+                    user_message=user_snapshot,
+                    assistant_message=assistant_snapshot,
+                    state_snapshot=state_snapshot,
+                    relationship_snapshot=relationship_snapshot,
+                )
+                graph_mgr.add_node(node)
+
+                # 与父节点建边（优先用 pending 选择，否则建无选择的延续边）
+                if prev_node:
+                    existing_edges = graph_mgr.get_graph(conversation_id).get("edges", [])
+                    if pending_choice_id:
+                        if not any(e.get("choice_id") == pending_choice_id for e in existing_edges):
+                            graph_mgr.create_edge_for_choice(pending_choice_id, node.id)
+                    elif not any(
+                        e.get("from_node_id") == prev_node.id and e.get("to_node_id") == node.id
+                        for e in existing_edges
+                    ):
+                        from nbot.plot.models import PlotEdge
+                        graph_mgr.add_edge(PlotEdge(
+                            from_node_id=prev_node.id, to_node_id=node.id, choice_id="",
+                        ))
+
+            # 更新激活节点为本轮新节点（单一真相来源）
+            graph_mgr.set_active_node(conversation_id, node.id)
 
             # Create choice entries
             for choice_data in choices:

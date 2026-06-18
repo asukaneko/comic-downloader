@@ -28342,13 +28342,12 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     content: "";
     position: absolute;
     left: 0;
-    top: 50%;
-    bottom: auto;
-    width: 5px;
-    height: 5px;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
     border-radius: 999px;
     background: var(--plot-accent, #b7c9d4);
-    transform: translateY(-50%);
+    transform: none;
 }
 
 .plot-choice-card:hover {
@@ -28367,12 +28366,16 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 
 .plot-choice-main {
     min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .plot-choice-level {
-    display: none;
+    display: inline-flex;
     align-items: center;
-    margin-bottom: 3px;
+    margin-bottom: 0;
+    flex: 0 0 auto;
 }
 
 .level-badge {
@@ -28706,12 +28709,8 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     color: #9fc4d4;
 }
 
-.plot-graph-mermaid {
-    display: none;
-}
-
-/* Inline Plot Graph (剧情选项区内联故事图) */
-.plot-inline-graph {
+/* Inline Path Bar (侧栏主线路径条) */
+.plot-path {
     margin: 8px 12px 4px;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.04);
@@ -28719,7 +28718,7 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     overflow: hidden;
 }
 
-.plot-inline-graph-header {
+.plot-path-header {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -28729,38 +28728,478 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     font-weight: 600;
     color: var(--text-primary, #e0e0e0);
     user-select: none;
-    transition: background 0.15s;
 }
 
-.plot-inline-graph-header:hover {
-    background: rgba(255, 255, 255, 0.04);
+.plot-path-count {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--accent-primary, #ec4899);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
 }
 
-.plot-inline-graph-toggle {
+.plot-path-toggle {
     margin-left: auto;
     font-size: 11px;
     opacity: 0.5;
 }
 
-.plot-inline-graph-body {
-    padding: 8px 14px 12px;
-    overflow-x: auto;
-    min-height: 80px;
+.plot-path-track {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 10px 12px;
+    position: relative;
+}
+.plot-path-track::before {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 12px;
+    bottom: 18px;
+    width: 2px;
+    background: rgba(190, 206, 230, 0.18);
 }
 
-.plot-inline-graph-body svg {
-    max-width: 100%;
-    height: auto;
+.plot-path-step {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
 }
 
-[data-theme="light"] .plot-inline-graph {
+.plot-path-step:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.plot-path-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px var(--bg-secondary, #161b22);
+    z-index: 1;
+}
+
+.plot-path-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--text-secondary, #8b949e);
+}
+
+.plot-path-step.current .plot-path-label {
+    color: var(--text-primary, #e6edf3);
+    font-weight: 650;
+}
+
+.plot-path-step.current .plot-path-dot {
+    animation: plotPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes plotPulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--bg-secondary, #161b22), 0 0 0 5px rgba(236, 72, 153, 0.18); }
+    50% { box-shadow: 0 0 0 3px var(--bg-secondary, #161b22), 0 0 0 9px rgba(236, 72, 153, 0); }
+}
+
+[data-theme="light"] .plot-path {
     background: rgba(0, 0, 0, 0.03);
     border-color: rgba(0, 0, 0, 0.08);
 }
-
-[data-theme="light"] .plot-inline-graph-header:hover {
-    background: rgba(0, 0, 0, 0.03);
+/* ============ Story Map Modal (全屏故事地图) ============ */
+.plot-map-overlay {
+    z-index: 1350;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+
+.plot-map-modal {
+    width: 95vw;
+    height: 90vh;
+    max-width: 1280px;
+    background:
+        linear-gradient(160deg, rgba(15, 23, 36, 0.99), rgba(17, 24, 39, 0.97)),
+        var(--bg-primary, #0d1117);
+    border: 1px solid rgba(180, 198, 222, 0.16);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.55);
+}
+
+.plot-map-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(190, 206, 230, 0.12);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.plot-map-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(248, 251, 255, 0.96);
+    font-size: 16px;
+    font-weight: 720;
+}
+
+.plot-map-title i { color: var(--accent-primary, #ec4899); }
+
+.plot-map-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+}
+.plot-map-tabs button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary, #8b949e);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.plot-map-tabs button.active {
+    background: var(--accent-primary, #ec4899);
+    color: #fff;
+}
+
+.plot-map-header .modal-close { margin-left: auto; }
+
+.plot-map-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+}
+
+.plot-map-graph-view {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+}
+
+.plot-map-canvas {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+}
+
+.plot-map-timeline-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+}
+.plot-map-detail {
+    flex: 0 0 320px;
+    border-left: 1px solid rgba(190, 206, 230, 0.12);
+    background: rgba(7, 13, 22, 0.4);
+    padding: 18px;
+    overflow-y: auto;
+}
+
+.plot-detail-hint {
+    height: 100%;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--text-secondary, #8b949e);
+    font-size: 13px;
+    text-align: center;
+}
+
+.plot-detail-hint i { font-size: 26px; opacity: 0.5; }
+
+.plot-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.plot-detail-badge {
+    flex: 0 0 auto;
+    padding: 3px 9px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.plot-detail-title {
+    color: rgba(248, 251, 255, 0.96);
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.plot-detail-summary {
+    margin-bottom: 16px;
+    color: rgba(210, 222, 238, 0.78);
+    font-size: 13px;
+    line-height: 1.65;
+}
+.plot-detail-section { margin-bottom: 16px; }
+
+.plot-detail-section-title {
+    margin-bottom: 8px;
+    color: var(--text-secondary, #8b949e);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+}
+
+.plot-detail-rel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.plot-rel-chip {
+    padding: 4px 9px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(210, 222, 238, 0.8);
+    font-size: 12px;
+}
+
+.plot-rel-chip b { color: #fff; margin-left: 3px; }
+
+.plot-detail-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.plot-detail-choice {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(220, 230, 244, 0.82);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.plot-detail-choice.selected {
+    background: rgba(236, 72, 153, 0.12);
+    color: #fff;
+}
+
+.plot-detail-choice i { color: rgba(180, 198, 222, 0.5); }
+.plot-detail-choice-text { flex: 1 1 60%; min-width: 0; }
+.plot-detail-choice-level { font-size: 11px; font-weight: 700; white-space: nowrap; }
+
+.plot-choice-branch-btn {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid rgba(124, 196, 245, 0.4);
+    border-radius: 8px;
+    background: rgba(124, 196, 245, 0.1);
+    color: #8fc7f5;
+    font-size: 11.5px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.plot-choice-branch-btn:hover:not(:disabled) {
+    background: rgba(124, 196, 245, 0.22);
+    color: #b6ddff;
+}
+
+.plot-choice-branch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.plot-choice-walked {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 650;
+    color: rgba(180, 198, 222, 0.6);
+}
+
+.plot-detail-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 4px 0 16px;
+}
+
+.plot-detail-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 9px 14px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    font-size: 12.5px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.plot-detail-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.plot-detail-here {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(236, 72, 153, 0.18);
+    color: #f8a8d0;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.plot-detail-action.switch {
+    border-color: rgba(236, 72, 153, 0.45);
+    background: rgba(236, 72, 153, 0.12);
+    color: #f8a8d0;
+}
+
+.plot-detail-action.switch:hover:not(:disabled) {
+    background: rgba(236, 72, 153, 0.24);
+    color: #ffc6e3;
+}
+
+.plot-detail-action.archive {
+    border-color: rgba(240, 168, 62, 0.4);
+    background: rgba(240, 168, 62, 0.1);
+    color: #f0bd6e;
+}
+
+.plot-detail-action.archive:hover:not(:disabled) {
+    background: rgba(240, 168, 62, 0.22);
+    color: #ffd596;
+}
+
+.plot-branch-preview-section .plot-detail-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.plot-preview-loading { color: var(--accent-primary, #ec4899); font-size: 11px; }
+.plot-preview-empty { color: rgba(180, 198, 222, 0.5); font-size: 12px; padding: 6px 0; }
+
+.plot-branch-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.plot-preview-msg {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 10px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.plot-preview-msg.user { background: rgba(124, 196, 245, 0.08); }
+.plot-preview-role { font-size: 10.5px; font-weight: 700; color: rgba(180, 198, 222, 0.65); }
+.plot-preview-msg.user .plot-preview-role { color: #8fc7f5; }
+.plot-preview-text { color: rgba(224, 233, 245, 0.85); }
+
+.plot-detail-rollback,
+.plot-graph-node-rollback {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border: 1px solid rgba(218, 54, 51, 0.4);
+    border-radius: 9px;
+    background: rgba(218, 54, 51, 0.1);
+    color: #f08a87;
+    font-size: 12.5px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.plot-detail-rollback { width: 100%; justify-content: center; margin-top: 4px; }
+
+.plot-detail-rollback:hover,
+.plot-graph-node-rollback:hover {
+    background: rgba(218, 54, 51, 0.2);
+    color: #ff9d9a;
+}
+
+.plot-graph-node-rollback {
+    margin-top: 10px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+}
+
+.plot-map-timeline-view .plot-graph-node { cursor: pointer; }
+
+.plot-graph-node-card.active {
+    border-color: var(--accent-primary, #ec4899);
+    box-shadow: 0 0 0 1px var(--accent-primary, #ec4899);
+}
+
+[data-theme="light"] .plot-map-modal {
+    background: linear-gradient(160deg, #ffffff, #f5f7fb);
+}
+
+[data-theme="light"] .plot-map-detail { background: rgba(0, 0, 0, 0.02); }
+[data-theme="light"] .plot-detail-title,
+[data-theme="light"] .plot-map-title,
+[data-theme="light"] .plot-rel-chip b { color: #1f2937; }
+[data-theme="light"] .plot-detail-choice.selected { color: #1f2937; }
+
+
+
+
+
+
+
+
 
 @media (max-width: 640px) {
     .plot-choices-group {

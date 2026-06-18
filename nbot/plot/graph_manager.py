@@ -25,6 +25,7 @@ class PlotGraphManager:
         self._nodes: Dict[str, PlotNode] = {}
         self._choices: Dict[str, PlotChoice] = {}
         self._edges: Dict[str, PlotEdge] = {}
+        self._active: Dict[str, str] = {}  # conversation_id -> 当前激活节点
         self._load()
 
     # -- Node CRUD --
@@ -38,6 +39,23 @@ class PlotGraphManager:
             node.id, node.title, node.level,
         )
         return node
+
+    def set_node_messages(
+        self,
+        node_id: str,
+        user_message: Optional[Dict[str, Any]] = None,
+        assistant_message: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """为节点写入消息快照（用于会话内分支物化）。"""
+        node = self._nodes.get(node_id)
+        if node is None:
+            return False
+        if user_message is not None:
+            node.user_message = user_message
+        if assistant_message is not None:
+            node.assistant_message = assistant_message
+        self._save()
+        return True
 
     def get_node(self, node_id: str) -> Optional[PlotNode]:
         """获取单个节点。"""
@@ -171,10 +189,10 @@ class PlotGraphManager:
         return candidates[0]
 
     def get_latest_choices(self, conversation_id: str) -> List[Dict[str, Any]]:
-        """获取最新节点中未选择的选项。
+        """获取"当前位置"节点的未选择选项。
 
-        只返回最新一个尚未做出选择的节点所关联的选项，
-        避免把历史轮次中所有未选选项都暴露出来。
+        以激活节点（当前会话所在分支末端）为准，而非全局最新节点，
+        这样切换/回溯分支后，选项会随当前分支一起更新。
         """
         candidates = [
             n for n in self._nodes.values()
@@ -182,9 +200,22 @@ class PlotGraphManager:
         ]
         if not candidates:
             return []
-        candidates.sort(key=lambda n: n.created_at, reverse=True)
 
-        # 找到最新的、尚未做出选择的节点
+        # 优先用激活节点；其名下若全已选，再回退到按时间找最新未选节点
+        active_id = self.get_active_node_id(conversation_id)
+        active = self._nodes.get(active_id) if active_id else None
+        if active is not None:
+            unsel = [
+                c.to_dict()
+                for c in self._choices.values()
+                if c.node_id == active.id and not c.selected
+            ]
+            if unsel:
+                return unsel
+            # 激活节点已无未选选项 -> 该位置不再展示历史其他分支的选项
+            return []
+
+        candidates.sort(key=lambda n: n.created_at, reverse=True)
         for node in candidates:
             if not node.selected_choice_id:
                 return [
@@ -192,8 +223,6 @@ class PlotGraphManager:
                     for c in self._choices.values()
                     if c.node_id == node.id and not c.selected
                 ]
-
-        # 所有节点都已选择，返回空
         return []
 
     # -- Mermaid Visualization --
@@ -375,30 +404,186 @@ class PlotGraphManager:
 
         return path
 
+    # -- In-session Branching (会话内分支) --
+
+    def _build_parent_map(self, conversation_id: str):
+        """返回 (nodes_by_id, parent_of, child_map)。
+
+        父子关系：优先 edges / parent_node_id，孤儿按 created_at 串联，
+        与前端 buildPlotChildMap 保持一致，保证单根连贯。
+        """
+        nodes = [
+            n for n in self._nodes.values()
+            if n.conversation_id == conversation_id
+        ]
+        nodes.sort(key=lambda n: n.created_at or "")
+        by_id = {n.id: n for n in nodes}
+        parent_of: Dict[str, str] = {}
+        for n in nodes:
+            if n.parent_node_id and n.parent_node_id in by_id:
+                parent_of[n.id] = n.parent_node_id
+        for e in self._edges.values():
+            if e.from_node_id in by_id and e.to_node_id in by_id:
+                parent_of.setdefault(e.to_node_id, e.from_node_id)
+        prev = None
+        for n in nodes:
+            if n.id not in parent_of and prev is not None:
+                parent_of[n.id] = prev.id
+            prev = n
+        child_map: Dict[str, list] = {}
+        for child, parent in parent_of.items():
+            child_map.setdefault(parent, []).append(child)
+        return by_id, parent_of, child_map
+
+    def get_active_node_id(self, conversation_id: str) -> str:
+        """返回会话当前激活节点 id（单一真相来源）。
+
+        若未显式设置，回退为最新创建的节点。
+        """
+        active = self._active.get(conversation_id, "")
+        if active and active in self._nodes:
+            return active
+        latest = self.get_latest_node(conversation_id)
+        return latest.id if latest else ""
+
+    def set_active_node(self, conversation_id: str, node_id: str) -> bool:
+        """设置会话当前激活节点并持久化。"""
+        if node_id and node_id not in self._nodes:
+            return False
+        self._active[conversation_id] = node_id
+        self._save()
+        return True
+
+    def get_children(self, conversation_id: str, node_id: str) -> List[PlotNode]:
+        """返回某节点的直接子节点（按创建时间排序）。"""
+        _, _, child_map = self._build_parent_map(conversation_id)
+        children = [
+            self._nodes[cid] for cid in child_map.get(node_id, [])
+            if cid in self._nodes
+        ]
+        children.sort(key=lambda n: n.created_at or "")
+        return children
+
+    def path_to_node(self, conversation_id: str, node_id: str) -> List[PlotNode]:
+        """返回从根到指定节点的节点路径（含该节点）。"""
+        by_id, parent_of, _ = self._build_parent_map(conversation_id)
+        if node_id not in by_id:
+            return []
+        path: List[PlotNode] = []
+        cur = node_id
+        guard = set()
+        while cur and cur in by_id and cur not in guard:
+            guard.add(cur)
+            path.append(by_id[cur])
+            cur = parent_of.get(cur, "")
+        path.reverse()
+        return path
+
+    def materialize_path(
+        self,
+        conversation_id: str,
+        node_id: str,
+        system_prompt: str = "",
+    ) -> List[Dict[str, Any]]:
+        """物化从根到 node_id 的完整消息列表。
+
+        缺少消息快照的历史节点用 title/summary 兜底，保证不报错。
+        """
+        path = self.path_to_node(conversation_id, node_id)
+        messages: List[Dict[str, Any]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        for node in path:
+            um = dict(node.user_message or {})
+            am = dict(node.assistant_message or {})
+            if um.get("content"):
+                # 为物化消息赋稳定 id（基于节点），保证切换/回溯后编辑、
+                # 重新生成、运行时时间线仍能正确引用。
+                um.setdefault("id", f"pm_u_{node.id}")
+                um.setdefault("role", "user")
+                messages.append(um)
+            if am.get("content"):
+                am.setdefault("id", f"pm_a_{node.id}")
+                am.setdefault("role", "assistant")
+                messages.append(am)
+            elif not node.assistant_message:
+                # 历史节点兜底：用 summary/title 重建一条 assistant 消息
+                fallback = node.summary or node.title or ""
+                if fallback:
+                    messages.append({
+                        "role": "assistant",
+                        "content": fallback,
+                        "id": f"pm_a_{node.id}",
+                    })
+        return messages
+
+    def branch_from(
+        self,
+        choice_id: str,
+        new_node: PlotNode,
+    ) -> Optional[PlotNode]:
+        """从某选择创建一条新分支：
+
+        允许同一父节点存在多个分支（每个已选 choice 一条边）。
+        标记 choice 为已选、设置新节点父指针、建边。
+        """
+        choice = self._choices.get(choice_id)
+        if choice is None:
+            _log.warning("[PlotGraphManager] branch_from: choice not found %s", choice_id)
+            return None
+        parent_id = choice.node_id
+        if parent_id not in self._nodes:
+            _log.warning("[PlotGraphManager] branch_from: parent node missing %s", parent_id)
+            return None
+        new_node.parent_node_id = parent_id
+        self._nodes[new_node.id] = new_node
+        choice.selected = True
+        # 不覆盖父节点已有的 selected_choice_id（保留首选主线语义）
+        if not self._nodes[parent_id].selected_choice_id:
+            self._nodes[parent_id].selected_choice_id = choice.id
+        edge = PlotEdge(
+            from_node_id=parent_id,
+            to_node_id=new_node.id,
+            choice_id=choice_id,
+            label=choice.text,
+        )
+        self._edges[edge.id] = edge
+        self._save()
+        _log.info(
+            "[PlotGraphManager] branched node %s from choice %s (parent %s)",
+            new_node.id, choice_id, parent_id,
+        )
+        return new_node
+
     # -- Rollback --
 
-    def rollback(self, node_id: str) -> bool:
-        """回滚：移除指定节点及其所有后代节点、相关选择和边。
+    def rollback(self, node_id: str, conversation_id: str = "") -> bool:
+        """回溯到指定节点：保留该节点，移除其所有后代节点、相关选择和边。
 
-        不允许回滚不存在的节点。
+        回溯后该节点成为分支末端：清除其 selected_choice_id 并把它名下
+        已选择的 choice 复位为未选，便于重新从此节点分支。
+        不允许回溯不存在的节点。
         """
         if node_id not in self._nodes:
             _log.warning("[PlotGraphManager] rollback target not found: %s", node_id)
             return False
 
-        # 收集要删除的节点（BFS 遍历后代）
-        to_remove: set = {node_id}
+        # 收集要删除的后代节点（BFS，不含目标节点本身）
+        to_remove: set = set()
         queue = [node_id]
+        seen = {node_id}
         while queue:
             current_id = queue.pop(0)
             for edge in list(self._edges.values()):
                 if edge.from_node_id == current_id:
                     child_id = edge.to_node_id
-                    if child_id not in to_remove:
+                    if child_id not in seen:
+                        seen.add(child_id)
                         to_remove.add(child_id)
                         queue.append(child_id)
 
-        # 收集要删除的边和选择
+        # 删除：连接到被删后代的边、被删后代名下的选择；
+        # 以及从目标节点出发指向被删后代的边。
         edges_to_remove = {
             eid for eid, e in self._edges.items()
             if e.from_node_id in to_remove or e.to_node_id in to_remove
@@ -408,17 +593,28 @@ class PlotGraphManager:
             if c.node_id in to_remove
         }
 
-        # 执行删除
         for nid in to_remove:
-            del self._nodes[nid]
+            self._nodes.pop(nid, None)
         for eid in edges_to_remove:
-            del self._edges[eid]
+            self._edges.pop(eid, None)
         for cid in choices_to_remove:
-            del self._choices[cid]
+            self._choices.pop(cid, None)
+
+        # 目标节点复位为分支末端
+        target = self._nodes.get(node_id)
+        if target:
+            target.selected_choice_id = ""
+        for c in self._choices.values():
+            if c.node_id == node_id:
+                c.selected = False
+
+        # 激活节点指向回溯目标
+        if conversation_id:
+            self._active[conversation_id] = node_id
 
         self._save()
         _log.info(
-            "[PlotGraphManager] rollback node=%s, removed %d nodes, "
+            "[PlotGraphManager] rollback to node=%s, removed %d descendants, "
             "%d edges, %d choices",
             node_id, len(to_remove), len(edges_to_remove),
             len(choices_to_remove),
@@ -433,6 +629,7 @@ class PlotGraphManager:
             "nodes": {nid: n.to_dict() for nid, n in self._nodes.items()},
             "choices": {cid: c.to_dict() for cid, c in self._choices.items()},
             "edges": {eid: e.to_dict() for eid, e in self._edges.items()},
+            "active": dict(self._active),
         }
         try:
             os.makedirs(os.path.dirname(self._graphs_file), exist_ok=True)
@@ -456,6 +653,9 @@ class PlotGraphManager:
                 self._choices[cid] = PlotChoice.from_dict(cdata)
             for eid, edata in data.get("edges", {}).items():
                 self._edges[eid] = PlotEdge.from_dict(edata)
+            active = data.get("active", {})
+            if isinstance(active, dict):
+                self._active = {str(k): str(v) for k, v in active.items()}
 
             _log.info(
                 "[PlotGraphManager] loaded %d nodes, %d choices, %d edges",

@@ -37,6 +37,10 @@ class PlotNode:
     selected_choice_id: str = ""
     created_at: str = ""
 
+    # 会话内分支：该轮的消息快照（用于物化任意分支的完整对话）
+    user_message: Dict[str, Any] = field(default_factory=dict)
+    assistant_message: Dict[str, Any] = field(default_factory=dict)
+
     def __post_init__(self):
         if not self.id:
             self.id = _new_id("pn")
@@ -57,6 +61,8 @@ class PlotNode:
             "parent_node_id": self.parent_node_id,
             "selected_choice_id": self.selected_choice_id,
             "created_at": self.created_at,
+            "user_message": self.user_message,
+            "assistant_message": self.assistant_message,
         }
 
     @classmethod
@@ -74,6 +80,8 @@ class PlotNode:
             parent_node_id=data.get("parent_node_id", ""),
             selected_choice_id=data.get("selected_choice_id", ""),
             created_at=data.get("created_at", ""),
+            user_message=data.get("user_message", {}) or {},
+            assistant_message=data.get("assistant_message", {}) or {},
         )
 
 

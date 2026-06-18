@@ -498,6 +498,66 @@ def _copy_character_runtime_state(
         )
 
 
+def restore_runtime_state_to_path(server, session_id, session, path_nodes):
+    """将会话的角色运行时状态/时间线回退/定位到给定节点路径的末端。
+
+    供剧情"切换分支"与"回溯"复用：
+    - 用路径末节点的 state/relationship 快照重建 character_runtime_snapshot；
+    - 用路径上每个带快照的节点重建 character_runtime_timeline（保持历史）；
+    - 同步写回 live 仓库（CharacterStateRepository/RelationshipRepository）。
+
+    path_nodes: 节点 dict 列表（含 state_snapshot/relationship_snapshot/id）。
+    返回 True 表示有状态被恢复。
+    """
+    if not isinstance(session, dict) or not path_nodes:
+        return False
+
+    def _combined(node):
+        snap = {}
+        snap.update(node.get("state_snapshot") or {})
+        snap.update(node.get("relationship_snapshot") or {})
+        return snap
+
+    # 末端节点的状态快照
+    tail = path_nodes[-1]
+    tail_snapshot = _combined(tail)
+    if not tail_snapshot:
+        # 路径末端没有运行时快照（如历史节点）——不强行改写，避免污染
+        return False
+
+    character_id = str(_resolve_session_runtime_character_id(session) or "").strip()
+    if not character_id:
+        character_id = str(session.get("character_id") or "").strip()
+
+    # 1) 重建时间线（仅含有快照的节点，按路径顺序）
+    timeline = []
+    for node in path_nodes:
+        snap = _combined(node)
+        if not snap:
+            continue
+        entry = _normalize_runtime_timeline_entry(snap)
+        entry["message_id"] = f"pm_a_{node.get('id', '')}"
+        timeline.append(entry)
+    session["character_runtime_timeline"] = timeline[-200:]
+
+    # 2) 写回会话快照
+    tail_snapshot = dict(tail_snapshot)
+    if character_id:
+        tail_snapshot.setdefault("character_id", character_id)
+    session["character_runtime_snapshot"] = tail_snapshot
+
+    # 3) 同步 live 仓库
+    if character_id:
+        try:
+            _save_character_runtime_snapshot(server, character_id, session_id, tail_snapshot)
+        except Exception as exc:
+            _log.warning(
+                "[CharacterRuntime] restore live state failed for %s: %s",
+                session_id, exc, exc_info=True,
+            )
+    return True
+
+
 def register_session_routes(app, server):
     session_store = WebSessionStore(
         server.sessions, save_callback=lambda: server._save_data("sessions")
@@ -2219,6 +2279,57 @@ def register_session_routes(app, server):
         except Exception as e:
             _log.error(f"[Compress] 压缩上下文失败: {e}", exc_info=True)
             return jsonify({"success": False, "error": f"压缩失败: {str(e)}"}), 500
+
+    @app.route("/api/sessions/<session_id>/archive-branch", methods=["POST"])
+    def archive_plot_branch(session_id):
+        """归档剧情某个分支：物化根→指定节点的对话，追加到归档会话。
+
+        复用既有归档逻辑（_get_or_create_archive_session + _append_to_archive），
+        因此归档结果与压缩归档一致，都会写入同一个归档会话。
+        """
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        data = request.get_json(silent=True) or {}
+        node_id = str(data.get("node_id") or "").strip()
+        if not node_id:
+            return jsonify({"success": False, "error": "node_id is required"}), 400
+
+        try:
+            from nbot.plot.graph_manager import get_plot_graph_manager
+            data_dir = getattr(server, "data_dir", "data/web")
+            manager = get_plot_graph_manager(data_dir=data_dir)
+            node = manager.get_node(node_id)
+            if node is None:
+                return jsonify({"success": False, "error": "node not found"}), 404
+
+            system_prompt = str(session.get("system_prompt") or "").strip()
+            materialized = manager.materialize_path(session_id, node_id, system_prompt)
+            branch_messages = [m for m in materialized if m.get("role") != "system"]
+            if not branch_messages:
+                return jsonify({"success": False, "error": "该分支没有可归档的对话"}), 400
+
+            archive = _get_or_create_archive_session(session_id, session)
+            label = (
+                f"分支归档 {datetime.now().strftime('%Y-%m-%d %H:%M')} "
+                f"（节点：{node.title or node_id[:8]}，{len(branch_messages)} 条）"
+            )
+            _append_to_archive(archive, deepcopy(branch_messages), label=label)
+
+            _log.info(
+                "[ArchiveBranch] 会话 %s 分支 %s 已归档到 %s（%d 条）",
+                session_id[:8], node_id, archive["id"][:8], len(branch_messages),
+            )
+            return jsonify({
+                "success": True,
+                "node_id": node_id,
+                "archived_count": len(branch_messages),
+                "archive_session_id": archive["id"],
+            })
+        except Exception as e:
+            _log.error("[ArchiveBranch] 归档分支失败: %s", e, exc_info=True)
+            return jsonify({"success": False, "error": f"归档失败: {str(e)}"}), 500
 
     @app.route("/api/sessions/<session_id>/ai-summary", methods=["POST"])
     def ai_summary_session(session_id):

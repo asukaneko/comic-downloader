@@ -15088,10 +15088,11 @@ def main(params):
                                     choices: data.graph.choices || [],
                                     edges: data.graph.edges || [],
                                 };
-                            }
-                            if (data.mermaid) {
-                                this.plotGraphMermaid = data.mermaid;
-                                this.$nextTick(() => this.renderInlinePlotGraph());
+                                this.refreshPlotPath();
+                                // 若全屏地图开着，实时重绘
+                                if (this.showPlotGraphModal && this.plotGraphView === 'graph') {
+                                    this.$nextTick(() => this.renderPlotGraphChart());
+                                }
                             }
                         }
                     });
@@ -16803,6 +16804,20 @@ def main(params):
             if (res.data && res.data.choices) {
                 this.plotChoices = this.normalizePlotChoices(res.data.choices);
             }
+            // 同步加载故事图数据，供侧栏路径条显示
+            try {
+                const g = await axios.get('/api/plot/' + sid + '/graph');
+                this.plotGraphData = {
+                    nodes: g.data?.nodes || [],
+                    choices: g.data?.choices || [],
+                    edges: g.data?.edges || [],
+                };
+                // 同步当前位置（后端为单一真相来源），供路径条正确高亮
+                if (g.data?.active_node_id) this.plotActiveNodeId = g.data.active_node_id;
+                this.refreshPlotPath();
+            } catch (ge) {
+                console.debug('loadPlotChoices graph:', ge.message);
+            }
         } catch (e) {
             console.debug('loadPlotChoices:', e.message);
         }
@@ -16905,56 +16920,317 @@ def main(params):
                 choices: graphRes.data?.choices || [],
                 edges: graphRes.data?.edges || []
             };
-            this.plotGraphMermaid = '';
-            this.showPlotGraphModal = true;
-
-            try {
-                const mermaidRes = await axios.get('/api/plot/' + sid + '/mermaid');
-                this.plotGraphMermaid = mermaidRes.data?.mermaid || '';
-                if (this.plotGraphMermaid) {
-                    this.$nextTick(() => this.renderMermaid());
-                }
-            } catch (e) {
-                console.debug('loadPlotGraph mermaid:', e.message);
+            // 激活节点（当前会话位置）：后端为单一真相来源
+            this.plotActiveNodeId = graphRes.data?.active_node_id
+                || (this.currentSession && this.currentSession.plot_active_node_id) || '';
+            this.refreshPlotPath();
+            if (!this.plotActiveNodeId && this.plotCurrentNode) {
+                this.plotActiveNodeId = this.plotCurrentNode.id;
             }
+            // 默认选中当前节点
+            this.plotSelectedNode = this.plotCurrentNode
+                || (this.plotGraphData.nodes.length ? this.plotGraphData.nodes[this.plotGraphData.nodes.length - 1] : null);
+            if (this.plotSelectedNode) this.loadPlotBranchPreview(this.plotSelectedNode.id);
+            this.plotGraphView = 'graph';
+            this.showPlotGraphModal = true;
+            this.$nextTick(() => this.renderPlotGraphChart());
         } catch (e) {
             console.debug('loadPlotGraph:', e.message);
             this.showToast('故事图加载失败', 'error');
         }
     },
 
-    renderMermaid() {
-        const el = this.$refs.plotGraphContainer;
-        if (el && window.mermaid) {
-            el.removeAttribute('data-processed');
-            el.textContent = this.plotGraphMermaid;
-            try {
-                const result = window.mermaid.run({ nodes: [el] });
-                if (result && typeof result.catch === 'function') {
-                    result.catch(e => console.debug('renderMermaid:', e.message));
-                }
-            } catch (e) {
-                console.debug('renderMermaid:', e.message);
+    // 关卡级别 -> 配色
+    plotLevelColor(level) {
+        return ({
+            normal: '#8b98a8',
+            important: '#f0a83e',
+            turning_point: '#ec4899',
+            ending: '#22b8cf',
+        })[level] || '#8b98a8';
+    },
+
+    plotLevelLabel(level) {
+        return ({
+            normal: '顺势',
+            important: '推进',
+            turning_point: '转折',
+            ending: '结局',
+        })[level] || level || '顺势';
+    },
+
+    plotChoicesForNode(nodeId) {
+        return (this.plotGraphData.choices || []).filter(c => c.node_id === nodeId);
+    },
+
+    // 当前激活分支(根→激活节点→其叶子)的节点 id 集合，用于"当前位置"高亮与
+    // 限制同分支切换：在这条线上的节点视为"同一分支"，不允许"切换分支"。
+    plotActivePathIds() {
+        const { byId, parentOf, childMap } = this.buildPlotChildMap();
+        const ids = new Set();
+        let cur = this.plotActiveNodeId && byId[this.plotActiveNodeId];
+        // 向上到根
+        const up = new Set();
+        let c = cur;
+        while (c && !up.has(c.id)) { up.add(c.id); ids.add(c.id); c = parentOf[c.id] ? byId[parentOf[c.id]] : null; }
+        // 向下沿最新子节点到叶子
+        let d = cur; const down = new Set();
+        while (d && !down.has(d.id)) {
+            down.add(d.id); ids.add(d.id);
+            const kids = (childMap[d.id] || []).map(id => byId[id]).filter(Boolean);
+            if (!kids.length) break;
+            kids.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+            d = kids[kids.length - 1];
+        }
+        return ids;
+    },
+
+    // 节点是否在当前激活分支上（同一分支 => 不可"切换分支"）
+    plotNodeOnActivePath(nodeId) {
+        return this.plotActivePathIds().has(nodeId);
+    },
+
+    // 计算父子关系：优先用 edges / parent_node_id，孤儿按 created_at 串联
+    buildPlotChildMap() {
+        const nodes = (this.plotGraphData.nodes || []).slice()
+            .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+        const byId = {};
+        nodes.forEach(n => { byId[n.id] = n; });
+        const parentOf = {};
+        // 1) 显式 parent_node_id
+        nodes.forEach(n => { if (n.parent_node_id && byId[n.parent_node_id]) parentOf[n.id] = n.parent_node_id; });
+        // 2) edges 补充
+        (this.plotGraphData.edges || []).forEach(e => {
+            if (byId[e.from_node_id] && byId[e.to_node_id] && !parentOf[e.to_node_id]) {
+                parentOf[e.to_node_id] = e.from_node_id;
             }
+        });
+        // 3) 孤儿按时间顺序挂到上一个节点（保证连贯单根）
+        let prev = null;
+        nodes.forEach(n => {
+            if (!parentOf[n.id] && prev) parentOf[n.id] = prev.id;
+            prev = n;
+        });
+        const childMap = {};
+        Object.entries(parentOf).forEach(([child, parent]) => {
+            (childMap[parent] = childMap[parent] || []).push(child);
+        });
+        return { nodes, byId, parentOf, childMap };
+    },
+
+    // 主线路径：从根沿子节点走到最新；同时刷新 plotCurrentNode
+    refreshPlotPath() {
+        const { nodes, byId, parentOf, childMap } = this.buildPlotChildMap();
+        if (!nodes.length) { this.plotMainPath = []; this.plotCurrentNode = null; return; }
+        // 路径末端：从激活分支节点出发，沿"最近创建的子节点"下探到叶子，
+        // 这样正常续聊会自动延伸当前分支；无激活节点时用全局最新节点。
+        let tip = (this.plotActiveNodeId && byId[this.plotActiveNodeId]) || nodes[nodes.length - 1];
+        const down = new Set();
+        while (tip && !down.has(tip.id)) {
+            down.add(tip.id);
+            const kids = (childMap[tip.id] || []).map(id => byId[id]).filter(Boolean);
+            if (!kids.length) break;
+            kids.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+            tip = kids[kids.length - 1];
+        }
+        // 从末端回溯到根
+        const path = [];
+        let cur = tip;
+        const guard = new Set();
+        while (cur && !guard.has(cur.id)) {
+            guard.add(cur.id);
+            path.unshift(cur);
+            cur = parentOf[cur.id] ? byId[parentOf[cur.id]] : null;
+        }
+        this.plotMainPath = path;
+        this.plotCurrentNode = tip;
+    },
+
+    // 将图数据转换为 ECharts tree 结构（单根）
+    buildPlotEchartsTree() {
+        const { nodes, byId, childMap } = this.buildPlotChildMap();
+        if (!nodes.length) return null;
+        const childSet = new Set();
+        Object.values(childMap).forEach(arr => arr.forEach(id => childSet.add(id)));
+        const roots = nodes.filter(n => !childSet.has(n.id));
+        const root = roots[0] || nodes[0];
+        const mainIds = new Set((this.plotMainPath || []).map(n => n.id));
+        const selId = this.plotSelectedNode?.id;
+        const activeId = this.plotActiveNodeId;
+        const makeNode = (node, idx) => {
+            const onMain = mainIds.has(node.id);
+            const isSel = node.id === selId;
+            const isActive = node.id === activeId;
+            const color = this.plotLevelColor(node.level);
+            const title = (node.title || '剧情节点').replace(/\.\.\.$/, '');
+            const prefix = isActive ? '📍 ' : '';
+            return {
+                name: prefix + (title.length > 14 ? title.slice(0, 14) + '…' : title),
+                value: node.id,
+                symbol: isActive ? 'pin' : 'circle',
+                symbolSize: isActive ? 30 : (isSel ? 26 : (onMain ? 20 : 14)),
+                itemStyle: {
+                    color: isActive ? '#ec4899' : (onMain ? color : 'rgba(139,152,168,0.35)'),
+                    borderColor: isActive ? '#fff' : (isSel ? '#fff' : color),
+                    borderWidth: isActive ? 3 : (isSel ? 3 : (onMain ? 2 : 1)),
+                    shadowBlur: isActive ? 22 : (isSel ? 18 : 0),
+                    shadowColor: isActive ? '#ec4899' : color,
+                },
+                label: {
+                    color: isActive ? '#ec4899' : (onMain ? 'var(--text-primary)' : 'var(--text-secondary)'),
+                    fontWeight: isActive ? 700 : 'normal',
+                },
+                lineStyle: { color: onMain ? color : 'rgba(139,152,168,0.3)' },
+                children: (childMap[node.id] || []).map((cid, i) => makeNode(byId[cid], i)),
+            };
+        };
+        return makeNode(root, 0);
+    },
+
+    renderPlotGraphChart() {
+        const el = this.$refs.plotGraphChart;
+        if (!el || !window.echarts) return;
+        const treeData = this.buildPlotEchartsTree();
+        const existing = echarts.getInstanceByDom(el);
+        if (existing) existing.dispose();
+        if (!treeData) return;
+        const chart = echarts.init(el);
+        this._plotChart = chart;
+        const cs = getComputedStyle(document.body);
+        const textColor = cs.getPropertyValue('--text-secondary').trim() || '#8b949e';
+        chart.setOption({
+            tooltip: { trigger: 'item', triggerOn: 'mousemove',
+                backgroundColor: 'rgba(15,23,42,0.92)', borderColor: 'rgba(255,255,255,0.1)',
+                textStyle: { color: '#e2e8f0', fontSize: 12 },
+                formatter: (p) => {
+                    const n = (this.plotGraphData.nodes || []).find(x => x.id === p.value);
+                    if (!n) return p.name;
+                    return `<b>${n.title || '剧情节点'}</b><br/>${this.plotLevelLabel(n.level)}`;
+                } },
+            series: [{
+                type: 'tree', data: [treeData], top: '4%', left: '8%', bottom: '4%', right: '14%',
+                orient: 'TB', symbol: 'circle', expandAndCollapse: false, roam: true, initialTreeDepth: -1,
+                label: { position: 'top', distance: 8, fontSize: 12, color: textColor, align: 'center' },
+                leaves: { label: { position: 'bottom' } },
+                lineStyle: { width: 2, curveness: 0.12 },
+                emphasis: { focus: 'relative' }, animationDuration: 400,
+            }],
+        });
+        chart.off('click');
+        chart.on('click', (p) => { if (p.data && p.data.value) this.selectPlotGraphNode(p.data.value); });
+        if (!this._plotChartResizer) {
+            this._plotChartResizer = () => { if (this._plotChart) this._plotChart.resize(); };
+            window.addEventListener('resize', this._plotChartResizer);
         }
     },
 
-    renderInlinePlotGraph() {
-        const el = this.$refs.inlinePlotGraphContainer;
-        if (!el || !window.mermaid || !this.plotGraphMermaid) return;
-        el.removeAttribute('data-processed');
-        el.textContent = this.plotGraphMermaid;
-        this.$nextTick(() => {
-            try {
-                const result = window.mermaid.run({ nodes: [el] });
-                if (result && typeof result.catch === 'function') {
-                    result.catch(e => console.debug('renderInlinePlotGraph:', e.message));
-                }
-            } catch (e) {
-                console.debug('renderInlinePlotGraph:', e.message);
-            }
-        });
+    selectPlotGraphNode(nodeId) {
+        const node = (this.plotGraphData.nodes || []).find(n => n.id === nodeId);
+        if (node) {
+            this.plotSelectedNode = node;
+            this.loadPlotBranchPreview(node.id);
+            if (this.plotGraphView === 'graph') this.$nextTick(() => this.renderPlotGraphChart());
+        }
     },
+
+    async loadPlotBranchPreview(nodeId) {
+        if (!this.currentSession || !nodeId) { this.plotBranchPreview = []; return; }
+        this.plotBranchPreviewLoading = true;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            const res = await axios.get('/api/plot/' + sid + '/branch-preview', { params: { node_id: nodeId } });
+            // 仅在仍选中同一节点时写入，避免快速点击竞态
+            if (this.plotSelectedNode && this.plotSelectedNode.id === nodeId) {
+                this.plotBranchPreview = res.data?.messages || [];
+            }
+        } catch (e) {
+            this.plotBranchPreview = [];
+            console.debug('branch-preview:', e.message);
+        } finally {
+            this.plotBranchPreviewLoading = false;
+        }
+    },
+
+    async createPlotBranch(node, choice) {
+        if (!node || !choice || !this.currentSession || this.plotBranchBusy) return;
+        this.plotBranchBusy = true;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            await axios.post('/api/plot/' + sid + '/branch', { node_id: node.id, choice_id: choice.id });
+            this.showPlotGraphModal = false;
+            this.showToast('已创建分支，正在生成新剧情…', 'success');
+            await this.loadMessages(true);
+        } catch (e) {
+            this.showToast('创建分支失败: ' + (e.response?.data?.error || e.message), 'error');
+        } finally {
+            this.plotBranchBusy = false;
+        }
+    },
+
+    async switchPlotBranch(node) {
+        if (!node || !this.currentSession || this.plotBranchBusy) return;
+        if (node.id === this.plotActiveNodeId) return;
+        // 同一分支内（激活路径上的祖先/后代）不允许"切换分支"
+        if (this.plotNodeOnActivePath(node.id)) {
+            this.showToast('该节点在当前分支上，无需切换；如需回到此处请用"回溯到此节点"', 'info');
+            return;
+        }
+        this.plotBranchBusy = true;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            await axios.post('/api/plot/' + sid + '/switch', { node_id: node.id });
+            this.plotActiveNodeId = node.id;
+            this.showToast('已切换到该分支', 'success');
+            await this.loadMessages(true);
+            await this.loadPlotChoices();
+            await this.loadPlotGraph();
+        } catch (e) {
+            this.showToast('切换分支失败: ' + (e.response?.data?.error || e.message), 'error');
+        } finally {
+            this.plotBranchBusy = false;
+        }
+    },
+
+    async archivePlotBranch(node) {
+        if (!node || !this.currentSession || this.plotBranchBusy) return;
+        if (!confirm(`将「${node.title || '该分支'}」从根到此节点的对话归档为归档会话？`)) return;
+        this.plotBranchBusy = true;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            const res = await axios.post('/api/sessions/' + sid + '/archive-branch', { node_id: node.id });
+            this.showToast(`已归档该分支（${res.data?.archived_count || 0} 条）`, 'success');
+            if (typeof this.loadSessions === 'function') this.loadSessions();
+        } catch (e) {
+            this.showToast('归档分支失败: ' + (e.response?.data?.error || e.message), 'error');
+        } finally {
+            this.plotBranchBusy = false;
+        }
+    },
+
+    switchPlotView(view) {
+        this.plotGraphView = view;
+        if (view === 'graph') this.$nextTick(() => this.renderPlotGraphChart());
+    },
+
+    async rollbackPlotNode(node) {
+        if (!node || !this.currentSession || this.plotBranchBusy) return;
+        if (!confirm(`确定回溯到「${node.title || '该节点'}」？该节点之后的剧情分支与对话将被移除，不可恢复。`)) return;
+        this.plotBranchBusy = true;
+        try {
+            const sid = this.currentSession.id || this.currentSession.session_id;
+            await axios.post('/api/plot/' + sid + '/rollback', { node_id: node.id });
+            this.plotActiveNodeId = node.id;
+            this.showToast('已回溯到该节点', 'success');
+            await this.loadMessages(true);
+            await this.loadPlotChoices();
+            await this.loadPlotGraph();
+        } catch (e) {
+            this.showToast('回溯失败: ' + (e.response?.data?.error || e.message), 'error');
+        } finally {
+            this.plotBranchBusy = false;
+        }
+    },
+
 
     // ============================================================
     // 3.x Character Status (角色状态)

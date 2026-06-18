@@ -21,10 +21,6 @@
     <script src="/static/vendor/marked.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/styles/highlight-github-dark.min.css">
     <script src="/static/vendor/highlight.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-    <script>
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
-    </script>
     <link rel="stylesheet" href="/static/vendor/styles/font-awesome.min.css">
     <script src="/static/js/i18n.js?v=20260525"></script>
     <script src="/static/js/push.js"></script>
@@ -2248,21 +2244,31 @@
                                     <div class="runtime-section-title">剧情</div>
                                     <div class="plot-status-card">
                                         <div v-if="plotCurrentNode" class="plot-node-mini">
-                                            <span class="plot-node-badge">{{ plotCurrentNode.level }}</span>
+                                            <span class="plot-node-badge" :style="{ background: plotLevelColor(plotCurrentNode.level) }">{{ plotLevelLabel(plotCurrentNode.level) }}</span>
                                             {{ plotCurrentNode.title }}
                                         </div>
                                         <button class="btn btn-ghost btn-xs" @click="loadPlotGraph()">
                                             <i class="fas fa-project-diagram"></i> 故事图
                                         </button>
                                     </div>
-                                    <!-- Inline Mermaid Graph -->
-                                    <div v-if="plotGraphMermaid" class="plot-inline-graph">
-                                        <div class="plot-inline-graph-header" @click="showInlinePlotGraph = !showInlinePlotGraph">
-                                            <i class="fas fa-diagram-project"></i>
+                                    <!-- Inline Path Bar (主线路径条) -->
+                                    <div v-if="plotMainPath.length" class="plot-path">
+                                        <div class="plot-path-header" @click="showInlinePlotGraph = !showInlinePlotGraph">
+                                            <i class="fas fa-route"></i>
                                             <span>剧情路径</span>
-                                            <i :class="showInlinePlotGraph ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="plot-inline-graph-toggle"></i>
+                                            <span class="plot-path-count">{{ plotMainPath.length }}</span>
+                                            <i :class="showInlinePlotGraph ? 'fas fa-chevron-up' : 'fas fa-chevron-down'" class="plot-path-toggle"></i>
                                         </div>
-                                        <div v-show="showInlinePlotGraph" ref="inlinePlotGraphContainer" class="plot-inline-graph-body"></div>
+                                        <div v-show="showInlinePlotGraph" class="plot-path-track">
+                                            <div v-for="(node, idx) in plotMainPath" :key="node.id"
+                                                 class="plot-path-step"
+                                                 :class="{ current: idx === plotMainPath.length - 1 }"
+                                                 :title="node.title"
+                                                 @click="loadPlotGraph()">
+                                                <span class="plot-path-dot" :style="{ background: plotLevelColor(node.level) }"></span>
+                                                <span class="plot-path-label">{{ node.title || '剧情节点' }}</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -8673,57 +8679,129 @@
         </div>
 
         <!-- Plot Graph Modal -->
-        <div v-if="showPlotGraphModal" class="modal-overlay plot-graph-overlay" @click.self="showPlotGraphModal = false">
-            <div class="modal plot-graph-modal">
-                <div class="modal-header">
-                    <span class="modal-title"><i class="fas fa-project-diagram"></i> 故事图</span>
+        <div v-if="showPlotGraphModal" class="modal-overlay plot-map-overlay" @click.self="showPlotGraphModal = false">
+            <div class="modal plot-map-modal">
+                <div class="plot-map-header">
+                    <span class="plot-map-title"><i class="fas fa-project-diagram"></i> 故事地图</span>
+                    <div class="plot-map-tabs">
+                        <button :class="{ active: plotGraphView === 'graph' }" @click="switchPlotView('graph')"><i class="fas fa-diagram-project"></i> 图谱</button>
+                        <button :class="{ active: plotGraphView === 'timeline' }" @click="switchPlotView('timeline')"><i class="fas fa-stream"></i> 时间线</button>
+                    </div>
                     <button class="modal-close" @click="showPlotGraphModal = false">&times;</button>
                 </div>
-                <div class="modal-body plot-graph-body">
-                    <div v-if="!plotGraphData.nodes || plotGraphData.nodes.length === 0" class="plot-graph-empty">
-                        <i class="fas fa-seedling"></i>
-                        <div class="plot-graph-empty-title">暂无故事节点</div>
-                        <div class="plot-graph-empty-text">开启剧情模式并完成一次 AI 回复后，这里会生成故事节点和分支。</div>
+                <div v-if="!plotGraphData.nodes || plotGraphData.nodes.length === 0" class="plot-graph-empty">
+                    <i class="fas fa-seedling"></i>
+                    <div class="plot-graph-empty-title">暂无故事节点</div>
+                    <div class="plot-graph-empty-text">开启剧情模式并完成一次 AI 回复后，这里会生成故事节点和分支。</div>
+                </div>
+                <div v-else class="plot-map-body">
+                    <!-- 图谱视图 -->
+                    <div v-show="plotGraphView === 'graph'" class="plot-map-graph-view">
+                        <div ref="plotGraphChart" class="plot-map-canvas"></div>
+                        <div class="plot-map-detail">
+                            <div v-if="!plotSelectedNode" class="plot-detail-hint">
+                                <i class="fas fa-hand-pointer"></i>
+                                <span>点击左侧节点查看剧情详情</span>
+                            </div>
+                            <template v-else>
+                                <div class="plot-detail-head">
+                                    <span class="plot-detail-badge" :style="{ background: plotLevelColor(plotSelectedNode.level) }">{{ plotLevelLabel(plotSelectedNode.level) }}</span>
+                                    <span class="plot-detail-title">{{ plotSelectedNode.title || '剧情节点' }}</span>
+                                    <span v-if="plotSelectedNode.id === plotActiveNodeId" class="plot-detail-here"><i class="fas fa-location-dot"></i> 当前位置</span>
+                                </div>
+                                <div v-if="plotSelectedNode.summary" class="plot-detail-summary">{{ plotSelectedNode.summary }}</div>
+                                <div v-if="plotSelectedNode.relationship_snapshot && Object.keys(plotSelectedNode.relationship_snapshot).length" class="plot-detail-section">
+                                    <div class="plot-detail-section-title">当时关系</div>
+                                    <div class="plot-detail-rel">
+                                        <span v-for="(val, key) in plotSelectedNode.relationship_snapshot" :key="key" class="plot-rel-chip">
+                                            {{ key }} <b>{{ val }}</b>
+                                        </span>
+                                    </div>
+                                </div>
+                                <div v-if="plotChoicesForNode(plotSelectedNode.id).length" class="plot-detail-section">
+                                    <div class="plot-detail-section-title">分支选项</div>
+                                    <div class="plot-detail-choices">
+                                        <div v-for="choice in plotChoicesForNode(plotSelectedNode.id)" :key="choice.id"
+                                             class="plot-detail-choice" :class="{ selected: choice.selected }">
+                                            <i :class="choice.selected ? 'fas fa-check-circle' : 'far fa-circle'" :style="choice.selected ? { color: plotLevelColor(choice.level) } : {}"></i>
+                                            <span class="plot-detail-choice-text">{{ choice.text }}</span>
+                                            <span class="plot-detail-choice-level" :style="{ color: plotLevelColor(choice.level) }">{{ plotLevelLabel(choice.level) }}</span>
+                                            <button v-if="!choice.selected" class="plot-choice-branch-btn"
+                                                    :disabled="plotBranchBusy"
+                                                    @click="createPlotBranch(plotSelectedNode, choice)"
+                                                    title="以此选项创建新分支并生成回复">
+                                                <i class="fas fa-code-branch"></i> 创建分支
+                                            </button>
+                                            <span v-else class="plot-choice-walked"><i class="fas fa-arrow-turn-down"></i> 已生成</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="plot-detail-actions">
+                                    <button class="plot-detail-action switch"
+                                            :disabled="plotBranchBusy || plotSelectedNode.id === plotActiveNodeId || plotNodeOnActivePath(plotSelectedNode.id)"
+                                            @click="switchPlotBranch(plotSelectedNode)">
+                                        <i class="fas fa-shuffle"></i>
+                                        {{ plotSelectedNode.id === plotActiveNodeId ? '当前位置'
+                                           : (plotNodeOnActivePath(plotSelectedNode.id) ? '同一分支（用回溯）' : '切换到此分支') }}
+                                    </button>
+                                    <button class="plot-detail-action archive" :disabled="plotBranchBusy"
+                                            @click="archivePlotBranch(plotSelectedNode)">
+                                        <i class="fas fa-box-archive"></i> 归档此分支
+                                    </button>
+                                    <button class="plot-detail-rollback" :disabled="plotBranchBusy" @click="rollbackPlotNode(plotSelectedNode)">
+                                        <i class="fas fa-clock-rotate-left"></i> 回溯到此节点
+                                    </button>
+                                </div>
+                                <div class="plot-detail-section plot-branch-preview-section">
+                                    <div class="plot-detail-section-title">
+                                        分支预览
+                                        <span v-if="plotBranchPreviewLoading" class="plot-preview-loading"><i class="fas fa-spinner fa-spin"></i></span>
+                                    </div>
+                                    <div v-if="!plotBranchPreviewLoading && !plotBranchPreview.length" class="plot-preview-empty">该分支暂无可预览的对话</div>
+                                    <div class="plot-branch-preview">
+                                        <div v-for="(m, i) in plotBranchPreview" :key="i"
+                                             class="plot-preview-msg" :class="m.role">
+                                            <span class="plot-preview-role">{{ m.role === 'user' ? '我' : (m.sender || 'AI') }}</span>
+                                            <span class="plot-preview-text">{{ (m.content || '').slice(0, 200) }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
                     </div>
-                    <template v-else>
+                    <!-- 时间线视图 -->
+                    <div v-show="plotGraphView === 'timeline'" class="plot-map-timeline-view">
                         <div class="plot-graph-summary">
-                            <div class="plot-graph-stat">
-                                <span>{{ plotGraphData.nodes.length }}</span>
-                                <label>节点</label>
-                            </div>
-                            <div class="plot-graph-stat">
-                                <span>{{ plotGraphData.choices.length }}</span>
-                                <label>分支</label>
-                            </div>
-                            <div class="plot-graph-stat">
-                                <span>{{ plotGraphData.edges.length }}</span>
-                                <label>连线</label>
-                            </div>
+                            <div class="plot-graph-stat"><span>{{ plotGraphData.nodes.length }}</span><label>节点</label></div>
+                            <div class="plot-graph-stat"><span>{{ plotGraphData.choices.length }}</span><label>分支</label></div>
+                            <div class="plot-graph-stat"><span>{{ plotMainPath.length }}</span><label>主线</label></div>
                         </div>
                         <div class="plot-graph-timeline">
-                            <div v-for="node in plotGraphData.nodes" :key="node.id" class="plot-graph-node">
-                                <div class="plot-graph-node-dot" :class="'plot-choice-' + (node.level || 'normal')"></div>
-                                <div class="plot-graph-node-card">
+                            <div v-for="node in plotGraphData.nodes" :key="node.id" class="plot-graph-node"
+                                 @click="selectPlotGraphNode(node.id)">
+                                <div class="plot-graph-node-dot" :style="{ background: plotLevelColor(node.level) }"></div>
+                                <div class="plot-graph-node-card" :class="{ active: plotSelectedNode && plotSelectedNode.id === node.id }">
                                     <div class="plot-graph-node-head">
                                         <span class="plot-graph-node-title">{{ node.title || '剧情节点' }}</span>
-                                        <span class="plot-graph-node-level">{{ node.level || 'normal' }}</span>
+                                        <span class="plot-graph-node-level" :style="{ color: plotLevelColor(node.level) }">{{ plotLevelLabel(node.level) }}</span>
                                     </div>
                                     <div v-if="node.summary" class="plot-graph-node-summary">{{ node.summary }}</div>
-                                    <div v-if="plotGraphData.choices.filter(c => c.node_id === node.id).length" class="plot-graph-choice-list">
-                                        <div
-                                            v-for="choice in plotGraphData.choices.filter(c => c.node_id === node.id)"
-                                            :key="choice.id"
-                                            class="plot-graph-choice"
-                                            :class="{ selected: choice.selected }">
+                                    <div v-if="plotChoicesForNode(node.id).length" class="plot-graph-choice-list">
+                                        <div v-for="choice in plotChoicesForNode(node.id)" :key="choice.id"
+                                             class="plot-graph-choice" :class="{ selected: choice.selected }">
                                             <i :class="choice.selected ? 'fas fa-check-circle' : 'far fa-circle'"></i>
                                             <span>{{ choice.text }}</span>
                                         </div>
                                     </div>
+                                    <button class="plot-graph-node-rollback" @click.stop="rollbackPlotNode(node)">
+                                        <i class="fas fa-clock-rotate-left"></i> 回溯到此
+                                    </button>
                                 </div>
                             </div>
                         </div>
-                        <div v-if="plotGraphMermaid" ref="plotGraphContainer" class="plot-graph-mermaid" aria-hidden="true"></div>
-                    </template>
+
+                    </div>
                 </div>
             </div>
         </div>
@@ -11835,10 +11913,16 @@
                     plotMode: false,
                     plotChoices: [],
                     plotCurrentNode: null,
-                    plotGraphMermaid: '',
                     plotGraphData: { nodes: [], choices: [], edges: [] },
+                    plotMainPath: [],
+                    plotGraphView: 'graph',
+                    plotSelectedNode: null,
                     showPlotGraphModal: false,
                     showInlinePlotGraph: true,
+                    plotActiveNodeId: '',
+                    plotBranchPreview: [],
+                    plotBranchPreviewLoading: false,
+                    plotBranchBusy: false,
                     // 3.x Runtime Panel
                     showRuntimePanel: false,
                     characterStatus: { mood: '平静', energy: 100, scene: {}, relationship: {} },
