@@ -35,7 +35,7 @@
         window.__nbotAssetVersion = '20260618-ws-auth';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260617-switch-fix">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260618-group-modal-top">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         // PWA install prompt - must be captured before Vue mounts
@@ -1006,8 +1006,19 @@
                                     </button>
                                 </div>
 
+                                <!-- 根视图切换：角色 / 会话（记住选择） -->
+                                <div class="chat-home-view-switch">
+                                    <button class="chat-home-view-btn" :class="{ active: chatHomeView === 'characters' }" @click="setChatHomeView('characters')">
+                                        <i class="fas fa-users"></i> 角色
+                                    </button>
+                                    <button class="chat-home-view-btn" :class="{ active: chatHomeView === 'sessions' }" @click="setChatHomeView('sessions')">
+                                        <i class="fas fa-comments"></i> 会话
+                                    </button>
+                                    <span class="chat-home-view-indicator" :class="{ 'slide-right': chatHomeView === 'sessions' }"></span>
+                                </div>
+
                                 <!-- 角色卡快速选择 -->
-                                <div class="chat-home-character-section" v-if="customPersonalityPresets.length > 0">
+                                <div class="chat-home-character-section" v-if="chatHomeView === 'characters' && customPersonalityPresets.length > 0">
                                     <div class="chat-home-character-header">
                                         <span class="chat-home-character-title">
                                             <i class="fas fa-users" style="color: var(--accent-primary);"></i>
@@ -1032,6 +1043,49 @@
                                                 <i class="fas fa-ellipsis-h"></i>
                                             </div>
                                             <div class="chat-home-character-name">更多</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 角色视图但无角色卡 -->
+                                <div class="chat-home-empty-card" v-if="chatHomeView === 'characters' && customPersonalityPresets.length === 0">
+                                    <i class="fas fa-user-plus"></i>
+                                    <div class="chat-home-empty-title">还没有角色卡</div>
+                                    <button class="btn btn-sm btn-secondary" @click="navigateTo('personality')">
+                                        <i class="fas fa-cog"></i> 去创建角色
+                                    </button>
+                                </div>
+
+                                <!-- 会话列表视图 -->
+                                <div class="chat-home-character-section" v-if="chatHomeView === 'sessions'">
+                                    <div class="chat-home-character-header">
+                                        <span class="chat-home-character-title">
+                                            <i class="fas fa-comments" style="color: var(--accent-primary);"></i>
+                                            选择会话继续
+                                        </span>
+                                        <button class="btn btn-sm btn-secondary" @click="createNewSession" :disabled="isLoading">
+                                            <i class="fas fa-plus"></i> 新建
+                                        </button>
+                                    </div>
+                                    <div class="chat-home-session-list">
+                                        <div v-for="session in chatHomeSessions" :key="session.id"
+                                             class="chat-home-session-item" @click="openSession(session)">
+                                            <div class="chat-home-session-icon" :class="{ 'has-portrait': getSessionPortrait(session) }">
+                                                <img v-if="getSessionPortrait(session)" :src="getSessionPortrait(session)" @error="handleSessionPortraitError(session, $event)">
+                                                <i v-else-if="getSessionAvatar(session)" :class="getSessionAvatar(session)"></i>
+                                                <i v-else class="fas fa-comment"></i>
+                                            </div>
+                                            <div class="chat-home-session-info">
+                                                <div class="chat-home-session-name">
+                                                    <i v-if="session.pinned" class="fas fa-thumbtack" style="font-size: 11px; color: var(--accent-primary); margin-right: 4px;"></i>
+                                                    {{ session.name }}
+                                                </div>
+                                                <div class="chat-home-session-meta">{{ getSessionMessageCount(session) }} 条消息 · {{ formatTime(session.created_at) }}</div>
+                                            </div>
+                                            <i class="fas fa-chevron-right chat-home-session-arrow"></i>
+                                        </div>
+                                        <div v-if="chatHomeSessions.length === 0" class="empty-hint" style="padding: 16px; text-align: center;">
+                                            暂无会话，点击右上角"新建"开始
                                         </div>
                                     </div>
                                 </div>
@@ -8553,7 +8607,7 @@
                 </div>
 
                 <!-- 群聊创建弹窗 -->
-                <div v-if="groupCreateModal.show" class="modal-overlay" @click.self="groupCreateModal.show = false">
+                <div v-if="groupCreateModal.show" class="modal-overlay group-create-overlay" @click.self="groupCreateModal.show = false">
                     <div class="modal-content gc-modal" style="max-width: 480px;">
                         <div class="modal-header">
                             <h3><i class="fas fa-users"></i> 创建群聊会话</h3>
@@ -11505,7 +11559,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260618-ws-auth"></script>
-    <script src="/static/js/nbot-methods.js?v=20260615-group-speakers"></script>
+    <script src="/static/js/nbot-methods.js?v=20260618-home-view"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -11921,6 +11975,7 @@
                         }
                     },
                     personalityPresets: [],
+                    chatHomeView: localStorage.getItem('nbot_chat_home_view') || 'characters', // 聊天首页根视图: characters/sessions（记住选择）
                     customPersonalityPresets: [], // 用户自定义人格预设
                     customPersonalityPage: 1, // 角色卡当前页码
                     customPersonalityPageSize: 10, // 角色卡每页数量
@@ -13662,6 +13717,20 @@
 
                 sessionCount() {
                     return this.sessions.length;
+                },
+
+                // 聊天首页"会话"视图的列表：当前频道下的 web/cli 会话，按创建时间倒序，置顶优先
+                chatHomeSessions() {
+                    const pool = (this.sessions || []).filter(s => {
+                        if (s.archived) return false;
+                        return s.type === 'web' || s.type === 'cli';
+                    });
+                    return pool.slice().sort((a, b) => {
+                        if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                        const ta = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+                        const tb = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+                        return ta - tb;
+                    });
                 },
 
                 // 获取注册的频道列表（排除内置频道）

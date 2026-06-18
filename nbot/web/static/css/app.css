@@ -2486,10 +2486,11 @@
         .chat-home-character-section {
             width: 100%;
             max-width: 800px;
-            background: var(--bg-card);
+            background: var(--bg-secondary);
             border: 1px solid var(--border-color);
             border-radius: 20px;
             padding: 24px 32px;
+            box-shadow: 0 8px 28px var(--shadow-color);
         }
 
         .chat-home-character-header {
@@ -2598,6 +2599,223 @@
         .chat-home-character-more-icon i {
             font-size: 28px;
             color: var(--text-secondary);
+        }
+
+        /* 聊天首页根视图切换（角色 / 会话） */
+        .chat-home-view-switch {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px;
+            margin-bottom: 24px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 999px;
+        }
+
+        .chat-home-view-btn {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-width: 96px;
+            padding: 8px 18px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: color 0.25s ease;
+        }
+
+        .chat-home-view-btn.active {
+            color: #fff;
+        }
+
+        .chat-home-view-indicator {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: calc(50% - 4px);
+            height: calc(100% - 8px);
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 999px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .chat-home-view-indicator.slide-right {
+            transform: translateX(100%);
+        }
+
+        /* 聊天首页会话列表视图 */
+        .chat-home-session-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 52vh;
+            overflow-y: auto;
+        }
+
+        .chat-home-session-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .chat-home-session-item:hover {
+            border-color: var(--accent-primary);
+            background: var(--bg-hover);
+            transform: translateX(4px);
+        }
+
+        .chat-home-session-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: #fff;
+            font-size: 18px;
+            overflow: hidden;
+        }
+
+        .chat-home-session-icon img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 12px;
+        }
+
+        .chat-home-session-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .chat-home-session-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-home-session-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .chat-home-session-arrow {
+            color: var(--text-muted);
+            font-size: 13px;
+            flex-shrink: 0;
+        }
+
+        .chat-home-empty-card {
+            width: 100%;
+            max-width: 800px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 40px 32px;
+            background: var(--bg-card);
+            border: 1px dashed var(--border-color);
+            border-radius: 20px;
+            color: var(--text-secondary);
+        }
+
+        .chat-home-empty-card i {
+            font-size: 40px;
+            color: var(--text-muted);
+        }
+
+        .chat-home-empty-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* 移动端：进入即角色/会话，像 App 一样，去掉多余提示 */
+        @media (max-width: 768px) {
+            .chat-home-container {
+                justify-content: flex-start;
+                padding: 12px 12px 24px;
+                gap: 0;
+                background: var(--bg-primary);
+            }
+
+            /* 隐藏欢迎提示与快捷按钮栏 */
+            .chat-home-container > .chat-empty-state,
+            .chat-home-toolbar {
+                display: none !important;
+            }
+
+            /* 视图切换吸顶 */
+            .chat-home-view-switch {
+                position: sticky;
+                top: 0;
+                z-index: 5;
+                width: 100%;
+                justify-content: center;
+                margin: 0 0 16px;
+                padding: 8px 0;
+                background: var(--bg-primary);
+            }
+
+            .chat-home-view-btn {
+                flex: 1;
+                min-width: 0;
+            }
+
+            /* 卡片占满宽度、去掉厚重边框，更像原生列表 */
+            .chat-home-character-section {
+                max-width: none;
+                padding: 0;
+                background: transparent;
+                border: none;
+                box-shadow: none;
+                border-radius: 0;
+            }
+
+            .chat-home-character-grid {
+                grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+                gap: 14px;
+            }
+
+            /* 标题文字与 tab 重复，移动端隐藏，仅留操作按钮靠右 */
+            .chat-home-character-title {
+                display: none;
+            }
+
+            .chat-home-character-header {
+                justify-content: flex-end;
+                margin-bottom: 14px;
+            }
+
+            .chat-home-session-list {
+                max-height: none;
+            }
+
+            .chat-home-empty-card {
+                max-width: none;
+            }
         }
 
         .admin-entry-button {
@@ -16588,6 +16806,11 @@
 
         .modal-overlay-top {
             z-index: 2000;
+        }
+
+        /* 群聊创建弹窗：浮于移动端会话抽屉（z-index 1200）之上 */
+        .modal-overlay.group-create-overlay {
+            z-index: 2100;
         }
 
         .confirm-modal {

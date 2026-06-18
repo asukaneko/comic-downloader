@@ -11916,6 +11916,15 @@ def main(params):
                     return this.getCharacterPortraitByName(session.sender_name).avatar || '';
                 },
 
+                // 切换聊天首页根视图（角色 / 会话）并记住选择
+                setChatHomeView(view) {
+                    if (view !== 'characters' && view !== 'sessions') return;
+                    this.chatHomeView = view;
+                    try {
+                        localStorage.setItem('nbot_chat_home_view', view);
+                    } catch (e) { /* 忽略存储异常 */ }
+                },
+
                 getMessageSenderName(msg) {
                     if (!msg || msg.role !== 'assistant') return '';
                     const sender = String(msg.sender || '').trim();
