@@ -119,6 +119,18 @@ class PlotGraphManager:
         """获取单个选择。"""
         return self._choices.get(choice_id)
 
+    def delete_choices_for_node(self, node_id: str) -> int:
+        """删除指定节点下所有未选中的选项，返回删除数量。"""
+        to_remove = [
+            cid for cid, c in self._choices.items()
+            if c.node_id == node_id and not c.selected
+        ]
+        for cid in to_remove:
+            del self._choices[cid]
+        if to_remove:
+            self._save()
+        return len(to_remove)
+
     # -- Edge CRUD --
 
     def add_edge(self, edge: PlotEdge) -> PlotEdge:

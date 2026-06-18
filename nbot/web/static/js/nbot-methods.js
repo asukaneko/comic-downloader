@@ -14878,6 +14878,11 @@ def main(params):
                             // 无 messageId 时直接触发队列处理
                             this.processPendingQueue(finishedSessionId);
                         }
+                        // AI 回复完成，触发剧情选项生成动画
+                        if (this.plotMode && this.currentSession && finishedSessionId === this.currentSession.id) {
+                            this.plotChoicesLoading = true;
+                            this.plotChoices = [];
+                        }
                     });
 
                     socket.on('ai_response', (data) => {
@@ -14950,6 +14955,11 @@ def main(params):
                         }
                         // 非流式回复完成，触发队列处理下一条
                         this.processPendingQueue(finishedSessionId);
+                        // AI 回复完成，触发剧情选项生成动画
+                        if (this.plotMode && this.currentSession && finishedSessionId === this.currentSession.id) {
+                            this.plotChoicesLoading = true;
+                            this.plotChoices = [];
+                        }
                     });
 
                     socket.on('message_filtered', (data) => {
@@ -15080,6 +15090,7 @@ def main(params):
                     socket.on('plot_choices', (data) => {
                         console.log('[PlotChoices] 收到剧情选项事件:', data);
                         if (data && data.choices && data.session_id === this.currentSession?.id) {
+                            this.plotChoicesLoading = false;
                             this.plotChoices = this.normalizePlotChoices(data.choices);
                             // 更新故事图数据
                             if (data.graph) {
@@ -16910,6 +16921,35 @@ def main(params):
         });
     },
 
+    async regeneratePlotChoices() {
+        if (!this.currentSession || this.plotChoicesLoading) return;
+        const sid = this.currentSession.id || this.currentSession.session_id;
+        if (!sid) return;
+        this.plotChoicesLoading = true;
+        try {
+            const res = await axios.post('/api/plot/' + sid + '/regenerate-choices');
+            const data = res.data || {};
+            if (data.choices && data.choices.length > 0) {
+                this.plotChoices = this.normalizePlotChoices(data.choices);
+                if (data.graph) {
+                    this.plotGraphData = {
+                        nodes: data.graph.nodes || [],
+                        choices: data.graph.choices || [],
+                        edges: data.graph.edges || [],
+                    };
+                    this.refreshPlotPath();
+                }
+            } else {
+                this.showToast('重新生成失败', 'error');
+            }
+        } catch (e) {
+            console.debug('regeneratePlotChoices:', e.message);
+            this.showToast('重新生成选项失败', 'error');
+        } finally {
+            this.plotChoicesLoading = false;
+        }
+    },
+
     async loadPlotGraph() {
         if (!this.currentSession) return;
         try {
@@ -17191,10 +17231,68 @@ def main(params):
         });
         chart.off('click');
         chart.on('click', (p) => { if (p.data && p.data.value) this.selectPlotGraphNode(p.data.value); });
+        // 右键拖拽平移
+        this._setupPlotChartRightDrag(chart, el);
         if (!this._plotChartResizer) {
             this._plotChartResizer = () => { if (this._plotChart) this._plotChart.resize(); };
             window.addEventListener('resize', this._plotChartResizer);
         }
+    },
+
+    // 仅更新图表数据（不重建实例，保留缩放/平移状态）
+    updatePlotGraphVisuals() {
+        const chart = this._plotChart;
+        if (!chart) { this.renderPlotGraphChart(); return; }
+        const treeData = this.buildPlotEchartsTree();
+        if (!treeData) return;
+        // 只替换 data 字段，保留 series 其余配置（type、orient 等）
+        const opt = chart.getOption();
+        const series = (opt.series || [{}])[0];
+        series.data = [treeData];
+        chart.setOption({ series: [series] }, false);
+    },
+
+    // 右键拖拽平移图表
+    _setupPlotChartRightDrag(chart, el) {
+        let rightDown = false, startX = 0, startY = 0;
+        const getCenter = () => chart.getOption().series[0].center || ['50%', '50%'];
+        const toPixel = (center) => {
+            const rect = el.getBoundingClientRect();
+            const cx = typeof center[0] === 'string' && center[0].endsWith('%')
+                ? rect.width * parseFloat(center[0]) / 100 : Number(center[0]);
+            const cy = typeof center[1] === 'string' && center[1].endsWith('%')
+                ? rect.height * parseFloat(center[1]) / 100 : Number(center[1]);
+            return [cx, cy];
+        };
+        el.addEventListener('mousedown', (e) => {
+            if (e.button !== 2) return;
+            e.preventDefault();
+            rightDown = true;
+            startX = e.clientX;
+            startY = e.clientY;
+        });
+        el.addEventListener('contextmenu', (e) => e.preventDefault());
+        document.addEventListener('mousemove', (e) => {
+            if (!rightDown) return;
+            const rect = el.getBoundingClientRect();
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            const center = getCenter();
+            const px = toPixel(center);
+            chart.setOption({
+                series: [{
+                    center: [
+                        ((px[0] + dx) / rect.width * 100).toFixed(2) + '%',
+                        ((px[1] + dy) / rect.height * 100).toFixed(2) + '%',
+                    ],
+                }],
+            }, false);
+            startX = e.clientX;
+            startY = e.clientY;
+        });
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 2) rightDown = false;
+        });
     },
 
     selectPlotGraphNode(nodeId) {
@@ -17202,7 +17300,7 @@ def main(params):
         if (node) {
             this.plotSelectedNode = node;
             this.loadPlotBranchPreview(node.id);
-            if (this.plotGraphView === 'graph') this.$nextTick(() => this.renderPlotGraphChart());
+            if (this.plotGraphView === 'graph') this.$nextTick(() => this.updatePlotGraphVisuals());
         }
     },
 

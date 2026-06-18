@@ -80,6 +80,85 @@ def register_plot_routes(app, server):
         )
         return jsonify({"success": True, "choice_id": choice_id})
 
+    @app.route("/api/plot/<conversation_id>/regenerate-choices", methods=["POST"])
+    def regenerate_plot_choices(conversation_id):
+        """重新生成当前激活节点的剧情选项。"""
+        import asyncio as _asyncio
+
+        data_dir = getattr(server, "data_dir", "data/web")
+        manager = get_plot_graph_manager(data_dir=data_dir)
+
+        # 找到当前激活节点（或最新节点）
+        active_id = manager.get_active_node_id(conversation_id)
+        node = manager.get_node(active_id) if active_id else manager.get_latest_node(conversation_id)
+        if node is None:
+            return jsonify({"error": "no plot node found"}), 404
+
+        # 删除该节点下未选中的旧选项
+        manager.delete_choices_for_node(node.id)
+
+        # 获取最后一条助手消息作为生成上下文
+        session = server.session_store.get_session(conversation_id) or {}
+        messages = session.get("messages") or []
+        last_assistant = ""
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("role") == "assistant":
+                last_assistant = msg.get("content", "") or ""
+                break
+
+        # 构建 turn_context（简化版，从 session metadata 提取）
+        session_meta = session.get("metadata", {}) or {}
+        turn_context = {
+            "mood": session_meta.get("mood", ""),
+            "relationship": session_meta.get("relationship", ""),
+        }
+
+        # 调用 AI 生成新选项
+        from nbot.plot.choice_generator import PlotChoiceGenerator
+        from nbot.plot.models import PlotChoice as PlotChoiceModel
+
+        generator = PlotChoiceGenerator()
+        try:
+            loop = _asyncio.new_event_loop()
+            try:
+                choices_data = loop.run_until_complete(
+                    generator.generate(last_assistant[:800], turn_context)
+                )
+            finally:
+                loop.close()
+        except Exception as e:
+            _log.error("[PlotRoutes] regenerate choices failed: %s", e)
+            return jsonify({"error": "generation failed"}), 500
+
+        if not choices_data:
+            return jsonify({"error": "generation returned empty"}), 500
+
+        # 创建新选项并关联到节点
+        new_choices = []
+        for cd in choices_data:
+            pc = PlotChoiceModel(
+                node_id=node.id,
+                text=cd.get("text", ""),
+                level=cd.get("level", "normal"),
+                intent=cd.get("intent", ""),
+            )
+            manager.add_choice(pc)
+            new_choices.append({
+                "id": pc.id,
+                "node_id": pc.node_id,
+                "text": pc.text,
+                "level": pc.level,
+                "intent": pc.intent,
+                "selected": False,
+            })
+
+        graph = manager.get_graph(conversation_id)
+        _log.info(
+            "[PlotRoutes] regenerated %d choices for node=%s conversation=%s",
+            len(new_choices), node.id, conversation_id,
+        )
+        return jsonify({"choices": new_choices, "graph": graph})
+
     @app.route("/api/plot/<conversation_id>/rollback", methods=["POST"])
     def rollback_plot(conversation_id):
         data = request.json or {}

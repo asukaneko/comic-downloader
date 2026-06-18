@@ -1893,7 +1893,7 @@
                                     </div>
                                     
                                     <!-- Plot Choices (剧情选项) -->
-                                    <div v-if="plotMode && plotChoices.length > 0" class="plot-choices-group">
+                                    <div v-if="plotMode && (plotChoices.length > 0 || plotChoicesLoading)" class="plot-choices-group">
                                         <div class="plot-choices-title">
                                             <i class="fas fa-book-open"></i>
                                             <span>剧情</span>
@@ -1907,7 +1907,14 @@
                                                 <i class="fas fa-times"></i>
                                             </button>
                                         </div>
-                                        <div class="plot-choices-list">
+                                        <!-- 占位骨架动画 -->
+                                        <template v-if="plotChoicesLoading">
+                                            <div class="plot-choice-skeleton-card" v-for="i in 3" :key="'skel-'+i">
+                                                <div class="plot-skeleton-badge"></div>
+                                                <div class="plot-skeleton-text"></div>
+                                            </div>
+                                        </template>
+                                        <div v-else class="plot-choices-list">
                                             <button v-for="choice in plotChoices" :key="choice.id"
                                                  type="button"
                                                  class="plot-choice-card"
@@ -1928,7 +1935,10 @@
                                                 <i class="fas fa-chevron-right plot-choice-arrow"></i>
                                             </button>
                                         </div>
-                                        <div class="plot-choices-free">
+                                        <div v-if="!plotChoicesLoading" class="plot-choices-free">
+                                            <button class="plot-regen-action" @mousedown.prevent @click="regeneratePlotChoices()" :disabled="plotChoicesLoading" title="重新生成选项">
+                                                <i class="fas fa-rotate-right"></i>
+                                            </button>
                                             <button class="plot-free-action" @mousedown.prevent @click="plotChoices = []">
                                                 <i class="fas fa-pen"></i> 不选以上选项，自由行动...
                                             </button>
@@ -11936,6 +11946,7 @@
                     // 3.x Plot Mode
                     plotMode: false,
                     plotChoices: [],
+                    plotChoicesLoading: false,
                     plotCurrentNode: null,
                     plotGraphData: { nodes: [], choices: [], edges: [] },
                     plotMainPath: [],
