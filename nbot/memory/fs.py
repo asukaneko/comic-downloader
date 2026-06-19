@@ -102,8 +102,13 @@ class MemoryFS:
 
         if existing and append:
             new_content = existing.content + "\n\n" + content if existing.content else content
-            # 截断：防止无限膨胀
-            if len(new_content) > _MAX_MEMORY_FILE_CHARS:
+            # 截断：防止无限膨胀（diary/plot 按条目数，其他按字符数）
+            needs_truncation = (
+                ("diary" in path and new_content.count("\n\n") >= _MAX_DIARY_ENTRIES)
+                or ("plot" in path and new_content.count("\n\n") >= _MAX_PLOT_ENTRIES)
+                or len(new_content) > _MAX_MEMORY_FILE_CHARS
+            )
+            if needs_truncation:
                 new_content = _truncate_entries(new_content, path)
             new_ids = list(set((existing.memory_ids or []) + (memory_ids or [])))
             mf = MemoryFile(
@@ -145,6 +150,22 @@ class MemoryFS:
                 importance=importance,
                 source_event_id=source_event_id,
                 memory_ids=memory_ids or [],
+            )
+
+        # 最终截断保护：确保任何路径都不超过字符上限
+        if len(mf.content) > _MAX_MEMORY_FILE_CHARS:
+            mf = MemoryFile(
+                path=mf.path,
+                character_id=mf.character_id,
+                target_id=mf.target_id,
+                title=mf.title,
+                content=mf.content[-_MAX_MEMORY_FILE_CHARS:],
+                summary=mf.summary,
+                tags=mf.tags,
+                importance=mf.importance,
+                version=mf.version,
+                source_event_id=mf.source_event_id,
+                memory_ids=mf.memory_ids,
             )
 
         self._index[path] = mf

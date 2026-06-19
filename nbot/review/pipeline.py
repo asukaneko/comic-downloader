@@ -86,10 +86,8 @@ class ReviewPipeline:
                 group_id=inp.group_id,
                 payload=payload,
             )
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self._event_bus.emit(evt))
+            from nbot.hooks.async_utils import run_hook_coro
+            run_hook_coro(self._event_bus.emit(evt))
         except Exception as exc:
             _log.debug("[ReviewPipeline] emit failed: %s", exc)
 
@@ -102,6 +100,6 @@ def get_review_pipeline(event_bus=None) -> ReviewPipeline:
     global _review_pipeline
     if _review_pipeline is None:
         _review_pipeline = ReviewPipeline(event_bus=event_bus)
-    elif event_bus and not _review_pipeline._event_bus:
+    elif event_bus and _review_pipeline._event_bus is not event_bus:
         _review_pipeline.set_event_bus(event_bus)
     return _review_pipeline

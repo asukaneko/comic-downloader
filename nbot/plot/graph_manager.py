@@ -48,10 +48,8 @@ class PlotGraphManager:
                 character_id=character_id,
                 payload=payload or {},
             )
-            import asyncio
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self._event_bus.emit(evt))
+            from nbot.hooks.async_utils import run_hook_coro
+            run_hook_coro(self._event_bus.emit(evt))
         except Exception as exc:
             _log.debug("[PlotGraphManager] emit failed: %s", exc)
 
@@ -783,6 +781,6 @@ def get_plot_graph_manager(data_dir: str = "data/web", event_bus=None) -> PlotGr
     global _plot_graph_manager
     if _plot_graph_manager is None:
         _plot_graph_manager = PlotGraphManager(data_dir=data_dir)
-    if event_bus and not _plot_graph_manager._event_bus:
+    if event_bus and _plot_graph_manager._event_bus is not event_bus:
         _plot_graph_manager.set_event_bus(event_bus)
     return _plot_graph_manager
