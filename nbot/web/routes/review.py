@@ -7,6 +7,7 @@ Review Pipeline Web API
     GET  /api/review/logs               — 查询 Review 事件历史
     GET  /api/review/memory-fs          — 查询 MemoryFS 逻辑文件列表
     GET  /api/review/memory-fs/<path>   — 读取指定路径的逻辑文件
+    GET  /api/review/event-stream       — 查询标准化事件流
     POST /api/review/run                — 手动触发一次 Review（调试用）
 """
 
@@ -15,6 +16,23 @@ import logging
 from flask import jsonify, request
 
 _log = logging.getLogger(__name__)
+
+
+def _get_event_bus(server):
+    """获取 event_bus，优先从 server.hook_runtime 读取，fallback 到全局 HookManager。"""
+    hook_runtime = getattr(server, "hook_runtime", None)
+    if hook_runtime:
+        bus = getattr(hook_runtime, "_event_bus", None)
+        if bus:
+            return bus
+    # fallback: 从全局 HookManager 获取
+    try:
+        data_dir = getattr(server, "data_dir", "data/web")
+        from nbot.hooks.manager import get_hook_manager
+        hm = get_hook_manager(data_dir=data_dir)
+        return getattr(hm, "_event_bus", None)
+    except Exception:
+        return None
 
 
 def register_review_routes(app, server):
@@ -30,11 +48,7 @@ def register_review_routes(app, server):
         conversation_id = request.args.get("conversation_id", "")
 
         try:
-            hook_runtime = getattr(server, "hook_runtime", None)
-            if not hook_runtime:
-                return jsonify({"logs": [], "total": 0})
-
-            bus = getattr(hook_runtime, "_event_bus", None)
+            bus = _get_event_bus(server)
             if not bus:
                 return jsonify({"logs": [], "total": 0})
 
@@ -107,11 +121,7 @@ def register_review_routes(app, server):
         conversation_id = request.args.get("conversation_id", "")
 
         try:
-            hook_runtime = getattr(server, "hook_runtime", None)
-            if not hook_runtime:
-                return jsonify({"events": [], "total": 0})
-
-            bus = getattr(hook_runtime, "_event_bus", None)
+            bus = _get_event_bus(server)
             if not bus:
                 return jsonify({"events": [], "total": 0})
 

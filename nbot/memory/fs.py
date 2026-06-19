@@ -2,10 +2,11 @@
 MemoryFS — 记忆逻辑文件系统
 
 作为现有 PromptManager 记忆系统的上层组织层。
-不替换底层存储，通过 path 字段把记忆条目组织成角色可读的逻辑视图。
+通过 path 字段把记忆条目组织成角色可读的逻辑视图。
 
 存储：data/web/memory_fs.json（path → MemoryFile 的索引）
-底层写入：仍通过 PromptManager.add_memory() 完成
+注意：MemoryFS 独立持久化到 memory_fs.json，不自动写入底层 memory_service。
+如需同步到底层记忆系统，需在调用方显式处理。
 """
 
 from __future__ import annotations
@@ -22,8 +23,35 @@ _log = logging.getLogger(__name__)
 _DEFAULT_DATA_DIR = "data/web"
 _FS_INDEX_FILE = "memory_fs.json"
 
+# 防止单文件无限膨胀
+_MAX_MEMORY_FILE_CHARS = 4000
+_MAX_DIARY_ENTRIES = 30
+_MAX_PLOT_ENTRIES = 50
+
 # 全局单例
 _memory_fs: Optional[MemoryFS] = None
+
+
+def _truncate_entries(content: str, path: str) -> str:
+    """截断过长内容，保留最近的条目。
+
+    根据路径类型选择不同的保留策略：
+    - diary: 保留最近 _MAX_DIARY_ENTRIES 条
+    - plot:  保留最近 _MAX_PLOT_ENTRIES 条
+    - 其他:  保留尾部 _MAX_MEMORY_FILE_CHARS 字符
+    """
+    entries = content.split("\n\n")
+    if "diary" in path:
+        max_entries = _MAX_DIARY_ENTRIES
+    elif "plot" in path:
+        max_entries = _MAX_PLOT_ENTRIES
+    else:
+        # 通用路径：保留尾部字符
+        return content[-_MAX_MEMORY_FILE_CHARS:]
+
+    if len(entries) > max_entries:
+        entries = entries[-max_entries:]
+    return "\n\n".join(entries)
 
 
 class MemoryFS:
@@ -74,6 +102,9 @@ class MemoryFS:
 
         if existing and append:
             new_content = existing.content + "\n\n" + content if existing.content else content
+            # 截断：防止无限膨胀
+            if len(new_content) > _MAX_MEMORY_FILE_CHARS:
+                new_content = _truncate_entries(new_content, path)
             new_ids = list(set((existing.memory_ids or []) + (memory_ids or [])))
             mf = MemoryFile(
                 path=path,

@@ -562,7 +562,9 @@ class CharacterRuntime:
                 relationship_state=rel_state,
             )
 
-            pipeline = get_review_pipeline()
+            # 注入 event_bus 使 review.started / review.finished 事件进入事件流
+            event_bus = getattr(self._hook_runtime, "_event_bus", None) if self._hook_runtime else None
+            pipeline = get_review_pipeline(event_bus=event_bus)
             output = pipeline.run(inp)
 
             if not output.skipped:
@@ -570,6 +572,9 @@ class CharacterRuntime:
                                 chat_request=chat_request)
                 # Review 结果同步写入 MemoryFS
                 self._sync_review_to_memory_fs(inp, output)
+                # Review 关系变化写入真实关系状态
+                self._apply_review_relationship_delta(
+                    output, new_relationship, identity, chat_request)
         except Exception as exc:
             _log.debug("[CharacterRuntime] review pipeline failed: %s", exc)
 
@@ -626,3 +631,29 @@ class CharacterRuntime:
         except Exception as exc:
             _log.debug("[CharacterRuntime] memory_fs sync failed: %s", exc)
 
+    def _apply_review_relationship_delta(self, output, new_relationship, identity, chat_request) -> None:
+        """将 Review 输出的 relationship_delta 应用到真实关系状态。"""
+        delta = getattr(output, "relationship_delta", None)
+        if not delta or not new_relationship:
+            return
+        try:
+            _REL_FIELDS = ("affection", "trust", "familiarity", "dependency", "security", "jealousy")
+            changed = False
+            for field in _REL_FIELDS:
+                d = getattr(delta, field, 0)
+                if d:
+                    old = getattr(new_relationship, field, 0)
+                    new = max(0, min(100, old + d))
+                    setattr(new_relationship, field, new)
+                    changed = True
+
+            if changed and self.relationship_repo:
+                self.relationship_repo.save(new_relationship)
+                self._emit_hook(_E.CHARACTER_RELATIONSHIP_CHANGED, identity, {
+                    "delta": {f: getattr(delta, f, 0) for f in _REL_FIELDS},
+                    "reason": getattr(delta, "reason", ""),
+                }, chat_request=chat_request)
+                _log.debug("[CharacterRuntime] review relationship delta applied: %s",
+                           {f: getattr(delta, f, 0) for f in _REL_FIELDS})
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] apply review relationship delta failed: %s", exc)

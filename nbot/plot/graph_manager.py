@@ -778,9 +778,11 @@ class PlotGraphManager:
             _log.error("[PlotGraphManager] load failed: %s", e)
 
 
-def get_plot_graph_manager(data_dir: str = "data/web") -> PlotGraphManager:
+def get_plot_graph_manager(data_dir: str = "data/web", event_bus=None) -> PlotGraphManager:
     """获取 PlotGraphManager 单例。"""
     global _plot_graph_manager
     if _plot_graph_manager is None:
         _plot_graph_manager = PlotGraphManager(data_dir=data_dir)
+    if event_bus and not _plot_graph_manager._event_bus:
+        _plot_graph_manager.set_event_bus(event_bus)
     return _plot_graph_manager

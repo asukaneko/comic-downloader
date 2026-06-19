@@ -98,8 +98,10 @@ class ReviewPipeline:
 _review_pipeline: Optional[ReviewPipeline] = None
 
 
-def get_review_pipeline() -> ReviewPipeline:
+def get_review_pipeline(event_bus=None) -> ReviewPipeline:
     global _review_pipeline
     if _review_pipeline is None:
-        _review_pipeline = ReviewPipeline()
+        _review_pipeline = ReviewPipeline(event_bus=event_bus)
+    elif event_bus and not _review_pipeline._event_bus:
+        _review_pipeline.set_event_bus(event_bus)
     return _review_pipeline

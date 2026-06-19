@@ -139,7 +139,10 @@ class GroupManager:
             return True
 
     def set_speaker_strategy(self, group_id: str, strategy: str) -> bool:
-        valid = {"round_robin", "mention", "relevance", "random"}
+        valid = {
+            "round_robin", "mention", "relevance", "random",
+            "narrator_driven", "world_engine",
+        }
         if strategy not in valid:
             _log.warning("invalid strategy: %s", strategy)
             return False

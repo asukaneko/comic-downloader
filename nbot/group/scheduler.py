@@ -291,16 +291,17 @@ class SpeakerScheduler:
             active_plot_node = gc.get("active_plot_node")
             recent_messages = gc.get("recent_messages", [])
 
-            # 构建关系列表
+            # 构建关系列表（双向：A→B 和 B→A 都有权重）
             relations = []
             if hasattr(conversation, "relations"):
                 for rel in conversation.relations.values():
-                    relations.append({
-                        "character_id": rel.char_a,
+                    rel_data = {
                         "affection": rel.affection,
                         "trust": rel.trust,
                         "familiarity": rel.familiarity,
-                    })
+                    }
+                    relations.append({"character_id": rel.char_a, **rel_data})
+                    relations.append({"character_id": rel.char_b, **rel_data})
 
             decision = engine.decide(
                 message,
