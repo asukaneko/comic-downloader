@@ -7,7 +7,7 @@ Plot System 数据模型
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 
 def _new_id(prefix: str) -> str:
@@ -41,6 +41,15 @@ class PlotNode:
     user_message: Dict[str, Any] = field(default_factory=dict)
     assistant_message: Dict[str, Any] = field(default_factory=dict)
 
+    # 3.1 Activity Graph 扩展字段
+    activity_type: str = "chat"           # chat / group / event / quest / ending
+    participants: List[str] = field(default_factory=list)  # 参与角色 ID 列表
+    location: str = ""                    # 场景地点
+    mood: str = ""                        # 整体氛围
+    world_changes: Dict[str, Any] = field(default_factory=dict)   # 世界状态变化
+    memory_refs: List[str] = field(default_factory=list)           # 关联记忆 ID
+    review_score: Dict[str, float] = field(default_factory=dict)   # Review 评分快照
+
     def __post_init__(self):
         if not self.id:
             self.id = _new_id("pn")
@@ -63,6 +72,13 @@ class PlotNode:
             "created_at": self.created_at,
             "user_message": self.user_message,
             "assistant_message": self.assistant_message,
+            "activity_type": self.activity_type,
+            "participants": self.participants,
+            "location": self.location,
+            "mood": self.mood,
+            "world_changes": self.world_changes,
+            "memory_refs": self.memory_refs,
+            "review_score": self.review_score,
         }
 
     @classmethod
@@ -82,6 +98,13 @@ class PlotNode:
             created_at=data.get("created_at", ""),
             user_message=data.get("user_message", {}) or {},
             assistant_message=data.get("assistant_message", {}) or {},
+            activity_type=data.get("activity_type", "chat"),
+            participants=data.get("participants", []) or [],
+            location=data.get("location", ""),
+            mood=data.get("mood", ""),
+            world_changes=data.get("world_changes", {}) or {},
+            memory_refs=data.get("memory_refs", []) or [],
+            review_score=data.get("review_score", {}) or {},
         )
 
 
@@ -99,6 +122,11 @@ class PlotChoice:
     selected: bool = False
     created_at: str = ""
 
+    # 3.1 Activity Graph 扩展字段
+    risk: str = "low"                              # low / medium / high
+    expected_effect: Dict[str, Any] = field(default_factory=dict)  # {relationship, world, plot}
+    hidden_requirements: Dict[str, Any] = field(default_factory=dict)  # {affection_gte, trust_gte}
+
     def __post_init__(self):
         if not self.id:
             self.id = _new_id("pc")
@@ -114,6 +142,9 @@ class PlotChoice:
             "intent": self.intent,
             "selected": self.selected,
             "created_at": self.created_at,
+            "risk": self.risk,
+            "expected_effect": self.expected_effect,
+            "hidden_requirements": self.hidden_requirements,
         }
 
     @classmethod
@@ -126,6 +157,9 @@ class PlotChoice:
             intent=data.get("intent", ""),
             selected=data.get("selected", False),
             created_at=data.get("created_at", ""),
+            risk=data.get("risk", "low"),
+            expected_effect=data.get("expected_effect", {}) or {},
+            hidden_requirements=data.get("hidden_requirements", {}) or {},
         )
 
 

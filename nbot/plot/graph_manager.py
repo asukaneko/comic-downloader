@@ -10,6 +10,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
+from nbot.events import names as _E
 from nbot.plot.models import PlotChoice, PlotEdge, PlotNode
 
 _log = logging.getLogger(__name__)
@@ -26,7 +27,33 @@ class PlotGraphManager:
         self._choices: Dict[str, PlotChoice] = {}
         self._edges: Dict[str, PlotEdge] = {}
         self._active: Dict[str, str] = {}  # conversation_id -> 当前激活节点
+        self._event_bus = None  # 可由外部注入 ConversationEventBus
         self._load()
+
+    def set_event_bus(self, bus) -> None:
+        """注入对话事件总线，启用标准化事件发射。"""
+        self._event_bus = bus
+
+    def _emit(self, event_type: str, payload: Dict[str, Any] = None,
+              conversation_id: str = "", character_id: str = "") -> None:
+        """发射标准化事件（忽略错误，保持非阻塞）。"""
+        if not self._event_bus:
+            return
+        try:
+            from nbot.hooks.models import RuntimeEvent
+            evt = RuntimeEvent(
+                type=event_type,
+                source="plot_graph_manager",
+                conversation_id=conversation_id,
+                character_id=character_id,
+                payload=payload or {},
+            )
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self._event_bus.emit(evt))
+        except Exception as exc:
+            _log.debug("[PlotGraphManager] emit failed: %s", exc)
 
     # -- Node CRUD --
 
@@ -38,6 +65,16 @@ class PlotGraphManager:
             "[PlotGraphManager] added node id=%s title=%s level=%s",
             node.id, node.title, node.level,
         )
+        self._emit(_E.PLOT_NODE_CREATED, {
+            "node_id": node.id,
+            "title": node.title,
+            "level": node.level,
+        }, conversation_id=node.conversation_id, character_id=node.character_id)
+        if node.level == "turning_point":
+            self._emit(_E.PLOT_TURNING_POINT_REACHED, {
+                "node_id": node.id,
+                "title": node.title,
+            }, conversation_id=node.conversation_id, character_id=node.character_id)
         return node
 
     def set_node_messages(
@@ -113,6 +150,14 @@ class PlotGraphManager:
             "[PlotChoiceManager] added choice id=%s node_id=%s level=%s",
             choice.id, choice.node_id, choice.level,
         )
+        node = self._nodes.get(choice.node_id)
+        self._emit(_E.PLOT_CHOICE_GENERATED, {
+            "choice_id": choice.id,
+            "node_id": choice.node_id,
+            "level": choice.level,
+            "text": choice.text[:100] if choice.text else "",
+        }, conversation_id=node.conversation_id if node else "",
+           character_id=node.character_id if node else "")
         return choice
 
     def get_choice(self, choice_id: str) -> Optional[PlotChoice]:
@@ -137,6 +182,12 @@ class PlotGraphManager:
         """添加故事边并持久化。"""
         self._edges[edge.id] = edge
         self._save()
+        self._emit(_E.PLOT_EDGE_CREATED, {
+            "edge_id": edge.id,
+            "from_node_id": edge.from_node_id,
+            "to_node_id": edge.to_node_id,
+            "choice_id": edge.choice_id,
+        })
         return edge
 
     # -- Selection --
@@ -174,6 +225,14 @@ class PlotGraphManager:
             "[PlotGraphManager] selected choice %s on node %s",
             choice.id, choice.node_id,
         )
+
+        self._emit(_E.PLOT_CHOICE_SELECTED, {
+            "choice_id": choice.id,
+            "node_id": choice.node_id,
+            "level": choice.level,
+            "text": choice.text[:100] if choice.text else "",
+        }, conversation_id=from_node.conversation_id if from_node else "",
+           character_id=from_node.character_id if from_node else "")
 
         # 剧情桥接：记忆 + 世界书
         self._bridge_to_memory(choice)

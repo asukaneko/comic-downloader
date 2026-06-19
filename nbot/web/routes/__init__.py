@@ -25,6 +25,7 @@ from nbot.web.routes.plot import register_plot_routes
 from nbot.web.routes.push import register_push_routes
 from nbot.web.routes.qq_overview import register_qq_overview_routes
 from nbot.web.routes.qrcode import register_qrcode_routes
+from nbot.web.routes.review import register_review_routes
 from nbot.web.routes.sessions import register_session_routes
 from nbot.web.routes.skills import register_skill_routes
 from nbot.web.routes.skills_storage import register_skills_storage_routes
@@ -69,6 +70,7 @@ __all__ = [
     "register_push_routes",
     "register_qq_overview_routes",
     "register_qrcode_routes",
+    "register_review_routes",
     "register_session_routes",
     "register_skill_routes",
     "register_skills_storage_routes",

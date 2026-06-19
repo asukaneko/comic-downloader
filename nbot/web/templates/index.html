@@ -1918,7 +1918,7 @@
                                             <button v-for="choice in plotChoices" :key="choice.id"
                                                  type="button"
                                                  class="plot-choice-card"
-                                                 :class="'plot-choice-' + choice.level"
+                                                 :class="['plot-choice-' + choice.level, choice.risk === 'high' ? 'plot-choice-risk-high' : choice.risk === 'medium' ? 'plot-choice-risk-medium' : '']"
                                                  :title="choice.text"
                                                  @mousedown.prevent
                                                  @click="selectPlotChoice(choice)">
@@ -1928,9 +1928,16 @@
                                                         <span v-else-if="choice.level === 'important'" class="level-badge level-important">推进</span>
                                                         <span v-else-if="choice.level === 'turning_point'" class="level-badge level-turning">转折</span>
                                                         <span v-else class="level-badge level-normal">{{ choice.level }}</span>
+                                                        <span v-if="choice.risk === 'high'" class="risk-badge risk-high" title="高风险选项">险</span>
+                                                        <span v-else-if="choice.risk === 'medium'" class="risk-badge risk-medium" title="中等风险">危</span>
                                                     </div>
                                                     <div class="plot-choice-text">{{ choice.text }}</div>
                                                     <div v-if="choice.intent" class="plot-choice-intent">{{ choice.intent }}</div>
+                                                    <div v-if="choice.hidden_requirements && Object.keys(choice.hidden_requirements).length" class="plot-choice-req">
+                                                        <i class="fas fa-lock" style="font-size:11px;opacity:0.6;margin-right:3px;"></i>
+                                                        <span v-if="choice.hidden_requirements.affection_gte">好感 ≥ {{ choice.hidden_requirements.affection_gte }}</span>
+                                                        <span v-if="choice.hidden_requirements.trust_gte"> · 信任 ≥ {{ choice.hidden_requirements.trust_gte }}</span>
+                                                    </div>
                                                 </div>
                                                 <i class="fas fa-chevron-right plot-choice-arrow"></i>
                                             </button>
@@ -4075,6 +4082,81 @@
                                             <span class="hk-status-text">{{ h.enabled ? '运行中' : '已暂停' }}</span>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Review / 事件流面板 -->
+                        <div class="rv-panel">
+                            <div class="rv-panel-header">
+                                <div class="rv-tabs">
+                                    <button class="rv-tab" :class="{ active: reviewTab === 'events' }" @click="reviewTab = 'events'; loadReviewEvents()">
+                                        <i class="fas fa-stream"></i> 事件流
+                                    </button>
+                                    <button class="rv-tab" :class="{ active: reviewTab === 'review' }" @click="reviewTab = 'review'; loadReviewLogs()">
+                                        <i class="fas fa-clipboard-check"></i> Review 日志
+                                    </button>
+                                    <button class="rv-tab" :class="{ active: reviewTab === 'memfs' }" @click="reviewTab = 'memfs'; loadMemoryFS()">
+                                        <i class="fas fa-folder-open"></i> 记忆文件
+                                    </button>
+                                </div>
+                                <div class="rv-filters" v-if="reviewTab === 'events'">
+                                    <select v-model="reviewEventDomain" class="rv-select" @change="loadReviewEvents()">
+                                        <option value="">全部域</option>
+                                        <option value="character">character</option>
+                                        <option value="plot">plot</option>
+                                        <option value="group">group</option>
+                                        <option value="review">review</option>
+                                        <option value="world">world</option>
+                                        <option value="workflow">workflow</option>
+                                    </select>
+                                    <button class="rv-btn-refresh" @click="loadReviewEvents()" title="刷新"><i class="fas fa-sync"></i></button>
+                                </div>
+                                <div class="rv-filters" v-if="reviewTab === 'memfs'">
+                                    <input v-model="reviewMemFsCharId" class="rv-input" placeholder="角色 ID 筛选" @keyup.enter="loadMemoryFS()" />
+                                    <button class="rv-btn-refresh" @click="loadMemoryFS()" title="刷新"><i class="fas fa-sync"></i></button>
+                                </div>
+                                <button class="rv-btn-refresh" v-if="reviewTab === 'review'" @click="loadReviewLogs()" title="刷新"><i class="fas fa-sync"></i></button>
+                            </div>
+
+                            <!-- 事件流 -->
+                            <div v-if="reviewTab === 'events'" class="rv-list">
+                                <div v-if="reviewEvents.length === 0" class="rv-empty">暂无事件记录</div>
+                                <div v-for="evt in reviewEvents" :key="evt.id" class="rv-event-item">
+                                    <span class="rv-event-type">{{ evt.type }}</span>
+                                    <span class="rv-event-conv" v-if="evt.conversation_id">{{ evt.conversation_id.slice(-8) }}</span>
+                                    <span class="rv-event-time">{{ evt.created_at ? evt.created_at.slice(11,19) : '' }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Review 日志 -->
+                            <div v-if="reviewTab === 'review'" class="rv-list">
+                                <div v-if="reviewLogs.length === 0" class="rv-empty">暂无 Review 日志</div>
+                                <div v-for="log in reviewLogs" :key="log.id" class="rv-log-item">
+                                    <div class="rv-log-header">
+                                        <span class="rv-log-type" :class="log.type === 'review.finished' ? 'rv-finished' : 'rv-started'">{{ log.type }}</span>
+                                        <span class="rv-log-time">{{ log.created_at ? log.created_at.slice(11,19) : '' }}</span>
+                                    </div>
+                                    <div class="rv-log-body" v-if="log.payload && log.payload.should_write_memory !== undefined">
+                                        <span :class="log.payload.should_write_memory ? 'rv-badge-yes' : 'rv-badge-no'">
+                                            {{ log.payload.should_write_memory ? '写入记忆' : '跳过记忆' }}
+                                        </span>
+                                        <span v-if="log.payload.skipped" class="rv-badge-skip">普通闲聊</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- MemoryFS 文件列表 -->
+                            <div v-if="reviewTab === 'memfs'" class="rv-list">
+                                <div v-if="memoryFSFiles.length === 0" class="rv-empty">暂无记忆文件</div>
+                                <div v-for="mf in memoryFSFiles" :key="mf.path" class="rv-memfs-item" @click="reviewMemFsSelected = reviewMemFsSelected === mf.path ? '' : mf.path">
+                                    <div class="rv-memfs-header">
+                                        <span class="rv-memfs-path">{{ mf.path }}</span>
+                                        <span class="rv-memfs-imp" :title="'importance: ' + mf.importance">{{ (mf.importance * 100).toFixed(0) }}%</span>
+                                    </div>
+                                    <div v-if="mf.summary" class="rv-memfs-summary">{{ mf.summary }}</div>
+                                    <div v-if="reviewMemFsSelected === mf.path && mf.content" class="rv-memfs-content">{{ mf.content }}</div>
+                                    <div class="rv-memfs-meta">v{{ mf.version }} · {{ mf.updated_at ? mf.updated_at.slice(0,10) : '' }}</div>
                                 </div>
                             </div>
                         </div>
@@ -8663,6 +8745,7 @@
                                     <option value="mention">@提及</option>
                                     <option value="relevance">智能推荐</option>
                                     <option value="random">随机</option>
+                                    <option value="world_engine">世界引擎（语境判断）</option>
                                 </select>
                             </div>
                             <div class="form-group" v-if="groupCreateModal.strategy === 'round_robin'">
@@ -11967,6 +12050,14 @@
                     hookNotifications: [],
                     editingHookId: null,
                     hookTemplates: window.__nbotHookTemplates || [],
+                    // 3.1 Review / 事件流面板
+                    reviewTab: 'events',
+                    reviewEvents: [],
+                    reviewLogs: [],
+                    memoryFSFiles: [],
+                    reviewEventDomain: '',
+                    reviewMemFsCharId: '',
+                    reviewMemFsSelected: '',
                     newHook: {
                         name: '', event: '', scope: 'global', priority: 100,
                         trigger_mode: 'always',

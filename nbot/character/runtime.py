@@ -20,6 +20,7 @@ from nbot.character.models import (
     ReactionPlan,
     RelationshipState,
 )
+from nbot.events import names as _E
 
 _log = logging.getLogger(__name__)
 
@@ -95,6 +96,10 @@ class CharacterRuntime:
         # 读取或创建关系状态
         relationship = self._get_or_create_relationship(identity, profile)
 
+        self._emit_hook(_E.CHARACTER_TURN_BEFORE, identity, {
+            "user_message": getattr(chat_request, "content", "")[:200],
+        }, chat_request=chat_request)
+
         _log.debug(
             "[CharacterRuntime] before_turn: character=%s target=%s "
             "profile.initial_state=%s state.mood=%s relationship=%s",
@@ -113,6 +118,9 @@ class CharacterRuntime:
 
         # 检索相关记忆
         memories = self._search_memories(identity, chat_request)
+        self._emit_hook(_E.CHARACTER_MEMORY_RECALLED, identity, {
+            "memory_count": len(memories),
+        }, chat_request=chat_request)
         self._emit_hook("character.after_memory_retrieve", identity, {
             "memory_count": len(memories),
         }, chat_request=chat_request)
@@ -139,6 +147,8 @@ class CharacterRuntime:
         prompt_text = self._build_prompt(
             profile, state, relationship, memories, plan,
             world_book_entries=world_book_entries,
+            identity=identity,
+            chat_request=chat_request,
         )
 
         self._emit_hook("character.before_turn.finished", identity, {
@@ -296,13 +306,22 @@ class CharacterRuntime:
                     result=result,
                     turn_context=turn_context,
                 )
+                self._emit_hook(_E.CHARACTER_MEMORY_WRITTEN, identity)
                 self._emit_hook("memory.after_extract", identity)
             except Exception as exc:
                 _log.warning("[CharacterRuntime] 记忆抽取异常: %s", exc)
 
+        # Review Pipeline（规则版）
+        self._run_review(chat_request, result, turn_context, identity, new_relationship)
+
         self._emit_hook("character.after_turn.finished", identity, {
             "mood": new_state.mood if new_state else "",
             "affection": new_relationship.affection if new_relationship else 0,
+        })
+        self._emit_hook(_E.CHARACTER_TURN_AFTER, identity, {
+            "mood": new_state.mood if new_state else "",
+            "affection": new_relationship.affection if new_relationship else 0,
+            "trust": new_relationship.trust if new_relationship else 0,
         })
 
     def _refresh_latest_state(self, state: CharacterState) -> CharacterState:
@@ -414,7 +433,7 @@ class CharacterRuntime:
             return ReactionPlan()
 
     def _build_prompt(self, profile, state, relationship, memories, plan,
-                      world_book_entries=None) -> str:
+                      world_book_entries=None, identity=None, chat_request=None) -> str:
         """编译提示词"""
         from nbot.character.prompt_builder import build_character_injections
         from nbot.character.prompt_stack import PromptStack
@@ -436,6 +455,10 @@ class CharacterRuntime:
         if world_book_entries:
             from nbot.character.world_book_injector import inject_world_book
             inject_world_book(stack, world_book_entries)
+
+        # MemoryFS 三层必读注入（用户关系摘要 + 剧情摘要 + 日记）
+        if identity:
+            self._inject_memory_fs(stack, identity, chat_request)
 
         # 合成最终提示词
         return stack.render()
@@ -484,3 +507,122 @@ class CharacterRuntime:
         except Exception as exc:
             _log.warning("[CharacterRuntime] world book match failed: %s", exc, exc_info=True)
             return []
+
+    def _inject_memory_fs(self, stack, identity, chat_request) -> None:
+        """将 MemoryFS 三层必读内容注入到 PromptStack（非阻塞）。"""
+        try:
+            from nbot.memory.fs import get_memory_fs
+            mfs = get_memory_fs()
+            char_id = identity.character_id
+            user_id = identity.target_id
+            conv_id = getattr(chat_request, "conversation_id", "") or ""
+
+            ctx_text = mfs.build_prompt_context(char_id, user_id, conv_id)
+            if ctx_text:
+                stack.add(
+                    key="memory_fs_context",
+                    content=f"## 角色记忆背景\n{ctx_text}",
+                    priority=200,
+                    scope="turn",
+                )
+                _log.debug("[MemoryFS] injected %d chars for char=%s user=%s",
+                           len(ctx_text), char_id, user_id)
+        except Exception as exc:
+            _log.debug("[MemoryFS] inject failed: %s", exc)
+
+    def _run_review(self, chat_request, result, turn_context, identity, new_relationship) -> None:
+        """执行 Review Pipeline，非阻塞，异常不影响主流程。"""
+        try:
+            from nbot.review.models import ReviewInput
+            from nbot.review.pipeline import get_review_pipeline
+
+            metadata = getattr(chat_request, "metadata", {}) or {}
+            selected_choice = metadata.get("selected_plot_choice") or {}
+
+            rel = new_relationship
+            rel_state = {}
+            if rel:
+                rel_state = {
+                    "affection": rel.affection,
+                    "trust": rel.trust,
+                    "familiarity": rel.familiarity,
+                    "dependency": rel.dependency,
+                    "security": rel.security,
+                    "jealousy": rel.jealousy,
+                }
+
+            inp = ReviewInput(
+                conversation_id=getattr(chat_request, "conversation_id", "") or "",
+                character_id=identity.character_id,
+                user_id=identity.target_id,
+                group_id=getattr(chat_request, "group_id", "") or "",
+                user_message=getattr(chat_request, "content", "") or "",
+                assistant_message=getattr(result, "final_content", "") or "",
+                selected_choice=selected_choice,
+                relationship_state=rel_state,
+            )
+
+            pipeline = get_review_pipeline()
+            output = pipeline.run(inp)
+
+            if not output.skipped:
+                self._emit_hook(_E.CHARACTER_MEMORY_REVIEWED, identity, output.to_dict(),
+                                chat_request=chat_request)
+                # Review 结果同步写入 MemoryFS
+                self._sync_review_to_memory_fs(inp, output)
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] review pipeline failed: %s", exc)
+
+    def _sync_review_to_memory_fs(self, inp, output) -> None:
+        """将 Review 输出同步写入 MemoryFS 逻辑路径（非阻塞）。"""
+        try:
+            from nbot.memory.fs import get_memory_fs
+            mfs = get_memory_fs()
+            char_id = inp.character_id
+            user_id = inp.user_id
+            conv_id = inp.conversation_id
+
+            # 1. 写入用户关系摘要（有记忆条目时更新）
+            if output.should_write_memory and output.memory_items:
+                for item in output.memory_items:
+                    if item.mem_type in ("relationship", "long") and user_id:
+                        existing = mfs.read_user(char_id, user_id)
+                        new_content = item.content
+                        mfs.write(
+                            mfs.path_user(char_id, user_id),
+                            character_id=char_id,
+                            target_id=user_id,
+                            title=f"与 {user_id} 的关系",
+                            content=new_content,
+                            summary=item.title,
+                            importance=item.importance,
+                            append=bool(existing),
+                        )
+
+            # 2. 写入日记（每轮有内容都追加）
+            if inp.user_message or inp.assistant_message:
+                diary_entry = f"用户：{inp.user_message[:100]}\n角色：{inp.assistant_message[:100]}"
+                mfs.write(
+                    mfs.path_diary_daily(char_id),
+                    character_id=char_id,
+                    title="最近对话日记",
+                    content=diary_entry,
+                    importance=0.3,
+                    append=True,
+                )
+
+            # 3. 写入剧情摘要（有剧情更新时）
+            if output.plot_update and output.plot_update.should_create_node and conv_id:
+                mfs.write(
+                    mfs.path_plot(char_id, conv_id),
+                    character_id=char_id,
+                    target_id=user_id,
+                    title=output.plot_update.title or "剧情进展",
+                    content=output.plot_update.summary,
+                    importance=0.7 if output.plot_update.level == "turning_point" else 0.5,
+                    append=True,
+                )
+
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] memory_fs sync failed: %s", exc)
+

@@ -984,7 +984,9 @@ class AIPipeline:
                 speaker = preset_speaker
             else:
                 speaker = scheduler.decide_next_speaker(
-                    conversation, message, character_ids, last_speaker=last_speaker,
+                    conversation, message, character_ids,
+                    last_speaker=last_speaker,
+                    group_context=group_context,
                 )
             conversation.active_speaker = speaker
             ctx.metadata["group_speaker"] = speaker
@@ -996,6 +998,18 @@ class AIPipeline:
             ctx.metadata["group_speaker_name"] = speaker_name
 
             _log.info("group %s: speaker selected = %s (%s)", conversation.group_id, speaker, speaker_name)
+
+            from nbot.events import names as _E
+            self._emit_hook(_E.GROUP_MESSAGE_RECEIVED, ctx, extra_payload={
+                "group_id": conversation.group_id,
+                "message": message[:200],
+            })
+            self._emit_hook(_E.GROUP_SPEAKER_SELECTED, ctx, extra_payload={
+                "group_id": conversation.group_id,
+                "speaker_id": speaker,
+                "speaker_name": speaker_name,
+                "strategy": conversation.config.speaker_strategy,
+            })
         except Exception as e:
             _log.error("group speaker select failed: %s", e)
 
@@ -1091,6 +1105,13 @@ class AIPipeline:
             conversation.advance_turn()
 
             _log.info("group %s: narration triggered at turn %d", conversation.group_id, conversation.turn_count)
+
+            from nbot.events import names as _E
+            self._emit_hook(_E.GROUP_NARRATION_REQUESTED, ctx, extra_payload={
+                "group_id": conversation.group_id,
+                "trigger": "interval",
+                "turn_count": conversation.turn_count,
+            })
         except Exception as e:
             _log.error("group narrator failed: %s", e)
 

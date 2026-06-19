@@ -2017,6 +2017,8 @@ const NbotMethods = {
                             break;
                         case 'hooks-nav':
                             await this.loadHookList();
+                            this.reviewTab = this.reviewTab || 'events';
+                            await this.loadReviewEvents();
                             break;
                         case 'message-filter':
                             await this.loadChannels();
@@ -17626,6 +17628,36 @@ def main(params):
             this.hookList = (res.data && res.data.hooks) || [];
         } catch (e) {
             console.error('loadHookList:', e);
+        }
+    },
+
+    async loadReviewEvents() {
+        try {
+            const domain = this.reviewEventDomain || '';
+            const res = await axios.get('/api/review/event-stream', { params: { domain, limit: 100 } });
+            this.reviewEvents = (res.data && res.data.events) || [];
+        } catch (e) {
+            console.error('loadReviewEvents:', e);
+        }
+    },
+
+    async loadReviewLogs() {
+        try {
+            const res = await axios.get('/api/review/logs', { params: { limit: 50 } });
+            this.reviewLogs = (res.data && res.data.logs) || [];
+        } catch (e) {
+            console.error('loadReviewLogs:', e);
+        }
+    },
+
+    async loadMemoryFS() {
+        try {
+            const params = {};
+            if (this.reviewMemFsCharId) params.character_id = this.reviewMemFsCharId;
+            const res = await axios.get('/api/review/memory-fs', { params });
+            this.memoryFSFiles = (res.data && res.data.files) || [];
+        } catch (e) {
+            console.error('loadMemoryFS:', e);
         }
     },
 
