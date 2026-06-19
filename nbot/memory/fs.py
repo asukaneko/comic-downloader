@@ -33,12 +33,12 @@ _memory_fs: Optional[MemoryFS] = None
 
 
 def _truncate_entries(content: str, path: str) -> str:
-    """截断过长内容，保留最近的条目。
+    """截断过长内容，保留最近的条目，不切断单条记忆。
 
     根据路径类型选择不同的保留策略：
     - diary: 保留最近 _MAX_DIARY_ENTRIES 条
     - plot:  保留最近 _MAX_PLOT_ENTRIES 条
-    - 其他:  保留尾部 _MAX_MEMORY_FILE_CHARS 字符
+    - 其他:  按条目从旧到新丢弃，直到总长度不超限
     """
     entries = content.split("\n\n")
     if "diary" in path:
@@ -46,11 +46,15 @@ def _truncate_entries(content: str, path: str) -> str:
     elif "plot" in path:
         max_entries = _MAX_PLOT_ENTRIES
     else:
-        # 通用路径：保留尾部字符
-        return content[-_MAX_MEMORY_FILE_CHARS:]
+        max_entries = len(entries)  # 不限条目数，只限总字符
 
     if len(entries) > max_entries:
         entries = entries[-max_entries:]
+
+    # 按条目从旧到新丢弃，直到总长度不超 _MAX_MEMORY_FILE_CHARS
+    while entries and len("\n\n".join(entries)) > _MAX_MEMORY_FILE_CHARS:
+        entries.pop(0)
+
     return "\n\n".join(entries)
 
 
@@ -152,14 +156,15 @@ class MemoryFS:
                 memory_ids=memory_ids or [],
             )
 
-        # 最终截断保护：确保任何路径都不超过字符上限
+        # 最终截断保护：确保任何路径都不超过字符上限（按条目截断，不切断单条记忆）
         if len(mf.content) > _MAX_MEMORY_FILE_CHARS:
+            truncated = _truncate_entries(mf.content, path)
             mf = MemoryFile(
                 path=mf.path,
                 character_id=mf.character_id,
                 target_id=mf.target_id,
                 title=mf.title,
-                content=mf.content[-_MAX_MEMORY_FILE_CHARS:],
+                content=truncated,
                 summary=mf.summary,
                 tags=mf.tags,
                 importance=mf.importance,
