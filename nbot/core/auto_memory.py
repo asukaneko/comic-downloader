@@ -339,7 +339,8 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
         turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0) + 1
         _MEMORY_TURN_COUNTERS[counter_key] = turn_count
     else:
-        turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0)
+        turn_count = _MEMORY_TURN_COUNTERS.get(counter_key, 0) + 1
+        _MEMORY_TURN_COUNTERS[counter_key] = turn_count
 
     if turn_count < _MEMORY_TURN_INTERVAL:
         return 0

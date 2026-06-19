@@ -343,7 +343,7 @@ def update_state_from_recent_turns(
     if is_group_round_complete:
         _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0) + 1
     else:
-        _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0)
+        _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0) + 1
 
     if _STATE_TURN_COUNTERS[key] < _STATE_TURN_INTERVAL:
         return state, relationship, False
