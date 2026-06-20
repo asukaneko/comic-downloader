@@ -16798,10 +16798,18 @@ def main(params):
             if (sessionInList) {
                 sessionInList.plot_mode = this.plotMode;
             }
+            // Show loading animation when enabling plot mode
+            if (this.plotMode) {
+                this.plotChoicesLoading = true;
+                this.plotChoices = [];
+            }
             try {
-                await api.post('/api/plot/toggle', { session_id: sid, enabled: this.plotMode });
+                const res = await api.post('/api/plot/toggle', { session_id: sid, enabled: this.plotMode });
+                // If choices were generated on server, they'll be loaded below
+                // If not (already had choices), also load them
             } catch (e) {
                 console.debug('togglePlotMode API:', e.message);
+                this.plotChoicesLoading = false;
             }
         }
         this.showToast(this.plotMode ? '🎭 剧情模式已开启' : '剧情模式已关闭', 'success');
@@ -16809,11 +16817,15 @@ def main(params):
             await this.loadPlotChoices();
         } else {
             this.plotChoices = [];
+            this.plotChoicesLoading = false;
         }
     },
 
     async loadPlotChoices() {
-        if (!this.currentSession) return;
+        if (!this.currentSession) {
+            this.plotChoicesLoading = false;
+            return;
+        }
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
             const res = await api.get('/api/plot/' + sid + '/latest-choices');
@@ -16836,6 +16848,8 @@ def main(params):
             }
         } catch (e) {
             console.debug('loadPlotChoices:', e.message);
+        } finally {
+            this.plotChoicesLoading = false;
         }
     },
 
