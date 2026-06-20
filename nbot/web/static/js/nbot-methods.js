@@ -17348,36 +17348,55 @@ def main(params):
             this.showToast('该节点在当前分支上，无需切换；如需回到此处请用"回溯到此节点"', 'info');
             return;
         }
-        this.plotBranchBusy = true;
-        try {
-            const sid = this.currentSession.id || this.currentSession.session_id;
-            await axios.post('/api/plot/' + sid + '/switch', { node_id: node.id });
-            this.plotActiveNodeId = node.id;
-            this.showToast('已切换到该分支', 'success');
-            await this.loadMessages(true);
-            await this.loadPlotChoices();
-            await this.loadPlotGraph();
-        } catch (e) {
-            this.showToast('切换分支失败: ' + (e.response?.data?.error || e.message), 'error');
-        } finally {
-            this.plotBranchBusy = false;
-        }
+        this.showConfirm({
+            title: '切换分支',
+            messageBefore: '确定要切换到',
+            highlight: node.title || '该分支',
+            messageAfter: '吗？',
+            impact: '将跳转到该分支的对话位置',
+            confirmText: '切换',
+            onConfirm: async () => {
+                this.plotBranchBusy = true;
+                try {
+                    const sid = this.currentSession.id || this.currentSession.session_id;
+                    await axios.post('/api/plot/' + sid + '/switch', { node_id: node.id });
+                    this.plotActiveNodeId = node.id;
+                    this.showToast('已切换到该分支', 'success');
+                    await this.loadMessages(true);
+                    await this.loadPlotChoices();
+                    await this.loadPlotGraph();
+                } catch (e) {
+                    this.showToast('切换分支失败: ' + (e.response?.data?.error || e.message), 'error');
+                } finally {
+                    this.plotBranchBusy = false;
+                }
+            }
+        });
     },
 
     async archivePlotBranch(node) {
         if (!node || !this.currentSession || this.plotBranchBusy) return;
-        if (!confirm(`将「${node.title || '该分支'}」从根到此节点的对话归档为归档会话？`)) return;
-        this.plotBranchBusy = true;
-        try {
-            const sid = this.currentSession.id || this.currentSession.session_id;
-            const res = await axios.post('/api/sessions/' + sid + '/archive-branch', { node_id: node.id });
-            this.showToast(`已归档该分支（${res.data?.archived_count || 0} 条）`, 'success');
-            if (typeof this.loadSessions === 'function') this.loadSessions();
-        } catch (e) {
-            this.showToast('归档分支失败: ' + (e.response?.data?.error || e.message), 'error');
-        } finally {
-            this.plotBranchBusy = false;
-        }
+        this.showConfirm({
+            title: '归档分支',
+            messageBefore: '确定要将',
+            highlight: node.title || '该分支',
+            messageAfter: '从根到此节点的对话归档吗？',
+            impact: '归档后对话将移至归档会话列表',
+            confirmText: '归档',
+            onConfirm: async () => {
+                this.plotBranchBusy = true;
+                try {
+                    const sid = this.currentSession.id || this.currentSession.session_id;
+                    const res = await axios.post('/api/sessions/' + sid + '/archive-branch', { node_id: node.id });
+                    this.showToast(`已归档该分支（${res.data?.archived_count || 0} 条）`, 'success');
+                    if (typeof this.loadSessions === 'function') this.loadSessions();
+                } catch (e) {
+                    this.showToast('归档分支失败: ' + (e.response?.data?.error || e.message), 'error');
+                } finally {
+                    this.plotBranchBusy = false;
+                }
+            }
+        });
     },
 
     switchPlotView(view) {
@@ -17387,21 +17406,31 @@ def main(params):
 
     async rollbackPlotNode(node) {
         if (!node || !this.currentSession || this.plotBranchBusy) return;
-        if (!confirm(`确定回溯到「${node.title || '该节点'}」？该节点之后的剧情分支与对话将被移除，不可恢复。`)) return;
-        this.plotBranchBusy = true;
-        try {
-            const sid = this.currentSession.id || this.currentSession.session_id;
-            await axios.post('/api/plot/' + sid + '/rollback', { node_id: node.id });
-            this.plotActiveNodeId = node.id;
-            this.showToast('已回溯到该节点', 'success');
-            await this.loadMessages(true);
-            await this.loadPlotChoices();
-            await this.loadPlotGraph();
-        } catch (e) {
-            this.showToast('回溯失败: ' + (e.response?.data?.error || e.message), 'error');
-        } finally {
-            this.plotBranchBusy = false;
-        }
+        this.showConfirm({
+            title: '回溯到此节点',
+            messageBefore: '确定要回溯到',
+            highlight: node.title || '该节点',
+            messageAfter: '吗？',
+            impact: '该节点之后的剧情分支与对话将被移除，不可恢复',
+            confirmText: '回溯',
+            danger: true,
+            onConfirm: async () => {
+                this.plotBranchBusy = true;
+                try {
+                    const sid = this.currentSession.id || this.currentSession.session_id;
+                    await axios.post('/api/plot/' + sid + '/rollback', { node_id: node.id });
+                    this.plotActiveNodeId = node.id;
+                    this.showToast('已回溯到该节点', 'success');
+                    await this.loadMessages(true);
+                    await this.loadPlotChoices();
+                    await this.loadPlotGraph();
+                } catch (e) {
+                    this.showToast('回溯失败: ' + (e.response?.data?.error || e.message), 'error');
+                } finally {
+                    this.plotBranchBusy = false;
+                }
+            }
+        });
     },
 
 
