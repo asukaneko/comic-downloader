@@ -1221,13 +1221,38 @@ class AIPipeline:
         level = getattr(choice, "level", "") or "normal"
         return "important" if level == "hidden" else level
 
+    @staticmethod
+    def _extract_plot_recent_history(ctx) -> List[Dict[str, Any]]:
+        """提取最近几轮 user/assistant 对话，供剧情选项生成避免重复并取材。
+
+        从 ctx.messages 取最后若干条，剥离 system，仅保留 role/content。
+        """
+        try:
+            messages = getattr(ctx, "messages", None) or []
+        except Exception:
+            return []
+        history: List[Dict[str, Any]] = []
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role", "")
+            if role not in ("user", "assistant"):
+                continue
+            content = msg.get("content")
+            if not isinstance(content, str) or not content.strip():
+                continue
+            history.append({"role": role, "content": content})
+        return history[-8:]
+
     async def _do_generate_plot_choices(self, generator, result, turn_context, conversation_id, ctx):
         """Async plot choice generation."""
         try:
             response_text = result.final_content or ""
+            recent_history = self._extract_plot_recent_history(ctx)
             choices = await generator.generate(
                 response_text,
                 _plot_turn_context_dict(turn_context),
+                recent_history=recent_history,
             )
             if not choices:
                 return

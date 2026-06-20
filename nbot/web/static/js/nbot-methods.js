@@ -2245,6 +2245,7 @@ const NbotMethods = {
                 
                 handleResize() {
                     this.viewportWidth = window.innerWidth || this.viewportWidth || 1200;
+                    this.syncPlotChoicesHeight();
                     if (this.trendChart) this.trendChart.resize();
                     if (this.platformChart) this.platformChart.resize();
                     if (this.tokenTrendChart && this.currentPage === 'tokens') this.tokenTrendChart.resize();
@@ -15094,6 +15095,8 @@ def main(params):
                         if (data && data.choices && data.session_id === this.currentSession?.id) {
                             this.plotChoicesLoading = false;
                             this.plotChoices = this.normalizePlotChoices(data.choices);
+                            // 新一轮选项到达：移动端默认先展示选项
+                            this.plotMobileInputMode = false;
                             // 更新故事图数据
                             if (data.graph) {
                                 this.plotGraphData = {
@@ -16915,12 +16918,39 @@ def main(params):
         }
         // 点击选项后填入输入框，但不隐藏选项（可点击其他选项覆盖）
         this.inputMessage = choiceText;
+        // 移动端：选中后切到输入框，方便编辑/发送
+        this.plotMobileInputMode = true;
         this.$nextTick(() => {
             if (this.$refs.chatInput) {
                 this.$refs.chatInput.focus();
                 this.$refs.chatInput.dispatchEvent(new Event('input'));
             }
         });
+    },
+
+    // 移动端：从剧情选项切换到输入框
+    switchToPlotInput() {
+        this.plotMobileInputMode = true;
+        this.$nextTick(() => {
+            if (this.$refs.chatInput) this.$refs.chatInput.focus();
+        });
+    },
+
+    // 移动端：从输入框返回剧情选项
+    switchToPlotChoices() {
+        this.plotMobileInputMode = false;
+    },
+
+    // 测量剧情选项面板真实高度，写入 CSS 变量，
+    // 让右侧悬浮按钮（角色状态/滚动/消息定位）按实际高度上抬，
+    // 适配竖排后高度可变的情况。
+    syncPlotChoicesHeight() {
+        const root = document.documentElement;
+        if (!root) return;
+        const el = this.$refs.plotChoicesGroup;
+        // display:none 时 offsetHeight 为 0，输入框视图下按钮自然回落
+        const h = (this.hasVisiblePlotChoices && el) ? el.offsetHeight : 0;
+        root.style.setProperty('--plot-choices-height', h + 'px');
     },
 
     async regeneratePlotChoices() {
@@ -16933,6 +16963,8 @@ def main(params):
             const data = res.data || {};
             if (data.choices && data.choices.length > 0) {
                 this.plotChoices = this.normalizePlotChoices(data.choices);
+                // 重新生成后移动端回到选项视图
+                this.plotMobileInputMode = false;
                 if (data.graph) {
                     this.plotGraphData = {
                         nodes: data.graph.nodes || [],

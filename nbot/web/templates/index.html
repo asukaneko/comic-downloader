@@ -1853,7 +1853,7 @@
                                 </div>
                             </div>
 
-                            <div class="chat-input-area" :class="{ 'plot-choices-active': hasVisiblePlotChoices }">
+                            <div class="chat-input-area" :class="{ 'plot-choices-active': hasVisiblePlotChoices, 'plot-mobile-choice-view': isMobilePlotChoiceView, 'plot-mobile-input-view': isMobilePlotInputView }">
                                     <div v-if="getCurrentSessionPendingCount() > 0" class="pending-queue-panel">
                                         <div class="pending-queue-header">
                                             <div class="pending-queue-title">
@@ -1893,7 +1893,7 @@
                                     </div>
                                     
                                     <!-- Plot Choices (剧情选项) -->
-                                    <div v-if="plotMode && (plotChoices.length > 0 || plotChoicesLoading)" class="plot-choices-group">
+                                    <div v-if="plotMode && (plotChoices.length > 0 || plotChoicesLoading)" class="plot-choices-group" ref="plotChoicesGroup">
                                         <div class="plot-choices-title">
                                             <i class="fas fa-book-open"></i>
                                             <span>剧情</span>
@@ -1949,8 +1949,15 @@
                                             <button class="plot-free-action" @mousedown.prevent @click="plotChoices = []">
                                                 <i class="fas fa-pen"></i> 不选以上选项，自由行动...
                                             </button>
+                                            <button class="plot-to-input-action" @mousedown.prevent @click="switchToPlotInput()" title="切换到输入框">
+                                                <i class="fas fa-keyboard"></i>
+                                            </button>
                                         </div>
                                     </div>
+
+                                    <button v-if="hasVisiblePlotChoices && plotMobileInputMode" type="button" class="plot-back-to-choices" @mousedown.prevent @click="switchToPlotChoices()">
+                                        <i class="fas fa-arrow-left"></i> 返回剧情选项
+                                    </button>
 
                                     <div class="chat-input-wrapper" :class="{ 'input-focused': inputFocused || showFileMenu, 'input-multiline': inputMultiline }">
                                         <div class="chat-input-container">
@@ -12035,6 +12042,8 @@
                     plotMode: false,
                     plotChoices: [],
                     plotChoicesLoading: false,
+                    // 移动端：true=显示输入框，false=显示剧情选项（仅 ≤640px 生效）
+                    plotMobileInputMode: false,
                     plotCurrentNode: null,
                     plotGraphData: { nodes: [], choices: [], edges: [] },
                     plotMainPath: [],
@@ -13171,6 +13180,18 @@
                 hasVisiblePlotChoices() {
                     return !!(this.plotMode && this.plotChoices && this.plotChoices.length > 0);
                 },
+                // 移动端剧情选项视图：≤640px、有可见选项、且未切到输入框模式
+                isMobilePlotChoiceView() {
+                    return this.viewportWidth <= 640
+                        && this.hasVisiblePlotChoices
+                        && !this.plotMobileInputMode;
+                },
+                // 移动端输入框视图：≤640px、有可见选项、已切到输入框模式
+                isMobilePlotInputView() {
+                    return this.viewportWidth <= 640
+                        && this.hasVisiblePlotChoices
+                        && this.plotMobileInputMode;
+                },
                 hasInputContent() {
                     return !!(this.inputMessage && this.inputMessage.trim()) || this.uploadedFiles.length > 0;
                 },
@@ -14064,7 +14085,11 @@
                     }
                 }, 5000);
             },
-            
+
+            updated() {
+                this.syncPlotChoicesHeight();
+            },
+
             beforeUnmount() {
                 window.removeEventListener('resize', this.handleResize);
                 if (this._modalOverlayClickCaptureHandler) {

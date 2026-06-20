@@ -113,6 +113,15 @@ def register_plot_routes(app, server):
             "relationship": session_meta.get("relationship", ""),
         }
 
+        # 提取最近几轮对话，供选项生成避免重复并取材
+        recent_history = [
+            {"role": m.get("role"), "content": m.get("content") or ""}
+            for m in messages[-8:]
+            if isinstance(m, dict)
+            and m.get("role") in ("user", "assistant")
+            and (m.get("content") or "").strip()
+        ]
+
         # 调用 AI 生成新选项
         from nbot.plot.choice_generator import PlotChoiceGenerator
         from nbot.plot.models import PlotChoice as PlotChoiceModel
@@ -122,7 +131,11 @@ def register_plot_routes(app, server):
             loop = _asyncio.new_event_loop()
             try:
                 choices_data = loop.run_until_complete(
-                    generator.generate(last_assistant[:800], turn_context)
+                    generator.generate(
+                        last_assistant[:800],
+                        turn_context,
+                        recent_history=recent_history,
+                    )
                 )
             finally:
                 loop.close()

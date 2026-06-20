@@ -6956,23 +6956,23 @@
         }
 
         .scroll-to-bottom-btn.plot-choices-lifted {
-            bottom: 148px;
+            bottom: calc(100px + var(--plot-choices-height, 0px) + 12px);
         }
 
         .user-msg-jumper.plot-choices-lifted {
-            bottom: 148px;
+            bottom: calc(100px + var(--plot-choices-height, 0px) + 12px);
         }
 
         .user-msg-jumper.shifted-up.plot-choices-lifted {
-            bottom: 196px;
+            bottom: calc(148px + var(--plot-choices-height, 0px) + 12px);
         }
 
         .char-status-btn-wrapper.plot-choices-lifted {
-            bottom: 196px;
+            bottom: calc(148px + var(--plot-choices-height, 0px) + 12px);
         }
 
         .char-status-btn-wrapper.shifted-up.plot-choices-lifted {
-            bottom: 244px;
+            bottom: calc(196px + var(--plot-choices-height, 0px) + 12px);
         }
 
         .message {
@@ -8015,7 +8015,7 @@
             }
 
             .scroll-to-bottom-btn.plot-choices-lifted {
-                bottom: 128px;
+                bottom: calc(80px + var(--plot-choices-height, 0px) + 12px);
             }
 
             /* 用户消息定位按钮移动端优化 */
@@ -8029,11 +8029,11 @@
             }
 
             .user-msg-jumper.plot-choices-lifted {
-                bottom: 128px;
+                bottom: calc(80px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .user-msg-jumper.shifted-up.plot-choices-lifted {
-                bottom: 176px;
+                bottom: calc(128px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .user-msg-jumper-btn {
@@ -8047,11 +8047,11 @@
             }
 
             .char-status-btn-wrapper.plot-choices-lifted {
-                bottom: 176px;
+                bottom: calc(128px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .char-status-btn-wrapper.shifted-up.plot-choices-lifted {
-                bottom: 224px;
+                bottom: calc(176px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .user-msg-jumper-popover {
@@ -20990,7 +20990,7 @@
             }
 
             .scroll-to-bottom-btn.plot-choices-lifted {
-                bottom: 144px;
+                bottom: calc(96px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .user-msg-jumper {
@@ -21003,11 +21003,11 @@
             }
 
             .user-msg-jumper.plot-choices-lifted {
-                bottom: 144px;
+                bottom: calc(96px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .user-msg-jumper.shifted-up.plot-choices-lifted {
-                bottom: 192px;
+                bottom: calc(144px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .char-status-btn-wrapper {
@@ -21015,11 +21015,11 @@
             }
 
             .char-status-btn-wrapper.plot-choices-lifted {
-                bottom: 192px;
+                bottom: calc(144px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .char-status-btn-wrapper.shifted-up.plot-choices-lifted {
-                bottom: 240px;
+                bottom: calc(192px + var(--plot-choices-height, 0px) + 12px);
             }
 
             .user-msg-jumper-btn {
@@ -28482,6 +28482,57 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     transform: none;
 }
 
+/* 移动端切换按钮：桌面端默认隐藏，仅 ≤640px 显示 */
+.plot-to-input-action {
+    display: none;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    border: 1px solid rgba(180, 198, 222, 0.18);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(214, 225, 241, 0.68);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.plot-to-input-action i {
+    font-size: 13px;
+}
+
+.plot-to-input-action:hover {
+    border-color: rgba(130, 180, 230, 0.45);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(160, 200, 255, 0.95);
+}
+
+.plot-back-to-choices {
+    display: none;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0 0 8px;
+    padding: 8px 14px;
+    border: 1px dashed rgba(180, 198, 222, 0.24);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(214, 225, 241, 0.78);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.plot-back-to-choices:hover {
+    border-color: rgba(130, 180, 230, 0.45);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
 /* 骨架占位动画 */
 .plot-choice-skeleton-card {
     position: relative;
@@ -29396,18 +29447,118 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     .plot-choices-group {
         width: 100%;
         padding: 5px;
+        /* 竖向排列：标题 + 选项列表 + 操作行 */
+        flex-direction: column;
+        align-items: stretch;
+        border-radius: 14px;
+        gap: 6px;
     }
 
+    /* 选项竖排 */
     .plot-choices-list {
-        flex-direction: row;
+        flex-direction: column;
         max-height: none;
-        overflow-x: auto;
-        scrollbar-width: thin;
+        overflow-x: hidden;
+        overflow-y: auto;
+        gap: 6px;
     }
 
     .plot-choice-card {
-        flex-basis: 190px;
-        min-height: 32px;
+        flex: 1 1 auto;
+        min-width: 0;
+        width: 100%;
+        min-height: 0;
+        border-radius: 12px;
+        align-items: center;
+        padding: 7px 10px 7px 12px;
+    }
+
+    /* 骨架卡同样竖排压缩，避免 flex-basis 被当作高度撑满屏幕 */
+    .plot-choice-skeleton-card {
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+        border-radius: 12px;
+        padding: 7px 12px;
+    }
+
+    /* 竖排时让文案换行展示 */
+    .plot-choice-main {
+        flex-direction: row;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .plot-choice-text {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        font-size: 12.5px;
+        line-height: 1.3;
+    }
+
+    /* 移动端隐藏意图描述，保持卡片紧凑 */
+    .plot-choice-intent {
+        display: none;
+    }
+
+    .plot-choice-card .plot-choice-arrow {
+        align-self: center;
+    }
+
+    /* 移动端显示切换按钮 */
+    .plot-to-input-action {
+        display: inline-flex;
+    }
+
+    /* 操作按钮提到顶部，贴着「剧情」标题右侧 */
+    .plot-choices-free {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        z-index: 3;
+    }
+
+    /* 顶部按钮统一缩小一圈，避免撑高标题行 */
+    .plot-choices-free .plot-regen-action,
+    .plot-choices-free .plot-to-input-action {
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        min-height: 28px;
+    }
+
+    /* 「自由行动」在顶部行收成图标按钮，省空间 */
+    .plot-choices-free .plot-free-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        min-height: 28px;
+        padding: 0;
+        font-size: 0;
+        border-radius: 999px;
+    }
+
+    .plot-back-to-choices {
+        display: flex;
+    }
+
+    /* 选项视图：隐藏输入框，只留剧情选项 */
+    .chat-input-area.plot-mobile-choice-view .chat-input-wrapper {
+        display: none;
+    }
+
+    /* 输入框视图：隐藏剧情选项，只留输入框 */
+    .chat-input-area.plot-mobile-input-view .plot-choices-group {
+        display: none;
     }
 }
 
