@@ -277,6 +277,34 @@ export default defineConfig({
                     { text: '概述', link: '/guide/nbot/group/index.md' },
                   ]
                 },
+                {
+                  text: 'events - 事件标准化系统',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/events/index.md' },
+                  ]
+                },
+                {
+                  text: 'memory - MemoryFS 记忆文件系统',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/memory/index.md' },
+                  ]
+                },
+                {
+                  text: 'review - Review Pipeline 审查层',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/review/index.md' },
+                  ]
+                },
+                {
+                  text: 'world - WorldEngine 群聊判定器',
+                  collapsed: true,
+                  items: [
+                    { text: '概述', link: '/guide/nbot/world/index.md' },
+                  ]
+                },
               ]
             },
             {
