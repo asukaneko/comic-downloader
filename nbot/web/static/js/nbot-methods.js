@@ -16813,13 +16813,13 @@ def main(params):
         if (!this.currentSession) return;
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
-            const res = await axios.get('/api/plot/' + sid + '/latest-choices');
+            const res = await api.get('/api/plot/' + sid + '/latest-choices');
             if (res.data && res.data.choices) {
                 this.plotChoices = this.normalizePlotChoices(res.data.choices);
             }
             // 同步加载故事图数据，供侧栏路径条显示
             try {
-                const g = await axios.get('/api/plot/' + sid + '/graph');
+                const g = await api.get('/api/plot/' + sid + '/graph');
                 this.plotGraphData = {
                     nodes: g.data?.nodes || [],
                     choices: g.data?.choices || [],
@@ -16911,7 +16911,7 @@ def main(params):
         // 通知后端标记选中（用于故事图边的创建）
         const sid = this.currentSession.id || this.currentSession.session_id;
         if (choice?.id && sid) {
-            axios.post('/api/plot/' + sid + '/select', { choice_id: choice.id }).catch(() => {});
+            api.post('/api/plot/' + sid + '/select', { choice_id: choice.id }).catch(() => {});
         }
         // 点击选项后填入输入框，但不隐藏选项（可点击其他选项覆盖）
         this.inputMessage = choiceText;
@@ -16929,7 +16929,7 @@ def main(params):
         if (!sid) return;
         this.plotChoicesLoading = true;
         try {
-            const res = await axios.post('/api/plot/' + sid + '/regenerate-choices');
+            const res = await api.post('/api/plot/' + sid + '/regenerate-choices');
             const data = res.data || {};
             if (data.choices && data.choices.length > 0) {
                 this.plotChoices = this.normalizePlotChoices(data.choices);
@@ -16956,7 +16956,7 @@ def main(params):
         if (!this.currentSession) return;
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
-            const graphRes = await axios.get('/api/plot/' + sid + '/graph');
+            const graphRes = await api.get('/api/plot/' + sid + '/graph');
             const graph = graphRes.data || {};
             const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
             const choices = Array.isArray(graph.choices) ? graph.choices : [];
@@ -17319,7 +17319,7 @@ def main(params):
         this.plotBranchPreviewLoading = true;
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
-            const res = await axios.get('/api/plot/' + sid + '/branch-preview', { params: { node_id: nodeId } });
+            const res = await api.get('/api/plot/' + sid + '/branch-preview', { params: { node_id: nodeId } });
             // 仅在仍选中同一节点时写入，避免快速点击竞态
             if (this.plotSelectedNode && this.plotSelectedNode.id === nodeId) {
                 this.plotBranchPreview = res.data?.messages || [];
@@ -17337,7 +17337,7 @@ def main(params):
         this.plotBranchBusy = true;
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
-            await axios.post('/api/plot/' + sid + '/branch', { node_id: node.id, choice_id: choice.id });
+            await api.post('/api/plot/' + sid + '/branch', { node_id: node.id, choice_id: choice.id });
             this.showPlotGraphModal = false;
             this.showToast('已创建分支，正在生成新剧情…', 'success');
             await this.loadMessages(true);
@@ -17367,7 +17367,7 @@ def main(params):
                 this.plotBranchBusy = true;
                 try {
                     const sid = this.currentSession.id || this.currentSession.session_id;
-                    await axios.post('/api/plot/' + sid + '/switch', { node_id: node.id });
+                    await api.post('/api/plot/' + sid + '/switch', { node_id: node.id });
                     this.plotActiveNodeId = node.id;
                     this.showToast('已切换到该分支', 'success');
                     await this.loadMessages(true);
@@ -17426,7 +17426,7 @@ def main(params):
                 this.plotBranchBusy = true;
                 try {
                     const sid = this.currentSession.id || this.currentSession.session_id;
-                    await axios.post('/api/plot/' + sid + '/rollback', { node_id: node.id });
+                    await api.post('/api/plot/' + sid + '/rollback', { node_id: node.id });
                     this.plotActiveNodeId = node.id;
                     this.showToast('已回溯到该节点', 'success');
                     await this.loadMessages(true);
