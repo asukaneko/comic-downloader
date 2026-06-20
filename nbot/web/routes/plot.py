@@ -8,6 +8,113 @@ from nbot.web.routes.sessions import restore_runtime_state_to_path
 _log = logging.getLogger(__name__)
 
 
+def _ensure_plot_choices(server, session_id: str) -> bool:
+    """Ensure the session has at least 3 unselected plot choices.
+
+    Creates a root PlotNode and generates choices if none exist.
+    Returns True if new choices were generated, False if already sufficient.
+    """
+    import asyncio as _asyncio
+
+    data_dir = getattr(server, "data_dir", "data/web")
+    manager = get_plot_graph_manager(data_dir=data_dir)
+
+    # Check if there are already enough unselected choices
+    existing_choices = manager.get_latest_choices(session_id)
+    if len(existing_choices) >= 3:
+        _log.info(
+            "[PlotRoutes] session %s already has %d choices, skipping generation",
+            session_id, len(existing_choices),
+        )
+        return False
+
+    # Get session and find the last assistant message (including opening)
+    session = server.session_store.get_session(session_id) or {}
+    messages = session.get("messages") or []
+    last_assistant = ""
+    for msg in reversed(messages):
+        if isinstance(msg, dict) and msg.get("role") == "assistant":
+            last_assistant = msg.get("content", "") or ""
+            break
+
+    if not last_assistant:
+        _log.info(
+            "[PlotRoutes] session %s has no assistant message, cannot generate choices",
+            session_id,
+        )
+        return False
+
+    # Build turn_context from session metadata
+    session_meta = session.get("metadata", {}) or {}
+    turn_context = {
+        "mood": session_meta.get("mood", ""),
+        "relationship": session_meta.get("relationship", ""),
+    }
+
+    # Extract recent history
+    recent_history = [
+        {"role": m.get("role"), "content": m.get("content") or ""}
+        for m in messages[-8:]
+        if isinstance(m, dict)
+        and m.get("role") in ("user", "assistant")
+        and (m.get("content") or "").strip()
+    ]
+
+    # Generate choices via AI
+    from nbot.plot.choice_generator import PlotChoiceGenerator
+    from nbot.plot.models import PlotNode, PlotChoice as PlotChoiceModel
+
+    generator = PlotChoiceGenerator()
+    try:
+        loop = _asyncio.new_event_loop()
+        try:
+            choices_data = loop.run_until_complete(
+                generator.generate(
+                    last_assistant[:800],
+                    turn_context,
+                    recent_history=recent_history,
+                )
+            )
+        finally:
+            loop.close()
+    except Exception as e:
+        _log.error("[PlotRoutes] choice generation failed in ensure: %s", e)
+        return False
+
+    if not choices_data:
+        _log.warning("[PlotRoutes] choice generation returned empty for session %s", session_id)
+        return False
+
+    # Create root plot node using the opening/last assistant message
+    character_id = session.get("character_id", "")
+    node = PlotNode(
+        conversation_id=session_id,
+        character_id=character_id,
+        title=last_assistant[:30] + ("..." if len(last_assistant) > 30 else ""),
+        summary=last_assistant[:100],
+        level="normal",
+        assistant_message={"role": "assistant", "content": last_assistant},
+    )
+    manager.add_node(node)
+    manager.set_active_node(session_id, node.id)
+
+    # Create choice entries
+    for cd in choices_data:
+        pc = PlotChoiceModel(
+            node_id=node.id,
+            text=cd.get("text", ""),
+            level=cd.get("level", "normal"),
+            intent=cd.get("intent", ""),
+        )
+        manager.add_choice(pc)
+
+    _log.info(
+        "[PlotRoutes] generated %d initial choices for session %s (node %s)",
+        len(choices_data), session_id, node.id,
+    )
+    return True
+
+
 def register_plot_routes(app, server):
 
     @app.route("/api/plot/toggle", methods=["POST"])
@@ -33,7 +140,22 @@ def register_plot_routes(app, server):
             session_id,
             enabled,
         )
-        return jsonify({"session_id": session_id, "plot_mode": enabled})
+
+        # When enabling plot mode, ensure choices exist
+        choices_generated = False
+        if enabled:
+            try:
+                choices_generated = _ensure_plot_choices(server, session_id)
+            except Exception as e:
+                _log.warning(
+                    "[PlotRoutes] ensure_plot_choices failed: %s", e, exc_info=True
+                )
+
+        return jsonify({
+            "session_id": session_id,
+            "plot_mode": enabled,
+            "choices_generated": choices_generated,
+        })
 
     @app.route("/api/plot/<conversation_id>/graph")
     def get_plot_graph(conversation_id):
