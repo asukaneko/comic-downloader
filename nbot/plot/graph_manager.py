@@ -10,6 +10,7 @@ import logging
 import os
 from typing import Any
 
+from nbot.events import names as _E
 from nbot.plot.models import PlotChoice, PlotEdge, PlotNode
 
 _log = logging.getLogger(__name__)
@@ -67,13 +68,13 @@ class PlotGraphManager:
             "[PlotGraphManager] added node id=%s title=%s level=%s",
             node.id, node.title, node.level,
         )
-        self._emit("plot.node.created", {
+        self._emit(_E.PLOT_NODE_CREATED, {
             "node_id": node.id,
             "title": node.title,
             "level": node.level,
         }, conversation_id=node.conversation_id, character_id=node.character_id)
         if node.level == "turning_point":
-            self._emit("plot.turning_point.reached", {
+            self._emit(_E.PLOT_TURNING_POINT_REACHED, {
                 "node_id": node.id,
                 "title": node.title,
             }, conversation_id=node.conversation_id, character_id=node.character_id)
@@ -153,7 +154,7 @@ class PlotGraphManager:
             choice.id, choice.node_id, choice.level,
         )
         node = self._nodes.get(choice.node_id)
-        self._emit("plot.choice.generated", {
+        self._emit(_E.PLOT_CHOICE_GENERATED, {
             "choice_id": choice.id,
             "node_id": choice.node_id,
             "level": choice.level,
@@ -184,7 +185,7 @@ class PlotGraphManager:
         """添加故事边并持久化。"""
         self._edges[edge.id] = edge
         self._save()
-        self._emit("plot.edge.created", {
+        self._emit(_E.PLOT_EDGE_CREATED, {
             "edge_id": edge.id,
             "from_node_id": edge.from_node_id,
             "to_node_id": edge.to_node_id,
@@ -228,7 +229,7 @@ class PlotGraphManager:
             choice.id, choice.node_id,
         )
 
-        self._emit("plot.choice.selected", {
+        self._emit(_E.PLOT_CHOICE_SELECTED, {
             "choice_id": choice.id,
             "node_id": choice.node_id,
             "level": choice.level,

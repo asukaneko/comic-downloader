@@ -1391,6 +1391,14 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             try:
                 from nbot.hooks.manager import get_hook_manager
                 hook_runtime = get_hook_manager(data_dir=getattr(server, "data_dir", "data/web"))
+                # 注入 event_bus 到 ReviewPipeline 和 PlotGraphManager，使标准化事件进入事件流
+                if hook_runtime:
+                    _ebus = getattr(hook_runtime, "_event_bus", None)
+                    if _ebus:
+                        from nbot.review.pipeline import get_review_pipeline
+                        from nbot.plot.graph_manager import get_plot_graph_manager
+                        get_review_pipeline(event_bus=_ebus)
+                        get_plot_graph_manager(event_bus=_ebus)
                 # Register Socket.IO notifier for hook trigger events
                 if hook_runtime and hasattr(server, 'socketio') and not hook_runtime._event_notifier:
                     _sio = server.socketio

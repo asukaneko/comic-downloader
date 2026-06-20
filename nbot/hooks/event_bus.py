@@ -31,6 +31,13 @@ _EVENT_ALIASES: Dict[str, List[str]] = {
     "character.before_turn.after_world_book_match": ["character.after_world_book_match"],
     "character.before_turn.after_reaction_plan": ["character.after_reaction_plan"],
     "character.after_turn.after_state_update": ["character.after_state_update"],
+    # 3.1 标准化事件名别名（旧名 → 新 domain.phase.action 名）
+    "character.before_turn.started": ["character.turn.before"],
+    "character.after_turn.finished": ["character.turn.after"],
+    "character.after_memory_retrieve": ["character.memory.recalled"],
+    "character.after_state_update": ["character.relationship.changed"],
+    "memory.after_extract": ["character.memory.written"],
+    "model.after_call": ["character.model.generated"],
 }
 
 # 反向映射：代码名 → 文档名（用于展示）
@@ -121,6 +128,48 @@ class HookEventType(str, Enum):
     # 工具调用
     TOOL_BEFORE_CALL = "tool.before_call"
     TOOL_AFTER_CALL = "tool.after_call"
+
+    # ---------------------------------------------------------------------------
+    # 3.1 标准化事件名（domain.phase.action 规范）
+    # ---------------------------------------------------------------------------
+
+    # character domain
+    CHARACTER_TURN_BEFORE = "character.turn.before"
+    CHARACTER_TURN_AFTER = "character.turn.after"
+    CHARACTER_MEMORY_RECALLED = "character.memory.recalled"
+    CHARACTER_MEMORY_REVIEWED = "character.memory.reviewed"
+    CHARACTER_MEMORY_WRITTEN = "character.memory.written"
+    CHARACTER_RELATIONSHIP_CHANGED = "character.relationship.changed"
+    CHARACTER_STATE_CHANGED = "character.state.changed"
+    CHARACTER_MODEL_GENERATED = "character.model.generated"
+
+    # plot domain
+    PLOT_NODE_CREATED = "plot.node.created"
+    PLOT_CHOICE_GENERATED = "plot.choice.generated"
+    PLOT_CHOICE_SELECTED = "plot.choice.selected"
+    PLOT_EDGE_CREATED = "plot.edge.created"
+    PLOT_ROLLBACK_DONE = "plot.rollback.done"
+    PLOT_TURNING_POINT_REACHED = "plot.turning_point.reached"
+
+    # group domain
+    GROUP_MESSAGE_RECEIVED = "group.message.received"
+    GROUP_SPEAKER_SELECTED = "group.speaker.selected"
+    GROUP_NARRATION_REQUESTED = "group.narration.requested"
+    GROUP_NARRATION_GENERATED = "group.narration.generated"
+    GROUP_RELATIONSHIP_CHANGED = "group.relationship.changed"
+
+    # world domain
+    WORLD_EVENT_TRIGGERED = "world.event.triggered"
+    WORLD_BOOK_UPDATED = "world.book.updated"
+
+    # workflow domain
+    WORKFLOW_STARTED = "workflow.started"
+    WORKFLOW_FINISHED = "workflow.finished"
+    WORKFLOW_FAILED = "workflow.failed"
+
+    # review domain
+    REVIEW_STARTED = "review.started"
+    REVIEW_FINISHED = "review.finished"
 
 
 class _Subscriber:

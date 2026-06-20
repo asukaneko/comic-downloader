@@ -30,6 +30,7 @@ class SpeakerScheduler:
         character_ids: list[str],
         *,
         last_speaker: str = "",
+        group_context: dict[str, Any] | None = None,
     ) -> str:
         """决定下一个发言角色"""
         if not character_ids:
@@ -47,6 +48,12 @@ class SpeakerScheduler:
             return self._relevance(message, character_ids, conversation)
         if strategy == "narrator_driven":
             return self._narrator_driven(conversation, character_ids)
+        if strategy == "world_engine":
+            return self._world_engine(
+                message, character_ids, conversation,
+                last_speaker=last_speaker,
+                group_context=group_context or {},
+            )
 
         _log.warning("unknown speaker strategy: %s, falling back to mention", strategy)
         return self._mention(message, character_ids)
@@ -264,3 +271,57 @@ class SpeakerScheduler:
         if max(scores.values()) > 0:
             return max(scores, key=scores.get)
         return _random.choice(character_ids)
+
+    def _world_engine(
+        self,
+        message: str,
+        character_ids: list[str],
+        conversation: GroupConversation,
+        *,
+        last_speaker: str = "",
+        group_context: dict[str, Any] = None,
+    ) -> str:
+        """world_engine 策略：调用 WorldEngine 综合语境判断。"""
+        try:
+            from nbot.world.engine import get_world_engine
+            engine = get_world_engine()
+
+            gc = group_context or {}
+            characters = gc.get("character_profiles", {})
+            active_plot_node = gc.get("active_plot_node")
+            recent_messages = gc.get("recent_messages", [])
+
+            # 构建关系列表（双向：A→B 和 B→A 都有权重）
+            relations = []
+            if hasattr(conversation, "relations"):
+                for rel in conversation.relations.values():
+                    rel_data = {
+                        "affection": rel.affection,
+                        "trust": rel.trust,
+                        "familiarity": rel.familiarity,
+                    }
+                    relations.append({"character_id": rel.char_a, **rel_data})
+                    relations.append({"character_id": rel.char_b, **rel_data})
+
+            decision = engine.decide(
+                message,
+                character_ids,
+                recent_messages=recent_messages,
+                characters=characters,
+                relations=relations,
+                active_plot_node=active_plot_node,
+                last_speaker=last_speaker,
+            )
+
+            _log.info(
+                "[WorldEngine] speaker=%s reason=%s confidence=%.2f",
+                decision.speaker_id, decision.reason, decision.confidence,
+            )
+            if decision.speaker_id and decision.speaker_id in character_ids:
+                return decision.speaker_id
+        except Exception as exc:
+            _log.warning("[SpeakerScheduler] world_engine failed: %s", exc)
+
+        # fallback
+        return self._mention(message, character_ids) or character_ids[0]
+
