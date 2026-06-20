@@ -17660,6 +17660,41 @@ def main(params):
         }
     },
 
+    formatReviewTime(timestamp) {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return String(timestamp).slice(11, 19);
+        return date.toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        });
+    },
+
+    formatReviewFullTime(timestamp) {
+        if (!timestamp) return '';
+        const date = new Date(timestamp);
+        if (Number.isNaN(date.getTime())) return String(timestamp);
+        return date.toLocaleString('zh-CN', { hour12: false });
+    },
+
+    formatReviewContext(item) {
+        if (!item) return '';
+        const parts = [];
+        const conversation = item.conversation_label
+            || item.conversation_name
+            || item.conversation_short_id
+            || (item.conversation_id ? String(item.conversation_id).slice(-8) : '');
+        const character = item.character_label || item.character_id || '';
+        const source = item.source_label || item.source || '';
+
+        if (conversation) parts.push(conversation);
+        if (character && character !== conversation) parts.push(character);
+        if (source) parts.push(source);
+        return parts.join(' · ');
+    },
+
     async loadReviewEvents() {
         try {
             const domain = this.reviewEventDomain || '';

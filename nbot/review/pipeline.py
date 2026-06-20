@@ -9,7 +9,6 @@ Review Pipeline
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from nbot.review.models import ReviewInput, ReviewOutput
 from nbot.review.rule_review import run_rule_review
@@ -65,7 +64,7 @@ class ReviewPipeline:
 
         return output
 
-    def _emit_event(self, event_type: str, inp: ReviewInput, output: Optional[ReviewOutput] = None) -> None:
+    def _emit_event(self, event_type: str, inp: ReviewInput, output: ReviewOutput | None = None) -> None:
         if not self._event_bus:
             return
         try:
@@ -74,6 +73,8 @@ class ReviewPipeline:
                 "conversation_id": inp.conversation_id,
                 "character_id": inp.character_id,
             }
+            if inp.real_time_context:
+                payload["real_time"] = inp.real_time_context
             if output:
                 payload["skipped"] = output.skipped
                 payload["should_write_memory"] = output.should_write_memory
@@ -93,7 +94,7 @@ class ReviewPipeline:
 
 
 # 全局单例（懒初始化）
-_review_pipeline: Optional[ReviewPipeline] = None
+_review_pipeline: ReviewPipeline | None = None
 
 
 def get_review_pipeline(event_bus=None) -> ReviewPipeline:

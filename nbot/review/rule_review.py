@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from nbot.review.models import (
     MemoryItem,
@@ -64,6 +63,11 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
         affection_delta += 2
         trust_delta += 1
 
+    time_level = str((inp.real_time_context or {}).get("continuity_level") or "")
+    time_label = str((inp.real_time_context or {}).get("elapsed_label") or "")
+    if time_level in ("days", "long_absence"):
+        familiarity_delta += 1
+
     reason = ""
     if affection_delta != 0 or trust_delta != 0 or familiarity_delta > 0:
         parts = []
@@ -77,6 +81,8 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
             parts.append(f"选择了 {choice_level} 级剧情分支")
         if familiarity_delta > 0:
             parts.append("正常对话推进熟悉度")
+        if time_level in ("days", "long_absence") and time_label:
+            parts.append(f"现实时间流逝推动了关系连续性（间隔 {time_label}）")
         reason = "；".join(parts) + "。" if parts else ""
 
     total_delta = abs(affection_delta) + abs(trust_delta) + familiarity_delta
@@ -96,6 +102,7 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
         memory_value >= 0.65
         or choice_level in ("important", "turning_point", "ending")
         or total_delta >= 3
+        or time_level in ("days", "long_absence")
     )
 
     if should_write and (inp.user_message or inp.assistant_message):
@@ -139,7 +146,7 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
     )
 
     # 普通闲聊且无剧情选择 → 标记 skipped，减少日志噪音
-    if not choice_level and memory_value < 0.3:
+    if not choice_level and memory_value < 0.3 and time_level not in ("days", "long_absence"):
         output.skipped = True
 
     return output
@@ -165,6 +172,10 @@ def _calc_memory_value(inp: ReviewInput, choice_level: str) -> float:
             score += 0.2
         if _AFFECTION_UP_KEYWORDS.search(inp.user_message or ""):
             score += 0.2
+        if (inp.real_time_context or {}).get("continuity_level") == "days":
+            score += 0.65
+        elif (inp.real_time_context or {}).get("continuity_level") == "long_absence":
+            score += 0.75
     return min(1.0, score)
 
 
@@ -194,6 +205,10 @@ def _extract_memory_title(choice: dict, inp: ReviewInput) -> str:
 
 def _extract_memory_content(inp: ReviewInput) -> str:
     parts = []
+    real_time = inp.real_time_context or {}
+    elapsed_label = real_time.get("elapsed_label")
+    if elapsed_label and real_time.get("continuity_level") not in ("first_contact", "continuous"):
+        parts.append(f"现实时间间隔：{elapsed_label}")
     if inp.user_message:
         parts.append(f"用户：{inp.user_message[:200]}")
     if inp.assistant_message:

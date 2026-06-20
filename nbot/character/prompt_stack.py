@@ -12,8 +12,8 @@
 
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from dataclasses import dataclass
+from typing import Any, Literal
 
 _log = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ _DYNAMIC_SECTION_KEYS = (
     "character.reaction_plan",
     "character.memories",
     "character.memories_legacy",
+    "real_time.continuity",
     "knowledge.rag",
     "world_book",
 )
@@ -99,7 +100,7 @@ class PromptInjection:
     scope: PromptScope = "turn"
     enabled: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
             "content": self.content[:200] + "..." if len(self.content) > 200 else self.content,
@@ -127,7 +128,7 @@ class PromptStack:
     PRIORITY_WORLD_BOOK = 65
 
     def __init__(self):
-        self.items: List[PromptInjection] = []
+        self.items: list[PromptInjection] = []
 
     def add(
         self,
@@ -175,7 +176,7 @@ class PromptStack:
         self.items = [item for item in self.items if item.key != key]
         return len(self.items) < before
 
-    def get(self, key: str) -> Optional[PromptInjection]:
+    def get(self, key: str) -> PromptInjection | None:
         """获取指定 key 的注入项"""
         for item in self.items:
             if item.key == key:
@@ -203,7 +204,7 @@ class PromptStack:
 
         return "\n\n".join(parts).strip()
 
-    def render_debug(self) -> List[Dict[str, Any]]:
+    def render_debug(self) -> list[dict[str, Any]]:
         """返回调试信息，展示本轮所有注入项"""
         return [
             item.to_dict()
@@ -217,12 +218,12 @@ class PromptStack:
         return before - len(self.items)
 
     @property
-    def keys(self) -> List[str]:
+    def keys(self) -> list[str]:
         """返回所有已注册的 key 列表"""
         return [item.key for item in self.items]
 
 
-def split_system_prompt(messages: List[Dict[str, Any]]) -> tuple:
+def split_system_prompt(messages: list[dict[str, Any]]) -> tuple:
     """从消息列表中分离 system prompt 和历史消息
 
     Args:

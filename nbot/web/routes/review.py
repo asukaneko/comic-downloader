@@ -35,6 +35,52 @@ def _get_event_bus(server):
         return None
 
 
+def _short_id(value, *, length=8):
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    return value[-length:] if len(value) > length else value
+
+
+def _get_session(server, conversation_id):
+    sessions = getattr(server, "sessions", {}) or {}
+    if not isinstance(sessions, dict):
+        return {}
+    session = sessions.get(conversation_id)
+    return session if isinstance(session, dict) else {}
+
+
+def _session_display_name(session, conversation_id):
+    for key in ("name", "title", "display_name"):
+        value = str((session or {}).get(key) or "").strip()
+        if value:
+            return value
+    return f"会话 {_short_id(conversation_id)}" if conversation_id else ""
+
+
+def _character_display_name(session, event):
+    for key in ("sender_name", "character_name", "character_id"):
+        value = str((session or {}).get(key) or "").strip()
+        if value:
+            return value
+    return str((event or {}).get("character_id") or "").strip()
+
+
+def _enrich_event_for_display(server, event):
+    enriched = dict(event or {})
+    conversation_id = enriched.get("conversation_id", "")
+    session = _get_session(server, conversation_id)
+    conversation_name = _session_display_name(session, conversation_id)
+    character_name = _character_display_name(session, enriched)
+
+    enriched["conversation_name"] = conversation_name
+    enriched["conversation_label"] = conversation_name or _short_id(conversation_id)
+    enriched["conversation_short_id"] = _short_id(conversation_id)
+    enriched["character_label"] = character_name
+    enriched["source_label"] = str(enriched.get("source") or "").strip()
+    return enriched
+
+
 def register_review_routes(app, server):
 
     # ------------------------------------------------------------------
@@ -58,7 +104,8 @@ def register_review_routes(app, server):
                 if e.get("type", "").startswith("review.")
                 and (not conversation_id or e.get("conversation_id") == conversation_id)
             ]
-            return jsonify({"logs": review_events[-limit:], "total": len(review_events)})
+            logs = [_enrich_event_for_display(server, e) for e in review_events[-limit:]]
+            return jsonify({"logs": logs, "total": len(review_events)})
         except Exception as exc:
             _log.error("[ReviewRoutes] get_review_logs failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
@@ -131,7 +178,8 @@ def register_review_routes(app, server):
                 if (not domain or e.get("type", "").startswith(domain + "."))
                 and (not conversation_id or e.get("conversation_id") == conversation_id)
             ]
-            return jsonify({"events": filtered[-limit:], "total": len(filtered)})
+            events = [_enrich_event_for_display(server, e) for e in filtered[-limit:]]
+            return jsonify({"events": events, "total": len(filtered)})
         except Exception as exc:
             _log.error("[ReviewRoutes] get_event_stream failed: %s", exc)
             return jsonify({"error": str(exc)}), 500

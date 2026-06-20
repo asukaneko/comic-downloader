@@ -9,7 +9,6 @@ CharacterRuntime 是角色模拟的编排中心，负责：
 """
 
 import logging
-from typing import List
 
 from nbot.character.models import (
     CharacterIdentity,
@@ -92,6 +91,7 @@ class CharacterRuntime:
 
         # 读取或创建角色运行时状态
         state = self._get_or_create_state(identity, profile)
+        real_time_context = self._build_real_time_context(state, chat_request)
 
         # 读取或创建关系状态
         relationship = self._get_or_create_relationship(identity, profile)
@@ -149,6 +149,7 @@ class CharacterRuntime:
             world_book_entries=world_book_entries,
             identity=identity,
             chat_request=chat_request,
+            real_time_context=real_time_context,
         )
 
         self._emit_hook("character.before_turn.finished", identity, {
@@ -387,7 +388,7 @@ class CharacterRuntime:
 
     def _search_memories(
         self, identity: CharacterIdentity, chat_request
-    ) -> List[CharacterMemory]:
+    ) -> list[CharacterMemory]:
         """检索相关记忆"""
         if not self.memory_service:
             return []
@@ -433,7 +434,8 @@ class CharacterRuntime:
             return ReactionPlan()
 
     def _build_prompt(self, profile, state, relationship, memories, plan,
-                      world_book_entries=None, identity=None, chat_request=None) -> str:
+                      world_book_entries=None, identity=None, chat_request=None,
+                      real_time_context=None) -> str:
         """编译提示词"""
         from nbot.character.prompt_builder import build_character_injections
         from nbot.character.prompt_stack import PromptStack
@@ -449,6 +451,7 @@ class CharacterRuntime:
             memories=memories,
             plan=plan,
         )
+        self._inject_real_time_context(stack, real_time_context)
 
         # 注入世界书
         _log.debug("[WorldBook] _build_prompt: entries=%d", len(world_book_entries) if world_book_entries else 0)
@@ -462,6 +465,38 @@ class CharacterRuntime:
 
         # 合成最终提示词
         return stack.render()
+
+    def _build_real_time_context(self, state, chat_request) -> dict:
+        try:
+            from nbot.review.time_context import build_current_real_time_context
+
+            previous_turn_time = getattr(state, "last_active_at", "") if state else ""
+            context = build_current_real_time_context(previous_turn_time)
+            metadata = getattr(chat_request, "metadata", None)
+            if not isinstance(metadata, dict):
+                metadata = {}
+                chat_request.metadata = metadata
+            metadata["real_time_context"] = context
+            return context
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] real time context failed: %s", exc)
+            return {}
+
+    def _inject_real_time_context(self, stack, real_time_context) -> None:
+        if not real_time_context:
+            return
+        try:
+            from nbot.character.prompt_stack import PromptStack
+            from nbot.review.time_context import format_real_time_prompt_context
+
+            stack.add(
+                key="real_time.continuity",
+                content=format_real_time_prompt_context(real_time_context),
+                priority=PromptStack.PRIORITY_CHARACTER_STATE + 1,
+                scope="turn",
+            )
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] real time prompt injection failed: %s", exc)
 
     def _match_world_books(self, identity, chat_request, state=None, recent_messages: list = None) -> list:
         """匹配世界书关键词（多源上下文召回）"""
@@ -560,6 +595,7 @@ class CharacterRuntime:
                 assistant_message=getattr(result, "final_content", "") or "",
                 selected_choice=selected_choice,
                 relationship_state=rel_state,
+                real_time_context=metadata.get("real_time_context") or {},
             )
 
             # 注入 event_bus 使 review.started / review.finished 事件进入事件流
@@ -606,7 +642,17 @@ class CharacterRuntime:
 
             # 2. 写入日记（每轮有内容都追加）
             if inp.user_message or inp.assistant_message:
-                diary_entry = f"用户：{inp.user_message[:100]}\n角色：{inp.assistant_message[:100]}"
+                diary_parts = []
+                real_time = getattr(inp, "real_time_context", {}) or {}
+                elapsed_label = real_time.get("elapsed_label")
+                if elapsed_label and real_time.get("continuity_level") not in (
+                    "first_contact",
+                    "continuous",
+                ):
+                    diary_parts.append(f"现实时间间隔：{elapsed_label}")
+                diary_parts.append(f"用户：{inp.user_message[:100]}")
+                diary_parts.append(f"角色：{inp.assistant_message[:100]}")
+                diary_entry = "\n".join(diary_parts)
                 mfs.write(
                     mfs.path_diary_daily(char_id),
                     character_id=char_id,

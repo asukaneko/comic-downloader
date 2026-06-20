@@ -7,7 +7,7 @@ Review Pipeline 数据模型
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -22,7 +22,7 @@ class ReviewScore:
     user_engagement: float = 0.0       # 用户互动
     risk: float = 0.0                  # 风险评分
 
-    def to_dict(self) -> Dict[str, float]:
+    def to_dict(self) -> dict[str, float]:
         return {
             "character_fidelity": self.character_fidelity,
             "immersion": self.immersion,
@@ -88,28 +88,29 @@ class ReviewInput:
     group_id: str = ""
     user_message: str = ""
     assistant_message: str = ""
-    recent_messages: List[Dict[str, Any]] = field(default_factory=list)
-    active_plot_node: Optional[Dict[str, Any]] = None
-    selected_choice: Optional[Dict[str, Any]] = None
-    relationship_state: Dict[str, Any] = field(default_factory=dict)
-    character_state: Dict[str, Any] = field(default_factory=dict)
-    world_context: Dict[str, Any] = field(default_factory=dict)
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    recent_messages: list[dict[str, Any]] = field(default_factory=list)
+    active_plot_node: dict[str, Any] | None = None
+    selected_choice: dict[str, Any] | None = None
+    relationship_state: dict[str, Any] = field(default_factory=dict)
+    character_state: dict[str, Any] = field(default_factory=dict)
+    world_context: dict[str, Any] = field(default_factory=dict)
+    real_time_context: dict[str, Any] = field(default_factory=dict)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
 class ReviewOutput:
     """Review Pipeline 输出"""
     should_write_memory: bool = False
-    memory_items: List[MemoryItem] = field(default_factory=list)
-    relationship_delta: Optional[RelationshipDelta] = None
-    plot_update: Optional[PlotUpdate] = None
-    world_book_update: Optional[WorldBookUpdate] = None
-    scores: Optional[ReviewScore] = None
+    memory_items: list[MemoryItem] = field(default_factory=list)
+    relationship_delta: RelationshipDelta | None = None
+    plot_update: PlotUpdate | None = None
+    world_book_update: WorldBookUpdate | None = None
+    scores: ReviewScore | None = None
     source: str = "rule"          # rule / llm
     skipped: bool = False         # 普通闲聊跳过 Review
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "should_write_memory": self.should_write_memory,
             "memory_items": [

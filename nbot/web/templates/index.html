@@ -31,7 +31,7 @@
         window.__nbotAssetVersion = '20260618-ws-auth';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260618-group-modal-top">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260620-review-events">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         // PWA install prompt - must be captured before Vue mounts
@@ -4123,9 +4123,11 @@
                             <div v-if="reviewTab === 'events'" class="rv-list">
                                 <div v-if="reviewEvents.length === 0" class="rv-empty">暂无事件记录</div>
                                 <div v-for="evt in reviewEvents" :key="evt.id" class="rv-event-item">
-                                    <span class="rv-event-type">{{ evt.type }}</span>
-                                    <span class="rv-event-conv" v-if="evt.conversation_id">{{ evt.conversation_id.slice(-8) }}</span>
-                                    <span class="rv-event-time">{{ evt.created_at ? evt.created_at.slice(11,19) : '' }}</span>
+                                    <div class="rv-event-main">
+                                        <span class="rv-event-type">{{ evt.type }}</span>
+                                        <span class="rv-event-context" v-if="formatReviewContext(evt)">{{ formatReviewContext(evt) }}</span>
+                                    </div>
+                                    <span class="rv-event-time" :title="formatReviewFullTime(evt.created_at)">{{ formatReviewTime(evt.created_at) }}</span>
                                 </div>
                             </div>
 
@@ -4134,8 +4136,11 @@
                                 <div v-if="reviewLogs.length === 0" class="rv-empty">暂无 Review 日志</div>
                                 <div v-for="log in reviewLogs" :key="log.id" class="rv-log-item">
                                     <div class="rv-log-header">
-                                        <span class="rv-log-type" :class="log.type === 'review.finished' ? 'rv-finished' : 'rv-started'">{{ log.type }}</span>
-                                        <span class="rv-log-time">{{ log.created_at ? log.created_at.slice(11,19) : '' }}</span>
+                                        <div class="rv-log-title">
+                                            <span class="rv-log-type" :class="log.type === 'review.finished' ? 'rv-finished' : 'rv-started'">{{ log.type }}</span>
+                                            <span class="rv-event-context" v-if="formatReviewContext(log)">{{ formatReviewContext(log) }}</span>
+                                        </div>
+                                        <span class="rv-log-time" :title="formatReviewFullTime(log.created_at)">{{ formatReviewTime(log.created_at) }}</span>
                                     </div>
                                     <div class="rv-log-body" v-if="log.payload && log.payload.should_write_memory !== undefined">
                                         <span :class="log.payload.should_write_memory ? 'rv-badge-yes' : 'rv-badge-no'">
@@ -11754,7 +11759,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260618-ws-auth"></script>
-    <script src="/static/js/nbot-methods.js?v=20260618-home-view"></script>
+    <script src="/static/js/nbot-methods.js?v=20260620-review-events"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
