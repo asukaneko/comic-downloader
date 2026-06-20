@@ -17281,7 +17281,8 @@ def main(params):
         const textColor = cs.getPropertyValue('--text-secondary').trim() || '#8b949e';
         const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
         chart.setOption({
-            tooltip: { trigger: 'item', triggerOn: 'mousemove',
+            // 移动端点击节点改用底部详情抽屉，关闭悬浮提示避免点击弹出节点名
+            tooltip: isMobile ? { show: false } : { trigger: 'item', triggerOn: 'mousemove',
                 backgroundColor: 'rgba(15,23,42,0.92)', borderColor: 'rgba(255,255,255,0.1)',
                 textStyle: { color: '#e2e8f0', fontSize: 12 },
                 formatter: (p) => {
