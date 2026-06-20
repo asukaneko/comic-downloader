@@ -17180,34 +17180,45 @@ def main(params):
         const mainIds = new Set((this.plotMainPath || []).map(n => n.id));
         const selId = this.plotSelectedNode?.id;
         const activeId = this.plotActiveNodeId;
-        const makeNode = (node, idx) => {
+        // 每个节点圆点内统一显示进展序号；标题改由悬停提示 + 右侧详情面板呈现，
+        // 避免线性主线上标签密集重叠
+        let order = 0;
+        const makeNode = (node) => {
+            const seq = ++order;
             const onMain = mainIds.has(node.id);
             const isSel = node.id === selId;
             const isActive = node.id === activeId;
-            const color = this.plotLevelColor(this.plotNodeLevel(node));
-            const title = (node.title || '剧情节点').replace(/\.\.\.$/, '');
-            const prefix = isActive ? '📍 ' : '';
+            const level = this.plotNodeLevel(node);
+            const color = this.plotLevelColor(level);
+            const childIds = childMap[node.id] || [];
             return {
-                name: prefix + (title.length > 14 ? title.slice(0, 14) + '…' : title),
+                name: node.title || '剧情节点',
                 value: node.id,
                 symbol: isActive ? 'pin' : 'circle',
-                symbolSize: isActive ? 30 : (isSel ? 26 : (onMain ? 20 : 14)),
+                symbolSize: isActive ? 36 : (isSel ? 30 : (onMain ? 24 : 20)),
                 itemStyle: {
-                    color: isActive ? '#ec4899' : (onMain ? color : 'rgba(139,152,168,0.35)'),
+                    color: isActive ? '#ec4899' : (onMain ? color : 'rgba(139,152,168,0.5)'),
                     borderColor: isActive ? '#fff' : (isSel ? '#fff' : color),
                     borderWidth: isActive ? 3 : (isSel ? 3 : (onMain ? 2 : 1)),
                     shadowBlur: isActive ? 22 : (isSel ? 18 : 0),
                     shadowColor: isActive ? '#ec4899' : color,
                 },
+                // 圆点内显示进展序号（白字 + 深色描边，适配黄/红/灰任意底色）
                 label: {
-                    color: isActive ? '#ec4899' : (onMain ? 'var(--text-primary)' : 'var(--text-secondary)'),
-                    fontWeight: isActive ? 700 : 'normal',
+                    show: true,
+                    position: 'inside',
+                    formatter: String(seq),
+                    color: '#fff',
+                    fontSize: isActive ? 13 : 11,
+                    fontWeight: 700,
+                    textBorderColor: 'rgba(0,0,0,0.55)',
+                    textBorderWidth: 2,
                 },
                 lineStyle: { color: onMain ? color : 'rgba(139,152,168,0.3)' },
-                children: (childMap[node.id] || []).map((cid, i) => makeNode(byId[cid], i)),
+                children: childIds.map((cid) => makeNode(byId[cid])),
             };
         };
-        return makeNode(root, 0);
+        return makeNode(root);
     },
 
     renderPlotGraphChart() {
@@ -17231,11 +17242,11 @@ def main(params):
                     return `<b>${n.title || '剧情节点'}</b><br/>${this.plotLevelLabel(this.plotNodeLevel(n))}`;
                 } },
             series: [{
-                type: 'tree', data: [treeData], top: '4%', left: '8%', bottom: '4%', right: '14%',
-                orient: 'TB', symbol: 'circle', expandAndCollapse: false, roam: true, initialTreeDepth: -1,
-                label: { position: 'top', distance: 8, fontSize: 12, color: textColor, align: 'center' },
-                leaves: { label: { position: 'bottom' } },
-                lineStyle: { width: 2, curveness: 0.12 },
+                type: 'tree', data: [treeData], top: '8%', left: '6%', bottom: '8%', right: '12%',
+                orient: 'LR', symbol: 'circle', expandAndCollapse: false, roam: true, initialTreeDepth: -1,
+                label: { fontSize: 12, color: textColor, align: 'center' },
+                leaves: { label: { position: 'inside', align: 'center', verticalAlign: 'middle' } },
+                lineStyle: { width: 2, curveness: 0.5 },
                 emphasis: { focus: 'relative' }, animationDuration: 400,
             }],
         });
