@@ -17013,6 +17013,7 @@ def main(params):
             if (this.plotSelectedNode) this.loadPlotBranchPreview(this.plotSelectedNode.id);
             this.plotGraphView = 'graph';
             this.showPlotGraphModal = true;
+            this.plotDetailSheetOpen = false;
             this.$nextTick(() => this.renderPlotGraphChart());
         } catch (e) {
             const detail = e.response?.data?.error || e.response?.data?.message
@@ -17264,6 +17265,7 @@ def main(params):
         this._plotChart = chart;
         const cs = getComputedStyle(document.body);
         const textColor = cs.getPropertyValue('--text-secondary').trim() || '#8b949e';
+        const isMobile = !!(window.matchMedia && window.matchMedia('(max-width: 640px)').matches);
         chart.setOption({
             tooltip: { trigger: 'item', triggerOn: 'mousemove',
                 backgroundColor: 'rgba(15,23,42,0.92)', borderColor: 'rgba(255,255,255,0.1)',
@@ -17274,10 +17276,21 @@ def main(params):
                     return `<b>${n.title || '剧情节点'}</b><br/>${this.plotLevelLabel(this.plotNodeLevel(n))}`;
                 } },
             series: [{
-                type: 'tree', data: [treeData], top: '8%', left: '6%', bottom: '8%', right: '12%',
-                orient: 'LR', symbol: 'circle', expandAndCollapse: false, roam: true, initialTreeDepth: -1,
-                label: { fontSize: 12, color: textColor, align: 'center' },
-                leaves: { label: { position: 'inside', align: 'center', verticalAlign: 'middle' } },
+                type: 'tree', data: [treeData],
+                top: isMobile ? '5%' : '8%',
+                left: isMobile ? '8%' : '6%',
+                bottom: isMobile ? '5%' : '8%',
+                right: isMobile ? '8%' : '12%',
+                // 移动端竖屏：自上而下生长，更贴合窄高屏幕；桌面端保持左右
+                orient: isMobile ? 'TB' : 'LR',
+                symbol: 'circle', symbolSize: isMobile ? 8 : 10,
+                expandAndCollapse: false, roam: true, initialTreeDepth: -1,
+                label: isMobile
+                    ? { fontSize: 10, color: textColor, position: 'bottom', align: 'center', verticalAlign: 'top', distance: 6 }
+                    : { fontSize: 12, color: textColor, align: 'center' },
+                leaves: isMobile
+                    ? { label: { position: 'bottom', align: 'center', verticalAlign: 'top', distance: 6 } }
+                    : { label: { position: 'inside', align: 'center', verticalAlign: 'middle' } },
                 lineStyle: { width: 2, curveness: 0.5 },
                 emphasis: { focus: 'relative' }, animationDuration: 400,
             }],
@@ -17353,8 +17366,22 @@ def main(params):
         if (node) {
             this.plotSelectedNode = node;
             this.loadPlotBranchPreview(node.id);
+            // 移动端：点击节点弹出底部详情抽屉
+            if (window.matchMedia && window.matchMedia('(max-width: 640px)').matches) {
+                // 记录打开时间，用于防止触摸后浏览器补发的「幽灵 click」立刻关闭抽屉
+                this._plotSheetOpenedAt = Date.now();
+                this.plotDetailSheetOpen = true;
+            }
             if (this.plotGraphView === 'graph') this.$nextTick(() => this.updatePlotGraphVisuals());
         }
+    },
+
+    // 收起底部详情抽屉（带幽灵点击防护）
+    closePlotDetailSheet() {
+        // 触摸 tap 在 touchend 触发节点 click 打开抽屉后，浏览器会在同一坐标补发一个
+        // 合成 click，落到刚出现的遮罩上会立刻关闭抽屉。此处忽略打开后极短时间内的关闭。
+        if (this._plotSheetOpenedAt && Date.now() - this._plotSheetOpenedAt < 350) return;
+        this.plotDetailSheetOpen = false;
     },
 
     async loadPlotBranchPreview(nodeId) {

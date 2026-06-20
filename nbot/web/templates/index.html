@@ -8803,7 +8803,12 @@
                     <!-- 图谱视图 -->
                     <div v-show="plotGraphView === 'graph'" class="plot-map-graph-view">
                         <div ref="plotGraphChart" class="plot-map-canvas"></div>
-                        <div class="plot-map-detail">
+                        <!-- 移动端：点击节点时弹出底部详情抽屉的遮罩，点击空白处收起 -->
+                        <div v-if="plotDetailSheetOpen" class="plot-map-detail-scrim" @click="closePlotDetailSheet()"></div>
+                        <div class="plot-map-detail" :class="{ 'sheet-open': plotDetailSheetOpen }">
+                            <button type="button" class="plot-detail-sheet-handle" @click="closePlotDetailSheet()" aria-label="收起详情">
+                                <span class="plot-detail-sheet-grip"></span>
+                            </button>
                             <div v-if="!plotSelectedNode" class="plot-detail-hint">
                                 <i class="fas fa-hand-pointer"></i>
                                 <span>点击左侧节点查看剧情详情</span>
@@ -12051,6 +12056,7 @@
                     plotSelectedNode: null,
                     showPlotGraphModal: false,
                     showInlinePlotGraph: true,
+                    plotDetailSheetOpen: false,
                     plotActiveNodeId: '',
                     plotBranchPreview: [],
                     plotBranchPreviewLoading: false,

@@ -29068,6 +29068,10 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     overflow-y: auto;
 }
 
+/* 抽屉把手与遮罩仅在移动端显示，桌面端隐藏 */
+.plot-detail-sheet-handle,
+.plot-map-detail-scrim { display: none; }
+
 .plot-detail-hint {
     height: 100%;
     min-height: 240px;
@@ -29560,6 +29564,108 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     .chat-input-area.plot-mobile-input-view .plot-choices-group {
         display: none;
     }
+
+    /* ===== 故事地图（剧情树）移动端适配 ===== */
+    /* 模态框全屏化，最大化树的可视空间 */
+    .plot-map-modal {
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        border-radius: 0;
+        border: none;
+    }
+
+    .plot-map-header {
+        gap: 8px;
+        padding: 10px 12px;
+        flex-wrap: wrap;
+    }
+
+    .plot-map-title { font-size: 15px; }
+
+    .plot-map-tabs button {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+
+    /* 图谱画布占满整个 body，详情面板改为底部抽屉浮层 */
+    .plot-map-graph-view {
+        position: relative;
+    }
+
+    .plot-map-canvas {
+        width: 100%;
+    }
+
+    /* 点击节点时的半透明遮罩，点击可收起抽屉 */
+    .plot-map-detail-scrim {
+        display: block;
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 4;
+        animation: plotScrimIn 0.2s ease;
+    }
+
+    @keyframes plotScrimIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    /* 详情面板：默认收起在屏幕底部外，点击节点后滑入 */
+    .plot-map-detail {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        flex: none;
+        width: 100%;
+        max-height: 68%;
+        border-left: none;
+        border-top: 1px solid rgba(190, 206, 230, 0.16);
+        border-radius: 16px 16px 0 0;
+        padding: 8px 16px 20px;
+        z-index: 5;
+        /* 浮在树图上方，需要近乎不透明的背景，否则透出树图看不清内容 */
+        background: var(--bg-secondary, #161b27);
+        transform: translateY(102%);
+        transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.4);
+        overflow-y: auto;
+    }
+
+    [data-theme="light"] .plot-map-detail {
+        background: var(--bg-primary, #ffffff);
+    }
+
+    .plot-map-detail.sheet-open {
+        transform: translateY(0);
+    }
+
+    /* 抽屉顶部的收起把手 */
+    .plot-detail-sheet-handle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 6px 0 10px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        position: sticky;
+        top: 0;
+    }
+
+    .plot-detail-sheet-grip {
+        width: 40px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(190, 206, 230, 0.35);
+    }
+}
+
+@media (min-width: 641px) {
+    .plot-map-detail { transform: none !important; }
 }
 
 /* 3.x Runtime Side Panel - Floating Modal */
