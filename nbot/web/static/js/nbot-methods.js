@@ -16955,14 +16955,20 @@ def main(params):
         try {
             const sid = this.currentSession.id || this.currentSession.session_id;
             const graphRes = await axios.get('/api/plot/' + sid + '/graph');
+            const graph = graphRes.data || {};
+            const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+            const choices = Array.isArray(graph.choices) ? graph.choices : [];
+            const edges = Array.isArray(graph.edges) ? graph.edges : [];
             this.plotGraphData = {
-                nodes: graphRes.data?.nodes || [],
-                choices: graphRes.data?.choices || [],
-                edges: graphRes.data?.edges || []
+                nodes,
+                choices,
+                edges
             };
             // 激活节点（当前会话位置）：后端为单一真相来源
-            this.plotActiveNodeId = graphRes.data?.active_node_id
+            const graphNodeIds = new Set(nodes.map(n => n && n.id).filter(Boolean));
+            const candidateActiveId = graph.active_node_id
                 || (this.currentSession && this.currentSession.plot_active_node_id) || '';
+            this.plotActiveNodeId = graphNodeIds.has(candidateActiveId) ? candidateActiveId : '';
             this.refreshPlotPath();
             if (!this.plotActiveNodeId && this.plotCurrentNode) {
                 this.plotActiveNodeId = this.plotCurrentNode.id;
@@ -16975,8 +16981,10 @@ def main(params):
             this.showPlotGraphModal = true;
             this.$nextTick(() => this.renderPlotGraphChart());
         } catch (e) {
-            console.debug('loadPlotGraph:', e.message);
-            this.showToast('故事图加载失败', 'error');
+            const detail = e.response?.data?.error || e.response?.data?.message
+                || e.response?.status || e.message || '未知错误';
+            console.debug('loadPlotGraph:', detail, e);
+            this.showToast('故事图加载失败: ' + detail, 'error');
         }
     },
 

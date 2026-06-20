@@ -8,7 +8,7 @@ JSON 持久化存储、Mermaid 可视化导出。
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from nbot.plot.models import PlotChoice, PlotEdge, PlotNode
 
@@ -22,11 +22,40 @@ class PlotGraphManager:
 
     def __init__(self, data_dir: str = "data/web"):
         self._graphs_file = os.path.join(data_dir, "plot_graphs.json")
-        self._nodes: Dict[str, PlotNode] = {}
-        self._choices: Dict[str, PlotChoice] = {}
-        self._edges: Dict[str, PlotEdge] = {}
-        self._active: Dict[str, str] = {}  # conversation_id -> 当前激活节点
+        self._nodes: dict[str, PlotNode] = {}
+        self._choices: dict[str, PlotChoice] = {}
+        self._edges: dict[str, PlotEdge] = {}
+        self._active: dict[str, str] = {}  # conversation_id -> 当前激活节点
+        self._event_bus = None
         self._load()
+
+    def set_event_bus(self, bus) -> None:
+        """Inject the conversation event bus used by plot lifecycle events."""
+        self._event_bus = bus
+
+    def _emit(
+        self,
+        event_type: str,
+        payload: dict[str, Any] = None,
+        conversation_id: str = "",
+        character_id: str = "",
+    ) -> None:
+        if not self._event_bus:
+            return
+        try:
+            from nbot.hooks.async_utils import run_hook_coro
+            from nbot.hooks.models import RuntimeEvent
+
+            event = RuntimeEvent(
+                type=event_type,
+                source="plot_graph_manager",
+                conversation_id=conversation_id,
+                character_id=character_id,
+                payload=payload or {},
+            )
+            run_hook_coro(self._event_bus.emit(event))
+        except Exception as exc:
+            _log.debug("[PlotGraphManager] emit failed: %s", exc)
 
     # -- Node CRUD --
 
@@ -38,13 +67,23 @@ class PlotGraphManager:
             "[PlotGraphManager] added node id=%s title=%s level=%s",
             node.id, node.title, node.level,
         )
+        self._emit("plot.node.created", {
+            "node_id": node.id,
+            "title": node.title,
+            "level": node.level,
+        }, conversation_id=node.conversation_id, character_id=node.character_id)
+        if node.level == "turning_point":
+            self._emit("plot.turning_point.reached", {
+                "node_id": node.id,
+                "title": node.title,
+            }, conversation_id=node.conversation_id, character_id=node.character_id)
         return node
 
     def set_node_messages(
         self,
         node_id: str,
-        user_message: Optional[Dict[str, Any]] = None,
-        assistant_message: Optional[Dict[str, Any]] = None,
+        user_message: dict[str, Any] | None = None,
+        assistant_message: dict[str, Any] | None = None,
     ) -> bool:
         """为节点写入消息快照（用于会话内分支物化）。"""
         node = self._nodes.get(node_id)
@@ -57,7 +96,7 @@ class PlotGraphManager:
         self._save()
         return True
 
-    def get_node(self, node_id: str) -> Optional[PlotNode]:
+    def get_node(self, node_id: str) -> PlotNode | None:
         """获取单个节点。"""
         return self._nodes.get(node_id)
 
@@ -113,9 +152,17 @@ class PlotGraphManager:
             "[PlotChoiceManager] added choice id=%s node_id=%s level=%s",
             choice.id, choice.node_id, choice.level,
         )
+        node = self._nodes.get(choice.node_id)
+        self._emit("plot.choice.generated", {
+            "choice_id": choice.id,
+            "node_id": choice.node_id,
+            "level": choice.level,
+            "text": choice.text[:100] if choice.text else "",
+        }, conversation_id=node.conversation_id if node else "",
+           character_id=node.character_id if node else "")
         return choice
 
-    def get_choice(self, choice_id: str) -> Optional[PlotChoice]:
+    def get_choice(self, choice_id: str) -> PlotChoice | None:
         """获取单个选择。"""
         return self._choices.get(choice_id)
 
@@ -137,6 +184,12 @@ class PlotGraphManager:
         """添加故事边并持久化。"""
         self._edges[edge.id] = edge
         self._save()
+        self._emit("plot.edge.created", {
+            "edge_id": edge.id,
+            "from_node_id": edge.from_node_id,
+            "to_node_id": edge.to_node_id,
+            "choice_id": edge.choice_id,
+        })
         return edge
 
     # -- Selection --
@@ -175,6 +228,14 @@ class PlotGraphManager:
             choice.id, choice.node_id,
         )
 
+        self._emit("plot.choice.selected", {
+            "choice_id": choice.id,
+            "node_id": choice.node_id,
+            "level": choice.level,
+            "text": choice.text[:100] if choice.text else "",
+        }, conversation_id=from_node.conversation_id,
+           character_id=from_node.character_id)
+
         # 剧情桥接：记忆 + 世界书
         self._bridge_to_memory(choice)
         self._bridge_to_world_book(choice)
@@ -183,7 +244,7 @@ class PlotGraphManager:
 
     def create_edge_for_choice(
         self, choice_id: str, to_node_id: str, label: str = "",
-    ) -> Optional[PlotEdge]:
+    ) -> PlotEdge | None:
         """为已选中的选择创建边。"""
         choice = self._choices.get(choice_id)
         if choice is None:
@@ -199,7 +260,7 @@ class PlotGraphManager:
 
     # -- Graph Query --
 
-    def get_graph(self, conversation_id: str) -> Dict[str, Any]:
+    def get_graph(self, conversation_id: str) -> dict[str, Any]:
         """获取指定会话的完整故事图谱。
 
         Returns:
@@ -217,7 +278,6 @@ class PlotGraphManager:
             for c in self._choices.values()
             if c.node_id in node_ids
         ]
-        choice_ids = {c["id"] for c in choices}
 
         edges = [
             e.to_dict()
@@ -231,7 +291,7 @@ class PlotGraphManager:
             "edges": edges,
         }
 
-    def get_latest_node(self, conversation_id: str) -> Optional[PlotNode]:
+    def get_latest_node(self, conversation_id: str) -> PlotNode | None:
         """获取会话的最新故事节点。"""
         candidates = [
             n for n in self._nodes.values()
@@ -242,7 +302,7 @@ class PlotGraphManager:
         candidates.sort(key=lambda n: n.created_at, reverse=True)
         return candidates[0]
 
-    def get_latest_choices(self, conversation_id: str) -> List[Dict[str, Any]]:
+    def get_latest_choices(self, conversation_id: str) -> list[dict[str, Any]]:
         """获取"当前位置"节点的未选择选项。
 
         以激活节点（当前会话所在分支末端）为准，而非全局最新节点，
@@ -301,13 +361,13 @@ class PlotGraphManager:
             return "graph TD\n    empty[暂无剧情节点]"
 
         # 构建 node_id -> 短标识的映射
-        node_id_map: Dict[str, str] = {}
+        node_id_map: dict[str, str] = {}
         for idx, node in enumerate(nodes):
             short_id = chr(65 + idx) if idx < 26 else f"N{idx}"
             node_id_map[node["id"]] = short_id
 
         # 构建 choice_id -> choice 的映射
-        choice_map: Dict[str, Dict[str, Any]] = {
+        choice_map: dict[str, dict[str, Any]] = {
             c["id"]: c for c in choices
         }
 
@@ -401,7 +461,7 @@ class PlotGraphManager:
 
     # -- Branch & Timeline --
 
-    def save_branch(self, conversation_id: str, branch_name: str) -> Optional[str]:
+    def save_branch(self, conversation_id: str, branch_name: str) -> str | None:
         """从当前节点创建分支快照，返回分支 ID"""
         graph = self.get_graph(conversation_id)
         nodes = graph.get("nodes", [])
@@ -420,7 +480,6 @@ class PlotGraphManager:
         graph = self.get_graph(conversation_id)
         nodes = graph.get("nodes", [])
         edges = graph.get("edges", [])
-        choices = graph.get("choices", [])
 
         if not nodes:
             return []
@@ -472,7 +531,7 @@ class PlotGraphManager:
         ]
         nodes.sort(key=lambda n: n.created_at or "")
         by_id = {n.id: n for n in nodes}
-        parent_of: Dict[str, str] = {}
+        parent_of: dict[str, str] = {}
         for n in nodes:
             if n.parent_node_id and n.parent_node_id in by_id:
                 parent_of[n.id] = n.parent_node_id
@@ -484,7 +543,7 @@ class PlotGraphManager:
             if n.id not in parent_of and prev is not None:
                 parent_of[n.id] = prev.id
             prev = n
-        child_map: Dict[str, list] = {}
+        child_map: dict[str, list] = {}
         for child, parent in parent_of.items():
             child_map.setdefault(parent, []).append(child)
         return by_id, parent_of, child_map
@@ -495,7 +554,8 @@ class PlotGraphManager:
         若未显式设置，回退为最新创建的节点。
         """
         active = self._active.get(conversation_id, "")
-        if active and active in self._nodes:
+        active_node = self._nodes.get(active)
+        if active_node and active_node.conversation_id == conversation_id:
             return active
         latest = self.get_latest_node(conversation_id)
         return latest.id if latest else ""
@@ -508,7 +568,7 @@ class PlotGraphManager:
         self._save()
         return True
 
-    def get_children(self, conversation_id: str, node_id: str) -> List[PlotNode]:
+    def get_children(self, conversation_id: str, node_id: str) -> list[PlotNode]:
         """返回某节点的直接子节点（按创建时间排序）。"""
         _, _, child_map = self._build_parent_map(conversation_id)
         children = [
@@ -518,12 +578,12 @@ class PlotGraphManager:
         children.sort(key=lambda n: n.created_at or "")
         return children
 
-    def path_to_node(self, conversation_id: str, node_id: str) -> List[PlotNode]:
+    def path_to_node(self, conversation_id: str, node_id: str) -> list[PlotNode]:
         """返回从根到指定节点的节点路径（含该节点）。"""
         by_id, parent_of, _ = self._build_parent_map(conversation_id)
         if node_id not in by_id:
             return []
-        path: List[PlotNode] = []
+        path: list[PlotNode] = []
         cur = node_id
         guard = set()
         while cur and cur in by_id and cur not in guard:
@@ -538,13 +598,13 @@ class PlotGraphManager:
         conversation_id: str,
         node_id: str,
         system_prompt: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """物化从根到 node_id 的完整消息列表。
 
         缺少消息快照的历史节点用 title/summary 兜底，保证不报错。
         """
         path = self.path_to_node(conversation_id, node_id)
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         for node in path:
@@ -575,7 +635,7 @@ class PlotGraphManager:
         self,
         choice_id: str,
         new_node: PlotNode,
-    ) -> Optional[PlotNode]:
+    ) -> PlotNode | None:
         """从某选择创建一条新分支：
 
         允许同一父节点存在多个分支（每个已选 choice 一条边）。
@@ -698,7 +758,7 @@ class PlotGraphManager:
             return
 
         try:
-            with open(self._graphs_file, "r", encoding="utf-8") as f:
+            with open(self._graphs_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             for nid, ndata in data.get("nodes", {}).items():
@@ -719,9 +779,11 @@ class PlotGraphManager:
             _log.error("[PlotGraphManager] load failed: %s", e)
 
 
-def get_plot_graph_manager(data_dir: str = "data/web") -> PlotGraphManager:
+def get_plot_graph_manager(data_dir: str = "data/web", event_bus=None) -> PlotGraphManager:
     """获取 PlotGraphManager 单例。"""
     global _plot_graph_manager
     if _plot_graph_manager is None:
         _plot_graph_manager = PlotGraphManager(data_dir=data_dir)
+    if event_bus and _plot_graph_manager._event_bus is not event_bus:
+        _plot_graph_manager.set_event_bus(event_bus)
     return _plot_graph_manager
