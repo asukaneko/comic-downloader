@@ -17406,7 +17406,7 @@ def main(params):
                 this.plotBranchBusy = true;
                 try {
                     const sid = this.currentSession.id || this.currentSession.session_id;
-                    const res = await axios.post('/api/sessions/' + sid + '/archive-branch', { node_id: node.id });
+                    const res = await api.post('/api/sessions/' + sid + '/archive-branch', { node_id: node.id });
                     this.showToast(`已归档该分支（${res.data?.archived_count || 0} 条）`, 'success');
                     if (typeof this.loadSessions === 'function') this.loadSessions();
                 } catch (e) {
@@ -17504,7 +17504,7 @@ def main(params):
                 if (characterId) {
                     // Fetch character state
                     try {
-                        const stateRes = await axios.get(`/api/characters/${encodeURIComponent(characterId)}/state`, {
+                        const stateRes = await api.get(`/api/characters/${encodeURIComponent(characterId)}/state`, {
                             params: { scope_id: sid }
                         });
                         if (stateRes.data) {
@@ -17518,7 +17518,7 @@ def main(params):
 
                     // Fetch relationship
                     try {
-                        const relRes = await axios.get(`/api/characters/${encodeURIComponent(characterId)}/relationships`, {
+                        const relRes = await api.get(`/api/characters/${encodeURIComponent(characterId)}/relationships`, {
                             params: { target_id: targetId }
                         });
                         if (relRes.data) {
@@ -17672,7 +17672,7 @@ def main(params):
 
     async loadHookList() {
         try {
-            const res = await axios.get('/api/hooks');
+            const res = await api.get('/api/hooks');
             this.hookList = (res.data && res.data.hooks) || [];
         } catch (e) {
             console.error('loadHookList:', e);
@@ -17717,7 +17717,7 @@ def main(params):
     async loadReviewEvents() {
         try {
             const domain = this.reviewEventDomain || '';
-            const res = await axios.get('/api/review/event-stream', { params: { domain, limit: 100 } });
+            const res = await api.get('/api/review/event-stream', { params: { domain, limit: 100 } });
             this.reviewEvents = (res.data && res.data.events) || [];
         } catch (e) {
             console.error('loadReviewEvents:', e);
@@ -17726,7 +17726,7 @@ def main(params):
 
     async loadReviewLogs() {
         try {
-            const res = await axios.get('/api/review/logs', { params: { limit: 50 } });
+            const res = await api.get('/api/review/logs', { params: { limit: 50 } });
             this.reviewLogs = (res.data && res.data.logs) || [];
         } catch (e) {
             console.error('loadReviewLogs:', e);
@@ -17737,7 +17737,7 @@ def main(params):
         try {
             const params = {};
             if (this.reviewMemFsCharId) params.character_id = this.reviewMemFsCharId;
-            const res = await axios.get('/api/review/memory-fs', { params });
+            const res = await api.get('/api/review/memory-fs', { params });
             this.memoryFSFiles = (res.data && res.data.files) || [];
         } catch (e) {
             console.error('loadMemoryFS:', e);
@@ -17746,7 +17746,7 @@ def main(params):
 
     async toggleHook(hookId) {
         try {
-            await axios.post('/api/hooks/' + hookId + '/toggle');
+            await api.post('/api/hooks/' + hookId + '/toggle');
             await this.loadHookList();
         } catch (e) {
             console.error('toggleHook:', e);
@@ -17765,7 +17765,7 @@ def main(params):
             danger: true,
             onConfirm: async () => {
                 try {
-                    await axios.delete('/api/hooks/' + hookId);
+                    await api.delete('/api/hooks/' + hookId);
                     await this.loadHookList();
                 } catch (e) {
                     console.error('deleteHook:', e);
@@ -17918,9 +17918,9 @@ def main(params):
         }
         try {
             if (this.editingHookId) {
-                await axios.put('/api/hooks/' + this.editingHookId, payload);
+                await api.put('/api/hooks/' + this.editingHookId, payload);
             } else {
-                await axios.post('/api/hooks', payload);
+                await api.post('/api/hooks', payload);
             }
             this.showCreateHookModal = false;
             this.editingHookId = null;
