@@ -462,6 +462,7 @@ class CharacterRuntime:
         # MemoryFS 三层必读注入（用户关系摘要 + 剧情摘要 + 日记）
         if identity:
             self._inject_memory_fs(stack, identity, chat_request)
+            self._inject_self_correction(stack, identity, chat_request)
 
         # 合成最终提示词
         return stack.render()
@@ -565,6 +566,26 @@ class CharacterRuntime:
         except Exception as exc:
             _log.debug("[MemoryFS] inject failed: %s", exc)
 
+    def _inject_self_correction(self, stack, identity, chat_request) -> None:
+        """注入上一轮 Review 生成的自我修正提示（一次性消费，非阻塞）。"""
+        try:
+            from nbot.character.prompt_stack import PromptStack
+            from nbot.review.self_correction import consume_hint
+
+            conv_id = getattr(chat_request, "conversation_id", "") or ""
+            hint = consume_hint(identity.character_id, identity.target_id, conv_id)
+            if hint:
+                stack.add(
+                    key="self_correction",
+                    content=f"## 自我修正提示\n{hint}",
+                    priority=PromptStack.PRIORITY_BEHAVIOR + 1,
+                    scope="turn",
+                )
+                _log.debug("[SelfCorrection] injected hint for char=%s user=%s",
+                           identity.character_id, identity.target_id)
+        except Exception as exc:
+            _log.debug("[SelfCorrection] inject failed: %s", exc)
+
     def _run_review(self, chat_request, result, turn_context, identity, new_relationship) -> None:
         """执行 Review Pipeline，非阻塞，异常不影响主流程。"""
         try:
@@ -606,13 +627,26 @@ class CharacterRuntime:
             if not output.skipped:
                 self._emit_hook(_E.CHARACTER_MEMORY_REVIEWED, identity, output.to_dict(),
                                 chat_request=chat_request)
-                # Review 结果同步写入 MemoryFS
-                self._sync_review_to_memory_fs(inp, output)
                 # Review 关系变化写入真实关系状态
                 self._apply_review_relationship_delta(
                     output, new_relationship, identity, chat_request)
+
+            # MemoryFS 同步不受 skipped 限制——日记每轮都写，记忆按条件写
+            self._sync_review_to_memory_fs(inp, output)
+
+            # 根据评分生成下一轮自我修正提示并缓存
+            self._store_self_correction_hint(inp, output)
         except Exception as exc:
             _log.debug("[CharacterRuntime] review pipeline failed: %s", exc)
+
+    def _store_self_correction_hint(self, inp, output) -> None:
+        """根据 Review 评分生成自我修正提示，缓存供下一轮 before_turn 注入。"""
+        try:
+            from nbot.review.self_correction import build_correction_hint, store_hint
+            hint = build_correction_hint(output.scores)
+            store_hint(inp.character_id, inp.user_id, inp.conversation_id, hint)
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] store self-correction hint failed: %s", exc)
 
     def _sync_review_to_memory_fs(self, inp, output) -> None:
         """将 Review 输出同步写入 MemoryFS 逻辑路径（非阻塞）。"""
@@ -626,7 +660,7 @@ class CharacterRuntime:
             # 1. 写入用户关系摘要（有记忆条目时更新）
             if output.should_write_memory and output.memory_items:
                 for item in output.memory_items:
-                    if item.mem_type in ("relationship", "long") and user_id:
+                    if user_id:
                         existing = mfs.read_user(char_id, user_id)
                         new_content = item.content
                         mfs.write(

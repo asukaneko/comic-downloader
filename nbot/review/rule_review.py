@@ -145,8 +145,25 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
         risk=0.0,
     )
 
+    # 角色体验质量评分：复用 AutoState 的 LLM 评估结果
+    # （character_fidelity / immersion / world_consistency / risk）
+    # 规则引擎无法靠关键词判断这些语义维度，从 AutoState 缓存读取最近一次评分
+    try:
+        from nbot.character.auto_state import get_quality_scores
+        quality = get_quality_scores(inp.character_id, inp.user_id, inp.conversation_id)
+        if quality:
+            output.scores.character_fidelity = quality.get("character_fidelity", 0.0)
+            output.scores.immersion = quality.get("immersion", 0.0)
+            output.scores.world_consistency = quality.get("world_consistency", 0.0)
+            output.scores.risk = quality.get("risk", 0.0)
+    except Exception:
+        pass
+
     # 普通闲聊且无剧情选择 → 标记 skipped，减少日志噪音
-    if not choice_level and memory_value < 0.3 and time_level not in ("days", "long_absence"):
+    # 但如果需要写入记忆或有关系变化，则不跳过
+    if (not choice_level and memory_value < 0.3
+            and time_level not in ("days", "long_absence")
+            and not output.should_write_memory):
         output.skipped = True
 
     return output

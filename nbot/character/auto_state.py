@@ -16,6 +16,60 @@ _STATE_TURN_BUFFER: Dict[str, List[Dict[str, str]]] = {}
 _STATE_TURN_INTERVAL = 2
 _STATE_TURN_WINDOW = 5
 
+# 角色体验质量评分缓存（由 AutoState 的 LLM 评估顺带产出，供 Review Pipeline 复用）
+# key: "{character_id}:{target_id}:{conversation_id}" -> {"character_fidelity": float, ...}
+_QUALITY_SCORE_CACHE: Dict[str, Dict[str, float]] = {}
+_QUALITY_SCORE_FIELDS = ("character_fidelity", "immersion", "world_consistency", "risk")
+
+
+def get_quality_scores(
+    character_id: str,
+    target_id: str = "",
+    conversation_id: str = "",
+) -> Dict[str, float]:
+    """读取 AutoState 顺带评估出的角色体验质量评分（最近一次）。
+
+    优先精确匹配 character:target:conversation，退而求其次只按 character_id 匹配，
+    使非整除轮（AutoState 未运行的轮）也能拿到最近一次评分。
+    返回空 dict 表示尚无评分。
+    """
+    if not character_id:
+        return {}
+    exact = _quality_key(character_id, target_id, conversation_id)
+    if exact in _QUALITY_SCORE_CACHE:
+        return dict(_QUALITY_SCORE_CACHE[exact])
+    prefix = f"{character_id}:"
+    for key in reversed(list(_QUALITY_SCORE_CACHE.keys())):
+        if key.startswith(prefix):
+            return dict(_QUALITY_SCORE_CACHE[key])
+    return {}
+
+
+def _quality_key(character_id: str, target_id: str, conversation_id: str) -> str:
+    return ":".join(str(p or "") for p in (character_id, target_id, conversation_id))
+
+
+def _store_quality_scores(
+    character_id: str,
+    target_id: str,
+    conversation_id: str,
+    raw_scores: Any,
+) -> None:
+    """从 LLM 评估结果中提取质量评分并缓存（限制缓存条目数防止内存膨胀）。"""
+    if not character_id or not isinstance(raw_scores, dict):
+        return
+    cleaned: Dict[str, float] = {}
+    for field_name in _QUALITY_SCORE_FIELDS:
+        if field_name in raw_scores:
+            cleaned[field_name] = _clamp_float(raw_scores.get(field_name), 0.0, 0.0, 1.0)
+    if not cleaned:
+        return
+    key = _quality_key(character_id, target_id, conversation_id)
+    # 防止无限膨胀：超过 200 条时丢弃最早的
+    if len(_QUALITY_SCORE_CACHE) >= 200 and key not in _QUALITY_SCORE_CACHE:
+        _QUALITY_SCORE_CACHE.pop(next(iter(_QUALITY_SCORE_CACHE)), None)
+    _QUALITY_SCORE_CACHE[key] = cleaned
+
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
 RELATIONSHIP_FIELDS = (
     "affection",
@@ -180,9 +234,17 @@ def _call_state_model(
         '    "affection": integer, "trust": integer, "familiarity": integer,\n'
         '    "dependency": integer, "security": integer, "jealousy": integer\n'
         "  },\n"
+        '  "quality_scores": {\n'
+        '    "character_fidelity": number 0-1 (how in-character the replies stayed),\n'
+        '    "immersion": number 0-1 (how immersive / emotionally engaging the exchange was),\n'
+        '    "world_consistency": number 0-1 (how consistent with the established setting),\n'
+        '    "risk": number 0-1 (risk of unsafe / contradictory / setting-breaking content; 0 = safe)\n'
+        "  },\n"
         '  "reason": "brief reason"\n'
         "}\n"
         "Use 0 for relationship fields that should not change. The relationship range is 0-100. "
+        "For quality_scores, judge the character's own replies in the conversation; "
+        "use 1.0 for excellent, around 0.5 for acceptable, lower for breaks of character or setting. "
         "Energy should recover when the user helps the character rest, eat, relax, feel safe, "
         "or receive affection/care; ordinary friendly comfort may be positive even without a major event."
     )
@@ -359,6 +421,14 @@ def update_state_from_recent_turns(
     _STATE_TURN_COUNTERS[key] = 0
     if not adjustment:
         return state, relationship, False
+
+    # 缓存角色体验质量评分，供 Review Pipeline 复用
+    _store_quality_scores(
+        str(character_id).strip(),
+        str(target_id).strip(),
+        conversation_id,
+        adjustment.get("quality_scores"),
+    )
 
     new_state, new_relationship = _apply_ai_adjustment(state, relationship, adjustment)
     _log.info(

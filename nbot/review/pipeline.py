@@ -78,6 +78,8 @@ class ReviewPipeline:
             if output:
                 payload["skipped"] = output.skipped
                 payload["should_write_memory"] = output.should_write_memory
+                # 完整 review 输出，供 UI 展示详情
+                payload["review_output"] = output.to_dict()
             evt = RuntimeEvent(
                 type=event_type,
                 source="review_pipeline",

@@ -4141,11 +4141,14 @@
                             <!-- Review 日志 -->
                             <div v-if="reviewTab === 'review'" class="rv-list">
                                 <div v-if="reviewLogs.length === 0" class="rv-empty">暂无 Review 日志</div>
-                                <div v-for="log in reviewLogs" :key="log.id" class="rv-log-item">
+                                <div v-for="log in reviewLogs" :key="log.id" class="rv-log-item"
+                                     :class="{ 'rv-log-clickable': log.type === 'review.finished', 'rv-log-expanded': reviewSelectedLog === log.id }"
+                                     @click="log.type === 'review.finished' && (reviewSelectedLog = reviewSelectedLog === log.id ? '' : log.id)">
                                     <div class="rv-log-header">
                                         <div class="rv-log-title">
                                             <span class="rv-log-type" :class="log.type === 'review.finished' ? 'rv-finished' : 'rv-started'">{{ log.type }}</span>
                                             <span class="rv-event-context" v-if="formatReviewContext(log)">{{ formatReviewContext(log) }}</span>
+                                            <i v-if="log.type === 'review.finished'" class="fas fa-chevron-down rv-expand-icon" :class="{ 'rv-expand-icon-open': reviewSelectedLog === log.id }"></i>
                                         </div>
                                         <span class="rv-log-time" :title="formatReviewFullTime(log.created_at)">{{ formatReviewTime(log.created_at) }}</span>
                                     </div>
@@ -4154,6 +4157,49 @@
                                             {{ log.payload.should_write_memory ? '写入记忆' : '跳过记忆' }}
                                         </span>
                                         <span v-if="log.payload.skipped" class="rv-badge-skip">普通闲聊</span>
+                                    </div>
+                                    <!-- Review 详情展开 -->
+                                    <div v-if="reviewSelectedLog === log.id && log.payload && log.payload.review_output" class="rv-detail">
+                                        <div v-if="log.payload.review_output.scores" class="rv-detail-section">
+                                            <div class="rv-detail-title"><i class="fas fa-chart-bar"></i> 评分</div>
+                                            <div class="rv-scores-grid">
+                                                <div v-for="(val, key) in log.payload.review_output.scores" :key="key" class="rv-score-item">
+                                                    <span class="rv-score-label">{{ {character_fidelity:'角色一致性',immersion:'沉浸感',relationship_progress:'关系推进',story_progress:'剧情推进',memory_value:'记忆价值',world_consistency:'世界一致性',user_engagement:'用户互动',risk:'风险'}[key] || key }}</span>
+                                                    <div class="rv-score-bar"><div class="rv-score-fill" :style="{width: (val * 100) + '%'}"></div></div>
+                                                    <span class="rv-score-val">{{ (val * 100).toFixed(0) }}%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-if="log.payload.review_output.relationship_delta" class="rv-detail-section">
+                                            <div class="rv-detail-title"><i class="fas fa-heart"></i> 关系变化</div>
+                                            <div class="rv-delta-list">
+                                                <template v-for="(val, key) in log.payload.review_output.relationship_delta" :key="key">
+                                                    <span v-if="val && key !== 'reason'" class="rv-delta-badge"
+                                                          :class="val > 0 ? 'rv-delta-pos' : 'rv-delta-neg'">
+                                                        {{ {affection:'好感',trust:'信任',familiarity:'熟悉',dependency:'依赖',security:'安心',jealousy:'嫉妒'}[key] || key }} {{ val > 0 ? '+' : '' }}{{ val }}
+                                                    </span>
+                                                </template>
+                                            </div>
+                                            <div v-if="log.payload.review_output.relationship_delta.reason" class="rv-delta-reason">{{ log.payload.review_output.relationship_delta.reason }}</div>
+                                        </div>
+                                        <div v-if="log.payload.review_output.memory_items && log.payload.review_output.memory_items.length" class="rv-detail-section">
+                                            <div class="rv-detail-title"><i class="fas fa-brain"></i> 记忆条目</div>
+                                            <div v-for="(mi, idx) in log.payload.review_output.memory_items" :key="idx" class="rv-memory-item">
+                                                <div class="rv-memory-title">{{ mi.title }} <span class="rv-memory-type">{{ mi.mem_type }}</span></div>
+                                                <div class="rv-memory-content">{{ mi.content }}</div>
+                                            </div>
+                                        </div>
+                                        <div v-if="log.payload.review_output.plot_update && log.payload.review_output.plot_update.should_create_node" class="rv-detail-section">
+                                            <div class="rv-detail-title"><i class="fas fa-book"></i> 剧情更新</div>
+                                            <div class="rv-plot-info">
+                                                <span class="rv-badge-yes">{{ log.payload.review_output.plot_update.level }}</span>
+                                                <span>{{ log.payload.review_output.plot_update.title }}</span>
+                                            </div>
+                                        </div>
+                                        <div v-if="log.payload.review_output.world_book_update && log.payload.review_output.world_book_update.should_update" class="rv-detail-section">
+                                            <div class="rv-detail-title"><i class="fas fa-globe"></i> 世界书更新</div>
+                                            <div>{{ log.payload.review_output.world_book_update.reason }}</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -12078,6 +12124,7 @@
                     reviewEventDomain: '',
                     reviewMemFsCharId: '',
                     reviewMemFsSelected: '',
+                    reviewSelectedLog: '',
                     newHook: {
                         name: '', event: '', scope: 'global', priority: 100,
                         trigger_mode: 'always',
