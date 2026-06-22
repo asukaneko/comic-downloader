@@ -451,7 +451,6 @@ class CharacterRuntime:
             memories=memories,
             plan=plan,
         )
-        self._inject_real_time_context(stack, real_time_context)
 
         # 注入世界书
         _log.debug("[WorldBook] _build_prompt: entries=%d", len(world_book_entries) if world_book_entries else 0)
@@ -459,13 +458,31 @@ class CharacterRuntime:
             from nbot.character.world_book_injector import inject_world_book
             inject_world_book(stack, world_book_entries)
 
-        # MemoryFS 三层必读注入（用户关系摘要 + 剧情摘要 + 日记）
-        if identity:
-            self._inject_memory_fs(stack, identity, chat_request)
-            self._inject_self_correction(stack, identity, chat_request)
+        self.inject_prompt_extras(
+            stack,
+            identity=identity,
+            chat_request=chat_request,
+            real_time_context=real_time_context,
+        )
 
         # 合成最终提示词
         return stack.render()
+
+    def inject_prompt_extras(
+        self,
+        stack,
+        *,
+        identity=None,
+        chat_request=None,
+        real_time_context=None,
+    ) -> None:
+        """Inject runtime-only prompt extras into an external PromptStack."""
+        self._inject_real_time_context(stack, real_time_context)
+        if identity and chat_request:
+            # MemoryFS 三层必读注入（用户关系摘要 + 剧情摘要 + 日记）
+            self._inject_memory_fs(stack, identity, chat_request)
+            self._inject_self_correction(stack, identity, chat_request)
+            self._inject_offline_plot_update(stack, identity, chat_request)
 
     def _build_real_time_context(self, state, chat_request) -> dict:
         try:
@@ -586,6 +603,66 @@ class CharacterRuntime:
         except Exception as exc:
             _log.debug("[SelfCorrection] inject failed: %s", exc)
 
+    def _inject_offline_plot_update(self, stack, identity, chat_request) -> None:
+        """注入上一轮 Review 生成的现实时间剧情推进（一次性消费，非阻塞）。"""
+        try:
+            from nbot.character.prompt_stack import PromptStack
+            from nbot.review.models import OfflinePlotUpdate
+            from nbot.review.offline_plot import consume_update
+
+            conv_id = getattr(chat_request, "conversation_id", "") or ""
+            metadata = getattr(chat_request, "metadata", None)
+            if not isinstance(metadata, dict):
+                metadata = {}
+                chat_request.metadata = metadata
+            update = metadata.get("_offline_plot_update")
+            if isinstance(update, dict):
+                update = OfflinePlotUpdate(**update)
+            if not update:
+                update = self._build_current_offline_plot_update(identity, chat_request)
+                if update:
+                    metadata["_offline_plot_update"] = update
+                    metadata["_offline_plot_update_current_turn"] = True
+            if not update:
+                update = consume_update(identity.character_id, identity.target_id, conv_id)
+                if update:
+                    metadata["_offline_plot_update"] = update
+            if update and update.should_inject:
+                stack.add(
+                    key="plot.real_time_sync",
+                    content=update.prompt_text or update.summary,
+                    priority=PromptStack.PRIORITY_REACTION_PLAN + 1,
+                    scope="turn",
+                )
+                _log.debug("[OfflinePlot] injected update for char=%s user=%s",
+                           identity.character_id, identity.target_id)
+        except Exception as exc:
+            _log.debug("[OfflinePlot] inject failed: %s", exc)
+
+    def _build_current_offline_plot_update(self, identity, chat_request):
+        """Generate the current-turn real-time plot prompt from review rules."""
+        try:
+            metadata = getattr(chat_request, "metadata", {}) or {}
+            if not metadata.get("plot_mode") or not metadata.get("plot_real_time_sync"):
+                return None
+            from nbot.review.models import ReviewInput
+            from nbot.review.rule_review import build_offline_plot_update
+
+            inp = ReviewInput(
+                conversation_id=getattr(chat_request, "conversation_id", "") or "",
+                character_id=identity.character_id,
+                user_id=identity.target_id,
+                group_id=getattr(chat_request, "group_id", "") or "",
+                user_message=getattr(chat_request, "content", "") or "",
+                real_time_context=metadata.get("real_time_context") or {},
+                plot_mode=True,
+                plot_real_time_sync=True,
+            )
+            return build_offline_plot_update(inp)
+        except Exception as exc:
+            _log.debug("[OfflinePlot] current-turn update build failed: %s", exc)
+            return None
+
     def _run_review(self, chat_request, result, turn_context, identity, new_relationship) -> None:
         """执行 Review Pipeline，非阻塞，异常不影响主流程。"""
         try:
@@ -617,6 +694,8 @@ class CharacterRuntime:
                 selected_choice=selected_choice,
                 relationship_state=rel_state,
                 real_time_context=metadata.get("real_time_context") or {},
+                plot_mode=bool(metadata.get("plot_mode")),
+                plot_real_time_sync=bool(metadata.get("plot_real_time_sync")),
             )
 
             # 注入 event_bus 使 review.started / review.finished 事件进入事件流
@@ -636,8 +715,25 @@ class CharacterRuntime:
 
             # 根据评分生成下一轮自我修正提示并缓存
             self._store_self_correction_hint(inp, output)
+            self._store_offline_plot_update(inp, output, metadata)
         except Exception as exc:
             _log.debug("[CharacterRuntime] review pipeline failed: %s", exc)
+
+    def _store_offline_plot_update(self, inp, output, metadata=None) -> None:
+        """缓存 Review 生成的现实时间剧情推进，供下一轮 PromptStack 注入。"""
+        try:
+            from nbot.review.offline_plot import store_update
+
+            if isinstance(metadata, dict) and metadata.get("_offline_plot_update_current_turn"):
+                return
+            store_update(
+                inp.character_id,
+                inp.user_id,
+                inp.conversation_id,
+                getattr(output, "offline_plot_update", None),
+            )
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] store offline plot update failed: %s", exc)
 
     def _store_self_correction_hint(self, inp, output) -> None:
         """根据 Review 评分生成自我修正提示，缓存供下一轮 before_turn 注入。"""

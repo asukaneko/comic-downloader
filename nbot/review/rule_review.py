@@ -11,6 +11,7 @@ import re
 
 from nbot.review.models import (
     MemoryItem,
+    OfflinePlotUpdate,
     PlotUpdate,
     RelationshipDelta,
     ReviewInput,
@@ -31,6 +32,12 @@ _AFFECTION_UP_KEYWORDS = re.compile(
 _AFFECTION_DOWN_KEYWORDS = re.compile(
     r"讨厌|烦死|滚|生气|失望|算了|拜拜|再见|冷漠|无聊", re.IGNORECASE
 )
+
+_OFFLINE_PLOT_LEVELS = {
+    "same_day_gap": "same_day",
+    "days": "days",
+    "long_absence": "long_absence",
+}
 
 
 def run_rule_review(inp: ReviewInput) -> ReviewOutput:
@@ -129,6 +136,8 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
             title=choice.get("text", "")[:30],
         )
 
+    output.offline_plot_update = _build_offline_plot_update(inp, time_level, time_label)
+
     # --- 世界书更新（仅 turning_point/ending 触发） ---
     if choice_level in ("turning_point", "ending"):
         output.world_book_update = WorldBookUpdate(
@@ -163,10 +172,82 @@ def run_rule_review(inp: ReviewInput) -> ReviewOutput:
     # 但如果需要写入记忆或有关系变化，则不跳过
     if (not choice_level and memory_value < 0.3
             and time_level not in ("days", "long_absence")
+            and not output.offline_plot_update
             and not output.should_write_memory):
         output.skipped = True
 
     return output
+
+
+def build_offline_plot_update(inp: ReviewInput) -> OfflinePlotUpdate | None:
+    """Build the real-time synchronized plot update used by review and prompt injection."""
+    time_ctx = inp.real_time_context or {}
+    return _build_offline_plot_update(
+        inp,
+        str(time_ctx.get("continuity_level") or ""),
+        str(time_ctx.get("elapsed_label") or ""),
+    )
+
+
+def _build_offline_plot_update(
+    inp: ReviewInput,
+    time_level: str,
+    time_label: str,
+) -> OfflinePlotUpdate | None:
+    if not getattr(inp, "plot_mode", False):
+        return None
+    if not getattr(inp, "plot_real_time_sync", False):
+        return None
+    level = _OFFLINE_PLOT_LEVELS.get(time_level)
+    if not level or not time_label:
+        return None
+
+    if level == "same_day":
+        activity = (
+            f"角色在现实间隔 {time_label} 中延续了自己的日常节奏，"
+            "处理手边事务、休息或等待，情绪比上次互动时更沉淀。"
+        )
+        world_changes = [
+            "当前场景中的时间自然流动，环境和氛围发生轻微变化。",
+            "未完成的剧情线保持连续，但可以向下一小步推进。",
+        ]
+    elif level == "days":
+        activity = (
+            f"角色在现实间隔 {time_label} 中按自己的生活轨迹度过了几天，"
+            "可能完成日程、处理私人事务、休息，并在重新见到用户时带着时间流逝后的反应。"
+        )
+        world_changes = [
+            "世界中的日常事件、环境状态和未完成安排按既有设定自然推进。",
+            "剧情可以承认角色独立生活过一段时间，但不要编造用户参与的离线经历。",
+        ]
+    else:
+        activity = (
+            f"角色在现实间隔 {time_label} 中经历了较长时间的独立生活，"
+            "生活节奏、情绪状态和对用户的等待感都可以出现阶段性变化。"
+        )
+        world_changes = [
+            "世界时间已经明显前进，场景、关系和悬而未决的事件可以出现阶段性变化。",
+            "允许主动推进剧情，但具体事件必须贴合角色卡、世界书和已有剧情，不要凭空制造重大事实。",
+        ]
+
+    summary = f"现实时间同步：离线上经过 {time_label}，角色和世界按既有设定向前推进。"
+    prompt_lines = [
+        summary,
+        f"角色这段时间的生活：{activity}",
+        "世界变化：",
+        *[f"- {item}" for item in world_changes],
+        "本轮承接要求：可以主动体现时间流逝后的生活痕迹和剧情进展；"
+        "不要声称用户参与了离线期间的事件；重大变化要保持含蓄，等待对话确认。",
+    ]
+    return OfflinePlotUpdate(
+        should_inject=True,
+        level=level,
+        elapsed_label=time_label,
+        character_activity=activity,
+        world_changes=world_changes,
+        summary=summary,
+        prompt_text="\n".join(prompt_lines),
+    )
 
 
 def _calc_memory_value(inp: ReviewInput, choice_level: str) -> float:

@@ -80,6 +80,19 @@ class WorldBookUpdate:
 
 
 @dataclass
+class OfflinePlotUpdate:
+    """现实时间同步产生的离线剧情推进。"""
+
+    should_inject: bool = False
+    level: str = "none"           # same_day / days / long_absence
+    elapsed_label: str = ""
+    character_activity: str = ""
+    world_changes: list[str] = field(default_factory=list)
+    summary: str = ""
+    prompt_text: str = ""
+
+
+@dataclass
 class ReviewInput:
     """Review Pipeline 输入"""
     conversation_id: str = ""
@@ -95,6 +108,8 @@ class ReviewInput:
     character_state: dict[str, Any] = field(default_factory=dict)
     world_context: dict[str, Any] = field(default_factory=dict)
     real_time_context: dict[str, Any] = field(default_factory=dict)
+    plot_mode: bool = False
+    plot_real_time_sync: bool = False
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
@@ -105,6 +120,7 @@ class ReviewOutput:
     memory_items: list[MemoryItem] = field(default_factory=list)
     relationship_delta: RelationshipDelta | None = None
     plot_update: PlotUpdate | None = None
+    offline_plot_update: OfflinePlotUpdate | None = None
     world_book_update: WorldBookUpdate | None = None
     scores: ReviewScore | None = None
     source: str = "rule"          # rule / llm
@@ -139,6 +155,15 @@ class ReviewOutput:
                 "summary": self.plot_update.summary,
                 "title": self.plot_update.title,
             } if self.plot_update else None,
+            "offline_plot_update": {
+                "should_inject": self.offline_plot_update.should_inject,
+                "level": self.offline_plot_update.level,
+                "elapsed_label": self.offline_plot_update.elapsed_label,
+                "character_activity": self.offline_plot_update.character_activity,
+                "world_changes": list(self.offline_plot_update.world_changes),
+                "summary": self.offline_plot_update.summary,
+                "prompt_text": self.offline_plot_update.prompt_text,
+            } if self.offline_plot_update else None,
             "world_book_update": {
                 "should_update": self.world_book_update.should_update,
                 "reason": self.world_book_update.reason,

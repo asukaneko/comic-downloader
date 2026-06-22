@@ -910,6 +910,7 @@ class AIPipeline:
 
         # 角色运行时 before_turn hook
         self._phase_character_runtime_before_turn(ctx, callbacks)
+        self._phase_real_time_prompt_fallback(ctx, messages_raw)
         if ctx.character_turn and getattr(ctx.character_turn, "memories", None):
             ctx.prompt_stack.remove("character.memories_legacy")
 
@@ -1396,12 +1397,108 @@ class AIPipeline:
     # 角色运行时 hooks
     # ------------------------------------------------------------------
 
+    def _phase_real_time_prompt_fallback(
+        self,
+        ctx: PipelineContext,
+        messages_raw: list[dict[str, Any]],
+    ) -> None:
+        """Inject real-time continuity if CharacterRuntime did not add it."""
+        if ctx.metadata.get("session_mode") == "agent":
+            return
+        if ctx.prompt_stack.get("real_time.continuity"):
+            return
+        try:
+            from nbot.character.prompt_stack import PromptStack
+            from nbot.review.models import ReviewInput
+            from nbot.review.rule_review import build_offline_plot_update
+            from nbot.review.time_context import (
+                build_current_real_time_context,
+                format_real_time_prompt_context,
+            )
+
+            previous_turn_time = self._extract_previous_message_time(
+                messages_raw,
+                getattr(ctx.chat_request, "content", "") or "",
+            )
+            real_time_context = build_current_real_time_context(previous_turn_time)
+            ctx.metadata["real_time_context"] = real_time_context
+            request_metadata = getattr(ctx.chat_request, "metadata", None)
+            if not isinstance(request_metadata, dict):
+                request_metadata = {}
+                ctx.chat_request.metadata = request_metadata
+            request_metadata["real_time_context"] = real_time_context
+
+            ctx.prompt_stack.add(
+                key="real_time.continuity",
+                content=format_real_time_prompt_context(real_time_context),
+                priority=PromptStack.PRIORITY_CHARACTER_STATE + 1,
+                scope="turn",
+            )
+
+            if (
+                ctx.metadata.get("plot_mode")
+                and ctx.metadata.get("plot_real_time_sync")
+                and not ctx.prompt_stack.get("plot.real_time_sync")
+            ):
+                update = build_offline_plot_update(
+                    ReviewInput(
+                        conversation_id=getattr(ctx.chat_request, "conversation_id", "") or "",
+                        character_id=str(ctx.metadata.get("character_id") or ""),
+                        user_id=getattr(ctx.chat_request, "user_id", "") or "",
+                        user_message=getattr(ctx.chat_request, "content", "") or "",
+                        real_time_context=real_time_context,
+                        plot_mode=True,
+                        plot_real_time_sync=True,
+                    )
+                )
+                if update and update.should_inject:
+                    ctx.prompt_stack.add(
+                        key="plot.real_time_sync",
+                        content=update.prompt_text or update.summary,
+                        priority=PromptStack.PRIORITY_REACTION_PLAN + 1,
+                        scope="turn",
+                    )
+        except Exception as exc:
+            _log.debug("[AIPipeline] real-time prompt fallback failed: %s", exc)
+
+    @staticmethod
+    def _extract_previous_message_time(
+        messages: list[dict[str, Any]],
+        current_content: str,
+    ) -> str:
+        history = list(messages or [])
+        if history:
+            last = history[-1]
+            if (
+                isinstance(last, dict)
+                and last.get("role") == "user"
+                and str(last.get("content") or "") == current_content
+            ):
+                history = history[:-1]
+        for message in reversed(history):
+            if not isinstance(message, dict):
+                continue
+            timestamp = (
+                message.get("timestamp")
+                or message.get("created_at")
+                or message.get("time")
+            )
+            if timestamp:
+                return str(timestamp)
+        return ""
+
     def _phase_character_runtime_before_turn(
         self,
         ctx: PipelineContext,
         callbacks: PipelineCallbacks,
     ) -> None:
         """角色运行时 before_turn：读取状态、生成 ReactionPlan、注册 PromptStack 注入项"""
+        request_metadata = getattr(ctx.chat_request, "metadata", None)
+        if not isinstance(request_metadata, dict):
+            request_metadata = {}
+            ctx.chat_request.metadata = request_metadata
+        request_metadata.update(ctx.metadata)
+
         runtime = callbacks.get_character_runtime(ctx)
         identity = callbacks.get_character_context(ctx)
 
@@ -1493,6 +1590,10 @@ class AIPipeline:
 
             turn = runtime.before_turn(ctx.chat_request, identity, recent_messages=recent_messages)
             ctx.character_turn = turn
+            request_metadata = getattr(ctx.chat_request, "metadata", {}) or {}
+            ctx.metadata.update(request_metadata)
+            if request_metadata.get("real_time_context"):
+                ctx.metadata["real_time_context"] = request_metadata.get("real_time_context")
 
             from nbot.character.prompt_builder import build_character_injections
 
@@ -1509,6 +1610,14 @@ class AIPipeline:
             if turn.world_book_entries:
                 from nbot.character.world_book_injector import inject_world_book
                 inject_world_book(ctx.prompt_stack, turn.world_book_entries)
+
+            if hasattr(runtime, "inject_prompt_extras"):
+                runtime.inject_prompt_extras(
+                    ctx.prompt_stack,
+                    identity=identity,
+                    chat_request=ctx.chat_request,
+                    real_time_context=request_metadata.get("real_time_context"),
+                )
 
             _log.debug(
                 "[CharacterRuntime] before_turn executed: character=%s target=%s scope=%s "
@@ -1536,6 +1645,12 @@ class AIPipeline:
         """角色运行时 after_turn：更新情绪、关系、写入事件、抽取记忆"""
         runtime = callbacks.get_character_runtime(ctx)
         identity = callbacks.get_character_context(ctx)
+
+        request_metadata = getattr(ctx.chat_request, "metadata", None)
+        if not isinstance(request_metadata, dict):
+            request_metadata = {}
+            ctx.chat_request.metadata = request_metadata
+        request_metadata.update(ctx.metadata)
 
         if not runtime:
             _log.debug("[CharacterRuntime] after_turn skipped: runtime is None")

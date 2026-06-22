@@ -24,6 +24,7 @@ _DYNAMIC_SECTION_KEYS = (
     "character.memories",
     "character.memories_legacy",
     "real_time.continuity",
+    "plot.real_time_sync",
     "knowledge.rag",
     "world_book",
 )

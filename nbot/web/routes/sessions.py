@@ -718,6 +718,8 @@ def register_session_routes(app, server):
                     "character_runtime_snapshot": session.get("character_runtime_snapshot"),
                     "character_runtime_timeline": timeline,
                     "custom_prompts": session.get("custom_prompts", []),
+                    "plot_mode": bool(session.get("plot_mode")),
+                    "plot_real_time_sync": bool(session.get("plot_real_time_sync")),
                 }
             )
 
@@ -864,6 +866,8 @@ def register_session_routes(app, server):
             "tts_config": _normalize_tts_config(data.get("tts_config")),
             "character_runtime_timeline": [],
             "session_mode": data.get("session_mode", "character"),
+            "plot_mode": bool(data.get("plot_mode")),
+            "plot_real_time_sync": bool(data.get("plot_real_time_sync")),
         }
 
         # 群聊模式：附加群聊关联字段
@@ -1005,6 +1009,10 @@ def register_session_routes(app, server):
             )
         if "disabled_prompt_keys" in data:
             session["disabled_prompt_keys"] = data.get("disabled_prompt_keys") or []
+        if "plot_mode" in data:
+            session["plot_mode"] = bool(data.get("plot_mode"))
+        if "plot_real_time_sync" in data:
+            session["plot_real_time_sync"] = bool(data.get("plot_real_time_sync"))
         if "tts_config" in data:
             session["tts_config"] = _normalize_tts_config(data.get("tts_config"))
 

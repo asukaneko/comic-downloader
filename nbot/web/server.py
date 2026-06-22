@@ -3033,9 +3033,12 @@ class WebChatServer:
         else:
             metadata = dict(metadata)
         try:
-            session_plot_mode = bool((self.sessions.get(session_id) or {}).get("plot_mode"))
+            session_data = self.sessions.get(session_id) or {}
+            session_plot_mode = bool(session_data.get("plot_mode"))
             if session_plot_mode:
                 metadata.setdefault("plot_mode", True)
+                if session_data.get("plot_real_time_sync"):
+                    metadata.setdefault("plot_real_time_sync", True)
         except Exception:
             pass
         metadata["_gateway_trace_id"] = trace_id

@@ -2190,6 +2190,13 @@
                                                             <span class="file-menu-item-desc">启用剧情分支选择</span>
                                                         </div>
                                                     </div>
+                                                    <div v-if="plotMode" class="file-menu-item" @click="togglePlotRealTimeSync(); closeFileMenu();">
+                                                        <i class="fas fa-clock"></i>
+                                                        <div class="file-menu-item-info">
+                                                            <span class="file-menu-item-title">{{ plotRealTimeSync ? '关闭同步现实时间' : '同步现实时间' }}</span>
+                                                            <span class="file-menu-item-desc">按现实时间推进角色生活</span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <!-- 隐藏的文件输入 -->
                                                 <input type="file" ref="fileInput" @change="handleFileSelect" multiple accept="image/*,.pdf,.doc,.docx,.txt,.json,.xml" style="display: none;">
@@ -12101,6 +12108,7 @@
                     showChannelDropdown: false,
                     // 3.x Plot Mode
                     plotMode: false,
+                    plotRealTimeSync: false,
                     plotChoices: [],
                     plotChoicesLoading: false,
                     // 移动端：true=显示输入框，false=显示剧情选项（仅 ≤640px 生效）

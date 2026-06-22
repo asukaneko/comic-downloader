@@ -160,6 +160,8 @@ def _normalize_session_record(session_id, session):
         "custom_prompts": session.get("custom_prompts")
         if isinstance(session.get("custom_prompts"), list)
         else [],
+        "plot_mode": bool(session.get("plot_mode")),
+        "plot_real_time_sync": bool(session.get("plot_real_time_sync")),
     }
     if not normalized.get("character_id") and normalized.get("sender_name"):
         normalized["character_id"] = normalized["sender_name"]

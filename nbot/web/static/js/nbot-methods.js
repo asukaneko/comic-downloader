@@ -5977,6 +5977,7 @@ def main(params):
                     // 切换到新会话，清除所有状态
                     this.currentSession = session;
                     this.plotMode = !!session.plot_mode || localStorage.getItem('plot_mode_' + session.id) === '1';
+                    this.plotRealTimeSync = !!session.plot_real_time_sync || localStorage.getItem('plot_real_time_sync_' + session.id) === '1';
                     this.plotChoices = [];
                     if (this.plotMode) {
                         this.loadPlotChoices();
@@ -6667,12 +6668,20 @@ def main(params):
                 buildPendingMessagePayload(content, files, sessionId) {
                     const clonedFiles = (files || []).map(file => ({ ...file }));
                     const sessionPlotMode = !!(this.currentSession && this.currentSession.id === sessionId && this.currentSession.plot_mode);
+                    const sessionPlotRealTimeSync = !!(
+                        this.currentSession &&
+                        this.currentSession.id === sessionId &&
+                        this.currentSession.plot_real_time_sync
+                    );
                     return {
                         id: 'queued_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
                         sessionId,
                         content,
                         files: clonedFiles,
                         plotMode: this.plotMode || sessionPlotMode || localStorage.getItem('plot_mode_' + sessionId) === '1',
+                        plotRealTimeSync: this.plotRealTimeSync
+                            || sessionPlotRealTimeSync
+                            || localStorage.getItem('plot_real_time_sync_' + sessionId) === '1',
                         createdAt: new Date().toISOString()
                     };
                 },
@@ -6800,6 +6809,7 @@ def main(params):
                     this.isLoading = true;
 
                     const plotMode = payload.plotMode ?? this.plotMode;
+                    const plotRealTimeSync = payload.plotRealTimeSync ?? this.plotRealTimeSync;
                     try {
                         socket.emit('send_message', {
                             session_id: sessionId,
@@ -6807,7 +6817,8 @@ def main(params):
                             sender: this.username,
                             attachments: uploadedFilesInfo,
                             tempId: tempId,
-                            plot_mode: !!plotMode
+                            plot_mode: !!plotMode,
+                            plot_real_time_sync: !!plotMode && !!plotRealTimeSync
                         });
                     } catch (e) {
                         this.isTyping = false;
@@ -16493,6 +16504,7 @@ def main(params):
                                     sender: this.username,
                                     attachments: [],
                                     plot_mode: this.plotMode,
+                                    plot_real_time_sync: this.plotMode && this.plotRealTimeSync,
                                     tempId: msg.id,
                                     is_edit_resend: true,
                                 });
@@ -16705,7 +16717,8 @@ def main(params):
                         content: '继续',
                         sender: 'web_user',
                         tempId: tempId,
-                        plot_mode: this.plotMode
+                        plot_mode: this.plotMode,
+                        plot_real_time_sync: this.plotMode && this.plotRealTimeSync
                     });
                 },
                 
@@ -16847,6 +16860,39 @@ def main(params):
             this.plotChoices = [];
             this.plotChoicesLoading = false;
         }
+    },
+
+    async togglePlotRealTimeSync() {
+        if (!this.currentSession) return;
+        if (!this.plotMode) {
+            this.showToast('请先开启剧情模式', 'warning');
+            return;
+        }
+        this.plotRealTimeSync = !this.plotRealTimeSync;
+        const sid = this.currentSession?.id || this.currentSession?.session_id;
+        if (sid) {
+            localStorage.setItem(
+                'plot_real_time_sync_' + sid,
+                this.plotRealTimeSync ? '1' : '0'
+            );
+            this.currentSession.plot_real_time_sync = this.plotRealTimeSync;
+            const sessionInList = this.sessions?.find?.(s => s.id === sid);
+            if (sessionInList) {
+                sessionInList.plot_real_time_sync = this.plotRealTimeSync;
+            }
+            try {
+                await api.post('/api/plot/real-time-sync/toggle', {
+                    session_id: sid,
+                    enabled: this.plotRealTimeSync
+                });
+            } catch (e) {
+                console.debug('togglePlotRealTimeSync API:', e.message);
+            }
+        }
+        this.showToast(
+            this.plotRealTimeSync ? '同步现实时间已开启' : '同步现实时间已关闭',
+            'success'
+        );
     },
 
     async loadPlotChoices() {

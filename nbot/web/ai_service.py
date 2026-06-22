@@ -1349,6 +1349,10 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
     ctx.metadata.setdefault("source", "web")
     # 注入会话级提示词栈禁用列表
     if _session_data:
+        if _session_data.get("plot_mode"):
+            ctx.metadata.setdefault("plot_mode", True)
+            if _session_data.get("plot_real_time_sync"):
+                ctx.metadata.setdefault("plot_real_time_sync", True)
         ctx.metadata.setdefault("disabled_prompt_keys", _session_data.get("disabled_prompt_keys", []))
         # 注入用户自定义提示词
         ctx.metadata.setdefault("custom_prompts", _session_data.get("custom_prompts", []))

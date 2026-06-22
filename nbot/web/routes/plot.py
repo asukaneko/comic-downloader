@@ -158,6 +158,36 @@ def register_plot_routes(app, server):
             "choices_generated": choices_generated,
         })
 
+    @app.route("/api/plot/real-time-sync/toggle", methods=["POST"])
+    def toggle_plot_real_time_sync():
+        data = request.json or {}
+        session_id = data.get("session_id", "")
+        enabled = bool(data.get("enabled", False))
+
+        if not session_id:
+            return jsonify({"error": "session_id is required"}), 400
+
+        sessions = getattr(server, "sessions", {})
+        if session_id not in sessions:
+            return jsonify({"error": "session not found"}), 404
+
+        sessions[session_id]["plot_real_time_sync"] = enabled
+        try:
+            server._save_data("sessions")
+        except Exception:
+            _log.debug("[PlotRoutes] failed to persist plot_real_time_sync", exc_info=True)
+
+        _log.info(
+            "[PlotRoutes] plot real-time sync toggled session=%s enabled=%s",
+            session_id,
+            enabled,
+        )
+
+        return jsonify({
+            "session_id": session_id,
+            "plot_real_time_sync": enabled,
+        })
+
     @app.route("/api/plot/<conversation_id>/graph")
     def get_plot_graph(conversation_id):
         data_dir = getattr(server, "data_dir", "data/web")

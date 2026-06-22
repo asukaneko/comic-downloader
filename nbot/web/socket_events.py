@@ -246,9 +246,15 @@ def register_socket_events(server):
 
             # 从 data 或 session 读取 plot_mode 传入 pipeline
             req_metadata = {"tempId": temp_id}
-            plot_mode = data.get("plot_mode") or server.sessions.get(session_id, {}).get("plot_mode")
+            session_data = server.sessions.get(session_id, {})
+            plot_mode = data.get("plot_mode") or session_data.get("plot_mode")
             if plot_mode:
                 req_metadata["plot_mode"] = True
+                plot_real_time_sync = data.get("plot_real_time_sync")
+                if plot_real_time_sync is None:
+                    plot_real_time_sync = session_data.get("plot_real_time_sync")
+                if plot_real_time_sync:
+                    req_metadata["plot_real_time_sync"] = True
 
             chat_request = adapter.build_chat_request(
                 conversation_id=session_id,
