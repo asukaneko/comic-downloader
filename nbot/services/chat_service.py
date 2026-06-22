@@ -1358,6 +1358,26 @@ def generate_today_summary(user_id=None, group_id=None) -> str:
                     stream=False
                 )
                 summary = response.choices[0].message.content
+
+                # 记录 token 用量
+                try:
+                    from nbot.core.token_stats import get_token_stats_manager, PURPOSE_UTILITY
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        stats_mgr = get_token_stats_manager()
+                        stats_mgr.record_usage(
+                            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                            total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                            model=runtime_ai.get("model") or ai_client.model or "",
+                            user_id=str(user_id) if user_id else "",
+                            channel_type="utility",
+                            source="utility",
+                            purpose=PURPOSE_UTILITY,
+                        )
+                except Exception:
+                    pass
+
                 return summary or "总结结果为空喵~"
             except Exception:
                 return "总结时出错喵，请稍后再试~"

@@ -6728,6 +6728,14 @@
                                         >
                                             {{ $t('tokens.tab_users') }}
                                         </button>
+                                        <button
+                                            class="ranking-tab"
+                                            :class="{ active: tokenRankingTab === 'purposes' }"
+                                            @click="tokenRankingTab = 'purposes'"
+                                            aria-label="用途排行"
+                                        >
+                                            用途
+                                        </button>
                                     </div>
                                     <div class="ranking-list">
                                         <div v-for="(item, index) in tokenRankings[tokenRankingTab]" :key="index" class="ranking-item">
@@ -6774,6 +6782,7 @@
                                     <thead>
                                         <tr>
                                             <th>时间</th>
+                                            <th>用途</th>
                                             <th>来源</th>
                                             <th>模型</th>
                                             <th>会话</th>
@@ -6786,6 +6795,7 @@
                                     <tbody>
                                         <tr v-for="record in tokenRecords" :key="record.id || record.timestamp">
                                             <td>{{ formatFullTime(record.timestamp || record.date) }}</td>
+                                            <td><span class="purpose-badge" :class="'purpose-' + (record.purpose || 'chat')">{{ getPurposeLabel(record.purpose) }}</span></td>
                                             <td>{{ record.source || record.channel_type || 'api' }}</td>
                                             <td>{{ record.model || 'unknown' }}</td>
                                             <td :title="record.session_id">{{ truncateId(record.session_id || '-') }}</td>
@@ -12745,7 +12755,8 @@
                     tokenRankings: {
                         sessions: [],
                         models: [],
-                        users: []
+                        users: [],
+                        purposes: []
                     },
                     tokenTrendChart: null,
                     

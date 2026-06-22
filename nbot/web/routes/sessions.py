@@ -2245,6 +2245,25 @@ def register_session_routes(app, server):
                 stream=False,
             )
 
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=server.ai_model or "",
+                        session_id=session_id,
+                        channel_type="web",
+                        source="web",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
+
             summary = response.choices[0].message.content.strip()
 
             # 清理AI输出中可能包含的嵌套【对话总结】标记，避免重复嵌套
@@ -2402,6 +2421,25 @@ def register_session_routes(app, server):
                 stream=False,
             )
 
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_MEMORY
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=server.ai_model or "",
+                        session_id=session_id,
+                        channel_type="web",
+                        source="web",
+                        purpose=PURPOSE_MEMORY,
+                    )
+            except Exception:
+                pass
+
             summary_text = response.choices[0].message.content.strip()
 
             saved_memories = 0
@@ -2418,6 +2456,24 @@ def register_session_routes(app, server):
                         messages=[{"role": "user", "content": memory_prompt}],
                         stream=False,
                     )
+                    # 记录 token 用量
+                    try:
+                        from nbot.core.token_stats import get_token_stats_manager, PURPOSE_MEMORY
+                        usage = getattr(mem_response, "usage", None)
+                        if usage:
+                            stats_mgr = get_token_stats_manager()
+                            stats_mgr.record_usage(
+                                prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                                completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                                total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                                model=server.ai_model or "",
+                                session_id=session_id,
+                                channel_type="web",
+                                source="web",
+                                purpose=PURPOSE_MEMORY,
+                            )
+                    except Exception:
+                        pass
                     import json
                     mem_text = mem_response.choices[0].message.content.strip()
                     json_start = mem_text.find("[")

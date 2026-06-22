@@ -432,6 +432,23 @@ class AIClient:
             model=model,
             stream=False,
         )
+        # 记录 token 用量
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_UTILITY
+            usage = getattr(response, "usage", None)
+            if usage:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                    total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                    model=model or self.model or "",
+                    channel_type="utility",
+                    source="utility",
+                    purpose=PURPOSE_UTILITY,
+                )
+        except Exception:
+            pass
         return self.clean_response(response.choices[0].message.content)
 
     def describe_image(self, image_url: str, text: str = None) -> Optional[str]:
@@ -501,11 +518,31 @@ class AIClient:
                         url, json=payload, headers=headers, timeout=request_timeout,
                     )
                     response.raise_for_status()
+                    resp_data = response_json_utf8(response)
                     result = self.clean_response(
-                        response_json_utf8(response)["choices"][0]["message"]["content"]
+                        resp_data["choices"][0]["message"]["content"]
                     )
                     failover.record_success(mid)
                     print(f"[图片识别] 识别成功(vision队列), 结果: {result[:100]}...")
+
+                    # 记录 token 用量
+                    try:
+                        from nbot.core.token_stats import get_token_stats_manager, PURPOSE_VISION
+                        usage_data = resp_data.get("usage", {})
+                        if usage_data:
+                            stats_mgr = get_token_stats_manager()
+                            stats_mgr.record_usage(
+                                prompt_tokens=usage_data.get("prompt_tokens", 0) or 0,
+                                completion_tokens=usage_data.get("completion_tokens", 0) or 0,
+                                total_tokens=usage_data.get("total_tokens", 0) or 0,
+                                model=mname or "",
+                                channel_type="vision",
+                                source="vision",
+                                purpose=PURPOSE_VISION,
+                            )
+                    except Exception:
+                        pass
+
                     return result
                 except Exception as e:
                     status = _extract_status_code(e)
@@ -705,6 +742,23 @@ class AIClient:
         ]
         response = self.chat_completion(messages=messages, stream=False)
         try:
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_UTILITY
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=self.model or "",
+                        channel_type="utility",
+                        source="utility",
+                        purpose=PURPOSE_UTILITY,
+                    )
+            except Exception:
+                pass
             return self.clean_response(response.choices[0].message.content)
         except Exception:
             return None
@@ -723,6 +777,23 @@ class AIClient:
         ]
         response = self.chat_completion(messages=messages, stream=False)
         try:
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_UTILITY
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=self.model or "",
+                        channel_type="utility",
+                        source="utility",
+                        purpose=PURPOSE_UTILITY,
+                    )
+            except Exception:
+                pass
             return self.clean_response(response.choices[0].message.content)
         except Exception:
             return ""
@@ -741,6 +812,23 @@ class AIClient:
         ]
         try:
             response = self.chat_completion(messages=messages, stream=False)
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_DECISION
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=self.model or "",
+                        channel_type="decision",
+                        source="decision",
+                        purpose=PURPOSE_DECISION,
+                    )
+            except Exception:
+                pass
             content = self.clean_response(response.choices[0].message.content)
             print(f"[DEBUG] should_search API响应: {content}")
             return int(content) == 1
@@ -761,6 +849,23 @@ class AIClient:
         ]
         response = self.chat_completion(messages=messages, stream=False)
         try:
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_DECISION
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=self.model or "",
+                        channel_type="decision",
+                        source="decision",
+                        purpose=PURPOSE_DECISION,
+                    )
+            except Exception:
+                pass
             score_str = self.clean_response(response.choices[0].message.content)
             score = float(score_str)
             if score < 0:
@@ -914,9 +1019,30 @@ class AIClient:
         request_timeout = cfg.get("failover_timeout", 0) or 120
         response = requests.post(url, json=payload, headers=headers, timeout=request_timeout)
         response.raise_for_status()
-        return self.clean_response(
-            response_json_utf8(response)["choices"][0]["message"]["content"]
+        resp_data = response_json_utf8(response)
+        result = self.clean_response(
+            resp_data["choices"][0]["message"]["content"]
         )
+
+        # 记录 token 用量
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_VISION
+            usage_data = resp_data.get("usage", {})
+            if usage_data:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=usage_data.get("prompt_tokens", 0) or 0,
+                    completion_tokens=usage_data.get("completion_tokens", 0) or 0,
+                    total_tokens=usage_data.get("total_tokens", 0) or 0,
+                    model=mname or "",
+                    channel_type="vision",
+                    source="vision",
+                    purpose=PURPOSE_VISION,
+                )
+        except Exception:
+            pass
+
+        return result
 
     def _call_gemini_video(self, video_url: str, text: str, system_prompt: str, cfg: dict) -> Optional[str]:
         """使用 Gemini 原生 generateContent 格式发送视频识别请求。
@@ -1002,6 +1128,25 @@ class AIClient:
 
         content_parts = candidates[0].get("content", {}).get("parts", [])
         result = "".join(p.get("text", "") for p in content_parts if "text" in p)
+
+        # 记录 token 用量（Gemini 格式）
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_VISION
+            usage_metadata = data.get("usageMetadata", {})
+            if usage_metadata:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=usage_metadata.get("promptTokenCount", 0) or 0,
+                    completion_tokens=usage_metadata.get("candidatesTokenCount", 0) or 0,
+                    total_tokens=usage_metadata.get("totalTokenCount", 0) or 0,
+                    model=mname or "",
+                    channel_type="vision",
+                    source="vision",
+                    purpose=PURPOSE_VISION,
+                )
+        except Exception:
+            pass
+
         return self.clean_response(result) if result else None
 
 

@@ -273,12 +273,32 @@ def _call_memory_model(turns: List[Dict[str, str]],
 
     response = requests.post(url, json=payload, headers=headers, timeout=60)
     response.raise_for_status()
+    resp_data = response_json_utf8(response)
     normalized = protocol.parse_response(
-        response_json_utf8(response),
+        resp_data,
         model=model,
         base_url=base_url,
         provider_type=provider_type,
     )
+
+    # 记录 token 用量
+    try:
+        from nbot.core.token_stats import get_token_stats_manager, PURPOSE_MEMORY
+        usage_data = resp_data.get("usage", {})
+        if usage_data:
+            stats_mgr = get_token_stats_manager()
+            stats_mgr.record_usage(
+                prompt_tokens=usage_data.get("prompt_tokens", 0) or 0,
+                completion_tokens=usage_data.get("completion_tokens", 0) or 0,
+                total_tokens=usage_data.get("total_tokens", 0) or 0,
+                model=model or "",
+                channel_type="memory",
+                source="memory",
+                purpose=PURPOSE_MEMORY,
+            )
+    except Exception:
+        pass
+
     return parse_memory_response(normalized.content)
 
 

@@ -215,6 +215,7 @@ class PlotChoiceGenerator:
         turn_context: Dict[str, Any],
         session_context: Optional[Dict[str, Any]] = None,
         recent_history: Optional[List[Dict[str, Any]]] = None,
+        session_id: str = "",
     ) -> List[Dict[str, Any]]:
         """Generate 3 plot choices based on the AI response.
 
@@ -224,6 +225,7 @@ class PlotChoiceGenerator:
             session_context: 会话级别上下文（recent_topics, current_arc 等）
             recent_history: 最近几轮对话（[{role, content}, ...]），
                 用于避免选项重复已聊内容并为新剧情提供素材
+            session_id: 会话ID，用于token统计
 
         Returns:
             list[dict]: [{level, text, intent}, ...]
@@ -246,6 +248,26 @@ class PlotChoiceGenerator:
             raw_content = ai_client.clean_response(
                 response.choices[0].message.content
             )
+
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_PLOT
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=getattr(ai_client, "model", "") or "",
+                        session_id=session_id,
+                        channel_type="plot",
+                        source="plot",
+                        purpose=PURPOSE_PLOT,
+                    )
+            except Exception as stats_err:
+                _log.debug(f"[PlotChoiceGenerator] 记录 token 用量失败: {stats_err}")
+
             choices = _parse_choices(raw_content)
 
             # 确保至少有 3 个选择

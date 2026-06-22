@@ -774,6 +774,24 @@ def register_personality_routes(app, server):
                 stream=False,
             )
 
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=server.ai_model or "",
+                        channel_type="web",
+                        source="web",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
+
             content = response.choices[0].message.content.strip()
 
             # 提取 JSON（可能被 markdown 代码块包裹）
@@ -891,6 +909,24 @@ def register_personality_routes(app, server):
                 ],
                 stream=False,
             )
+
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=server.ai_model or "",
+                        channel_type="web",
+                        source="web",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
 
             content = response.choices[0].message.content.strip()
 
@@ -1097,6 +1133,24 @@ def register_personality_routes(app, server):
                 ],
                 stream=False,
             )
+
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=server.ai_model or "",
+                        channel_type="web",
+                        source="web",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
 
             result = response.choices[0].message.content.strip()
             result = result.strip("\"'「」『』【】()（）")

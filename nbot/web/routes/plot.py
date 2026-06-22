@@ -73,6 +73,7 @@ def _ensure_plot_choices(server, session_id: str) -> bool:
                     last_assistant[:800],
                     turn_context,
                     recent_history=recent_history,
+                    session_id=session_id or "",
                 )
             )
         finally:
@@ -257,6 +258,7 @@ def register_plot_routes(app, server):
                         last_assistant[:800],
                         turn_context,
                         recent_history=recent_history,
+                        session_id=conversation_id or "",
                     )
                 )
             finally:

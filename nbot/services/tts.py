@@ -92,6 +92,24 @@ def tts(content: str):
         adapter = get_adapter(provider)
         adapter.synthesize(clean_text, tts_config, speech_file_path)
 
+        # 记录 TTS 用量（按字符数估算 token，TTS 不返回标准 token usage）
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_TTS
+            char_count = len(clean_text)
+            if char_count > 0:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=char_count,
+                    completion_tokens=0,
+                    total_tokens=char_count,
+                    model=tts_config.get("tts_model") or "",
+                    channel_type="tts",
+                    source="tts",
+                    purpose=PURPOSE_TTS,
+                )
+        except Exception:
+            pass
+
         return MessageChain([Record(speech_file_path)])
     except Exception as e:
         _log.error("TTS生成失败(tts): %s", str(e))
@@ -122,6 +140,24 @@ def generate_tts_audio(content: str) -> str | None:
         _log.info("TTS 开始生成语音 provider=%s model=%s", provider, tts_config.get("tts_model", ""))
         adapter = get_adapter(provider)
         adapter.synthesize(clean_text, tts_config, speech_file_path)
+
+        # 记录 TTS 用量
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_TTS
+            char_count = len(clean_text)
+            if char_count > 0:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=char_count,
+                    completion_tokens=0,
+                    total_tokens=char_count,
+                    model=tts_config.get("tts_model") or "",
+                    channel_type="tts",
+                    source="tts",
+                    purpose=PURPOSE_TTS,
+                )
+        except Exception as stats_err:
+            _log.debug("[TTS] 记录 token 用量失败: %s", stats_err)
 
         if os.path.exists(speech_file_path):
             file_size = os.path.getsize(speech_file_path)

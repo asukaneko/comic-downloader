@@ -4067,6 +4067,26 @@ async def handle_translate(msg, is_group=True):
             ]
         )
         result = response.choices[0].message.content.strip()
+
+        # 记录 token 用量
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_UTILITY
+            usage = getattr(response, "usage", None)
+            if usage:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                    completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                    total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                    model=getattr(ai_client, "model", "") or "",
+                    user_id=str(msg.user_id),
+                    channel_type="command",
+                    source="command",
+                    purpose=PURPOSE_UTILITY,
+                )
+        except Exception as stats_err:
+            logging.getLogger(__name__).debug(f"[Translate] 记录 token 用量失败: {stats_err}")
+
         reply = f"翻译结果如下喵：\n{result}"
         if is_group: await msg.reply(text=reply)
         else: await bot.api.post_private_msg(msg.user_id, text=reply)

@@ -425,6 +425,23 @@ def run_web_agent_turn(server, instruction, allow_write=False):
         messages=[{"role": "system", "content": prompt}, {"role": "user", "content": instruction}],
         stream=False,
     )
+    # 记录 token 用量
+    try:
+        from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+        usage = getattr(response, "usage", None)
+        if usage:
+            stats_mgr = get_token_stats_manager()
+            stats_mgr.record_usage(
+                prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                model=getattr(server, "ai_model", "") or "",
+                channel_type="web_agent",
+                source="web_agent",
+                purpose=PURPOSE_WEB_FEATURE,
+            )
+    except Exception:
+        pass
     try:
         raw = response.choices[0].message.content
     except Exception:

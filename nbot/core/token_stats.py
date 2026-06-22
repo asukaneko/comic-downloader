@@ -12,6 +12,39 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 
+# ====================================================================
+# 用途分类常量（粗粒度）
+# ====================================================================
+PURPOSE_CHAT = "chat"                  # 主要对话（Web、QQ、Telegram等）
+PURPOSE_DECISION = "decision"          # 决策类（should_reply、should_search等）
+PURPOSE_MEMORY = "memory"              # 记忆相关（auto_memory、session summary等）
+PURPOSE_VISION = "vision"              # 视觉理解（image、video、gif描述）
+PURPOSE_UTILITY = "utility"            # 工具类（translation、summarize、analyze_json等）
+PURPOSE_WEB_FEATURE = "web_feature"    # Web功能（personality、live2d、world_book等）
+PURPOSE_REACT = "react"                # ReAct推理循环
+PURPOSE_PLOT = "plot"                  # 剧情相关（choice_generator）
+PURPOSE_HEARTBEAT = "heartbeat"        # 心跳
+PURPOSE_EMBEDDING = "embedding"        # 知识库embedding
+PURPOSE_TTS = "tts"                    # 语音合成
+PURPOSE_IMAGE_GEN = "image_gen"        # 图片生成
+
+# 用途显示名称映射（用于前端展示）
+PURPOSE_LABELS: Dict[str, str] = {
+    PURPOSE_CHAT: "对话",
+    PURPOSE_DECISION: "决策",
+    PURPOSE_MEMORY: "记忆",
+    PURPOSE_VISION: "视觉",
+    PURPOSE_UTILITY: "工具",
+    PURPOSE_WEB_FEATURE: "Web功能",
+    PURPOSE_REACT: "推理",
+    PURPOSE_PLOT: "剧情",
+    PURPOSE_HEARTBEAT: "心跳",
+    PURPOSE_EMBEDDING: "向量化",
+    PURPOSE_TTS: "语音合成",
+    PURPOSE_IMAGE_GEN: "图片生成",
+}
+
+
 # 模型定价 ($/M tokens)
 _MODEL_PRICING = {
     "claude-opus-4-7": (15.0, 75.0),       # input $15/M, output $75/M
@@ -222,11 +255,16 @@ class TokenStatsManager:
         channel_type: str = "web",
         user_id: str = "",
         source: str = "api",
+        purpose: str = PURPOSE_CHAT,
         duration_ms: Optional[float] = None,
         input_price: Optional[float] = None,
         output_price: Optional[float] = None,
     ):
-        """记录一次 AI 调用用量。"""
+        """记录一次 AI 调用用量。
+
+        Args:
+            purpose: 用途分类，使用 PURPOSE_* 常量
+        """
         try:
             prompt_tokens = max(0, int(prompt_tokens or 0))
             completion_tokens = max(0, int(completion_tokens or 0))
@@ -342,6 +380,7 @@ class TokenStatsManager:
                 "total": total_tokens,
                 "cost": round(cost, 6),
                 "source": source or channel_type or "api",
+                "purpose": purpose or PURPOSE_CHAT,
             }
             if duration_ms is not None:
                 try:
@@ -460,6 +499,18 @@ class TokenStatsManager:
         }
         active_sessions = len(active_session_ids) if active_session_ids else len(sessions)
 
+        # 用途维度统计
+        purposes: Dict[str, Dict[str, Any]] = {}
+        for record in records:
+            p = record.get("purpose", PURPOSE_CHAT)
+            if p not in purposes:
+                purposes[p] = {"input": 0, "output": 0, "total": 0, "message_count": 0, "cost": 0.0}
+            purposes[p]["input"] += record.get("input", 0)
+            purposes[p]["output"] += record.get("output", 0)
+            purposes[p]["total"] += record.get("total", 0)
+            purposes[p]["message_count"] += 1
+            purposes[p]["cost"] += float(record.get("cost", 0) or 0)
+
         return {
             "today": stats.get("today", 0),
             "month": stats.get("month", 0),
@@ -480,6 +531,7 @@ class TokenStatsManager:
             "sessions": sessions,
             "models": models,
             "users": users,
+            "purposes": purposes,
         }
 
     # ------------------------------------------------------------------
@@ -487,11 +539,12 @@ class TokenStatsManager:
     # ------------------------------------------------------------------
 
     def get_rankings(self, limit: int = 10) -> Dict[str, List[Dict]]:
-        """返回会话 / 模型 / 用户排行榜。"""
+        """返回会话 / 模型 / 用户 / 用途排行榜。"""
         with self._lock:
             sessions = dict(self._stats.get("sessions", {}))
             models = dict(self._stats.get("models", {}))
             users = dict(self._stats.get("users", {}))
+            records = list(self._stats.get("records", []))
 
         def _build(items: Dict, name_key: str = None) -> List[Dict]:
             result = []
@@ -513,10 +566,31 @@ class TokenStatsManager:
             result.sort(key=lambda x: x["value"], reverse=True)
             return result[:limit]
 
+        # 用途维度统计
+        purposes: Dict[str, Dict[str, Any]] = {}
+        for record in records:
+            p = record.get("purpose", PURPOSE_CHAT)
+            if p not in purposes:
+                purposes[p] = {"input": 0, "output": 0, "total": 0, "message_count": 0, "cost": 0.0}
+            purposes[p]["input"] += record.get("input", 0)
+            purposes[p]["output"] += record.get("output", 0)
+            purposes[p]["total"] += record.get("total", 0)
+            purposes[p]["message_count"] += 1
+            purposes[p]["cost"] += float(record.get("cost", 0) or 0)
+
+        # 为用途添加显示名称
+        purposes_with_labels = {}
+        for key, val in purposes.items():
+            purposes_with_labels[key] = {
+                **val,
+                "label": PURPOSE_LABELS.get(key, key),
+            }
+
         return {
             "sessions": _build(sessions),
             "models": _build(models),
             "users": _build(users),
+            "purposes": _build(purposes_with_labels),
         }
 
     def get_model_usage(self, model_name: str) -> Dict[str, int]:

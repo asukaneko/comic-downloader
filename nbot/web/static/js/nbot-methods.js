@@ -5001,6 +5001,25 @@ def main(params):
                     return s.substring(0, 8) + '...' + s.substring(s.length - 6);
                 },
 
+                /* Token page helper: get purpose label */
+                getPurposeLabel(purpose) {
+                    const labels = {
+                        'chat': '对话',
+                        'decision': '决策',
+                        'memory': '记忆',
+                        'vision': '视觉',
+                        'utility': '工具',
+                        'web_feature': 'Web功能',
+                        'react': '推理',
+                        'plot': '剧情',
+                        'heartbeat': '心跳',
+                        'embedding': '向量化',
+                        'tts': '语音合成',
+                        'image_gen': '图片生成',
+                    };
+                    return labels[purpose] || purpose || '对话';
+                },
+
                 formatTokenDateValue(date) {
                     const year = date.getFullYear();
                     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -5072,6 +5091,15 @@ def main(params):
                         this.tokenRankings.users = users.map(u => ({
                             ...u,
                             percentage: (u.value / maxUser) * 100
+                        }));
+
+                        // 处理用途排行
+                        const purposes = rankings.purposes || [];
+                        const maxPurpose = purposes[0]?.value || 1;
+                        this.tokenRankings.purposes = purposes.map(p => ({
+                            ...p,
+                            name: this.getPurposeLabel(p.name),
+                            percentage: (p.value / maxPurpose) * 100
                         }));
                     } catch (e) {
                         console.error('Failed to load token rankings:', e);

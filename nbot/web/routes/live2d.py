@@ -265,6 +265,23 @@ def register_live2d_routes(app, server):
                 messages=messages,
                 stream=False,
             )
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=getattr(server, "ai_model", "") or "",
+                        channel_type="live2d",
+                        source="live2d",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
             message = _clean_line(_response_text(response))
             if not message:
                 message = "我看了一下状态，现在一切都在运行。"
@@ -319,6 +336,23 @@ def register_live2d_routes(app, server):
                 messages=messages,
                 stream=False,
             )
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=getattr(server, "ai_model", "") or "",
+                        channel_type="live2d",
+                        source="live2d",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
             raw = _response_text(response)
             parsed = _parse_json_array(raw)
 
@@ -428,6 +462,23 @@ def register_live2d_routes(app, server):
                 messages=messages,
                 stream=False,
             )
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=getattr(server, "ai_model", "") or "",
+                        channel_type="live2d",
+                        source="live2d",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
             message = _clean_line(_response_text(response))
             if not message:
                 message = "这个回复看起来不错。"

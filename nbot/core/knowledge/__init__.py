@@ -195,6 +195,24 @@ class EmbeddingService:
         for item in sorted(data.get("data", []), key=lambda x: x.get("index", 0)):
             embeddings.append(item.get("embedding", []))
 
+        # 记录 token 用量（embedding 按 token 计费）
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_EMBEDDING
+            usage_data = data.get("usage", {})
+            if usage_data:
+                stats_mgr = get_token_stats_manager()
+                stats_mgr.record_usage(
+                    prompt_tokens=usage_data.get("prompt_tokens", 0) or 0,
+                    completion_tokens=0,  # embedding 没有输出 token
+                    total_tokens=usage_data.get("total_tokens", 0) or 0,
+                    model=self.model or "",
+                    channel_type="embedding",
+                    source="embedding",
+                    purpose=PURPOSE_EMBEDDING,
+                )
+        except Exception:
+            pass
+
         return embeddings
 
     def _get_fallback_embeddings(self, texts: List[str]) -> List[List[float]]:

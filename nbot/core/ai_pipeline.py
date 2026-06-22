@@ -1253,6 +1253,7 @@ class AIPipeline:
                 response_text,
                 _plot_turn_context_dict(turn_context),
                 recent_history=recent_history,
+                session_id=conversation_id or "",
             )
             if not choices:
                 return

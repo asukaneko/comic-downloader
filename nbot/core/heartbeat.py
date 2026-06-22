@@ -103,6 +103,25 @@ class HeartbeatCore:
             content = ai_client.clean_response(content)
             _log.debug(f"[Heartbeat] 用户 {user_id} LLM 返回内容: {content[:200]}...")
 
+            # 记录 token 用量
+            try:
+                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_HEARTBEAT
+                usage = getattr(response, "usage", None)
+                if usage:
+                    stats_mgr = get_token_stats_manager()
+                    stats_mgr.record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=ai_client.model or "",
+                        user_id=user_id,
+                        channel_type="heartbeat",
+                        source="heartbeat",
+                        purpose=PURPOSE_HEARTBEAT,
+                    )
+            except Exception as stats_err:
+                _log.debug(f"[Heartbeat] 记录 token 用量失败: {stats_err}")
+
             try:
                 from json_repair import repair_json
 

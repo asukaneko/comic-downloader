@@ -138,6 +138,24 @@ class ReActAgent:
                     response.choices[0].message.content
                 )
 
+                # 记录 token 用量
+                try:
+                    from nbot.core.token_stats import get_token_stats_manager, PURPOSE_REACT
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        stats_mgr = get_token_stats_manager()
+                        stats_mgr.record_usage(
+                            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                            total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                            model=getattr(ai_client, "model", "") or "",
+                            channel_type="react",
+                            source="react",
+                            purpose=PURPOSE_REACT,
+                        )
+                except Exception as stats_err:
+                    _log.debug(f"[ReAct] 记录 token 用量失败: {stats_err}")
+
                 thought_step = self._parse_thought(content, step_num)
                 thought_history.append(thought_step)
 
