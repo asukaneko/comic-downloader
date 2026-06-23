@@ -23,6 +23,7 @@
 
 - 重构文档结构，拆分各模块为独立子文档
 - 更新 Token 用量统计文档，补充用途分类参数说明
+- 补充 plot/group/events/memory/review/world 模块的侧边栏导航条目
 
 ---
 

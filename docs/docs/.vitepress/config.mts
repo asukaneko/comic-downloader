@@ -268,6 +268,10 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/plot/index.md' },
+                    { text: 'models - 数据模型', link: '/guide/nbot/plot/models.md' },
+                    { text: 'graph_manager - 剧情图管理器', link: '/guide/nbot/plot/graph_manager.md' },
+                    { text: 'choice_generator - 选择生成器', link: '/guide/nbot/plot/choice_generator.md' },
+                    { text: 'bridges - 桥接模块', link: '/guide/nbot/plot/bridges.md' },
                   ]
                 },
                 {
@@ -275,6 +279,10 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/group/index.md' },
+                    { text: 'models - 数据模型', link: '/guide/nbot/group/models.md' },
+                    { text: 'scheduler - 调度器', link: '/guide/nbot/group/scheduler.md' },
+                    { text: 'narrator - 旁白系统', link: '/guide/nbot/group/narrator.md' },
+                    { text: 'cross_talk - 跨角色对话', link: '/guide/nbot/group/cross_talk.md' },
                   ]
                 },
                 {
@@ -282,6 +290,7 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/events/index.md' },
+                    { text: '事件名称参考', link: '/guide/nbot/events/names.md' },
                   ]
                 },
                 {
@@ -289,6 +298,8 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/memory/index.md' },
+                    { text: 'models - 数据模型', link: '/guide/nbot/memory/models.md' },
+                    { text: 'fs - 文件系统', link: '/guide/nbot/memory/fs.md' },
                   ]
                 },
                 {
@@ -296,6 +307,10 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/review/index.md' },
+                    { text: 'models - 数据模型', link: '/guide/nbot/review/models.md' },
+                    { text: 'pipeline - 审查管线', link: '/guide/nbot/review/pipeline.md' },
+                    { text: 'self_correction - 自我修正', link: '/guide/nbot/review/self_correction.md' },
+                    { text: 'time_context - 现实时间连续性', link: '/guide/nbot/review/time_context.md' },
                   ]
                 },
                 {
@@ -303,6 +318,7 @@ export default defineConfig({
                   collapsed: true,
                   items: [
                     { text: '概述', link: '/guide/nbot/world/index.md' },
+                    { text: 'engine - 判定引擎', link: '/guide/nbot/world/engine.md' },
                   ]
                 },
               ]
