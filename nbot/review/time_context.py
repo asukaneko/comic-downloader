@@ -13,9 +13,15 @@ def _parse_datetime(value: str) -> datetime | None:
     if value.endswith("Z"):
         value = value[:-1] + "+00:00"
     try:
-        return datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(value)
     except ValueError:
         return None
+
+    # 兼容旧数据：datetime.now().isoformat() 产生的 naive 时间
+    if dt.tzinfo is None:
+        dt = dt.astimezone()
+
+    return dt
 
 
 def _now_iso() -> str:
@@ -106,7 +112,6 @@ def format_real_time_prompt_context(context: dict[str, Any]) -> str:
     if not context:
         return ""
     lines = [
-        "## real_time.continuity",
         f"当前现实时间: {context.get('current_time', '')}",
     ]
     if context.get("previous_turn_time"):

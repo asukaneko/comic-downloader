@@ -497,7 +497,7 @@ class CharacterRuntime:
             metadata["real_time_context"] = context
             return context
         except Exception as exc:
-            _log.debug("[CharacterRuntime] real time context failed: %s", exc)
+            _log.warning("[CharacterRuntime] real time context failed: %s", exc, exc_info=True)
             return {}
 
     def _inject_real_time_context(self, stack, real_time_context) -> None:

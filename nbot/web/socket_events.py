@@ -128,7 +128,7 @@ def register_socket_events(server):
             "role": "assistant",
             "sender": "Stream Demo",
             "content": "",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now().astimezone().isoformat(),
             "session_id": session_id,
         }
 

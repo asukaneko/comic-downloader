@@ -24,7 +24,7 @@ class Message:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     role: str = "user"  # user, assistant, system
     content: str = ""
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+    timestamp: str = field(default_factory=lambda: datetime.now().astimezone().isoformat())
     sender: str = ""  # 发送者标识
     source: str = "unknown"  # qq_private, qq_group, web
     session_id: str = ""  # 会话 ID

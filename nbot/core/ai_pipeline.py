@@ -1459,7 +1459,7 @@ class AIPipeline:
                         scope="turn",
                     )
         except Exception as exc:
-            _log.debug("[AIPipeline] real-time prompt fallback failed: %s", exc)
+            _log.warning("[AIPipeline] real-time prompt fallback failed: %s", exc, exc_info=True)
 
     @staticmethod
     def _extract_previous_message_time(

@@ -82,7 +82,7 @@ class BaseChannelAdapter:
             "id": str(uuid.uuid4()),
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now().astimezone().isoformat(),
             "sender": sender,
             "source": source or self.channel_name,
         }

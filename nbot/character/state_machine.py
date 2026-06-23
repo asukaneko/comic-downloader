@@ -127,8 +127,8 @@ class StateMachine:
             mood_intensity=old_state.mood_intensity,
             energy=old_state.energy,
             scene=dict(old_state.scene),
-            last_active_at=datetime.now().isoformat(),
-            updated_at=datetime.now().isoformat(),
+            last_active_at=datetime.now().astimezone().isoformat(),
+            updated_at=datetime.now().astimezone().isoformat(),
         )
 
         # 情绪更新
@@ -237,7 +237,7 @@ class StateMachine:
             dependency=old_rel.dependency,
             security=old_rel.security,
             jealousy=old_rel.jealousy,
-            updated_at=datetime.now().isoformat(),
+            updated_at=datetime.now().astimezone().isoformat(),
         )
 
         # 应用关系变化量

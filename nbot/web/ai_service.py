@@ -185,7 +185,7 @@ def _build_change_card(
         "content": "本轮文件变更",
         "summary": summary,
         "file_changes": normalized_changes,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now().astimezone().isoformat(),
         "is_complete": True,
     }
 
@@ -420,7 +420,7 @@ class WebCallbacks(PipelineCallbacks):
                 session = self.session_store.get_session(self.session_id) or {}
                 message["sender"] = session.get("sender_name") or "AI"
         if not message.get("timestamp"):
-            message["timestamp"] = datetime.now().isoformat()
+            message["timestamp"] = datetime.now().astimezone().isoformat()
         if not message.get("session_id"):
             message["session_id"] = self.session_id
         if not message.get("source"):
@@ -604,7 +604,7 @@ class WebCallbacks(PipelineCallbacks):
             "id": str(uuid.uuid4()),
             "role": "assistant",
             "content": "",
-            "timestamp": __import__("datetime").datetime.now().isoformat(),
+            "timestamp": __import__("datetime").datetime.now().astimezone().isoformat(),
             "sender": "AI",
             "source": "sticker",
             "sticker": {
@@ -792,7 +792,7 @@ class WebCallbacks(PipelineCallbacks):
                             "message_index",
                         )
                     },
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.now().astimezone().isoformat(),
                 }
                 last = timeline[-1] if timeline else None
                 if isinstance(last, dict) and _runtime_timeline_state_signature(last) == _runtime_timeline_state_signature(entry):

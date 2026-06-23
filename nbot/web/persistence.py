@@ -138,7 +138,7 @@ def _normalize_session_record(session_id, session):
                 created_at = message.get("timestamp")
                 break
     if not created_at:
-        created_at = datetime.now().isoformat()
+        created_at = datetime.now().astimezone().isoformat()
 
     normalized = {
         **session,
