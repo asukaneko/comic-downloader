@@ -22,6 +22,7 @@
 | `total` | int | 总 Token 数 |
 | `cost` | float | 估算费用（美元） |
 | `source` | string | 来源标识 |
+| `purpose` | string | 用途分类（`chat` / `plot` / `memory` / `review` / `vision` / `stt` / `image_gen`） |
 | `duration_ms` | float | 响应耗时（毫秒，可选） |
 
 ## 模型定价
@@ -39,6 +40,22 @@
 | deepseek-r1 | $0.55 | $2.19 |
 
 未匹配的模型默认按 $1.0/$4.0 估算。
+
+## 用途分类（Purpose）
+
+每条用量记录可携带 `purpose` 字段，标识该次 Token 消耗的业务用途，用于多维度统计分析。
+
+| 常量 | 值 | 说明 |
+|------|------|------|
+| `PURPOSE_CHAT` | `chat` | 主要对话（Web、QQ、Telegram 等） |
+| `PURPOSE_PLOT` | `plot` | 剧情模式（选择生成、剧情推进） |
+| `PURPOSE_MEMORY` | `memory` | 记忆提取与注入 |
+| `PURPOSE_REVIEW` | `review` | Review Pipeline 审查评分 |
+| `PURPOSE_VISION` | `vision` | 图片/视频识别 |
+| `PURPOSE_STT` | `stt` | 语音转文字 |
+| `PURPOSE_IMAGE_GEN` | `image_gen` | 图片生成 |
+
+`get_stats()` 返回结果中包含 `purposes` 字段，按用途维度聚合 input/output/total/message_count/cost。
 
 ## 核心 API
 
@@ -68,6 +85,7 @@ manager.record_usage(
     channel_type="web",         # 频道类型
     user_id="user_001",         # 用户 ID
     source="web",               # 来源标识
+    purpose="chat",             # 用途分类（默认 chat）
     duration_ms=1234.5,         # 响应耗时 ms（可选）
 )
 ```
@@ -115,6 +133,7 @@ print(stats["history"])            # 每日汇总历史
 | `sessions` | 会话维度统计 |
 | `models` | 模型维度统计 |
 | `users` | 用户维度统计 |
+| `purposes` | 用途维度统计（按 purpose 聚合 input/output/total/message_count/cost） |
 
 ### get_rankings()
 
