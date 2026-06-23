@@ -718,6 +718,8 @@ def register_session_routes(app, server):
                     "character_runtime_snapshot": session.get("character_runtime_snapshot"),
                     "character_runtime_timeline": timeline,
                     "custom_prompts": session.get("custom_prompts", []),
+                    "disabled_prompt_keys": session.get("disabled_prompt_keys", []),
+                    "prompt_stack_debug": session.get("prompt_stack_debug", []),
                     "plot_mode": bool(session.get("plot_mode")),
                     "plot_real_time_sync": bool(session.get("plot_real_time_sync")),
                 }

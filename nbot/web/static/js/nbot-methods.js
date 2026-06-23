@@ -2512,6 +2512,18 @@ const NbotMethods = {
 
                         // 合并：临时会话 + 服务器会话
                         this.sessions = [...localTempSessions, ...serverSessions];
+                        const activeSession = this.currentSession && !this.currentSession._isTemp
+                            ? this.sessions.find(s => s.id === this.currentSession.id)
+                            : null;
+                        if (activeSession) {
+                            this.currentSession = { ...this.currentSession, ...activeSession };
+                        }
+                        const viewedSession = this.viewingSession && !this.viewingSession._isTemp
+                            ? this.sessions.find(s => s.id === this.viewingSession.id)
+                            : null;
+                        if (viewedSession) {
+                            this.viewingSession = { ...this.viewingSession, ...viewedSession };
+                        }
                         this.refreshPersonalityTimelineSessions();
                     } catch (e) {
                         console.error('Failed to load sessions:', e);
@@ -14528,6 +14540,25 @@ def main(params):
                     return false;
                 },
 
+                applyPromptStackUpdate(sessionId, systemPrompt, promptStackDebug) {
+                    if (!sessionId || !Array.isArray(promptStackDebug)) return;
+                    const update = {
+                        system_prompt: systemPrompt || '',
+                        prompt_stack_debug: promptStackDebug
+                    };
+                    if (this.currentSession && this.currentSession.id === sessionId) {
+                        this.currentSession = { ...this.currentSession, ...update };
+                        this.updateContextStats();
+                    }
+                    if (this.viewingSession && this.viewingSession.id === sessionId) {
+                        this.viewingSession = { ...this.viewingSession, ...update };
+                    }
+                    const sessionInList = this.sessions.find(s => s.id === sessionId);
+                    if (sessionInList) {
+                        Object.assign(sessionInList, update);
+                    }
+                },
+
                 // Socket.io
                 initSocket() {
                     socket.on('connect', () => {
@@ -14555,7 +14586,23 @@ def main(params):
                     // 处理会话更新事件（如 heartbeat 追加到会话）
                     socket.on('session_updated', async (data) => {
                         console.log('Session updated:', data);
-                        if (data.action === 'heartbeat_completed' && data.session_id) {
+                        if (data.action === 'prompt_stack_updated' && data.session_id) {
+                            const update = {
+                                system_prompt: data.system_prompt || '',
+                                prompt_stack_debug: data.prompt_stack_debug || []
+                            };
+                            if (this.currentSession && this.currentSession.id === data.session_id) {
+                                this.currentSession = { ...this.currentSession, ...update };
+                                this.updateContextStats();
+                            }
+                            if (this.viewingSession && this.viewingSession.id === data.session_id) {
+                                this.viewingSession = { ...this.viewingSession, ...update };
+                            }
+                            const sessionInList = this.sessions.find(s => s.id === data.session_id);
+                            if (sessionInList) {
+                                Object.assign(sessionInList, update);
+                            }
+                        } else if (data.action === 'heartbeat_completed' && data.session_id) {
                             // 刷新该会话的消息
                             this.refreshSessionMessages(data.session_id);
                             await this.loadSessions();
@@ -14896,6 +14943,11 @@ def main(params):
                             localStorage.removeItem('nbot_loading_start_time');
                             this.scheduleStreamType(finishedMessageId);
                         }
+                        this.applyPromptStackUpdate(
+                            finishedSessionId,
+                            data?.system_prompt,
+                            data?.prompt_stack_debug
+                        );
                         if (this.currentSession && finishedSessionId === this.currentSession.id && window.__nbotLive2dComment && this.settings?.features?.live2d !== false) {
                             // Collect last 5 rounds (up to 10 messages) for Live2D commentary
                             const allMsgs = this.currentMessages.filter(m => m.role === 'user' || m.role === 'assistant');
@@ -14937,6 +14989,11 @@ def main(params):
                         localStorage.removeItem('nbot_loading_session_id');
                         localStorage.removeItem('nbot_loading_start_time');
                         if (this.currentSession && data.session_id === this.currentSession.id) {
+                            this.applyPromptStackUpdate(
+                                data.session_id,
+                                data.system_prompt,
+                                data.prompt_stack_debug
+                            );
                             const reconciledStream = this.reconcileFinalStreamMessage(data.session_id, data.message);
                             if (reconciledStream) {
                                 this.$nextTick(() => this.scrollToBottom(false));

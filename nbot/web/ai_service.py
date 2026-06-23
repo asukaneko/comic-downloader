@@ -493,7 +493,12 @@ class WebCallbacks(PipelineCallbacks):
             return
         self.server.socketio.emit(
             "ai_response",
-            {"session_id": self.session_id, "message": message},
+            {
+                "session_id": self.session_id,
+                "message": message,
+                "system_prompt": ctx.metadata.get("composed_system_prompt", ""),
+                "prompt_stack_debug": ctx.metadata.get("prompt_stack_debug", []),
+            },
             room=self.session_id,
         )
         self._try_send_push(message)
@@ -548,6 +553,8 @@ class WebCallbacks(PipelineCallbacks):
             "session_id": self.session_id,
             "message_id": message_id,
             "is_end": True,
+            "system_prompt": ctx.metadata.get("composed_system_prompt", "") if ctx else "",
+            "prompt_stack_debug": ctx.metadata.get("prompt_stack_debug", []) if ctx else [],
         }
         # 群聊模式：附加 sender 以便前端匹配到正确的流式气泡
         if ctx and ctx.metadata:
@@ -726,9 +733,8 @@ class WebCallbacks(PipelineCallbacks):
             session["system_prompt"] = composed
 
             # 同时保存角色运行时调试信息
-            prompt_stack_debug = ctx.metadata.get("prompt_stack_debug")
-            if prompt_stack_debug:
-                session["prompt_stack_debug"] = prompt_stack_debug
+            prompt_stack_debug = ctx.metadata.get("prompt_stack_debug") or []
+            session["prompt_stack_debug"] = prompt_stack_debug
 
             # 保存角色运行时上下文摘要
             if hasattr(ctx, 'character_turn') and ctx.character_turn:
@@ -796,6 +802,19 @@ class WebCallbacks(PipelineCallbacks):
                 session["character_runtime_timeline"] = timeline[-200:]
 
             self.session_store.set_session(self.session_id, session)
+            try:
+                self.server.socketio.emit(
+                    "session_updated",
+                    {
+                        "action": "prompt_stack_updated",
+                        "session_id": self.session_id,
+                        "system_prompt": composed,
+                        "prompt_stack_debug": prompt_stack_debug,
+                    },
+                    room=self.session_id,
+                )
+            except Exception:
+                pass
         except Exception:
             pass
 
