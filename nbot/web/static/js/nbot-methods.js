@@ -17934,7 +17934,9 @@ def main(params):
     async loadReviewLogs() {
         try {
             const res = await api.get('/api/review/logs', { params: { limit: 50 } });
-            this.reviewLogs = (res.data && res.data.logs) || [];
+            const logs = (res.data && res.data.logs) || [];
+            // review.started 仅为过程噪声，列表只展示有结论的 review.finished 及其它类型
+            this.reviewLogs = logs.filter(l => l.type !== 'review.started');
         } catch (e) {
             console.error('loadReviewLogs:', e);
         }
