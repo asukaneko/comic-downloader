@@ -168,7 +168,7 @@ def test_event_bus_history_cap():
     bus = ConversationEventBus(history_max=3)
 
     async def _run():
-        for i in range(5):
+        for _ in range(5):
             await bus.emit(RuntimeEvent(type="t"))
 
     _loop().run_until_complete(_run())
@@ -628,6 +628,42 @@ def test_action_memory_write_mem_type_alias():
     result = _loop().run_until_complete(exe.execute(action, RuntimeEvent(type="t"), ctx))
     assert result.success
     assert saved[0]["mem_type"] == "short"
+
+
+def test_action_memory_write_structured_category_writes_memory_fs(tmp_path, monkeypatch):
+    """带 category 的 memory_write 应写入结构化 MemoryFS，而不是旧 memory_service。"""
+    import nbot.memory.fs as fs_mod
+    from nbot.memory.fs import MemoryFS
+
+    exe = ActionExecutor()
+    mfs = MemoryFS(data_dir=str(tmp_path))
+    monkeypatch.setattr(fs_mod, "_memory_fs", mfs)
+
+    class FakeMemoryService:
+        def save(self, **kwargs):
+            raise AssertionError("structured memory_write should bypass legacy memory_service")
+
+    action = {
+        "type": "memory_write",
+        "category": "user_persona",
+        "title": "互动边界",
+        "summary": "用户偏好克制安慰",
+        "content": "用户在难过时希望角色先安静陪伴。",
+        "importance": 0.8,
+    }
+    event = RuntimeEvent(
+        type="test.memory",
+        character_id="char-1",
+        user_id="user-1",
+        conversation_id="conv-1",
+    )
+    result = asyncio.run(exe.execute(action, event, {"memory_service": FakeMemoryService()}))
+
+    assert result.success
+    stored = mfs.read(mfs.path_user_persona("char-1", "user-1"))
+    assert stored is not None
+    assert stored.summary == "用户偏好克制安慰"
+    assert stored.importance == 0.8
 
 
 def test_action_workflow_id_alias():

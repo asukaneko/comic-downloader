@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Dict, List, Optional
 
 from nbot.memory.models import MemoryFile
 
@@ -28,8 +27,40 @@ _MAX_MEMORY_FILE_CHARS = 4000
 _MAX_DIARY_ENTRIES = 30
 _MAX_PLOT_ENTRIES = 50
 
+_MEMORY_CATEGORY_META = {
+    "user_persona": {"label": "用户人格", "injects_to_prompt": True, "order": 10},
+    "character_persona": {"label": "角色人格", "injects_to_prompt": True, "order": 20},
+    "important_event": {"label": "重要事件", "injects_to_prompt": True, "order": 30},
+    "recent_digest": {"label": "近期摘要", "injects_to_prompt": True, "order": 40},
+    "legacy": {"label": "旧版/其他", "injects_to_prompt": False, "order": 90},
+}
+
+_MEMORY_CATEGORY_ALIASES = {
+    "user": "user_persona",
+    "user_profile": "user_persona",
+    "user_preference": "user_persona",
+    "user_preferences": "user_persona",
+    "persona_user": "user_persona",
+    "character": "character_persona",
+    "character_profile": "character_persona",
+    "character_attitude": "character_persona",
+    "persona_character": "character_persona",
+    "relationship": "character_persona",
+    "event": "important_event",
+    "events": "important_event",
+    "important_events": "important_event",
+    "plot": "important_event",
+    "plot_summary": "important_event",
+    "world_event": "important_event",
+    "digest": "recent_digest",
+    "summary": "recent_digest",
+    "recent_summary": "recent_digest",
+    "dialogue_digest": "recent_digest",
+    "diary": "recent_digest",
+}
+
 # 全局单例
-_memory_fs: Optional[MemoryFS] = None
+_memory_fs: MemoryFS | None = None
 
 
 def _truncate_entries(content: str, path: str) -> str:
@@ -58,13 +89,45 @@ def _truncate_entries(content: str, path: str) -> str:
     return "\n\n".join(entries)
 
 
+def normalize_memory_category(value) -> str:
+    category = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if category in _MEMORY_CATEGORY_META and category != "legacy":
+        return category
+    return _MEMORY_CATEGORY_ALIASES.get(category, "")
+
+
+def describe_memory_path(path: str) -> dict:
+    path = str(path or "")
+    category = "legacy"
+    if path.endswith("/user_persona.md"):
+        category = "user_persona"
+    elif path.endswith("/character_persona.md"):
+        category = "character_persona"
+    elif path.endswith("/recent_digest.md"):
+        category = "recent_digest"
+    elif "/events/" in path or "/plot/" in path:
+        category = "important_event"
+
+    meta = _MEMORY_CATEGORY_META[category]
+    return {
+        "category": category,
+        "category_label": meta["label"],
+        "injects_to_prompt": bool(meta["injects_to_prompt"]),
+        "category_order": meta["order"],
+    }
+
+
 class MemoryFS:
     """记忆逻辑文件系统
 
     路径规范：
         characters/{char_id}/general.md           角色通用信息
-        characters/{char_id}/users/{user_id}.md   对特定用户的关系摘要
-        characters/{char_id}/diary/daily.md        最近日常日记
+        characters/{char_id}/users/{user_id}/user_persona.md       用户人格/偏好画像
+        characters/{char_id}/users/{user_id}/character_persona.md  角色对用户的关系理解
+        characters/{char_id}/users/{user_id}/recent_digest.md      压缩后的近期摘要
+        characters/{char_id}/events/{conversation_id}.md           重要事件
+        characters/{char_id}/users/{user_id}.md                    旧版用户关系摘要
+        characters/{char_id}/diary/daily.md                        旧版日记路径
         characters/{char_id}/diary/weekly.md       本周摘要
         characters/{char_id}/plot/{conv_id}.md    剧情摘要
         characters/{char_id}/world/events.md       世界事件记录
@@ -72,14 +135,14 @@ class MemoryFS:
 
     def __init__(self, data_dir: str = _DEFAULT_DATA_DIR):
         self._index_file = os.path.join(data_dir, _FS_INDEX_FILE)
-        self._index: Dict[str, MemoryFile] = {}
+        self._index: dict[str, MemoryFile] = {}
         self._load()
 
     # ------------------------------------------------------------------
     # 核心接口
     # ------------------------------------------------------------------
 
-    def read(self, path: str) -> Optional[MemoryFile]:
+    def read(self, path: str) -> MemoryFile | None:
         """读取逻辑路径对应的记忆文件。"""
         return self._index.get(path)
 
@@ -92,10 +155,10 @@ class MemoryFS:
         title: str = "",
         content: str = "",
         summary: str = "",
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
         importance: float = 0.0,
         source_event_id: str = "",
-        memory_ids: Optional[List[str]] = None,
+        memory_ids: list[str] | None = None,
         append: bool = False,
     ) -> MemoryFile:
         """写入或更新逻辑路径的记忆文件。
@@ -192,6 +255,19 @@ class MemoryFS:
     def path_user(self, char_id: str, user_id: str) -> str:
         return f"characters/{char_id}/users/{user_id}.md"
 
+    def path_user_persona(self, char_id: str, user_id: str) -> str:
+        return f"characters/{char_id}/users/{user_id}/user_persona.md"
+
+    def path_character_persona(self, char_id: str, user_id: str) -> str:
+        return f"characters/{char_id}/users/{user_id}/character_persona.md"
+
+    def path_recent_digest(self, char_id: str, user_id: str) -> str:
+        return f"characters/{char_id}/users/{user_id}/recent_digest.md"
+
+    def path_important_events(self, char_id: str, conversation_id: str) -> str:
+        safe_conversation_id = conversation_id or "general"
+        return f"characters/{char_id}/events/{safe_conversation_id}.md"
+
     def path_diary_daily(self, char_id: str) -> str:
         return f"characters/{char_id}/diary/daily.md"
 
@@ -211,19 +287,19 @@ class MemoryFS:
     # 查询
     # ------------------------------------------------------------------
 
-    def list_for_character(self, char_id: str) -> List[MemoryFile]:
+    def list_for_character(self, char_id: str) -> list[MemoryFile]:
         """列出指定角色的所有逻辑文件，按 importance 降序。"""
         prefix = f"characters/{char_id}/"
         files = [mf for path, mf in self._index.items() if path.startswith(prefix)]
         return sorted(files, key=lambda m: m.importance, reverse=True)
 
-    def read_user(self, char_id: str, user_id: str) -> Optional[MemoryFile]:
+    def read_user(self, char_id: str, user_id: str) -> MemoryFile | None:
         return self.read(self.path_user(char_id, user_id))
 
-    def read_diary(self, char_id: str) -> Optional[MemoryFile]:
+    def read_diary(self, char_id: str) -> MemoryFile | None:
         return self.read(self.path_diary_daily(char_id))
 
-    def read_plot(self, char_id: str, conversation_id: str) -> Optional[MemoryFile]:
+    def read_plot(self, char_id: str, conversation_id: str) -> MemoryFile | None:
         return self.read(self.path_plot(char_id, conversation_id))
 
     def build_prompt_context(
@@ -232,24 +308,32 @@ class MemoryFS:
         user_id: str,
         conversation_id: str = "",
     ) -> str:
-        """按三层读取策略构建 prompt 注入文本（必读层）。
+        """按结构化读取策略构建 prompt 注入文本（必读层）。
 
-        必读：用户关系摘要 + 当前剧情摘要 + 最近日记摘要
+        必读：用户人格 + 角色关系理解 + 重要事件/剧情摘要 + 压缩近期摘要。
+        旧版 raw daily 不再注入，避免把逐轮流水账塞进上下文。
         """
-        parts: List[str] = []
+        parts: list[str] = []
 
-        user_mf = self.read_user(char_id, user_id)
-        if user_mf:
-            parts.append(user_mf.to_prompt_text())
+        user_persona = self.read(self.path_user_persona(char_id, user_id))
+        if user_persona:
+            parts.append(user_persona.to_prompt_text())
+
+        character_persona = self.read(self.path_character_persona(char_id, user_id))
+        if character_persona:
+            parts.append(character_persona.to_prompt_text())
 
         if conversation_id:
+            event_mf = self.read(self.path_important_events(char_id, conversation_id))
+            if event_mf:
+                parts.append(event_mf.to_prompt_text())
             plot_mf = self.read_plot(char_id, conversation_id)
             if plot_mf:
                 parts.append(plot_mf.to_prompt_text())
 
-        diary_mf = self.read_diary(char_id)
-        if diary_mf:
-            parts.append(diary_mf.to_prompt_text())
+        digest_mf = self.read(self.path_recent_digest(char_id, user_id))
+        if digest_mf:
+            parts.append(digest_mf.to_prompt_text())
 
         return "\n\n".join(p for p in parts if p)
 

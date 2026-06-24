@@ -753,46 +753,9 @@ class CharacterRuntime:
             user_id = inp.user_id
             conv_id = inp.conversation_id
 
-            # 1. 写入用户关系摘要（有记忆条目时更新）
-            if output.should_write_memory and output.memory_items:
-                for item in output.memory_items:
-                    if user_id:
-                        existing = mfs.read_user(char_id, user_id)
-                        new_content = item.content
-                        mfs.write(
-                            mfs.path_user(char_id, user_id),
-                            character_id=char_id,
-                            target_id=user_id,
-                            title=f"与 {user_id} 的关系",
-                            content=new_content,
-                            summary=item.title,
-                            importance=item.importance,
-                            append=bool(existing),
-                        )
-
-            # 2. 写入日记（每轮有内容都追加）
-            if inp.user_message or inp.assistant_message:
-                diary_parts = []
-                real_time = getattr(inp, "real_time_context", {}) or {}
-                elapsed_label = real_time.get("elapsed_label")
-                if elapsed_label and real_time.get("continuity_level") not in (
-                    "first_contact",
-                    "continuous",
-                ):
-                    diary_parts.append(f"现实时间间隔：{elapsed_label}")
-                diary_parts.append(f"用户：{inp.user_message[:100]}")
-                diary_parts.append(f"角色：{inp.assistant_message[:100]}")
-                diary_entry = "\n".join(diary_parts)
-                mfs.write(
-                    mfs.path_diary_daily(char_id),
-                    character_id=char_id,
-                    title="最近对话日记",
-                    content=diary_entry,
-                    importance=0.3,
-                    append=True,
-                )
-
-            # 3. 写入剧情摘要（有剧情更新时）
+            # Review 不再写入逐轮用户/角色原文；人格记忆和近期摘要由 auto_memory
+            # 复用 6 轮一次的模型调用压缩后写入 MemoryFS。
+            # 这里只保留剧情选择产生的非逐字剧情摘要。
             if output.plot_update and output.plot_update.should_create_node and conv_id:
                 mfs.write(
                     mfs.path_plot(char_id, conv_id),

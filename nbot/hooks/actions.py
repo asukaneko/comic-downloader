@@ -5,8 +5,9 @@ Executes hook actions after event matching.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List
+from typing import Any
 
 from nbot.hooks.models import RuntimeEvent
 
@@ -23,7 +24,7 @@ class ActionResult:
 
 class ActionExecutor:
     def __init__(self):
-        self._handlers: Dict[str, Callable] = {}
+        self._handlers: dict[str, Callable] = {}
         self._register_builtins()
 
     def _register_builtins(self):
@@ -39,7 +40,7 @@ class ActionExecutor:
     def register(self, action_type: str, handler: Callable) -> None:
         self._handlers[action_type] = handler
 
-    async def execute(self, action: Dict[str, Any], event: RuntimeEvent, context: Dict[str, Any]) -> ActionResult:
+    async def execute(self, action: dict[str, Any], event: RuntimeEvent, context: dict[str, Any]) -> ActionResult:
         action_type = action.get("type", "")
         handler = self._handlers.get(action_type)
         if not handler:
@@ -54,7 +55,7 @@ class ActionExecutor:
             _log.error("[HookAction] failed type=%s err=%s", action_type, e)
             return ActionResult(success=False, action_type=action_type, detail=str(e))
 
-    async def execute_all(self, actions: List[Dict[str, Any]], event: RuntimeEvent, context: Dict[str, Any]) -> List[ActionResult]:
+    async def execute_all(self, actions: list[dict[str, Any]], event: RuntimeEvent, context: dict[str, Any]) -> list[ActionResult]:
         results = []
         for action in actions:
             results.append(await self.execute(action, event, context))
@@ -127,15 +128,19 @@ class ActionExecutor:
 
     @staticmethod
     def _action_memory_write(action, event, ctx):
-        memory_service = ctx.get("memory_service")
-        if memory_service is None:
-            return ActionResult(False, "memory_write", "Memory service unavailable")
         title = action.get("title", "")
         content = action.get("content", "")
+        category = action.get("category") or action.get("memory_category")
         # 兼容: 文档用 memory_type，代码用 mem_type
         mem_type = action.get("mem_type") or action.get("memory_type", "long")
         if not content:
             return ActionResult(False, "memory_write", "Empty content")
+        if category:
+            return ActionExecutor._action_structured_memory_write(action, event, content)
+
+        memory_service = ctx.get("memory_service")
+        if memory_service is None:
+            return ActionResult(False, "memory_write", "Memory service unavailable")
         try:
             memory_service.save(
                 character_id=event.character_id,
@@ -146,6 +151,80 @@ class ActionExecutor:
                 mem_type=mem_type,
             )
             return ActionResult(True, "memory_write", "saved: " + title)
+        except Exception as e:
+            return ActionResult(False, "memory_write", str(e))
+
+    @staticmethod
+    def _action_structured_memory_write(action, event, content):
+        try:
+            from nbot.memory.fs import get_memory_fs, normalize_memory_category
+
+            category = normalize_memory_category(
+                action.get("category") or action.get("memory_category")
+            )
+            if not category:
+                return ActionResult(False, "memory_write", "Unknown memory category")
+
+            character_id = str(action.get("character_id") or event.character_id or "").strip()
+            target_id = str(
+                action.get("target_id")
+                or action.get("user_id")
+                or event.user_id
+                or ""
+            ).strip()
+            conversation_id = str(
+                action.get("conversation_id")
+                or event.conversation_id
+                or target_id
+                or "general"
+            ).strip()
+            if not character_id:
+                return ActionResult(False, "memory_write", "Missing character_id")
+            if category != "important_event" and not target_id:
+                return ActionResult(False, "memory_write", "Missing target_id")
+
+            title = str(action.get("title") or "").strip()
+            summary = str(action.get("summary") or content[:100]).strip()
+            try:
+                importance = max(0.0, min(1.0, float(action.get("importance", 0.6))))
+            except (TypeError, ValueError):
+                importance = 0.6
+
+            mfs = get_memory_fs()
+            if category == "user_persona":
+                path = mfs.path_user_persona(character_id, target_id)
+                fallback_title = "用户人格记忆"
+                default_append = True
+            elif category == "character_persona":
+                path = mfs.path_character_persona(character_id, target_id)
+                fallback_title = "角色人格记忆"
+                default_append = True
+            elif category == "recent_digest":
+                path = mfs.path_recent_digest(character_id, target_id)
+                fallback_title = "近期对话压缩摘要"
+                default_append = False
+            else:
+                path = mfs.path_important_events(character_id, conversation_id)
+                fallback_title = "重要事件"
+                default_append = True
+
+            append = action.get("append")
+            if append is None:
+                append = default_append
+            mfs.write(
+                path,
+                character_id=character_id,
+                target_id=target_id,
+                title=title or fallback_title,
+                content=content,
+                summary=summary,
+                importance=importance,
+                append=bool(append),
+            )
+            return ActionResult(True, "memory_write", f"saved {category}: {path}", {
+                "category": category,
+                "path": path,
+            })
         except Exception as e:
             return ActionResult(False, "memory_write", str(e))
 

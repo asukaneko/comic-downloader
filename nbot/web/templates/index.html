@@ -4214,14 +4214,29 @@
                             <!-- MemoryFS 文件列表 -->
                             <div v-if="reviewTab === 'memfs'" class="rv-list">
                                 <div v-if="memoryFSFiles.length === 0" class="rv-empty">暂无记忆文件</div>
-                                <div v-for="mf in memoryFSFiles" :key="mf.path" class="rv-memfs-item" @click="reviewMemFsSelected = reviewMemFsSelected === mf.path ? '' : mf.path">
-                                    <div class="rv-memfs-header">
-                                        <span class="rv-memfs-path">{{ mf.path }}</span>
-                                        <span class="rv-memfs-imp" :title="'importance: ' + mf.importance">{{ (mf.importance * 100).toFixed(0) }}%</span>
+                                <div v-for="group in groupedMemoryFSFiles()" :key="group.key" class="rv-memfs-group" :class="'rv-memfs-group-' + group.key">
+                                    <div class="rv-memfs-group-head">
+                                        <div>
+                                            <span class="rv-memfs-group-title">{{ group.label }}</span>
+                                            <span class="rv-memfs-group-count">{{ group.files.length }}</span>
+                                        </div>
+                                        <span class="rv-memfs-inject" :class="{ off: !group.injects_to_prompt }">
+                                            {{ group.injects_to_prompt ? '注入 Prompt' : '不注入' }}
+                                        </span>
                                     </div>
-                                    <div v-if="mf.summary" class="rv-memfs-summary">{{ mf.summary }}</div>
-                                    <div v-if="reviewMemFsSelected === mf.path && mf.content" class="rv-memfs-content">{{ mf.content }}</div>
-                                    <div class="rv-memfs-meta">v{{ mf.version }} · {{ mf.updated_at ? mf.updated_at.slice(0,10) : '' }}</div>
+                                    <div v-for="mf in group.files" :key="mf.path" class="rv-memfs-item" :class="{ legacy: mf.category === 'legacy' }" @click="reviewMemFsSelected = reviewMemFsSelected === mf.path ? '' : mf.path">
+                                        <div class="rv-memfs-header">
+                                            <div class="rv-memfs-main">
+                                                <span class="rv-memfs-title">{{ memoryFSFileTitle(mf) }}</span>
+                                                <span v-if="memoryFSFileSubtitle(mf)" class="rv-memfs-subtitle">{{ memoryFSFileSubtitle(mf) }}</span>
+                                            </div>
+                                            <span class="rv-memfs-imp" :title="'importance: ' + mf.importance">{{ (mf.importance * 100).toFixed(0) }}%</span>
+                                        </div>
+                                        <div v-if="mf.summary" class="rv-memfs-summary">{{ mf.summary }}</div>
+                                        <div class="rv-memfs-path">{{ mf.path }}</div>
+                                        <div v-if="reviewMemFsSelected === mf.path && mf.content" class="rv-memfs-content">{{ mf.content }}</div>
+                                        <div class="rv-memfs-meta">v{{ mf.version }} · {{ mf.updated_at ? mf.updated_at.slice(0,10) : '' }}</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -4412,8 +4427,17 @@
                                             <button class="hk-preset-btn" @click="addActionPreset('message')">
                                                 <i class="fas fa-envelope"></i> 发送消息
                                             </button>
-                                            <button class="hk-preset-btn" @click="addActionPreset('memory_write')">
-                                                <i class="fas fa-brain"></i> 写入记忆
+                                            <button class="hk-preset-btn" @click="addActionPreset('memory_user_persona')">
+                                                <i class="fas fa-user-edit"></i> 用户人格
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('memory_character_persona')">
+                                                <i class="fas fa-heart"></i> 角色人格
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('memory_important_event')">
+                                                <i class="fas fa-bookmark"></i> 重要事件
+                                            </button>
+                                            <button class="hk-preset-btn" @click="addActionPreset('memory_recent_digest')">
+                                                <i class="fas fa-compress-alt"></i> 近期摘要
                                             </button>
                                             <button class="hk-preset-btn" @click="addActionPreset('custom')">
                                                 <i class="fas fa-code"></i> 自定义 JSON

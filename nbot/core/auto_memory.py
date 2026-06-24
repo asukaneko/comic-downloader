@@ -2,18 +2,46 @@ import json
 import logging
 import os
 import re
-import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 _log = logging.getLogger(__name__)
 
 # 记忆提取频率控制：同一角色每 N 轮对话才提取一次，使用累积的对话内容
-_MEMORY_TURN_COUNTERS: Dict[str, int] = {}
+_MEMORY_TURN_COUNTERS: dict[str, int] = {}
 _MEMORY_TURN_INTERVAL = 6
 # 对话缓冲区：按角色存储累积的对话轮次
-_MEMORY_TURN_BUFFER: Dict[str, List[Dict[str, str]]] = {}
+_MEMORY_TURN_BUFFER: dict[str, list[dict[str, str]]] = {}
+
+_STRUCTURED_MEMORY_CATEGORIES = {
+    "user_persona",
+    "character_persona",
+    "important_event",
+    "recent_digest",
+}
+
+_CATEGORY_ALIASES = {
+    "user": "user_persona",
+    "user_profile": "user_persona",
+    "user_preference": "user_persona",
+    "user_preferences": "user_persona",
+    "persona_user": "user_persona",
+    "relationship": "character_persona",
+    "character": "character_persona",
+    "character_profile": "character_persona",
+    "character_attitude": "character_persona",
+    "persona_character": "character_persona",
+    "event": "important_event",
+    "plot": "important_event",
+    "important_events": "important_event",
+    "world_event": "important_event",
+    "digest": "recent_digest",
+    "summary": "recent_digest",
+    "recent_summary": "recent_digest",
+    "dialogue_digest": "recent_digest",
+    "diary": "recent_digest",
+}
 
 
 FALSE_VALUES = {"0", "false", "no", "off", "disabled"}
@@ -27,7 +55,7 @@ def is_auto_memory_enabled() -> bool:
     )
     try:
         if os.path.exists(settings_file):
-            with open(settings_file, "r", encoding="utf-8") as file:
+            with open(settings_file, encoding="utf-8") as file:
                 settings = json.load(file)
             features = settings.get("features") if isinstance(settings, dict) else {}
             if isinstance(features, dict) and "auto_memory" in features:
@@ -50,7 +78,20 @@ def _clean_json_text(text: str) -> str:
     return text.strip()
 
 
-def parse_memory_response(text: str) -> List[Dict[str, Any]]:
+def _normalize_memory_category(value: Any) -> str:
+    category = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return _CATEGORY_ALIASES.get(category, category if category in _STRUCTURED_MEMORY_CATEGORIES else "")
+
+
+def _coerce_importance(value: Any) -> float:
+    try:
+        importance = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, importance))
+
+
+def parse_memory_response(text: str) -> list[dict[str, Any]]:
     text = _clean_json_text(text)
     if not text:
         return []
@@ -67,11 +108,14 @@ def parse_memory_response(text: str) -> List[Dict[str, Any]]:
             return []
 
     if isinstance(parsed, dict):
-        parsed = parsed.get("memories") or parsed.get("items") or []
+        if any(key in parsed for key in ("title", "summary", "content")):
+            parsed = [parsed]
+        else:
+            parsed = parsed.get("memories") or parsed.get("items") or []
     if not isinstance(parsed, list):
         return []
 
-    memories: List[Dict[str, Any]] = []
+    memories: list[dict[str, Any]] = []
     for item in parsed:
         if not isinstance(item, dict):
             continue
@@ -81,24 +125,34 @@ def parse_memory_response(text: str) -> List[Dict[str, Any]]:
         mem_type = str(item.get("type") or "long").strip().lower()
         if mem_type not in {"long", "short"}:
             mem_type = "long"
+        category = _normalize_memory_category(
+            item.get("category")
+            or item.get("kind")
+            or item.get("memory_category")
+            or item.get("target")
+        )
+        importance = _coerce_importance(item.get("importance"))
         if not title and summary:
             title = summary[:30]
         if not content and summary:
             content = summary
         if not title or not content:
             continue
-        memories.append(
-            {
-                "title": title[:80],
-                "summary": (summary or content)[:200],
-                "content": content[:2000],
-                "type": mem_type,
-            }
-        )
-    return memories[:1]
+        normalized = {
+            "title": title[:80],
+            "summary": (summary or content)[:200],
+            "content": content[:2000],
+            "type": mem_type,
+        }
+        if category:
+            normalized["category"] = category
+        if importance:
+            normalized["importance"] = importance
+        memories.append(normalized)
+    return memories[:8]
 
 
-def format_memories_for_prompt(memories: List[Dict[str, Any]]) -> str:
+def format_memories_for_prompt(memories: list[dict[str, Any]]) -> str:
     if not memories:
         return ""
 
@@ -117,6 +171,108 @@ def format_memories_for_prompt(memories: List[Dict[str, Any]]) -> str:
         elif summary:
             lines.append(f"- {summary[:240]}")
     return "\n\n" + "\n".join(lines).rstrip()
+
+
+def _has_structured_memories(memories: list[dict[str, Any]]) -> bool:
+    return any(str(mem.get("category") or "") in _STRUCTURED_MEMORY_CATEGORIES for mem in memories)
+
+
+def _memory_title(memory: dict[str, Any], fallback: str) -> str:
+    return str(memory.get("title") or fallback).strip()[:80]
+
+
+def _memory_summary(memory: dict[str, Any]) -> str:
+    return str(memory.get("summary") or memory.get("content") or "").strip()[:500]
+
+
+def _memory_content(memory: dict[str, Any]) -> str:
+    title = str(memory.get("title") or "").strip()
+    content = str(memory.get("content") or memory.get("summary") or "").strip()
+    if title and content and title not in content:
+        return f"{title}\n{content}"[:2000]
+    return content[:2000]
+
+
+def _save_structured_memories_to_memory_fs(
+    memories: list[dict[str, Any]],
+    *,
+    character_id: str,
+    target_id: str,
+    session_id: str,
+) -> int:
+    if not character_id or not memories:
+        return 0
+
+    try:
+        from nbot.memory.fs import get_memory_fs
+
+        mfs = get_memory_fs()
+        saved = 0
+        for memory in memories:
+            category = str(memory.get("category") or "")
+            if category not in _STRUCTURED_MEMORY_CATEGORIES:
+                continue
+
+            content = _memory_content(memory)
+            if not content:
+                continue
+
+            importance = _coerce_importance(memory.get("importance"))
+            if category == "user_persona":
+                if not target_id:
+                    continue
+                mfs.write(
+                    mfs.path_user_persona(character_id, target_id),
+                    character_id=character_id,
+                    target_id=target_id,
+                    title=_memory_title(memory, "用户人格记忆"),
+                    content=content,
+                    summary=_memory_summary(memory),
+                    importance=importance or 0.6,
+                    append=True,
+                )
+            elif category == "character_persona":
+                if not target_id:
+                    continue
+                mfs.write(
+                    mfs.path_character_persona(character_id, target_id),
+                    character_id=character_id,
+                    target_id=target_id,
+                    title=_memory_title(memory, "角色人格记忆"),
+                    content=content,
+                    summary=_memory_summary(memory),
+                    importance=importance or 0.6,
+                    append=True,
+                )
+            elif category == "important_event":
+                mfs.write(
+                    mfs.path_important_events(character_id, session_id or target_id or "general"),
+                    character_id=character_id,
+                    target_id=target_id,
+                    title=_memory_title(memory, "重要事件"),
+                    content=content,
+                    summary=_memory_summary(memory),
+                    importance=importance or 0.8,
+                    append=True,
+                )
+            elif category == "recent_digest":
+                if not target_id:
+                    continue
+                mfs.write(
+                    mfs.path_recent_digest(character_id, target_id),
+                    character_id=character_id,
+                    target_id=target_id,
+                    title=_memory_title(memory, "近期对话压缩摘要"),
+                    content=content,
+                    summary=_memory_summary(memory),
+                    importance=importance or 0.4,
+                    append=False,
+                )
+            saved += 1
+        return saved
+    except Exception as exc:
+        _log.warning("[AutoMemory] 结构化记忆写入 MemoryFS 失败: %s", exc, exc_info=True)
+        return 0
 
 
 def load_character_memories(character_name: str = "", target_id: str = "") -> str:
@@ -140,8 +296,8 @@ def load_character_memories(character_name: str = "", target_id: str = "") -> st
         return ""
 
 
-def build_memory_context(ctx, callbacks) -> Dict[str, str]:
-    context: Dict[str, Any] = {}
+def build_memory_context(ctx, callbacks) -> dict[str, str]:
+    context: dict[str, Any] = {}
 
     try:
         if hasattr(callbacks, "get_memory_context"):
@@ -159,6 +315,12 @@ def build_memory_context(ctx, callbacks) -> Dict[str, str]:
         or metadata.get("sender_name")
         or ""
     )
+    character_id = (
+        context.get("character_id")
+        or metadata.get("character_id")
+        or character_name
+        or ""
+    )
     target_id = (
         context.get("target_id")
         or context.get("user_id")
@@ -169,13 +331,14 @@ def build_memory_context(ctx, callbacks) -> Dict[str, str]:
     # session_id 用于区分同一角色的不同 Web 会话
     session_id = str(context.get("session_id") or "").strip()
     return {
+        "character_id": str(character_id or "").strip(),
         "character_name": str(character_name or "").strip(),
         "target_id": str(target_id or "").strip(),
         "session_id": session_id,
     }
 
 
-def inject_memories_into_messages(messages: List[Dict[str, Any]], memory_text: str) -> None:
+def inject_memories_into_messages(messages: list[dict[str, Any]], memory_text: str) -> None:
     if not memory_text:
         return
 
@@ -189,9 +352,9 @@ def inject_memories_into_messages(messages: List[Dict[str, Any]], memory_text: s
     messages.insert(0, {"role": "system", "content": memory_text.strip()})
 
 
-def _call_memory_model(turns: List[Dict[str, str]],
+def _call_memory_model(turns: list[dict[str, str]],
                        character_name: str = "", user_name: str = "",
-                       language: str = "") -> List[Dict[str, Any]]:
+                       language: str = "") -> list[dict[str, Any]]:
     """调用 AI 模型从多轮对话中提取记忆
 
     Args:
@@ -226,21 +389,19 @@ def _call_memory_model(turns: List[Dict[str, str]],
     system_prompt = (
         "You are a memory extraction middleware, not a roleplay character."
         f"{char_desc}{user_desc}\n"
-        "You will receive multiple conversation turns. Your task is to consolidate them into exactly ONE concise memory entry. "
-        "Synthesize all important, stable, future-useful information into a single summary. "
+        "You will receive multiple conversation turns. Reuse this one call to extract only compressed, future-useful memory. "
         "IMPORTANT: The memory MUST be specifically about or related to the character. "
         "Do NOT include generic information that is not tied to this character. "
-        "For example, user preferences should be framed as what the user feels toward this character, "
-        "and relationship facts must involve this character.\n"
-        "Focus on: user preferences about this character, identity facts involving this character, "
-        "durable relationship changes between the user and this character, "
-        "long-term goals involving this character, promises made to or by this character, "
-        "and stable fictional-world facts about this character.\n"
-        "Ignore ordinary chat, one-off requests, claims invented only by the assistant, "
-        "and anything not directly related to this character.\n"
-        "If nothing worth remembering about this character, return []. "
-        "Otherwise, return a JSON array with exactly ONE item containing title, summary, content, and type ('long' or 'short'). "
-        "The content should be a well-organized consolidation of all noteworthy facts from the conversation."
+        "Never store raw dialogue transcripts.\n"
+        "Return JSON only. Use either [] if nothing is worth remembering, or an object with a memories array. "
+        "Each memory item must contain category, title, summary, content, type ('long' or 'short'), and importance (0-1). "
+        "Allowed categories:\n"
+        "- user_persona: stable user preferences, boundaries, names, interaction style, emotional needs, or recurring traits.\n"
+        "- character_persona: how the character's attitude, promises, habits, or relationship understanding toward the user changed.\n"
+        "- important_event: promises, conflicts, confessions, separations, plot turns, confirmed setting changes, or world-state changes.\n"
+        "- recent_digest: a compact summary of the recent turns only if it helps continuity; omit it for ordinary small talk.\n"
+        "Use at most one item per category. Write summaries, not quotes. "
+        "Ignore ordinary chat, one-off requests, and claims invented only by the assistant."
         f"{lang_instruction}"
     )
 
@@ -283,7 +444,7 @@ def _call_memory_model(turns: List[Dict[str, str]],
 
     # 记录 token 用量
     try:
-        from nbot.core.token_stats import get_token_stats_manager, PURPOSE_MEMORY
+        from nbot.core.token_stats import PURPOSE_MEMORY, get_token_stats_manager
         usage_data = resp_data.get("usage", {})
         if usage_data:
             stats_mgr = get_token_stats_manager()
@@ -322,6 +483,7 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
         return 0
 
     memory_context = build_memory_context(ctx, callbacks)
+    character_id = memory_context.get("character_id", "")
     character_name = memory_context.get("character_name", "")
     target_id = memory_context.get("target_id", "")
     session_id = memory_context.get("session_id", "")
@@ -331,6 +493,8 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
         speaker_name = str(ctx.metadata.get("group_speaker_name") or "").strip()
         if speaker_name:
             character_name = speaker_name
+            if not character_id:
+                character_id = speaker_name
 
     if not character_name and not target_id:
         _log.warning("[AutoMemory] 跳过: character_name和target_id都为空，无法建立记忆关联")
@@ -404,6 +568,21 @@ def extract_and_save_turn_memories(ctx, callbacks, result) -> int:
         return 0
 
     _MEMORY_TURN_COUNTERS[counter_key] = 0
+
+    if _has_structured_memories(memories):
+        saved_count = _save_structured_memories_to_memory_fs(
+            memories,
+            character_id=character_id or character_name,
+            target_id=target_id,
+            session_id=session_id,
+        )
+        if saved_count:
+            _log.info(
+                "[AutoMemory] 已保存结构化记忆到 MemoryFS: character=%s count=%d",
+                character_id or character_name,
+                saved_count,
+            )
+        return saved_count
 
     try:
         from nbot.core.prompt import prompt_manager

@@ -119,14 +119,24 @@ def register_review_routes(app, server):
         """列出指定角色的所有 MemoryFS 逻辑文件。"""
         character_id = request.args.get("character_id", "")
         try:
-            from nbot.memory.fs import get_memory_fs
+            from nbot.memory.fs import describe_memory_path, get_memory_fs
             mfs = get_memory_fs()
             if character_id:
                 files = mfs.list_for_character(character_id)
             else:
                 files = list(mfs._index.values())
+            items = []
+            for mf in files:
+                item = mf.to_dict()
+                item.update(describe_memory_path(mf.path))
+                items.append(item)
+            items.sort(key=lambda item: (
+                item.get("category_order", 99),
+                -float(item.get("importance") or 0),
+                item.get("path", ""),
+            ))
             return jsonify({
-                "files": [f.to_dict() for f in files],
+                "files": items,
                 "total": len(files),
             })
         except Exception as exc:

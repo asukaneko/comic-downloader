@@ -30017,15 +30017,81 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     color: #fbbf24;
     font-size: 11px;
 }
+.rv-memfs-group {
+    border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.rv-memfs-group-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 16px;
+    background: rgba(15,23,42,.94);
+    border-bottom: 1px solid rgba(255,255,255,.05);
+}
+.rv-memfs-group-title {
+    color: var(--text-primary, #e2e8f0);
+    font-size: 12px;
+    font-weight: 700;
+}
+.rv-memfs-group-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    margin-left: 6px;
+    border-radius: 9px;
+    background: rgba(96,165,250,.16);
+    color: #93c5fd;
+    font-size: 11px;
+}
+.rv-memfs-inject {
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(52,211,153,.12);
+    color: #34d399;
+    font-size: 11px;
+}
+.rv-memfs-inject.off {
+    background: rgba(148,163,184,.1);
+    color: var(--text-tertiary, #64748b);
+}
 .rv-memfs-item {
-    padding: 8px 16px;
-    border-bottom: 1px solid rgba(255,255,255,.04);
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,.035);
     cursor: pointer;
     font-size: 12px;
 }
 .rv-memfs-item:hover { background: rgba(255,255,255,.03); }
-.rv-memfs-header { display: flex; align-items: center; justify-content: space-between; }
-.rv-memfs-path { font-family: monospace; color: var(--accent-primary, #60a5fa); font-size: 12px; }
+.rv-memfs-item.legacy { opacity: .72; }
+.rv-memfs-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rv-memfs-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.rv-memfs-title {
+    color: var(--text-primary, #e2e8f0);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rv-memfs-subtitle {
+    color: var(--text-tertiary, #64748b);
+    font-size: 11px;
+}
+.rv-memfs-path {
+    margin-top: 4px;
+    font-family: monospace;
+    color: var(--text-tertiary, #64748b);
+    font-size: 11px;
+    word-break: break-all;
+}
 .rv-memfs-imp { color: var(--text-tertiary, #64748b); font-size: 11px; }
 .rv-memfs-summary { color: var(--text-secondary, #94a3b8); margin-top: 2px; }
 .rv-memfs-content {

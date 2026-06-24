@@ -81,9 +81,11 @@ window.__nbotHookTemplates = [
             actions: [
                 {
                     type: 'memory_write',
+                    category: 'character_persona',
                     title: '关系升温',
+                    summary: '角色对用户的亲近感上升',
                     content: '用户与角色的关系正在升温，角色会更自然地表达亲近。',
-                    mem_type: 'short',
+                    importance: 0.7,
                 },
                 {
                     type: 'log',
@@ -17949,6 +17951,49 @@ def main(params):
         }
     },
 
+    groupedMemoryFSFiles() {
+        const order = ['user_persona', 'character_persona', 'important_event', 'recent_digest', 'legacy'];
+        const fallbackLabels = {
+            user_persona: '用户人格',
+            character_persona: '角色人格',
+            important_event: '重要事件',
+            recent_digest: '近期摘要',
+            legacy: '旧版/其他',
+        };
+        const groups = new Map();
+        (this.memoryFSFiles || []).forEach(file => {
+            const category = file.category || 'legacy';
+            if (!groups.has(category)) {
+                groups.set(category, {
+                    key: category,
+                    label: file.category_label || fallbackLabels[category] || category,
+                    injects_to_prompt: !!file.injects_to_prompt,
+                    files: [],
+                });
+            }
+            groups.get(category).files.push(file);
+        });
+        return Array.from(groups.values())
+            .sort((a, b) => {
+                const ai = order.includes(a.key) ? order.indexOf(a.key) : order.length;
+                const bi = order.includes(b.key) ? order.indexOf(b.key) : order.length;
+                return ai - bi;
+            });
+    },
+
+    memoryFSFileTitle(file) {
+        if (!file) return '';
+        return file.title || file.summary || file.path || '';
+    },
+
+    memoryFSFileSubtitle(file) {
+        if (!file) return '';
+        const parts = [];
+        if (file.character_id) parts.push(file.character_id);
+        if (file.target_id) parts.push(file.target_id);
+        return parts.join(' · ');
+    },
+
     async toggleHook(hookId) {
         try {
             await api.post('/api/hooks/' + hookId + '/toggle');
@@ -18063,6 +18108,39 @@ def main(params):
             relationship_delta: { type: 'relationship_delta', field: 'affection', delta: 1 },
             log: { type: 'log', level: 'info', message: 'Hook 触发' },
             message: { type: 'message', content: '' },
+            memory_user_persona: {
+                type: 'memory_write',
+                category: 'user_persona',
+                title: '用户偏好',
+                summary: '',
+                content: '',
+                importance: 0.6,
+            },
+            memory_character_persona: {
+                type: 'memory_write',
+                category: 'character_persona',
+                title: '角色关系理解',
+                summary: '',
+                content: '',
+                importance: 0.6,
+            },
+            memory_important_event: {
+                type: 'memory_write',
+                category: 'important_event',
+                title: '重要事件',
+                summary: '',
+                content: '',
+                importance: 0.8,
+            },
+            memory_recent_digest: {
+                type: 'memory_write',
+                category: 'recent_digest',
+                title: '近期对话压缩摘要',
+                summary: '',
+                content: '',
+                importance: 0.4,
+                append: false,
+            },
             memory_write: { type: 'memory_write', title: '', content: '', mem_type: 'short' },
             custom: { type: '' }
         };
