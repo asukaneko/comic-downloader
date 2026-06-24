@@ -27,6 +27,8 @@ _DYNAMIC_SECTION_KEYS = (
     "plot.real_time_sync",
     "knowledge.rag",
     "world_book",
+    "memory_fs.context",
+    "memory_fs_context",
 )
 
 

@@ -676,7 +676,13 @@ class CharacterRuntime:
             return []
 
     def _inject_memory_fs(self, stack, identity, chat_request) -> None:
-        """将 MemoryFS 三层必读内容注入到 PromptStack（非阻塞）。"""
+        """将 MemoryFS 三层必读内容注入到 PromptStack（非阻塞）。
+
+        注意：identity.target_id 可能是 scope_id 格式（如 web:{session_id}），
+        与 auto_memory 保存时使用的 user_id 不一致，导致 user_persona/character_persona
+        路径无法匹配。Pipeline 阶段的 _inject_memory_fs_direct 已用正确的 target_id
+        注入了 memory_fs.context，此处不再覆盖。
+        """
         try:
             from nbot.memory.fs import get_memory_fs
             mfs = get_memory_fs()
@@ -686,12 +692,15 @@ class CharacterRuntime:
 
             ctx_text = mfs.build_prompt_context(char_id, user_id, conv_id)
             if ctx_text:
-                stack.add(
-                    key="memory_fs_context",
-                    content=f"## 角色记忆背景\n{ctx_text}",
-                    priority=200,
-                    scope="turn",
-                )
+                # 如果 Pipeline 阶段已注入 memory_fs.context（使用正确的 target_id），
+                # 则不覆盖，仅在无 Pipeline 注入时补充
+                if not stack.get("memory_fs.context"):
+                    stack.add(
+                        key="memory_fs_context",
+                        content=f"## 角色记忆背景\n{ctx_text}",
+                        priority=200,
+                        scope="turn",
+                    )
                 _log.debug("[MemoryFS] injected %d chars for char=%s user=%s",
                            len(ctx_text), char_id, user_id)
         except Exception as exc:

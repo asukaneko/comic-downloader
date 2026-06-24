@@ -914,6 +914,9 @@ class AIPipeline:
             except Exception:
                 pass
 
+        # MemoryFS 结构化记忆直接注入（独立于角色运行时，agent 模式跳过）
+        if ctx.metadata.get("session_mode") != "agent":
+            self._inject_memory_fs_direct(ctx, callbacks)
 
         # 角色运行时 before_turn hook
         self._phase_character_runtime_before_turn(ctx, callbacks)
@@ -1719,6 +1722,60 @@ class AIPipeline:
             run_auto_memory,
             serial_key="auto_memory",
         )
+
+    # ------------------------------------------------------------------
+    # MemoryFS 直接注入（独立于角色运行时）
+    # ------------------------------------------------------------------
+
+    def _inject_memory_fs_direct(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+    ) -> None:
+        """将 MemoryFS 结构化记忆直接注入 PromptStack。
+
+        不依赖 CharacterRuntime，作为 _phase_prepare_context 的独立步骤。
+        如果后续角色运行时成功执行了 _inject_memory_fs（key=memory_fs_context），
+        本步骤注入的 memory_fs.context 会被移除以避免重复。
+        """
+        try:
+            from nbot.memory.fs import get_memory_fs
+
+            mfs = get_memory_fs()
+
+            # 从 metadata 和 callbacks 提取标识
+            memory_ctx = callbacks.get_memory_context(ctx) if hasattr(callbacks, "get_memory_context") else {}
+            metadata = getattr(ctx.chat_request, "metadata", {}) or {}
+
+            char_id = (
+                str(memory_ctx.get("character_id") or "").strip()
+                or str(metadata.get("character_id") or "").strip()
+                or str(memory_ctx.get("character_name") or "").strip()
+            )
+            user_id = (
+                str(memory_ctx.get("target_id") or "").strip()
+                or str(memory_ctx.get("user_id") or "").strip()
+                or str(getattr(ctx.chat_request, "user_id", "") or "").strip()
+            )
+            conv_id = str(getattr(ctx.chat_request, "conversation_id", "") or "").strip()
+
+            if not char_id:
+                return
+
+            ctx_text = mfs.build_prompt_context(char_id, user_id, conv_id)
+            if ctx_text:
+                ctx.prompt_stack.add(
+                    key="memory_fs.context",
+                    content=ctx_text,
+                    priority=58,  # 在旧记忆(60)之前、关系(50)之后
+                    scope="turn",
+                )
+                _log.debug(
+                    "[MemoryFS] direct inject %d chars for char=%s user=%s",
+                    len(ctx_text), char_id, user_id,
+                )
+        except Exception as exc:
+            _log.debug("[MemoryFS] direct inject failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Phase 4: AI 响应
