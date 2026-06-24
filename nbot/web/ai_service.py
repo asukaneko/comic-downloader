@@ -33,6 +33,7 @@ from nbot.core.ai_pipeline import (
     PipelineCallbacks,
     PipelineResult,
 )
+from nbot.core.background_tasks import submit_background_task
 from nbot.web.utils.config_loader import get_vision_model_config
 
 try:
@@ -855,6 +856,7 @@ class WebCallbacks(PipelineCallbacks):
             if getattr(self, "_naming_in_progress", False):
                 return
             self._naming_in_progress = True
+            unique_key = f"session_name:{self.session_id}"
 
             _log.info(f"开始为会话 {self.session_id[:8]} 自动生成名称 (当前: {name}, 消息数: {total_count})")
 
@@ -864,12 +866,18 @@ class WebCallbacks(PipelineCallbacks):
 
             def generate_and_update():
                 try:
-                    new_name = self.server._generate_session_name(recent_msgs, session_id=self.session_id)
+                    new_name = self.server._generate_session_name(
+                        recent_msgs,
+                        session_id=self.session_id,
+                    )
                     if new_name:
-                        session["name"] = new_name
-                        session["_auto_name_generated"] = True
-                        session["_last_rename_count"] = total_count
-                        self.session_store.set_session(self.session_id, session)
+                        latest_session = (
+                            self.session_store.get_session(self.session_id) or session
+                        )
+                        latest_session["name"] = new_name
+                        latest_session["_auto_name_generated"] = True
+                        latest_session["_last_rename_count"] = total_count
+                        self.session_store.set_session(self.session_id, latest_session)
                         self.server.socketio.emit(
                             "session_renamed",
                             {"session_id": self.session_id, "name": new_name},
@@ -881,11 +889,54 @@ class WebCallbacks(PipelineCallbacks):
                 finally:
                     self._naming_in_progress = False
 
-            threading.Thread(target=generate_and_update, daemon=True).start()
+            future = submit_background_task(
+                "session_auto_name",
+                generate_and_update,
+                unique_key=unique_key,
+            )
+            if future is None:
+                self._naming_in_progress = False
         except Exception as e:
             _log.error(f"自动命名检查失败: {e}")
 
     # ---- 附件解析 ----
+
+    def on_plot_choices_ready(
+        self,
+        ctx: PipelineContext,
+        result: PipelineResult,
+    ) -> None:
+        plot_choices = (result.metadata or {}).get("plot_choices")
+        if not plot_choices:
+            return
+
+        mermaid = ""
+        graph = None
+        try:
+            from nbot.plot.graph_manager import get_plot_graph_manager
+
+            plot_mgr = get_plot_graph_manager(
+                data_dir=getattr(self.server, "data_dir", "data/web"),
+            )
+            mermaid = plot_mgr.generate_mermaid(self.session_id)
+            graph = plot_mgr.get_graph(self.session_id)
+        except Exception:
+            pass
+
+        self.server.socketio.emit(
+            "plot_choices",
+            {
+                "session_id": self.session_id,
+                "choices": plot_choices,
+                "mermaid": mermaid,
+                "graph": graph,
+            },
+            room=self.session_id,
+        )
+        try:
+            self.server.socketio.sleep(0)
+        except Exception:
+            pass
 
     def resolve_attachment_data(self, ctx: PipelineContext, attachment: Dict) -> Optional[Dict]:
         """Web 频道附件解析：静态文件 / 工作区文件 / 数据 URL。"""

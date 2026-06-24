@@ -19,6 +19,7 @@ from nbot.character.models import (
     ReactionPlan,
     RelationshipState,
 )
+from nbot.core.background_tasks import submit_background_task
 from nbot.events import names as _E
 
 _log = logging.getLogger(__name__)
@@ -211,28 +212,6 @@ class CharacterRuntime:
             assistant_message=getattr(result, "final_content", ""),
         )
 
-        try:
-            from nbot.character.auto_state import update_state_from_recent_turns
-
-            new_state, new_relationship, auto_state_changed = update_state_from_recent_turns(
-                profile=turn_context.profile,
-                state=new_state,
-                relationship=new_relationship,
-                user_message=getattr(chat_request, "content", ""),
-                assistant_message=getattr(result, "final_content", ""),
-                metadata=getattr(chat_request, "metadata", {}) or {},
-                conversation_id=getattr(chat_request, "conversation_id", "") or "",
-                result_error=getattr(result, "error", None),
-            )
-            if auto_state_changed:
-                _log.debug(
-                    "[CharacterRuntime] auto state adjustment applied: mood=%s intensity=%s",
-                    new_state.mood,
-                    new_state.mood_intensity,
-                )
-        except Exception as exc:
-            _log.warning("[CharacterRuntime] auto state adjustment failed: %s", exc, exc_info=True)
-
         _log.debug(
             "[CharacterRuntime] after_turn: old_rel=%s new_rel=%s state_repo=%s rel_repo=%s",
             {
@@ -259,6 +238,15 @@ class CharacterRuntime:
 
         if self.relationship_repo and new_relationship:
             self.relationship_repo.save(new_relationship)
+
+        self._schedule_auto_state_adjustment(
+            chat_request=chat_request,
+            result=result,
+            turn_context=turn_context,
+            base_state=new_state,
+            base_relationship=new_relationship,
+            identity=identity,
+        )
 
         # Emit state/relationship change events
         if new_state and old_state:
@@ -324,6 +312,132 @@ class CharacterRuntime:
             "affection": new_relationship.affection if new_relationship else 0,
             "trust": new_relationship.trust if new_relationship else 0,
         })
+
+    def _schedule_auto_state_adjustment(
+        self,
+        *,
+        chat_request,
+        result,
+        turn_context: CharacterTurnContext,
+        base_state: CharacterState,
+        base_relationship: RelationshipState,
+        identity: CharacterIdentity,
+    ) -> None:
+        """Run the slow AutoState evaluator after the reply has been sent."""
+        if not base_state or not base_relationship or not turn_context:
+            return
+
+        metadata = dict(getattr(chat_request, "metadata", {}) or {})
+        user_message = getattr(chat_request, "content", "") or ""
+        assistant_message = getattr(result, "final_content", "") or ""
+        conversation_id = getattr(chat_request, "conversation_id", "") or ""
+        result_error = getattr(result, "error", None)
+        profile = turn_context.profile
+
+        def run_auto_state() -> None:
+            try:
+                from nbot.character.auto_state import update_state_from_recent_turns
+
+                adjusted_state, adjusted_relationship, changed = update_state_from_recent_turns(
+                    profile=profile,
+                    state=base_state,
+                    relationship=base_relationship,
+                    user_message=user_message,
+                    assistant_message=assistant_message,
+                    metadata=metadata,
+                    conversation_id=conversation_id,
+                    result_error=result_error,
+                )
+                if not changed:
+                    return
+                self._save_async_auto_state_delta(
+                    base_state=base_state,
+                    base_relationship=base_relationship,
+                    adjusted_state=adjusted_state,
+                    adjusted_relationship=adjusted_relationship,
+                    identity=identity,
+                )
+            except Exception as exc:
+                _log.warning(
+                    "[CharacterRuntime] auto state adjustment failed: %s",
+                    exc,
+                    exc_info=True,
+                )
+
+        submit_background_task(
+            "auto_state_adjustment",
+            run_auto_state,
+            serial_key="auto_state",
+        )
+
+    def _save_async_auto_state_delta(
+        self,
+        *,
+        base_state: CharacterState,
+        base_relationship: RelationshipState,
+        adjusted_state: CharacterState,
+        adjusted_relationship: RelationshipState,
+        identity: CharacterIdentity,
+    ) -> None:
+        """Save AutoState changes on top of the latest persisted values."""
+        latest_state = self._refresh_latest_state(base_state) or base_state
+        latest_relationship = (
+            self._refresh_latest_relationship(base_relationship) or base_relationship
+        )
+
+        if self.state_repo and adjusted_state:
+            if adjusted_state.mood != base_state.mood:
+                latest_state.mood = adjusted_state.mood
+            latest_state.mood_intensity = max(
+                0.0,
+                min(
+                    1.0,
+                    latest_state.mood_intensity
+                    + (adjusted_state.mood_intensity - base_state.mood_intensity),
+                ),
+            )
+            latest_state.energy = max(
+                0,
+                min(
+                    100,
+                    int(latest_state.energy + (adjusted_state.energy - base_state.energy)),
+                ),
+            )
+            self.state_repo.save(latest_state)
+
+        rel_changes = {}
+        if self.relationship_repo and adjusted_relationship:
+            for field in (
+                "affection",
+                "trust",
+                "familiarity",
+                "dependency",
+                "security",
+                "jealousy",
+            ):
+                delta = getattr(adjusted_relationship, field) - getattr(base_relationship, field)
+                if not delta:
+                    continue
+                old_value = getattr(latest_relationship, field)
+                new_value = max(0, min(100, int(old_value + delta)))
+                setattr(latest_relationship, field, new_value)
+                rel_changes[field] = {"old": old_value, "new": new_value}
+            self.relationship_repo.save(latest_relationship)
+
+        if adjusted_state and adjusted_state.mood != base_state.mood:
+            self._emit_hook("state.changed", identity, {
+                "field": "mood",
+                "old": base_state.mood,
+                "new": adjusted_state.mood,
+            })
+        if rel_changes:
+            self._emit_hook("relationship.changed", identity, rel_changes)
+
+        _log.debug(
+            "[CharacterRuntime] async auto state adjustment applied: mood=%s intensity=%.2f",
+            latest_state.mood if latest_state else "",
+            latest_state.mood_intensity if latest_state else 0,
+        )
 
     def _refresh_latest_state(self, state: CharacterState) -> CharacterState:
         if not self.state_repo or not state:

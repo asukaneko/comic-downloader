@@ -20,6 +20,7 @@ from abc import ABC
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
+from nbot.core.background_tasks import submit_background_task
 from nbot.core.chat_models import ChatRequest, ChatResponse
 
 _log = logging.getLogger(__name__)
@@ -531,6 +532,12 @@ class PipelineCallbacks(ABC):
 
     # ---- 表情包 ----
 
+    def on_plot_choices_ready(
+        self, ctx: PipelineContext, result: PipelineResult
+    ) -> None:
+        """Called when async plot choice generation finishes."""
+        pass
+
     def send_sticker(
         self, ctx: PipelineContext, sticker_info: Dict[str, Any]
     ) -> None:
@@ -682,7 +689,7 @@ class AIPipeline:
         self._emit_hook("reply.after_send", ctx)
 
         # Phase 6: 剧情选项生成（异步，不阻塞主回复）
-        self._generate_plot_choices_if_enabled(ctx, result)
+        self._generate_plot_choices_if_enabled(ctx, result, callbacks)
 
         # Phase 7: 群聊旁白生成（条件触发）
         if self._group_context and self._group_context.get("auto_narrate"):
@@ -1116,7 +1123,7 @@ class AIPipeline:
         except Exception as e:
             _log.error("group narrator failed: %s", e)
 
-    def _generate_plot_choices_if_enabled(self, ctx, result):
+    def _generate_plot_choices_if_enabled(self, ctx, result, callbacks=None):
         """Generate plot choices if plot mode is enabled for this session."""
         if not ctx or not ctx.chat_request:
             _log.debug("[PlotMode] skipped: no ctx or chat_request")
@@ -1126,56 +1133,55 @@ class AIPipeline:
             if not conversation_id:
                 _log.debug("[PlotMode] skipped: no conversation_id")
                 return
-            # Check if plot mode is enabled
-            from nbot.plot.graph_manager import get_plot_graph_manager
             from nbot.plot.choice_generator import PlotChoiceGenerator
-            from nbot.plot.models import PlotNode, PlotChoice
 
             # Check session for plot_mode flag
-            metadata = getattr(ctx.chat_request, 'metadata', {}) or {}
-            session_plot = metadata.get('plot_mode', False)
+            metadata = getattr(ctx.chat_request, "metadata", {}) or {}
+            session_plot = metadata.get("plot_mode", False)
             if not session_plot:
                 return
 
-            # Generate choices asynchronously
-            import asyncio
             generator = PlotChoiceGenerator()
             turn_context = ctx.character_turn
 
             self._run_plot_choice_generation(
-                generator, result, turn_context, conversation_id, ctx
+                generator, result, turn_context, conversation_id, ctx, callbacks
             )
         except Exception as e:
             _log.debug("[AIPipeline] plot choice generation skipped: %s", e)
 
-    def _run_plot_choice_generation(self, generator, result, turn_context, conversation_id, ctx):
-        """Run plot choice generation to completion before Web emits result metadata."""
+    def _run_plot_choice_generation(
+        self,
+        generator,
+        result,
+        turn_context,
+        conversation_id,
+        ctx,
+        callbacks=None,
+    ):
+        """Schedule plot choice generation without blocking the main reply."""
         import asyncio
 
-        coro = self._do_generate_plot_choices(
-            generator, result, turn_context, conversation_id, ctx
-        )
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            asyncio.run(coro)
-            return
+        result.metadata["plot_mode"] = True
+        result.metadata["plot_choices_pending"] = True
 
-        import threading
-
-        error_holder = []
-
-        def run_in_thread():
+        def run_plot_generation() -> None:
             try:
-                asyncio.run(coro)
-            except Exception as exc:
-                error_holder.append(exc)
+                asyncio.run(
+                    self._do_generate_plot_choices(
+                        generator, result, turn_context, conversation_id, ctx
+                    )
+                )
+                if callbacks and result.metadata.get("plot_choices"):
+                    callbacks.on_plot_choices_ready(ctx, result)
+            finally:
+                result.metadata["plot_choices_pending"] = False
 
-        worker = threading.Thread(target=run_in_thread, daemon=True)
-        worker.start()
-        worker.join()
-        if error_holder:
-            raise error_holder[0]
+        submit_background_task(
+            "plot_choice_generation",
+            run_plot_generation,
+            serial_key=f"plot:{conversation_id}",
+        )
 
     def _build_plot_runtime_snapshots(self, turn_context):
         """从 turn_context 提取角色运行时状态/关系快照，供分支切换与回溯定位。
@@ -1694,15 +1700,25 @@ class AIPipeline:
         callbacks: PipelineCallbacks,
         result: PipelineResult,
     ) -> None:
-        """主回复完成后，旁路抽取并保存记忆。"""
-        try:
-            from nbot.core.auto_memory import extract_and_save_turn_memories
+        result.metadata["auto_memory_pending"] = True
 
-            saved_count = extract_and_save_turn_memories(ctx, callbacks, result)
-            if saved_count:
-                result.metadata["auto_memory_saved"] = saved_count
-        except Exception as exc:
-            _log.warning("[AutoMemory] 记忆中间件异常: %s", exc, exc_info=True)
+        def run_auto_memory() -> None:
+            try:
+                from nbot.core.auto_memory import extract_and_save_turn_memories
+
+                saved_count = extract_and_save_turn_memories(ctx, callbacks, result)
+                if saved_count:
+                    result.metadata["auto_memory_saved"] = saved_count
+            except Exception as exc:
+                _log.warning("[AutoMemory] async task failed: %s", exc, exc_info=True)
+            finally:
+                result.metadata["auto_memory_pending"] = False
+
+        submit_background_task(
+            "auto_memory",
+            run_auto_memory,
+            serial_key="auto_memory",
+        )
 
     # ------------------------------------------------------------------
     # Phase 4: AI 响应
