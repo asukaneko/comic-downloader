@@ -1977,7 +1977,13 @@ const NbotMethods = {
                             await this.loadGatewayLogs();
                             break;
                         case 'memory':
-                            await this.loadMemory();
+                            this.memfsViewState = 'cards';
+                            this.memfsSelectedChar = '';
+                            this.memfsSearch = '';
+                            await Promise.all([
+                                this.loadMemoryFS(),
+                                this.loadMemory()
+                            ]);
                             break;
                         case 'heartbeat':
                             await this.loadHeartbeat();

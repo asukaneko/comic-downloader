@@ -4969,261 +4969,162 @@
                     <div v-if="currentPage === 'memory'" class="fade-in">
                         <!-- 统计概览 -->
                         <div class="memory-stats">
-                            <div class="memory-stat-card long-term">
+                            <div class="memory-stat-card total">
                                 <div class="memory-stat-icon">
-                                    <i class="fas fa-archive"></i>
+                                    <i class="fas fa-folder-open"></i>
                                 </div>
                                 <div class="memory-stat-content">
-                                    <div class="memory-stat-label">长期记忆</div>
-                                    <div class="memory-stat-value">{{ longTermMemories.length }}</div>
-                                    <div class="memory-stat-desc">持久保存的核心记忆</div>
+                                    <div class="memory-stat-label">记忆文件</div>
+                                    <div class="memory-stat-value">{{ memfsStats.total }}</div>
+                                    <div class="memory-stat-desc">MemoryFS 逻辑文件总数</div>
+                                </div>
+                            </div>
+                            <div class="memory-stat-card long-term">
+                                <div class="memory-stat-icon">
+                                    <i class="fas fa-users"></i>
+                                </div>
+                                <div class="memory-stat-content">
+                                    <div class="memory-stat-label">角色数</div>
+                                    <div class="memory-stat-value">{{ memfsStats.charCount }}</div>
+                                    <div class="memory-stat-desc">拥有记忆文件的角色</div>
                                 </div>
                             </div>
                             <div class="memory-stat-card short-term">
                                 <div class="memory-stat-icon">
-                                    <i class="fas fa-clock"></i>
+                                    <i class="fas fa-syringe"></i>
                                 </div>
                                 <div class="memory-stat-content">
-                                    <div class="memory-stat-label">短期记忆</div>
-                                    <div class="memory-stat-value">{{ shortTermMemories.length }}</div>
-                                    <div class="memory-stat-desc">临时保存的对话上下文</div>
-                                </div>
-                            </div>
-                            <div class="memory-stat-card total">
-                                <div class="memory-stat-icon">
-                                    <i class="fas fa-brain"></i>
-                                </div>
-                                <div class="memory-stat-content">
-                                    <div class="memory-stat-label">记忆总量</div>
-                                    <div class="memory-stat-value">{{ memories.length }}</div>
-                                    <div class="memory-stat-desc">所有记忆条目总数</div>
+                                    <div class="memory-stat-label">注入 Prompt</div>
+                                    <div class="memory-stat-value">{{ memfsStats.injectable }}</div>
+                                    <div class="memory-stat-desc">会被注入到角色上下文的文件</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 记忆空间入口 -->
-                        <div v-if="selectedMemorySpace === null" class="memory-space-panel">
-                            <div class="memory-space-panel-header">
-                                <div>
-                                    <div class="memory-space-eyebrow">Memory Spaces</div>
-                                    <h2>选择记忆空间</h2>
-                                    <p>先按公共记忆或角色分组浏览，点进卡片后再查看、编辑对应记忆。</p>
+                        <!-- ====== 卡片视图：选择角色 ====== -->
+                        <div v-if="memfsViewState === 'cards'">
+                            <div class="memfs-char-cards-header">
+                                <div class="memfs-char-cards-title">
+                                    <i class="fas fa-users"></i>
+                                    <span>选择角色</span>
                                 </div>
-                                <div class="memory-space-header-actions">
+                            </div>
+                            <div class="memfs-char-cards">
+                                <div v-for="char in memfsCharacters" :key="char.id"
+                                     class="memfs-char-card"
+                                     @click="memfsSelectedChar = char.id; memfsViewState = 'detail'">
+                                    <!-- 背景光斑 -->
+                                    <div class="memfs-char-card-blob memfs-char-card-blob-1"></div>
+                                    <div class="memfs-char-card-blob memfs-char-card-blob-2"></div>
+                                    <!-- 立绘区域 -->
+                                    <div class="memfs-char-card-portrait">
+                                        <img v-if="char.portrait" :src="char.portrait" :alt="char.id">
+                                        <i v-else :class="char.icon"></i>
+                                        <div class="memfs-char-card-portrait-overlay"></div>
+                                    </div>
+                                    <!-- 信息区域 -->
+                                    <div class="memfs-char-card-info">
+                                        <div class="memfs-char-card-name">{{ char.id }}</div>
+                                        <div class="memfs-char-card-count">{{ char.fileCount }} 条记忆</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="memfsCharacters.length === 0" class="memfs-empty">
+                                <i class="fas fa-inbox"></i>
+                                <p>暂无记忆数据</p>
+                            </div>
+                        </div>
+
+                        <!-- ====== 详情视图：角色记忆 ====== -->
+                        <div v-if="memfsViewState === 'detail'">
+                            <!-- 返回 + 角色信息 + 工具栏 -->
+                            <div class="memfs-detail-header">
+                                <button class="btn btn-secondary btn-sm" @click="memfsViewState = 'cards'; memfsSelectedChar = ''; memfsSearch = ''">
+                                    <i class="fas fa-arrow-left"></i> 返回
+                                </button>
+                                <div class="memfs-detail-char-info">
+                                    <div class="memfs-detail-char-icon" :class="{ 'has-portrait': memfsSelectedCharPortrait.portrait }">
+                                        <img v-if="memfsSelectedCharPortrait.portrait" :src="memfsSelectedCharPortrait.portrait" :alt="memfsSelectedChar">
+                                        <i v-else :class="memfsSelectedCharPortrait.avatar || 'fas fa-user-circle'"></i>
+                                    </div>
+                                    <div>
+                                        <div class="memfs-detail-char-name">{{ memfsSelectedChar }}</div>
+                                        <div class="memfs-detail-char-count">{{ memfsFilteredFiles.length + legacyCountForSelectedChar }} 条记忆</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 工具栏 -->
+                            <div class="memfs-toolbar">
+                                <div class="memfs-toolbar-left">
+                                    <div class="memfs-search">
+                                        <i class="fas fa-search"></i>
+                                        <input v-model="memfsSearch" type="text" placeholder="搜索记忆文件...">
+                                    </div>
+                                </div>
+                                <div class="memfs-toolbar-right">
                                     <button class="btn btn-primary btn-sm" @click="openAddMemoryModal">
-                                        <i class="fas fa-plus"></i> 添加记忆
+                                        <i class="fas fa-plus"></i> 添加旧版记忆
                                     </button>
-                                    <button class="btn-icon memory-toolbar-btn" @click="importMemoryDialog" title="导入记忆">
+                                    <button class="btn-icon memfs-toolbar-btn" @click="importMemoryDialog" title="导入记忆">
                                         <i class="fas fa-file-import"></i>
                                     </button>
-                                    <button class="btn-icon memory-toolbar-btn" @click="exportMemory" title="导出记忆">
+                                    <button class="btn-icon memfs-toolbar-btn" @click="exportMemory" title="导出记忆">
                                         <i class="fas fa-file-export"></i>
+                                    </button>
+                                    <button class="btn-icon memfs-toolbar-btn" @click="loadMemoryFS(); loadMemory()" title="刷新">
+                                        <i class="fas fa-sync"></i>
                                     </button>
                                 </div>
                             </div>
-                            <div class="memory-space-grid">
-                                <div
-                                    v-for="space in memorySpaces"
-                                    :key="space.id"
-                                    class="memory-space-card"
-                                    :class="{ public: space.type === 'public', empty: space.total === 0 }"
-                                    @click="selectMemorySpace(space)"
-                                >
-                                    <div class="memory-space-portrait" :class="{ 'has-portrait': space.portrait }">
-                                        <img v-if="space.portrait" :src="space.portrait" :alt="space.name">
-                                        <i v-else :class="space.icon"></i>
-                                    </div>
-                                    <div class="memory-space-info">
-                                        <div class="memory-space-type">{{ space.type === 'public' ? '公共记忆' : '角色记忆' }}</div>
-                                        <h3>{{ space.name }}</h3>
-                                        <p>{{ getMemorySpaceSubtitle(space) }}</p>
-                                        <div class="memory-space-preview">{{ getMemorySpacePreview(space) }}</div>
-                                    </div>
-                                    <div class="memory-space-metrics">
-                                        <span><b>{{ space.longCount }}</b> 长期</span>
-                                        <span><b>{{ space.shortCount }}</b> 短期</span>
-                                        <span><b>{{ space.total }}</b> 总计</span>
-                                    </div>
-                                    <div class="memory-space-open">
-                                        <span>查看记忆</span>
-                                        <i class="fas fa-arrow-right"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        <!-- 工具栏 -->
-                        <div v-if="selectedMemorySpace !== null" class="memory-toolbar memory-detail-toolbar">
-                            <div class="memory-toolbar-left">
-                                <button class="btn btn-secondary btn-sm" @click="backToMemorySpaces">
-                                    <i class="fas fa-arrow-left"></i> 返回卡片
-                                </button>
-                                <div class="memory-detail-title">
-                                    <span>{{ selectedMemorySpaceInfo ? selectedMemorySpaceInfo.name : '记忆详情' }}</span>
-                                    <small>{{ selectedMemorySpaceInfo ? getMemorySpaceSubtitle(selectedMemorySpaceInfo) : '' }}</small>
+                            <!-- 记忆文件列表（按类别分组） -->
+                            <div class="memfs-content">
+                                <div v-if="memfsGroupedFiles.length === 0" class="memfs-empty">
+                                    <i class="fas fa-inbox"></i>
+                                    <p>暂无记忆文件</p>
                                 </div>
-                                <button class="btn btn-primary btn-sm" @click="openAddMemoryModal">
-                                    <i class="fas fa-plus"></i> 添加
-                                </button>
-                                <button v-if="selectedMemoryIds.length > 0" class="btn btn-danger btn-sm" @click="batchDeleteMemories">
-                                    <i class="fas fa-trash"></i> 删除 ({{ selectedMemoryIds.length }})
-                                </button>
-                                <button v-if="selectedMemoryIds.length > 0" class="btn btn-secondary btn-sm" @click="selectedMemoryIds = []">
-                                    取消选择
-                                </button>
-                            </div>
-                            <div class="memory-toolbar-center">
-                                <div class="memory-search">
-                                    <i class="fas fa-search"></i>
-                                    <input v-model="memorySearch" type="text" placeholder="搜索记忆...">
-                                </div>
-                                <select v-model="memoryCharacterFilter" class="memory-filter-select">
-                                    <option value="">{{ $t('journey.all_characters') }}</option>
-                                    <option v-for="name in memoryCharacterNames" :key="name" :value="name">{{ name }}</option>
-                                </select>
-                                <div class="memory-filter">
-                                    <button class="filter-btn" :class="{ active: memoryFilter === 'all' }" @click="memoryFilter = 'all'">全部</button>
-                                    <button class="filter-btn" :class="{ active: memoryFilter === 'long' }" @click="memoryFilter = 'long'">长期</button>
-                                    <button class="filter-btn" :class="{ active: memoryFilter === 'short' }" @click="memoryFilter = 'short'">短期</button>
-                                </div>
-                            </div>
-                            <div class="memory-toolbar-right">
-                                <select v-model="memorySortBy" class="memory-filter-select" style="width: auto;">
-                                    <option value="newest">最新优先</option>
-                                    <option value="oldest">最早优先</option>
-                                    <option value="title">按标题</option>
-                                </select>
-                                <button class="btn-icon memory-toolbar-btn" @click="importMemoryDialog" title="导入记忆">
-                                    <i class="fas fa-file-import"></i>
-                                </button>
-                                <button class="btn-icon memory-toolbar-btn" @click="exportMemory" title="导出记忆">
-                                    <i class="fas fa-file-export"></i>
-                                </button>
-                                <button class="btn-icon memory-toolbar-btn" :class="{ active: memorySelectMode }" @click="toggleMemorySelectMode" title="批量选择">
-                                    <i class="fas fa-check-square"></i>
-                                </button>
-                            </div>
-                        </div>
 
-                        <!-- 记忆列表 -->
-                        <div v-if="selectedMemorySpace !== null" class="memory-grid">
-                            <!-- 长期记忆 -->
-                            <div v-if="memoryFilter !== 'short'" class="memory-section">
-                                <div class="memory-section-header">
-                                    <h3>
-                                        <label v-if="memorySelectMode" class="memory-select-all" @click.stop="toggleSelectAllLongTerm">
-                                            <input type="checkbox" :checked="allLongTermSelected" @click.prevent>
-                                        </label>
-                                        <i class="fas fa-archive"></i> 长期记忆
-                                    </h3>
-                                    <span class="memory-count">{{ sortedFilteredLongTermMemories.length }} 条</span>
-                                </div>
-                                <div class="memory-list">
-                                    <div v-if="sortedFilteredLongTermMemories.length === 0" class="memory-empty">
-                                        <i class="fas fa-inbox"></i>
-                                        <p>暂无长期记忆</p>
-                                    </div>
-                                    <div
-                                        v-for="mem in sortedFilteredLongTermMemories"
-                                        :key="mem.id"
-                                        class="memory-item"
-                                        :class="{ expanded: expandedMemory === mem.id, selected: selectedMemoryIds.includes(mem.id) }"
-                                    >
-                                        <div class="memory-item-header" @click="memorySelectMode ? toggleMemorySelect(mem.id) : toggleMemoryExpand(mem.id)">
-                                            <label v-if="memorySelectMode" class="memory-checkbox" @click.stop>
-                                                <input type="checkbox" :checked="selectedMemoryIds.includes(mem.id)" @change="toggleMemorySelect(mem.id)">
-                                            </label>
-                                            <div class="memory-item-icon" :class="{ 'has-portrait': getCharacterPortraitByName(mem.character_name).portrait }">
-                                                <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
-                                                <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-archive'"></i>
-                                            </div>
-                                            <span v-if="mem.character_name" class="memory-character-tag">{{ mem.character_name }}</span>
-                                            <div class="memory-item-title">{{ mem.title || mem.key }}</div>
-                                            <div class="memory-item-actions" @click.stop>
-                                                <button class="btn-icon" @click="editMemory(mem)" title="编辑">
-                                                    <i class="fas fa-edit"></i>
-                                                </button>
-                                                <button class="btn-icon" @click="deleteMemory(mem.id)" title="删除">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
+                                <div v-for="group in memfsGroupedFiles" :key="group.key" class="memfs-group" :class="'memfs-group-' + group.key">
+                                    <div class="memfs-group-header">
+                                        <div class="memfs-group-title-row">
+                                            <span class="memfs-group-dot"></span>
+                                            <span class="memfs-group-title">{{ group.label }}</span>
+                                            <span class="memfs-group-count">{{ group.files.length }}</span>
                                         </div>
-                                        <div class="memory-item-content">
-                                            <div v-if="mem.summary" class="memory-item-summary">
-                                                <i class="fas fa-file-alt"></i> {{ mem.summary }}
+                                        <span class="memfs-inject-badge" :class="{ off: !group.injects_to_prompt }">
+                                            {{ group.injects_to_prompt ? '注入 Prompt' : '不注入' }}
+                                        </span>
+                                    </div>
+
+                                    <div v-for="mf in group.files" :key="mf.path"
+                                         class="memfs-file-card" :class="{ expanded: memfsExpandedPath === mf.path, legacy: mf.category === 'legacy' }"
+                                         @click="memfsExpandedPath = memfsExpandedPath === mf.path ? '' : mf.path">
+                                        <div class="memfs-file-header">
+                                            <div class="memfs-file-main">
+                                                <div class="memfs-file-title">{{ memoryFSFileTitle(mf) }}</div>
+                                                <div v-if="memoryFSFileSubtitle(mf)" class="memfs-file-subtitle">{{ memoryFSFileSubtitle(mf) }}</div>
                                             </div>
-                                            <p>{{ mem.content || mem.value }}</p>
-                                            <div class="memory-item-meta">
-                                                <span><i class="fas fa-calendar"></i> {{ formatFullTime(mem.created_at) }}</span>
-                                                <span class="memory-priority" :class="mem.priority || 'normal'">
-                                                    {{ getPriorityLabel(mem.priority) }}
-                                                </span>
-                                                <span v-if="mem.target_id" class="memory-target">
-                                                    <i class="fas fa-link"></i> {{ getSessionNameById(mem.target_id) }}
+                                            <div class="memfs-file-badges">
+                                                <span v-if="mf._legacyType" class="memfs-legacy-type-badge">{{ mf._legacyType === 'short' ? '短期' : '长期' }}</span>
+                                                <span v-if="mf.importance > 0" class="memfs-imp-badge" :title="'importance: ' + mf.importance">
+                                                    {{ (mf.importance * 100).toFixed(0) }}%
                                                 </span>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 短期记忆 -->
-                            <div v-if="memoryFilter !== 'long'" class="memory-section">
-                                <div class="memory-section-header">
-                                    <h3>
-                                        <label v-if="memorySelectMode" class="memory-select-all" @click.stop="toggleSelectAllShortTerm">
-                                            <input type="checkbox" :checked="allShortTermSelected" @click.prevent>
-                                        </label>
-                                        <i class="fas fa-clock"></i> 短期记忆
-                                    </h3>
-                                    <span class="memory-count">{{ sortedFilteredShortTermMemories.length }} 条</span>
-                                </div>
-                                <div class="memory-list">
-                                    <div v-if="sortedFilteredShortTermMemories.length === 0" class="memory-empty">
-                                        <i class="fas fa-inbox"></i>
-                                        <p>暂无短期记忆</p>
-                                    </div>
-                                    <div
-                                        v-for="mem in sortedFilteredShortTermMemories"
-                                        :key="mem.id"
-                                        class="memory-item short-term"
-                                        :class="{ expanded: expandedMemory === mem.id, expired: isMemoryExpired(mem), selected: selectedMemoryIds.includes(mem.id) }"
-                                    >
-                                        <div class="memory-item-header" @click="memorySelectMode ? toggleMemorySelect(mem.id) : toggleMemoryExpand(mem.id)">
-                                            <label v-if="memorySelectMode" class="memory-checkbox" @click.stop>
-                                                <input type="checkbox" :checked="selectedMemoryIds.includes(mem.id)" @change="toggleMemorySelect(mem.id)">
-                                            </label>
-                                            <div class="memory-item-icon short-term-icon" :class="{ 'has-portrait': getCharacterPortraitByName(mem.character_name).portrait }">
-                                                <img v-if="getCharacterPortraitByName(mem.character_name).portrait" :src="getCharacterPortraitByName(mem.character_name).portrait" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;">
-                                                <i v-else :class="getCharacterPortraitByName(mem.character_name).avatar || 'fas fa-clock'"></i>
-                                            </div>
-                                            <span v-if="mem.character_name" class="memory-character-tag">{{ mem.character_name }}</span>
-                                            <div class="memory-item-title">{{ mem.title || mem.key }}</div>
-                                            <div class="memory-item-actions" @click.stop>
-                                                <button class="btn-icon" @click="promoteToLongTerm(mem)" title="转为长期记忆">
-                                                    <i class="fas fa-arrow-up"></i>
-                                                </button>
-                                                <button class="btn-icon" @click="editMemory(mem)" title="编辑">
-                                                    <i class="fas fa-edit"></i>
-                                                </button>
-                                                <button class="btn-icon" @click="deleteMemory(mem.id)" title="删除">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            </div>
+                                        <div v-if="mf.summary" class="memfs-file-summary">{{ mf.summary }}</div>
+                                        <div class="memfs-file-path">{{ mf.path }}</div>
+                                        <div v-if="memfsExpandedPath === mf.path && mf.content" class="memfs-file-content">{{ mf.content }}</div>
+                                        <div class="memfs-file-meta">
+                                            <span v-if="mf.version > 1">v{{ mf.version }}</span>
+                                            <span>{{ mf.updated_at ? mf.updated_at.slice(0,10) : '' }}</span>
+                                            <span v-if="mf.target_id">→ {{ mf.target_id }}</span>
+                                            <span v-if="mf._isLegacy" class="memfs-legacy-badge">旧版系统</span>
                                         </div>
-                                        <div class="memory-item-content">
-                                            <div v-if="mem.summary" class="memory-item-summary">
-                                                <i class="fas fa-file-alt"></i> {{ mem.summary }}
-                                            </div>
-                                            <p>{{ mem.content || mem.value }}</p>
-                                            <div class="memory-item-meta">
-                                                <span><i class="fas fa-calendar"></i> {{ formatFullTime(mem.created_at) }}</span>
-                                                <span><i class="fas fa-hourglass-half"></i> 有效期: {{ mem.expire_days || 7 }}天</span>
-                                                <span v-if="isMemoryExpired(mem)" class="memory-expired-badge">已过期</span>
-                                                <span v-if="mem.target_id" class="memory-target">
-                                                    <i class="fas fa-link"></i> {{ getSessionNameById(mem.target_id) }}
-                                                </span>
-                                            </div>
+                                        <!-- 旧版记忆的操作按钮 -->
+                                        <div v-if="mf._isLegacy" class="memfs-file-actions" @click.stop>
+                                            <button class="btn-icon" @click="editMemory(mf._legacyRef)" title="编辑"><i class="fas fa-edit"></i></button>
+                                            <button class="btn-icon" @click="deleteMemory(mf._legacyId)" title="删除"><i class="fas fa-trash"></i></button>
                                         </div>
                                     </div>
                                 </div>
@@ -12415,6 +12316,13 @@
                         character_name: ''
                     },
 
+                    // MemoryFS page
+                    memoryPageView: 'memfs',
+                    memfsViewState: 'cards',
+                    memfsSelectedChar: '',
+                    memfsExpandedPath: '',
+                    memfsSearch: '',
+
                     // Knowledge
                     knowledgeDocs: [],
                     knowledgeSearch: '',
@@ -13992,6 +13900,147 @@
                 selectedMemorySpaceInfo() {
                     if (this.selectedMemorySpace === null) return null;
                     return this.memorySpaces.find(space => space.id === this.selectedMemorySpace) || null;
+                },
+
+                // MemoryFS page computed
+                memfsCharacters() {
+                    const chars = new Map();
+                    (this.memoryFSFiles || []).forEach(f => {
+                        const cid = f.character_id || '';
+                        if (!cid) return;
+                        if (!chars.has(cid)) {
+                            chars.set(cid, { id: cid, fileCount: 0, portrait: null, icon: 'fas fa-user-circle' });
+                        }
+                        chars.get(cid).fileCount += 1;
+                    });
+                    // 旧版记忆中的角色也纳入
+                    (this.memories || []).forEach(m => {
+                        const name = m.character_name || '';
+                        if (!name) return;
+                        if (!chars.has(name)) {
+                            chars.set(name, { id: name, fileCount: 0, portrait: null, icon: 'fas fa-user-circle' });
+                        }
+                        chars.get(name).fileCount += 1;
+                    });
+                    // attach portrait info
+                    const result = [...chars.values()].map(c => {
+                        const p = this.getCharacterPortraitByName(c.id);
+                        return { ...c, portrait: p.portrait, icon: p.avatar || c.icon };
+                    });
+                    result.sort((a, b) => b.fileCount - a.fileCount);
+                    return result;
+                },
+
+                memfsFilteredFiles() {
+                    let files = this.memoryFSFiles || [];
+                    if (this.memfsSelectedChar) {
+                        files = files.filter(f => f.character_id === this.memfsSelectedChar);
+                    }
+                    if (this.memfsSearch) {
+                        const q = this.memfsSearch.toLowerCase();
+                        files = files.filter(f =>
+                            (f.path || '').toLowerCase().includes(q)
+                            || (f.title || '').toLowerCase().includes(q)
+                            || (f.summary || '').toLowerCase().includes(q)
+                            || (f.content || '').toLowerCase().includes(q)
+                        );
+                    }
+                    return files;
+                },
+
+                memfsGroupedFiles() {
+                    const order = ['user_persona', 'character_persona', 'important_event', 'recent_digest', 'legacy'];
+                    const fallbackLabels = {
+                        user_persona: '用户人格',
+                        character_persona: '角色人格',
+                        important_event: '重要事件',
+                        recent_digest: '近期摘要',
+                        legacy: '旧版/其他',
+                    };
+                    const groups = new Map();
+
+                    // MemoryFS 文件
+                    (this.memfsFilteredFiles || []).forEach(file => {
+                        const category = file.category || 'legacy';
+                        if (!groups.has(category)) {
+                            groups.set(category, {
+                                key: category,
+                                label: file.category_label || fallbackLabels[category] || category,
+                                injects_to_prompt: !!file.injects_to_prompt,
+                                files: [],
+                            });
+                        }
+                        groups.get(category).files.push(file);
+                    });
+
+                    // 旧版记忆（融入 legacy 分组）
+                    let legacyMems = this.memories || [];
+                    if (this.memfsSelectedChar) {
+                        legacyMems = legacyMems.filter(m => m.character_name === this.memfsSelectedChar);
+                    }
+                    if (this.memfsSearch) {
+                        const q = this.memfsSearch.toLowerCase();
+                        legacyMems = legacyMems.filter(m =>
+                            (m.title || '').toLowerCase().includes(q)
+                            || (m.content || '').toLowerCase().includes(q)
+                        );
+                    }
+                    if (legacyMems.length > 0) {
+                        if (!groups.has('legacy')) {
+                            groups.set('legacy', {
+                                key: 'legacy',
+                                label: fallbackLabels.legacy,
+                                injects_to_prompt: false,
+                                files: [],
+                            });
+                        }
+                        const legacyGroup = groups.get('legacy');
+                        legacyMems.forEach(mem => {
+                            legacyGroup.files.push({
+                                path: 'legacy/' + (mem.id || ''),
+                                character_id: mem.character_name || '',
+                                target_id: mem.target_id || '',
+                                title: mem.title || mem.key || '',
+                                content: mem.content || mem.value || '',
+                                summary: mem.summary || '',
+                                importance: 0,
+                                version: 1,
+                                updated_at: mem.updated_at || mem.created_at || '',
+                                category: 'legacy',
+                                category_label: fallbackLabels.legacy,
+                                injects_to_prompt: false,
+                                _isLegacy: true,
+                                _legacyId: mem.id,
+                                _legacyType: mem.type || 'long',
+                                _legacyRef: mem,
+                            });
+                        });
+                    }
+
+                    return Array.from(groups.values())
+                        .sort((a, b) => {
+                            const ai = order.includes(a.key) ? order.indexOf(a.key) : order.length;
+                            const bi = order.includes(b.key) ? order.indexOf(b.key) : order.length;
+                            return ai - bi;
+                        });
+                },
+
+                memfsStats() {
+                    const files = this.memoryFSFiles || [];
+                    const total = files.length;
+                    const charCount = new Set(files.map(f => f.character_id).filter(Boolean)).size;
+                    const injectable = files.filter(f => f.injects_to_prompt).length;
+                    return { total, charCount, injectable };
+                },
+
+                memfsSelectedCharPortrait() {
+                    if (!this.memfsSelectedChar) return { portrait: null, avatar: 'fas fa-user-circle' };
+                    return this.getCharacterPortraitByName(this.memfsSelectedChar);
+                },
+
+                legacyCountForSelectedChar() {
+                    if (!this.memfsSelectedChar) return (this.memories || []).length;
+                    return (this.memories || []).filter(m => m.character_name === this.memfsSelectedChar).length;
                 },
 
                 sortedFilteredLongTermMemories() {
