@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import threading
+import asyncio
 
 from dotenv import load_dotenv
 
@@ -278,10 +279,39 @@ def start_web_server(host="0.0.0.0", port=5000, bot=None, prepared=None, ssl_con
 
 
 def run_bot():
-    _log.info("Starting NekoBot QQ service...")
-    commands = _get_commands_module()
-    _set_web_server_bot(commands.bot)
-    commands.bot.run(enable_webui_interaction=False)
+    """启动 QQ bot —— 阶段 1 重构后使用 BotBackend 抽象
+
+    检测可用后端(ncatbot / qqbot)→ 异步 start() → 同步 run_forever() 阻塞
+    """
+    from nbot.bot_runner import detect_backend, create_backend
+    from nbot.commands_backend import set_backend, IncomingMessage
+
+    backend_name = detect_backend()
+    if backend_name is None:
+        _log.warning(
+            "No QQ bot backend configured (need BOT_UIN+WS_URI "
+            "or QQBOT_APP_ID+QQBOT_APP_SECRET)"
+        )
+        return
+
+    _log.info("Starting NekoBot with backend: %s", backend_name)
+    backend = create_backend(backend_name)
+    set_backend(backend)
+
+    # 注入 dispatcher: IncomingMessage → commands.handle_incoming_message
+    async def dispatcher(incoming: IncomingMessage):
+        from nbot.commands import handle_incoming_message
+        await handle_incoming_message(incoming)
+    backend.set_dispatcher(dispatcher)
+
+    # Web server 端通过 backend 推送消息(兼容 server.py:2010 等处)
+    _set_web_server_bot(backend)
+
+    # rev. 2: 异步 start() + 同步 run_forever() 分离
+    # start() 必须在 async 上下文中(QQBotBackend 需要获取 event loop)
+    asyncio.run(backend.start())
+    # run_forever() 同步阻塞,不外层包 asyncio.run()
+    backend.run_forever()
 
 
 def run_cli():
@@ -501,26 +531,50 @@ def run_mcp_connect(url: str):
 
 
 def _has_qq_bot_config():
-    """检查是否配置了QQ机器人（ncatbot/napcat）"""
+    """检查是否配置了 QQ 机器人(ncatbot / QQ Bot 官方任一即可)
+
+    阶段 1 改造:同时识别 ncatbot 配置(BOT_UIN+WS_URI)和
+    QQ Bot 官方配置(QQBOT_APP_ID+QQBOT_APP_SECRET)。
+    """
     bot_uin = os.getenv("BOT_UIN", "").strip()
     ws_uri = os.getenv("WS_URI", "").strip()
-    
-    # 如果环境变量没有配置，尝试从config.ini读取
+    qqbot_app_id = os.getenv("QQBOT_APP_ID", "").strip()
+    qqbot_app_secret = os.getenv("QQBOT_APP_SECRET", "").strip()
+
+    # 如果环境变量没有配置，尝试从 config.ini 读取
     if not bot_uin or not ws_uri:
         try:
             import configparser
             config_parser = configparser.ConfigParser()
             config_parser.read("config.ini", encoding="utf-8")
-            bot_uin = config_parser.get("BotConfig", "bot_uin", fallback="").strip()
-            ws_uri = config_parser.get("BotConfig", "ws_uri", fallback="").strip()
+            if not bot_uin:
+                bot_uin = config_parser.get(
+                    "BotConfig", "bot_uin", fallback=""
+                ).strip()
+            if not ws_uri:
+                ws_uri = config_parser.get(
+                    "BotConfig", "ws_uri", fallback=""
+                ).strip()
+            if not qqbot_app_id:
+                qqbot_app_id = config_parser.get(
+                    "BotConfig", "qqbot_app_id", fallback=""
+                ).strip()
+            if not qqbot_app_secret:
+                qqbot_app_secret = config_parser.get(
+                    "BotConfig", "qqbot_app_secret", fallback=""
+                ).strip()
         except Exception:
             pass
-    
-    # 检查配置是否有效（bot_uin是QQ号，ws_uri是websocket地址）
-    has_bot_uin = bool(bot_uin and bot_uin not in ["", "0"])
-    has_ws_uri = bool(ws_uri and ws_uri not in ["", "ws://", "ws://localhost"])
-    
-    return has_bot_uin and has_ws_uri
+
+    # ncatbot 配置检查
+    has_ncatbot = bool(
+        bot_uin and bot_uin not in ["", "0"]
+        and ws_uri and ws_uri not in ["", "ws://", "ws://localhost"]
+    )
+    # QQBot 配置检查
+    has_qqbot = bool(qqbot_app_id and qqbot_app_secret)
+
+    return has_ncatbot or has_qqbot
 
 
 if __name__ == "__main__":

@@ -4361,16 +4361,15 @@ async def handle_filter_toggle(msg, is_group=True):
         await bot.api.post_private_msg(msg.user_id, text=reply)
 
 
-async def handle_group_message(msg):
-    """处理群消息"""
-    is_group = True
-    await dispatch_message(msg, is_group)
+async def handle_incoming_message(incoming):
+    """统一事件入口 —— 由 backend dispatcher 调用
+
+    阶段 1 重构:接收 IncomingMessage 替代 ncatbot 原生 msg 对象。
+    """
+    await dispatch_message(incoming)
 
 
-async def handle_private_message(msg):
-    """处理私聊消息"""
-    is_group = False
-    await dispatch_message(msg, is_group)
+# 删除: handle_group_message / handle_private_message(已迁移到 NcatbotBackend._wrap_*)
 
 
 # 获取机器人QQ号
@@ -4680,9 +4679,16 @@ register_ai_commands(
 )
 
 
-async def dispatch_message(msg, is_group: bool):
-    """分发消息到命令处理器"""
-    raw_msg = msg.raw_message
+async def dispatch_message(incoming):
+    """分发消息到命令处理器
+
+    阶段 1 重构:接收 IncomingMessage dataclass(替代 ncatbot 原生 msg 对象)。
+    函数体内部通过 `msg = incoming` 兼容层保持原有 `msg.xxx` 访问工作
+    (IncomingMessage 字段 + __getattr__ fallback 到 _legacy_msg)。
+    """
+    msg = incoming
+    is_group = incoming.is_group
+    raw_msg = incoming.text
 
     if not raw_msg:
         return
@@ -4982,8 +4988,4 @@ async def dispatch_message(msg, is_group: bool):
             _log.error(traceback.format_exc())
 
 
-# 防止重复注册事件处理器
-if not hasattr(bot, '_nbot_handlers_registered'):
-    bot.add_group_event_handler(handle_group_message)
-    bot.add_private_event_handler(handle_private_message)
-    bot._nbot_handlers_registered = True
+# 删除: ncatbot event handler 注册(已迁移到 NcatbotBackend.start())
