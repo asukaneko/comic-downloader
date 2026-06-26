@@ -722,13 +722,13 @@
                             
                             <div class="chat-sidebar-header" v-if="chatTab === 'web' || chatTab === 'cli' || selectedSenderFilter">
                                 <div class="session-mode-tabs">
-                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'character' }" @click="sessionModeTab = 'character'">
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'character' }" @click="switchSessionModeTab('character')">
                                         <i class="fas fa-user-circle"></i> 角色
                                     </button>
-                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'agent' }" @click="sessionModeTab = 'agent'">
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'agent' }" @click="switchSessionModeTab('agent')">
                                         <i class="fas fa-robot"></i> Agent
                                     </button>
-                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="sessionModeTab = 'group'">
+                                    <button class="session-mode-tab" :class="{ active: sessionModeTab === 'group' }" @click="switchSessionModeTab('group')">
                                         <i class="fas fa-users"></i> 群聊
                                     </button>
                                     <div class="session-mode-tab-indicator" :class="{ 'slide-right': sessionModeTab === 'agent', 'slide-far-right': sessionModeTab === 'group' }"></div>
@@ -744,7 +744,7 @@
 
                             <!-- 会话列表 -->
                             <div class="session-list" v-if="chatTab === 'web' || chatTab === 'cli' || selectedSenderFilter">
-                                <transition :name="sessionModeTab === 'agent' ? 'slide-left' : 'slide-right'" mode="out-in">
+                                <transition :name="sessionModeTransitionName" mode="out-in">
                                     <div :key="sessionModeTab" class="session-list-inner">
                                         <div
                                             v-for="session in currentModeSessions"
@@ -786,7 +786,7 @@
                                             </div>
                                         </div>
                                         <div v-if="currentModeSessions.length === 0" class="empty-hint" style="padding: 8px 0;">
-                                            {{ sessionModeTab === 'agent' ? '暂无 Agent 会话' : '暂无角色会话' }}
+                                            {{ sessionModeTab === 'agent' ? '暂无 Agent 会话' : (sessionModeTab === 'group' ? '暂无群聊会话' : '暂无角色会话') }}
                                         </div>
                                     </div>
                                 </transition>
@@ -11966,6 +11966,7 @@
                     sessionSwitching: false,
                     sessionSearch: '',
                     sessionModeTab: 'character',
+                    sessionModeTransitionName: 'slide-left',
                     groupCreateModal: {
                         show: false,
                         name: '群聊',

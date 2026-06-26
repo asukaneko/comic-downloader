@@ -6103,6 +6103,18 @@ def main(params):
                     }
                 },
                 
+                switchSessionModeTab(tab) {
+                    const tabOrder = { character: 0, agent: 1, group: 2 };
+                    const currentIndex = tabOrder[this.sessionModeTab] ?? 0;
+                    const nextIndex = tabOrder[tab] ?? currentIndex;
+                    if (nextIndex === currentIndex) return;
+
+                    this.sessionModeTransitionName = nextIndex > currentIndex
+                        ? 'slide-left'
+                        : 'slide-right';
+                    this.sessionModeTab = tab;
+                },
+
                 async switchChatTab(tab) {
                     this.chatTab = tab;
                     this.currentSession = null;
