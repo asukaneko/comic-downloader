@@ -1,7 +1,7 @@
 # Ncatbot 解耦与 QQ Bot 官方频道接入设计
 
 **Date**: 2026-06-27
-**Status**: Draft — pending user review
+**Status**: Draft — pending user review (rev. 2)
 **Author**: Brainstorming session output
 
 ## 1. 背景与目标
@@ -14,10 +14,10 @@ NekoBot 当前通过 [ncatbot](https://github.com/liyihao1110/ncatbot) + [NapCat
 
 ### 1.2 目标
 
-1. 让 `commands.py` 中的 60+ 命令可以同时跑在 ncatbot 和 QQBot 两个后端上
+1. 让 `commands.py` 中的核心命令（文本类）可以同时跑在 ncatbot 和 QQBot 两个后端上
 2. 配置文件支持 `app_id` + `app_secret` 作为新主推方案，与 `bot_uin` + `ws_uri` 并存
 3. 保留对老 ncatbot 用户的向后兼容
-4. 消除 `commands.py` 中 ~100+ 处 `bot.api.*` 散落调用，将其抽象到 `BotBackend` 协议
+4. 引入 `BotBackend` 多层 Protocol 抽象，分阶段消除 `commands.py` 中对 ncatbot 的硬依赖
 
 ### 1.3 非目标
 
@@ -25,97 +25,168 @@ NekoBot 当前通过 [ncatbot](https://github.com/liyihao1110/ncatbot) + [NapCat
 - 不拆分 `commands.py` 4989 行单文件
 - 不重写 QQ Bot 业务逻辑（保留 `qqbot_service.py` 现有实现）
 - 不引入第三方 QQ Bot SDK（如 `botpy`），仍用 `requests` + `websocket-client`
+- **第一阶段不追求所有命令两端能力一致**，只保证核心文本命令可路由
 
-## 2. 核心设计：BotBackend 抽象层
+### 1.4 关键设计修正（rev. 2）
+
+> 在 brainstorming review 后修正：
+> 1. `BotBackend` 拆分为多层 Protocol（核心 / Media / NcatbotAdmin / RawApi）
+> 2. `run_forever()` 改为同步方法（不 async），避免与 ncatbot BotClient 内部事件循环冲突
+> 3. `IncomingMessage.reply()` 第一版只支持文本，富媒体走 backend 显式方法
+> 4. QQBot WebSocket 线程回调使用 `asyncio.run_coroutine_threadsafe`，避免 `no running event loop`
+> 5. 实施拆为 4 个渐进阶段，每阶段可独立交付
+
+## 2. 核心设计：分层 Protocol + 能力检测
 
 ### 2.1 设计原则
 
-- **Platform-neutral 命令系统**：`commands.py` 不再直接导入 ncatbot 类型
-- **鸭子类型后端**：`BotBackend` 是 `Protocol`，ncatbot_backend 和 qqbot_backend 不需要显式继承
-- **最小破坏面**：保留现有 ncatbot 事件循环机制和 BotAPI monkey-patch（消息持久化逻辑）
+- **Platform-neutral 命令系统**：`commands.py` 不直接导入 ncatbot 类型
+- **分层 Protocol 而非万能接口**：核心 / 媒体 / 管理 / 透传各为独立 Protocol，避免 QQBotBackend 出现大量"假实现"
+- **能力检测代替全方法实现**：命令侧用 `isinstance(backend, MediaBackend)` 或 `backend.supports("group_voice")` 判断能力
+- **最小破坏面**：保留 ncatbot 事件循环、BotAPI monkey-patch、QQBot 现有 service 层
 - **配置驱动**：根据环境变量自动选择后端
 
-### 2.2 三个核心抽象
-
-#### 2.2.1 `IncomingMessage`（入站消息数据类）
+### 2.2 `IncomingMessage`（入站消息数据类）
 
 **新文件**：`nbot/commands_backend.py`
 
 ```python
+from __future__ import annotations
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, TYPE_CHECKING
+
+class Scene(str, Enum):
+    GROUP = "group"
+    PRIVATE = "private"
+
+
 @dataclass
 class IncomingMessage:
-    """统一入站消息格式 —— 替代 ncatbot 的 msg 对象"""
-    scene: Scene               # GROUP | PRIVATE
+    """统一入站消息格式 —— 替代 ncatbot 的 msg 对象
+
+    rev. 2 简化：第一版 reply() 只支持文本，富媒体走 backend 显式方法。
+    """
+    scene: Scene
     user_id: str
     text: str = ""
     group_id: str = ""
     sender_name: str = ""
     message_id: str = ""
     is_mentioned: bool = False
-    raw_message: Any = None    # 原生对象（ncatbot GroupMessage / qqbot dict）
+    raw_message: Any = None           # 原生对象(ncatbot GroupMessage / qqbot dict)
     backend_name: str = "unknown"
     metadata: dict = field(default_factory=dict)
 
     @property
-    def is_group(self) -> bool: ...
+    def is_group(self) -> bool:
+        return self.scene == Scene.GROUP
 
-    async def reply(self, text=None, *, image=None, voice=None, file=None) -> bool:
-        """便捷回复，自动选择私聊/群聊路径"""
+    async def reply(self, text: str) -> bool:
+        """便捷文本回复 —— 自动选择私聊/群聊路径
+
+        rev. 2: 第一版只支持 text 富媒体请用 backend.send_group_image 等显式方法
+        """
+        from nbot.commands_backend import get_backend
+        backend = get_backend()
+        if self.is_group:
+            return await backend.send_group_text(self.group_id, text)
+        return await backend.send_private_text(self.user_id, text)
 ```
 
-**关键点**：
-- 替代 ncatbot 的 `GroupMessage`/`PrivateMessage` 对象访问模式（`msg.user_id`、`msg.group_id`、`msg.reply()`）
-- `reply()` 是 async 方法（保留与 `msg.reply()` 的语义兼容），但内部走 `get_backend().send_*`
-- `raw_message` 保留原生对象（备用，业务代码不应直接访问）
+**关键约束**：
+- `reply()` 只接受 `text` 参数
+- `reply_image()` / `reply_voice()` / `reply_file()` 不在第一版提供，使用方显式调用 `backend.send_*_*()`
 
-#### 2.2.2 `BotBackend` 协议
+### 2.3 分层 Protocol 定义
 
 ```python
+from typing import Protocol, runtime_checkable, Any
+
+
 @runtime_checkable
 class BotBackend(Protocol):
+    """核心 BotBackend —— 所有后端必须实现
+
+    rev. 2: run_forever() 是同步方法，由 backend 内部决定如何阻塞
+            不外层包 asyncio.run()，避免与 ncatbot BotClient 内部事件循环冲突
+    """
     name: str
     is_running: bool
 
-    async def start(self) -> None: ...
-    async def stop(self) -> None: ...
-    async def run_forever(self) -> None:        # 阻塞入口
+    async def start(self) -> None:
+        """异步初始化：建立连接、获取 token 等"""
+        ...
 
-    # 文本消息
+    def run_forever(self) -> None:
+        """同步阻塞入口：ncatbot 由 bot.run() 阻塞；QQBot 由 WebSocketApp.run_forever() 阻塞"""
+        ...
+
+    async def stop(self) -> None:
+        """异步停止"""
+        ...
+
+    # ---- 核心文本能力（所有后端必须实现）----
     async def send_private_text(self, user_id: str, text: str) -> bool: ...
     async def send_group_text(self, group_id: str, text: str) -> bool: ...
 
-    # 富媒体
+    # ---- 能力检测（所有后端必须实现）----
+    def supports(self, capability: str) -> bool: ...
+
+
+@runtime_checkable
+class MediaBackend(Protocol):
+    """富媒体能力（可选）—— ncatbotBackend 实现，QQBotBackend 不实现"""
     async def send_private_image(self, user_id: str, image_path: str) -> bool: ...
     async def send_group_image(self, group_id: str, image_path: str) -> bool: ...
     async def send_group_voice(self, group_id: str, voice_path: str) -> bool: ...
     async def send_group_file(self, group_id: str, file_path: str) -> bool: ...
     async def send_private_file(self, user_id: str, file_path: str) -> bool: ...
-
-    # 引用回复
     async def reply_message(self, message_id: str, text: str, *,
-                            is_group: bool = False,
-                            target_id: str = "") -> bool: ...
+                            is_group: bool = False, target_id: str = "") -> bool: ...
 
-    # 历史/文件
-    async def get_group_msg_history(self, group_id: str, count: int = 20) -> list: ...
-    async def get_file_sync(self, file_id: str) -> dict: ...
-    async def download_file_sync(self, thread_count: int, headers: dict, url: str) -> bytes: ...
 
-    # 账号管理
+@runtime_checkable
+class NcatbotAdminBackend(Protocol):
+    """ncatbot / OneBot 专属管理能力（ncatbotBackend 实现，QQBotBackend 不实现）
+
+    rev. 2: 拆出独立 Protocol，避免 QQBotBackend 假实现
+    """
     async def set_qq_profile(self, **kwargs) -> bool: ...
     async def set_online_status(self, status: str) -> bool: ...
     async def set_qq_avatar(self, url: str) -> bool: ...
     async def send_like(self, user_id: str, times: int = 1) -> bool: ...
     async def set_group_admin(self, group_id: str, user_id: str, enable: bool) -> bool: ...
     async def set_friend_add_request(self, flag: str, approve: bool, remark: str = "") -> bool: ...
+    async def get_group_msg_history(self, group_id: str, count: int = 20) -> list: ...
+    async def get_file_sync(self, file_id: str) -> dict: ...
+    async def download_file_sync(self, thread_count: int, headers: dict, url: str) -> bytes: ...
 
-    # 透传
+
+@runtime_checkable
+class RawApiBackend(Protocol):
+    """透传原生 API（ncatbotBackend 实现，QQBotBackend 不实现）"""
     async def call_raw_api(self, func_name: str, **params) -> Any: ...
+
+
+# 能力字符串常量（用于 supports()）
+class Capability:
+    GROUP_IMAGE = "group_image"
+    GROUP_VOICE = "group_voice"
+    GROUP_FILE = "group_file"
+    PRIVATE_IMAGE = "private_image"
+    PRIVATE_FILE = "private_file"
+    REPLY_MESSAGE = "reply_message"
+    SET_QQ_PROFILE = "set_qq_profile"
+    SET_QQ_AVATAR = "set_qq_avatar"
+    SEND_LIKE = "send_like"
+    SET_GROUP_ADMIN = "set_group_admin"
+    GET_GROUP_HISTORY = "get_group_history"
+    FILE_DOWNLOAD = "file_download"
+    RAW_API = "raw_api"
 ```
 
-**总方法数**：约 20 个。覆盖 commands.py 中所有 30+ 种 `bot.api.*` 调用 + ai_commands.py + heartbeat.py + message_middleware.py + tts_handler.py + server.py。
-
-#### 2.2.3 全局后端注册
+### 2.4 全局后端注册
 
 ```python
 _active_backend: Optional[BotBackend] = None
@@ -130,10 +201,36 @@ def get_backend() -> BotBackend:
     return _active_backend
 ```
 
-**说明**：
-- 全局单例，bot.py 启动时 `set_backend()` 一次
-- 与现有全局 `bot` 风格一致，避免引入 contextvars
-- 启动前调用 `get_backend()` 抛 `RuntimeError`（明确失败）
+### 2.5 命令侧能力判断模式
+
+```python
+# 命令函数内部模式 A：Protocol isinstance 判断（推荐）
+from nbot.commands_backend import MediaBackend
+
+async def cmd_send_image(incoming: IncomingMessage, image_path: str):
+    backend = get_backend()
+    if not isinstance(backend, MediaBackend):
+        await incoming.reply("当前后端不支持发送图片")
+        return
+    if incoming.is_group:
+        await backend.send_group_image(incoming.group_id, image_path)
+    else:
+        await backend.send_private_image(incoming.user_id, image_path)
+
+
+# 命令函数内部模式 B：supports() 字符串判断
+async def cmd_send_voice(incoming: IncomingMessage, voice_path: str):
+    backend = get_backend()
+    if not backend.supports(Capability.GROUP_VOICE):
+        await incoming.reply("当前后端不支持语音消息")
+        return
+    await backend.send_group_voice(incoming.group_id, voice_path)
+```
+
+**两种模式选型建议**：
+- 能力组合判断（≥2 个方法）→ `isinstance` 更类型安全
+- 单能力开关 → `supports()` 更轻量
+- 项目内统一一种风格（推荐 `isinstance`）
 
 ## 3. 后端实现
 
@@ -141,12 +238,13 @@ def get_backend() -> BotBackend:
 
 **新文件**：`nbot/backends/ncatbot_backend.py`（约 350 行）
 
-**核心职责**：
-1. 包装 `BotClient()` 实例
-2. 事件转换：把 `GroupMessage/PrivateMessage` → `IncomingMessage`
-3. API 包装：把 `bot.api.post_*` → `backend.send_*`
+**目标实现 4 个 Protocol**：BotBackend + MediaBackend + NcatbotAdminBackend + RawApiBackend
 
-**关键代码骨架**：
+**按阶段补全**：
+- **阶段 1**：仅实现 `BotBackend` 核心（`start` / `run_forever` / `stop` / `send_*_text` / `supports`）
+- **阶段 2**：补全 `NcatbotAdminBackend`（管理能力）+ `RawApiBackend`（`call_raw_api`）
+- **阶段 3**：补全 `MediaBackend`（富媒体）
+- 每个阶段未实现的方法保留为返回 `False` 的空实现，确保 isinstance 判断在该阶段不命中
 
 ```python
 class NcatbotBackend:
@@ -154,24 +252,65 @@ class NcatbotBackend:
     is_running = False
 
     def __init__(self):
+        from ncatbot.core import BotClient
         self.bot = BotClient()
         self._dispatch_callback = None
 
     def set_dispatcher(self, callback):
         self._dispatch_callback = callback
 
+    # ---- BotBackend ----
     async def start(self):
         from nbot.commands import handle_incoming_message
         self.bot.add_group_event_handler(self._wrap_group)
         self.bot.add_private_event_handler(self._wrap_private)
         self.is_running = True
 
-    async def _wrap_group(self, msg: GroupMessage):
+    def run_forever(self):
+        """同步阻塞 —— ncatbot BotClient.run() 内部管理事件循环
+
+        rev. 2: 不返回,直接阻塞。bot.py 不要外层包 asyncio.run()
+        """
+        self.bot.run(enable_webui_interaction=False)
+
+    async def stop(self):
+        self.is_running = False
+
+    async def send_private_text(self, user_id, text):
+        return await self.bot.api.post_private_msg(user_id=user_id, text=text)
+
+    async def send_group_text(self, group_id, text):
+        return await self.bot.api.post_group_msg(group_id=group_id, text=text)
+
+    def supports(self, capability: str) -> bool:
+        # ncatbot 实现所有能力
+        return True
+
+    # ---- MediaBackend ----
+    async def send_group_image(self, group_id, image_path): ...
+    async def send_private_image(self, user_id, image_path): ...
+    async def send_group_voice(self, group_id, voice_path): ...
+    async def send_group_file(self, group_id, file_path): ...
+    async def send_private_file(self, user_id, file_path): ...
+    async def reply_message(self, message_id, text, *, is_group=False, target_id=""): ...
+
+    # ---- NcatbotAdminBackend ----
+    async def set_qq_profile(self, **kwargs): ...
+    async def set_online_status(self, status): ...
+    # ... 其他 7 个方法
+
+    # ---- RawApiBackend ----
+    async def call_raw_api(self, func_name, **params):
+        method = getattr(self.bot.api, func_name)
+        return await method(**params)
+
+    # ---- 事件转换 ----
+    async def _wrap_group(self, msg):
         incoming = self._to_incoming(msg, Scene.GROUP)
         if self._dispatch_callback:
             await self._dispatch_callback(incoming)
 
-    async def _wrap_private(self, msg: PrivateMessage):
+    async def _wrap_private(self, msg):
         incoming = self._to_incoming(msg, Scene.PRIVATE)
         if self._dispatch_callback:
             await self._dispatch_callback(incoming)
@@ -188,52 +327,17 @@ class NcatbotBackend:
             raw_message=msg,
             backend_name="ncatbot",
         )
-
-    def _detect_mention(self, msg) -> bool:
-        """检测消息是否 @机器人"""
-        try:
-            at_segments = [s for s in msg.message if s.get('type') == 'at']
-            return any(s.get('data', {}).get('qq') == str(msg.self_id)
-                       for s in at_segments)
-        except Exception:
-            return False
-
-    async def run_forever(self):
-        """ncatbot BotClient.run() 内部管理事件循环，阻塞"""
-        self.bot.run(enable_webui_interaction=False)
-
-    async def stop(self):
-        self.is_running = False
-
-    # ---- BotBackend 协议方法（包装 bot.api）----
-    async def send_private_text(self, user_id, text):
-        return await self.bot.api.post_private_msg(user_id=user_id, text=text)
-
-    async def send_group_text(self, group_id, text):
-        return await self.bot.api.post_group_msg(group_id=group_id, text=text)
-
-    # ... 其他 18 个方法类似包装
-    async def call_raw_api(self, func_name, **params):
-        """透传 ncatbot 原生 API（用于 /bot 动态命令）"""
-        method = getattr(self.bot.api, func_name)
-        return await method(**params)
 ```
 
 **保留事项**：
-- `BotAPI`/`GroupMessage.reply`/`PrivateMessage.reply` 的 monkey-patch **原状保留**（消息持久化自动记录是业务逻辑）
-- `BotClient` 事件循环不替换
-- 现有 60+ 命令函数业务逻辑不修改
+- `BotAPI`/`GroupMessage.reply`/`PrivateMessage.reply` 的 monkey-patch **原状保留**（消息持久化业务逻辑）
+- 60+ 命令函数业务逻辑不修改（只改 `bot.api.*` → `backend.*`）
 
 ### 3.2 `QQBotBackend`（包装现有 QQBotService）
 
-**新文件**：`nbot/backends/qqbot_backend.py`（约 250 行）
+**新文件**：`nbot/backends/qqbot_backend.py`（约 200 行）
 
-**核心职责**：
-1. 包装 `QQBotWebSocketService` WebSocket 客户端
-2. 事件转换：把 OpenAPI v2 dispatch event → `IncomingMessage`
-3. 复用 `send_qqbot_message()` REST API
-
-**关键代码骨架**：
+**实现 1 个 Protocol**：仅 BotBackend（不实现 MediaBackend / NcatbotAdminBackend / RawApiBackend）
 
 ```python
 class QQBotBackend:
@@ -251,51 +355,34 @@ class QQBotBackend:
             "https://sandbox.api.sgroup.qq.com" if sandbox
             else "https://api.sgroup.qq.com"
         )
+        self._loop = None   # rev. 2: 在 start() 中获取主 asyncio loop,供 run_coroutine_threadsafe 使用
 
     def set_dispatcher(self, callback):
         self._dispatch_callback = callback
 
+    # ---- BotBackend ----
     async def start(self):
         from nbot.services.qqbot_service import (
-            get_app_access_token, get_gateway,
-            QQBotWebSocketService
+            get_app_access_token, get_gateway, QQBotWebSocketService
         )
+        # rev. 2: 关键修复 —— 在异步上下文中获取 event loop
+        self._loop = asyncio.get_running_loop()
+
         self._token = get_app_access_token(
             self._creds["app_id"], self._creds["app_secret"]
         )
         gateway_url = get_gateway(self._token)
         self._ws_service = QQBotWebSocketService(
-            gateway_url, self._token, on_event=self._on_dispatch
+            gateway_url, self._token, on_event=self._on_dispatch_safe
         )
         self._ws_service.start()  # 启动独立线程
         self.is_running = True
 
-    def _on_dispatch(self, raw_event: dict):
-        """WebSocket 推来的事件 → IncomingMessage → 推给 dispatcher"""
-        from nbot.channels.qqbot import QQBotChannelAdapter
-        adapter = QQBotChannelAdapter(bot_appid=self._creds["app_id"])
-        parsed = adapter.parse_event(raw_event)
-        if parsed is None:
-            return
-        metadata = parsed.get("metadata", {})
-        scene = Scene.GROUP if metadata.get("qqbot_scene") == "group" else Scene.PRIVATE
-        incoming = IncomingMessage(
-            scene=scene,
-            user_id=parsed.get("user_id", ""),
-            group_id=metadata.get("qqbot_group_openid", ""),
-            text=parsed.get("content", ""),
-            sender_name=parsed.get("sender", ""),
-            message_id=parsed.get("message_id", ""),
-            is_mentioned=metadata.get("is_mentioned", False),
-            raw_message=raw_event,
-            backend_name="qqbot",
-            metadata=metadata,
-        )
-        if self._dispatch_callback:
-            asyncio.create_task(self._dispatch_callback(incoming))
+    def run_forever(self):
+        """同步阻塞 —— WebSocket 主循环
 
-    async def run_forever(self):
-        """WebSocket 主循环，阻塞"""
+        rev. 2: 不返回,直接阻塞。bot.py 不要外层包 asyncio.run()
+        """
         if self._ws_service:
             self._ws_service.run_forever()
 
@@ -304,7 +391,6 @@ class QQBotBackend:
         if self._ws_service:
             self._ws_service.stop()
 
-    # ---- BotBackend 协议方法 ----
     async def send_private_text(self, user_id, text):
         from nbot.services.qqbot_service import send_qqbot_message
         return send_qqbot_message(
@@ -317,17 +403,55 @@ class QQBotBackend:
             self._token, "group", group_id, text, api_base=self._api_base
         )
 
-    # ... 其他 18 个方法
+    def supports(self, capability: str) -> bool:
+        """rev. 2: QQBot 只支持核心文本能力"""
+        return capability == "private_text" or capability == "group_text"
 
-    async def call_raw_api(self, func_name, **params):
-        """QQBot 不支持原生透传，返回 None + warning"""
-        _log.warning("QQBot backend does not support raw API call: %s", func_name)
-        return None
+    # ---- 事件转换 ----
+    def _on_dispatch_safe(self, raw_event: dict):
+        """rev. 2: 关键修复 —— WebSocket 线程回调不能直接 asyncio.create_task()
+
+        必须用 run_coroutine_threadsafe 把协程调度到主 event loop
+        """
+        if self._loop is None or self._dispatch_callback is None:
+            return
+        try:
+            from nbot.channels.qqbot import QQBotChannelAdapter
+            adapter = QQBotChannelAdapter(bot_appid=self._creds["app_id"])
+            parsed = adapter.parse_event(raw_event)
+            if parsed is None:
+                return
+            metadata = parsed.get("metadata", {})
+            scene = Scene.GROUP if metadata.get("qqbot_scene") == "group" else Scene.PRIVATE
+            incoming = IncomingMessage(
+                scene=scene,
+                user_id=parsed.get("user_id", ""),
+                group_id=metadata.get("qqbot_group_openid", ""),
+                text=parsed.get("content", ""),
+                sender_name=parsed.get("sender", ""),
+                message_id=parsed.get("message_id", ""),
+                is_mentioned=metadata.get("is_mentioned", False),
+                raw_message=raw_event,
+                backend_name="qqbot",
+                metadata=metadata,
+            )
+            # rev. 2: 关键 —— 跨线程调度协程
+            asyncio.run_coroutine_threadsafe(
+                self._dispatch_callback(incoming),
+                self._loop
+            )
+        except Exception as e:
+            _log.exception("qqbot dispatch error: %s", e)
 ```
+
+**关键修复**（rev. 2 核心）：
+- `start()` 中通过 `asyncio.get_running_loop()` 捕获主 loop 引用
+- 线程回调 `_on_dispatch_safe()` 使用 `asyncio.run_coroutine_threadsafe(coro, loop)` 跨线程调度
+- 避免 `RuntimeError: no running event loop`
 
 **`qqbot_service.py` 改动**：
 - `answer_qqbot_event()` 约 100 行拆分：
-  - 事件分发部分（`parse_event` → `IncomingMessage`）迁到 `QQBotBackend._on_dispatch`
+  - 事件分发部分（`parse_event` → `IncomingMessage`）迁到 `QQBotBackend._on_dispatch_safe`
   - 业务处理（AIPipeline、命令匹配、Web session 创建）保留为 `nbot/services/qqbot_dispatch.py` 的 `handle_qqbot_incoming()`
 - `QQBotWebSocketService` 新增 `on_event` 回调参数（替代现有 `_handle_dispatch` 内联逻辑）
 - `QQBotMessageAdapter`/`QQBotBotMock` **保留**（ai_commands.py 还在用，标记 deprecated）
@@ -381,9 +505,6 @@ def create_backend(backend_name: str):
 ### 4.2 `bot.py` 改动（约 30 行）
 
 ```python
-# 删除: _apply_runtime_ncatbot_config() 的直接调用
-# 删除: _has_qq_bot_config() 的 ncatbot 风格判断
-
 def run_bot():
     from nbot.bot_runner import detect_backend, create_backend
     from nbot.commands_backend import set_backend
@@ -397,23 +518,31 @@ def run_bot():
     backend = create_backend(backend_name)
     set_backend(backend)
 
-    # 注入 dispatcher: IncomingMessage → commands.handle_incoming_message
+    # 注入 dispatcher
     async def dispatcher(incoming: IncomingMessage):
         from nbot.commands import handle_incoming_message
         await handle_incoming_message(incoming)
     backend.set_dispatcher(dispatcher)
 
-    # Web server 端通过 backend 推送消息（兼容 server.py:2010 等处）
     _set_web_server_bot(backend)
 
-    # 阻塞运行
-    asyncio.run(backend.run_forever())
+    # rev. 2: 异步 start() + 同步 run_forever() 分离
+    # start() 必须在 async 上下文中(QQBotBackend 需要获取 event loop)
+    asyncio.run(backend.start())
+    # run_forever() 同步阻塞,不外层包 asyncio.run()
+    backend.run_forever()
 ```
+
+**关键修正（rev. 2）**：
+- `asyncio.run(backend.start())` 启动后立即退出（start 只做连接初始化）
+- `backend.run_forever()` 在主线程同步阻塞
+- ncatbot 路径：`start()` 注册 event handler → `run_forever()` 调 `bot.run()` 阻塞
+- QQBot 路径：`start()` 获取 token + 启动 WebSocket 线程 → `run_forever()` 阻塞 WebSocket 主循环
 
 **主入口 `__main__` 改动**：
 
 ```python
-# bot.py:691-707 (default branch) —— 简化为:
+# bot.py default branch —— 简化为:
 else:
     backend_name = detect_backend()
     if backend_name:
@@ -426,7 +555,7 @@ else:
         _log.info("No QQ bot config found, starting Web Dashboard only...")
 ```
 
-## 5. 配置项
+## 5. 配置项（不变）
 
 ### 5.1 `.env.example` 改动（双轨并列）
 
@@ -465,206 +594,118 @@ qqbot_sandbox = false
 qqbot_api_base =
 ```
 
-**读取兼容**：保留 `configparser` 读取 `[BotConfig]` 段，运行时通过 `os.getenv` 优先，fallback 到 `config.ini`。
+## 6. commands.py 改造（分 4 阶段）
 
-## 6. commands.py 改造
+### 6.1 阶段 1：文本消息链路（最优先）
 
-### 6.1 保持不变
+**目标**：打通核心文本消息闭环，不动富媒体/管理/边缘功能。
 
-- 文件结构（仍单文件 ~5000 行）
-- 60+ 命令函数主体业务逻辑
-- `_dispatch_message` 命令路由逻辑
-- `BotAPI`/`GroupMessage.reply` monkey-patch
+**改动清单**：
+1. `commands.py` 顶部：删除 `bot = BotClient()` 全局、删除 `heartbeat_core = HeartbeatCore(bot.api)`（仅在阶段 4 恢复）
+2. `commands.py` 顶部：删除 `handle_group_message`/`handle_private_message`，新增 `handle_incoming_message`
+3. `commands.py` 顶部：删除 `bot.add_group_event_handler/add_private_event_handler` 注册（移到 `NcatbotBackend.start()`）
+4. `commands.py` 中 `dispatch_message(msg, is_group)` 签名改为 `dispatch_message(incoming)`，内部 `msg.user_id/group_id/raw_message/sender.nickname` → `incoming.user_id/group_id/text/sender_name`
+5. `commands.py` 中 `msg.reply("text")` → `await incoming.reply("text")`（reply 简化为只支持文本）
+6. `commands.py` 中**只替换** `await bot.api.post_private_msg(user_id=..., text=...)` → `await get_backend().send_private_text(user_id, text)` 和 `await bot.api.post_group_msg(group_id=..., text=...)` → `await get_backend().send_group_text(group_id, text)`（**这两类调用优先替换**）
+7. 暂不替换：图片/语音/文件/管理类 `bot.api.*` 调用（保留 `await bot.api.post_group_file(...)` 等原状）
 
-### 6.2 改动点
+**涉及命令**：所有命令的"发文本消息"路径，包括 AI 对话、`/roll`、`/dice`、`/email` 等。
 
-#### 6.2.1 事件入口（顶部）
+**新增文件**：
+- `nbot/commands_backend.py`（核心抽象 + IncomingMessage + BotBackend Protocol + 全局 getter）
+- `nbot/backends/__init__.py`
+- `nbot/backends/ncatbot_backend.py`（仅实现 BotBackend 核心，MediaBackend 暂空实现或 return False）
+- `nbot/backends/qqbot_backend.py`（仅实现 BotBackend 核心）
+- `nbot/bot_runner.py`
+- `tests/test_commands_backend.py`
+- `tests/test_backend_ncatbot.py`
+- `tests/test_backend_qqbot.py`
 
-```python
-# 删除:
-async def handle_group_message(msg: GroupMessage): ...
-async def handle_private_message(msg: PrivateMessage): ...
+**bot.py 改造**：`run_bot()` 改用 `asyncio.run(backend.start()) + backend.run_forever()`。
 
-# 替换为:
-async def handle_incoming_message(incoming: IncomingMessage):
-    """统一事件入口 —— 由 backend 注入的 dispatcher 调用"""
-    await dispatch_message(incoming)
+**.env.example / config.ini 改造**：双轨并列配置项。
 
-# 删除:
-if not hasattr(bot, '_nbot_handlers_registered'):
-    bot.add_group_event_handler(handle_group_message)
-    bot.add_private_event_handler(handle_private_message)
-    bot._nbot_handlers_registered = True
-# (这一段移到 NcatbotBackend.start() 中)
-```
+**阶段 1 验收**：
+- ncatbot 模式：AI 对话私聊/群聊可用
+- ncatbot 模式：`/roll` `/dice` `/email` 基础命令文本回复正常
+- QQBot 模式：AI 对话私聊/群聊可用
+- QQBot 模式：`/roll` `/dice` `/email` 基础命令文本回复正常
+- ncatbot 老用户配置零修改
 
-#### 6.2.2 全局 bot 引用
+### 6.2 阶段 2：迁移 commands.py 主路径
 
-```python
-# 删除:
-bot = BotClient()
-heartbeat_core = HeartbeatCore(bot.api)
+**目标**：批量替换 commands.py 中所有 `bot.api.*` 文本类调用到 backend。
 
-# 替换为:
-from nbot.commands_backend import get_backend, set_backend
-# backend 通过 bot.py 启动时 set_backend() 注入
-# HeartbeatCore 改为内部通过 get_backend() 获取
-```
+**改动清单**：
+1. 替换 `await bot.api.post_*_msg(...)` 的所有剩余调用
+2. 替换 `await bot.api.set_qq_profile/set_online_status/set_qq_avatar/send_like/set_group_admin/set_friend_add_request` → 通过 `isinstance(backend, NcatbotAdminBackend)` 判断后调用；QQBot 路径返回"不支持"提示
+3. 替换 `await bot.api.get_group_msg_history(...)` → 同上 NcatbotAdminBackend 判断
+4. 替换 `getattr(bot.api, func_name)(**params)` (`/bot` 动态命令) → `isinstance(backend, RawApiBackend)` 判断
+5. `ai_commands.py`：`register_ai_commands(bot=bot, ...)` → `register_ai_commands(backend=..., ...)`，内部 `bot_instance.api.*` → `backend.*`
 
-#### 6.2.3 消息分发（`dispatch_message`）
+**涉及命令**：
+- 完整覆盖 60+ 命令的文本路径
+- 管理类命令（`/setadmin` `/ban` 等）在 QQBot 模式下提示"当前后端不支持"
 
-```python
-# 旧:
-async def dispatch_message(msg, is_group: bool):
-    user_id = msg.user_id
-    group_id = msg.group_id if is_group else ""
-    raw = msg.raw_message
-    sender_name = msg.sender.nickname
-    ...
+**阶段 2 验收**：
+- ncatbot 模式：60+ 命令文本路径行为完全一致（与重构前）
+- QQBot 模式：文本命令 100% 可用，管理类命令明确提示"不支持"
+- `commands.py` 中不再有 `bot.api.post_*_msg` 调用
 
-# 新:
-async def dispatch_message(incoming: IncomingMessage):
-    user_id = incoming.user_id
-    group_id = incoming.group_id if incoming.is_group else ""
-    raw = incoming.text
-    sender_name = incoming.sender_name
-    ...
-```
+### 6.3 阶段 3：富媒体与边缘能力
 
-#### 6.2.4 `bot.api.*` 批量替换（约 100+ 处机械替换）
+**目标**：处理图片/语音/文件/TTS/message_middleware/web 推送。
 
-| 原代码 | 新代码 |
-|--------|--------|
-| `await bot.api.post_private_msg(user_id=..., text=...)` | `await get_backend().send_private_text(user_id, text)` |
-| `await bot.api.post_group_msg(group_id=..., text=...)` | `await get_backend().send_group_text(group_id, text)` |
-| `await bot.api.post_group_msg(group_id=..., rtf=MessageChain([Record(p)]))` | `await get_backend().send_group_voice(group_id, p)` |
-| `await bot.api.post_group_file(group_id=..., file=...)` | `await get_backend().send_group_file(group_id, file)` |
-| `await bot.api.upload_private_file(user_id=..., file=...)` | `await get_backend().send_private_file(user_id, file)` |
-| `await bot.api.set_qq_profile(...)` | `await get_backend().set_qq_profile(...)` |
-| `await bot.api.set_online_status(...)` | `await get_backend().set_online_status(...)` |
-| `await bot.api.set_qq_avatar(...)` | `await get_backend().set_qq_avatar(...)` |
-| `await bot.api.send_like(...)` | `await get_backend().send_like(...)` |
-| `await bot.api.set_group_admin(...)` | `await get_backend().set_group_admin(...)` |
-| `await bot.api.set_friend_add_request(...)` | `await get_backend().set_friend_add_request(...)` |
-| `await bot.api.get_group_msg_history(...)` | `await get_backend().get_group_msg_history(...)` |
-| `getattr(bot.api, func_name)(**params)` | `await get_backend().call_raw_api(func_name, **params)` |
+**改动清单**：
+1. `nbot/services/tts.py`：删除 `from ncatbot.core.element import MessageChain, Record`，改为 `await backend.send_group_voice(group_id, path)`；QQBot 不支持私聊语音，降级为文本
+2. `nbot/gateway/tts_handler.py`：同上
+3. `nbot/core/message_middleware.py`：`bot.api.get_file_sync/download_file_sync` → `isinstance(backend, NcatbotAdminBackend)` 判断后调用
+4. `nbot/web/server.py`：`self.qq_bot.api.*` → `backend.*`
+5. commands.py 中 `bot.api.post_group_file/upload_private_file` → `isinstance(backend, MediaBackend)` 判断后调用
+6. commands.py 中 `bot.api.post_group_msg(rtf=MessageChain([Record(...)]))` → `isinstance(backend, MediaBackend)` 判断后调用 `backend.send_group_voice(...)`
 
-| 原代码（msg 对象） | 新代码（incoming） |
-|--------|--------|
-| `msg.user_id` | `incoming.user_id` |
-| `msg.group_id` | `incoming.group_id` |
-| `msg.raw_message` | `incoming.text` |
-| `msg.sender.nickname` | `incoming.sender_name` |
-| `msg.message_id` | `incoming.message_id` |
-| `msg.reply("text")` | `await incoming.reply("text")` |
+**涉及命令**：
+- 漫画下载（图片发送）
+- TTS 语音消息
+- 文件传输（表情包等）
 
-### 6.3 `ai_commands.py` 改动
+**阶段 3 验收**：
+- ncatbot 模式：富媒体/文件/语音/TTS 全部正常
+- QQBot 模式：富媒体命令明确提示"当前后端不支持"
+- `tts.py` / `tts_handler.py` / `message_middleware.py` / `server.py` 中不再有 `bot.api.*` 调用
 
-**`commands.py` 已删除全局 `bot` 引用**（见 §6.2.2），但 `ai_commands.py` 仍需要 backend 引用。
+### 6.4 阶段 4：清理 ncatbot 残留依赖
 
-```python
-# 旧 (ai_commands.py):
-def register_ai_commands(bot=None, ...):
-    self.bot = bot
-    ...
-    await self.bot.api.post_private_msg(...)
+**目标**：完全切断 commands.py 等核心模块对 ncatbot 的直接 import。
 
-# 新 (ai_commands.py):
-def register_ai_commands(backend=None, ...):
-    self.backend = backend
-    ...
-    await self.backend.send_private_text(...)
-```
+**改动清单**：
+1. `nbot/core/heartbeat.py`：修正 `from ncatbot.services.ai import ai_client` → `from nbot.services.ai import ai_client`（疑似 bug）；`bot_api` 参数 → 内部 `get_backend()` 获取
+2. `commands.py` 顶部：确认无 `import ncatbot` 残留
+3. `ai_commands.py`：确认无 `import ncatbot` 残留
+4. `nbot/commands_backend.py`、`nbot/backends/ncatbot_backend.py` 是**唯一**仍可 `import ncatbot` 的文件
+5. 删除 `_apply_runtime_ncatbot_config` 中重复的 setter 调用（保留核心部分）
+6. `requirements.txt`：`ncatbot == 3.8.5` 标注为可选（`ncatbot>=3.8.5; sys_platform == "win32"` 或保留但加注释）
 
-**`commands.py` 全局状态约定**：
-- `commands.py` **删除** `bot = BotClient()` 全局（由 §6.2.2）
-- `commands.py` **不新增** `backend = None` 全局（命令函数统一通过 `get_backend()` 获取）
-- `ai_commands.py` **保留** `self.backend` 实例属性（每个命令 handler 实例一个）
-- `nbot/services/qqbot_service.py` 的 `_handle_qqbot_command` 中的 monkey-patch **保留**（`cmd_module.bot = adapter.bot`），仅用于兼容 ai_commands.py 内部的 `_bot_instance` 引用，**不影响** commands.py
+**涉及文件**：
+- `nbot/core/heartbeat.py`
+- `nbot/commands.py`
+- `nbot/ai_commands.py`
+- `requirements.txt`
 
-### 6.4 `nbot/core/heartbeat.py` 改动
+**阶段 4 验收**：
+- `grep -r "import ncatbot" nbot/commands.py nbot/ai_commands.py nbot/core/ nbot/services/ nbot/web/ nbot/gateway/ nbot/channels/` 无结果（仅 `nbot/commands_backend.py` 和 `nbot/backends/ncatbot_backend.py` 可有 ncatbot 引用）
+- `python -m compileall -q bot.py nbot tools` 通过
+- `ruff check .` 无新增警告
+- `python -m pytest -q` 全部通过
 
-```python
-# 旧 (line 37 - 疑似 bug):
-from ncatbot.services.ai import ai_client
-# 旧 (line 174):
-await self.bot_api.post_private_msg(int(user_id), text=msg_text)
+### 6.5 4 阶段总览
 
-# 新:
-from nbot.services.ai import ai_client   # 修正为 nbot
-class HeartbeatCore:
-    def __init__(self):
-        # 移除 bot_api 参数,内部通过 get_backend() 获取
-        pass
-    async def send_to_user(self, user_id, text):
-        backend = get_backend()
-        await backend.send_private_text(str(user_id), text)
-```
-
-### 6.5 `nbot/services/tts.py` 改动
-
-```python
-# 旧 (line 80):
-from ncatbot.core.element import MessageChain, Record
-def tts(text):
-    audio = synthesize(text)
-    return MessageChain([Record(audio)])
-
-# 新:
-async def tts(text, target_id, is_group=True):
-    audio = synthesize(text)
-    backend = get_backend()
-    if is_group:
-        await backend.send_group_voice(target_id, audio)
-    else:
-        # QQBot 不支持私聊语音,降级为文本
-        await backend.send_private_text(target_id, "[语音消息]")
-```
-
-### 6.6 `nbot/gateway/tts_handler.py` 改动
-
-```python
-# 旧 (line 97, 122-125):
-from ncatbot.core.element import MessageChain, Record
-await self._qq_bot.api.post_group_msg(group_id=target_id, rtf=MessageChain([Record(path)]))
-
-# 新:
-from nbot.commands_backend import get_backend
-backend = get_backend()
-await backend.send_group_voice(target_id, path)
-```
-
-### 6.7 `nbot/core/message_middleware.py` 改动
-
-```python
-# 旧 (line 460, 544):
-await bot.api.get_file_sync(file_id)
-await bot.api.download_file_sync(thread_count, headers, url)
-
-# 新:
-from nbot.commands_backend import get_backend
-backend = get_backend()
-await backend.get_file_sync(file_id)
-await backend.download_file_sync(thread_count, headers, url)
-```
-
-### 6.8 `nbot/web/server.py` 改动
-
-```python
-# 旧 (line 2010, 2017, 2019):
-if self.qq_bot and qq_id:
-    await self.qq_bot.api.post_group_msg(group_id=qq_id, text=...)
-    await self.qq_bot.api.post_private_msg(user_id=qq_id, text=...)
-
-# 新:
-from nbot.commands_backend import get_backend
-backend = get_backend()
-if backend and qq_id:
-    await backend.send_group_text(qq_id, ...)
-    await backend.send_private_text(qq_id, ...)
-```
-
-`_set_web_server_bot(backend)` 替换现有的 `_set_web_server_bot(bot)`（已存在于 bot.py:255-265）。
+| 阶段 | 目标 | 工作量 | 风险 | 验收命令数 |
+|------|------|-------|------|----------|
+| 1 | 文本消息链路 | 中 | 中 | 5-10 个核心命令 |
+| 2 | 主路径批量替换 | 大 | 中 | 60+ 命令文本路径 |
+| 3 | 富媒体 + 边缘 | 中 | 中低 | 60+ 命令完整 |
+| 4 | 清理残留 import | 小 | 低 | 全部清理 |
 
 ## 7. 数据流
 
@@ -679,9 +720,12 @@ bot.py main()
        ├─ backend.set_dispatcher(dispatcher)
        │    └─ dispatcher(incoming) = handle_incoming_message
        ├─ _set_web_server_bot(backend) [for web push]
-       └─ backend.run_forever() [blocking — 不外层包 asyncio.run]
+       ├─ asyncio.run(backend.start())  [rev. 2: 异步初始化]
+       │    ├─ NcatbotBackend.start() → 注册 event handler
+       │    └─ QQBotBackend.start() → 获取 token + 启动 WebSocket 线程 + 保存 self._loop
+       └─ backend.run_forever()  [rev. 2: 同步阻塞,不外层包 asyncio.run]
               ├─ NcatbotBackend.run_forever() → self.bot.run()  (ncatbot 内部管理事件循环)
-              └─ QQBotBackend.run_forever() → self._ws_service.run_forever()  (独立线程)
+              └─ QQBotBackend.run_forever() → self._ws_service.run_forever()  (阻塞 WebSocket 主循环)
 ```
 
 ### 7.2 ncatbot 路径
@@ -691,7 +735,7 @@ NapCatQQ WebSocket
   → ncatbot.BotClient event loop
   → NcatbotBackend._wrap_group(msg: GroupMessage)
   → _to_incoming(msg, Scene.GROUP)
-  → dispatcher(incoming)
+  → dispatcher(incoming)  [async, 同一 event loop]
   → commands.handle_incoming_message(incoming)
   → dispatch_message(incoming)
   → 60+ 命令函数 [通过 get_backend().send_* 发回]
@@ -704,11 +748,12 @@ NapCatQQ WebSocket
 
 ```
 QQ OpenAPI WebSocket (api.sgroup.qq.com)
-  → QQBotWebSocketService 收到 OP_DISPATCH
-  → QQBotBackend._on_dispatch(raw_event)
+  → QQBotWebSocketService 收到 OP_DISPATCH [独立线程]
+  → QQBotBackend._on_dispatch_safe(raw_event) [rev. 2: 关键修复]
   → QQBotChannelAdapter.parse_event(raw_event) → parsed dict
   → 转 IncomingMessage
-  → dispatcher(incoming)
+  → asyncio.run_coroutine_threadsafe(self._dispatch_callback(incoming), self._loop)  [rev. 2: 跨线程调度]
+  → 主 event loop 中执行 dispatcher(incoming)
   → commands.handle_incoming_message(incoming)
   → dispatch_message(incoming)
   → 60+ 命令函数 [通过 get_backend().send_* 发回]
@@ -728,21 +773,25 @@ QQ OpenAPI WebSocket (api.sgroup.qq.com)
 import asyncio
 import pytest
 from nbot.commands_backend import (
-    IncomingMessage, Scene, set_backend, get_backend
+    IncomingMessage, Scene, set_backend, get_backend, Capability
 )
 
 class FakeBackend:
+    """最小 BotBackend 实现,用于测试"""
     name = "fake"
-    sent = []
     is_running = True
+
     async def start(self): pass
+    def run_forever(self): pass
     async def stop(self): pass
-    async def run_forever(self): pass
     async def send_private_text(self, user_id, text):
         self.sent.append(("private", user_id, text)); return True
     async def send_group_text(self, group_id, text):
         self.sent.append(("group", group_id, text)); return True
-    # ... 其他 17 个方法
+    def supports(self, capability): return False  # 核心 fake 不支持富媒体
+
+    def __init__(self):
+        self.sent = []
 
 def test_incoming_message_reply_uses_group_path():
     fb = FakeBackend(); set_backend(fb)
@@ -769,13 +818,13 @@ def test_get_backend_before_set_raises():
 def test_to_incoming_group_message():
     from nbot.backends.ncatbot_backend import NcatbotBackend
     from unittest.mock import MagicMock
-    backend = NcatbotBackend.__new__(NcatbotBackend)  # skip __init__
+    backend = NcatbotBackend.__new__(NcatbotBackend)
     backend.bot = MagicMock()
     msg = MagicMock()
     msg.user_id = "123"; msg.group_id = "456"
     msg.raw_message = "hello"; msg.sender.nickname = "Alice"
     msg.message_id = "m1"; msg.self_id = "999"
-    msg.message = []  # no at
+    msg.message = []
     inc = backend._to_incoming(msg, Scene.GROUP)
     assert inc.user_id == "123"
     assert inc.group_id == "456"
@@ -788,21 +837,22 @@ def test_to_incoming_group_message():
 **新文件**：`tests/test_backend_qqbot.py`
 
 ```python
-def test_on_dispatch_private_message():
+def test_on_dispatch_uses_run_coroutine_threadsafe():
+    """rev. 2: 验证线程回调使用 run_coroutine_threadsafe,不直接 create_task"""
     from nbot.backends.qqbot_backend import QQBotBackend
-    from unittest.mock import MagicMock
+    from unittest.mock import MagicMock, patch
+    import asyncio
     backend = QQBotBackend.__new__(QQBotBackend)
-    backend._creds = {"app_id": "test_id"}
+    backend._creds = {"app_id": "test"}
+    backend._loop = MagicMock()
     backend._dispatch_callback = MagicMock()
-    raw_event = {
-        "t": "C2C_MESSAGE_CREATE",
-        "d": {
-            "id": "msg_1", "content": "hello",
-            "author": {"user_openid": "u_openid_1", "username": "Alice"},
-        }
-    }
-    backend._on_dispatch(raw_event)
-    # 验证 dispatcher 被调用(IncomingMessage 包含正确字段)
+    with patch("asyncio.run_coroutine_threadsafe") as mock_rcts:
+        backend._on_dispatch_safe({"t": "C2C_MESSAGE_CREATE", "d": {}})
+        # 验证 run_coroutine_threadsafe 被调用
+        assert mock_rcts.called
+        # 验证传入 loop
+        call_args = mock_rcts.call_args
+        assert call_args[0][1] == backend._loop
 ```
 
 ### 8.2 集成测试（手动）
@@ -814,19 +864,21 @@ BOT_UIN=xxx WS_URI=ws://localhost:3001 python bot.py
 
 # QQBot 模式
 QQBOT_APP_ID=xxx QQBOT_APP_SECRET=xxx python bot.py
-
-# 同时启动（ncatbot 优先）
-BOT_UIN=xxx WS_URI=ws://localhost:3001 QQBOT_APP_ID=xxx QQBOT_APP_SECRET=xxx python bot.py
 ```
 
-回归测试（每条命令至少跑通一次）：
-- `/jmrank` `/jm_search` —— 漫画
-- `/email` —— 邮箱
-- `/roll` `/dice` —— 骰子
-- `/emoji` —— 表情包
-- `/setadmin` `/admin` —— 管理
-- AI 对话（私聊 + 群 @）—— 核心
+阶段 1 回归测试（每条至少跑通一次）：
+- AI 对话（私聊）—— 核心
+- AI 对话（群 @）—— 核心
+- `/roll` `/dice` —— 基础工具
+- `/email` —— 文本命令
+
+阶段 2 回归测试（在阶段 1 基础上增加）：
+- 60+ 命令的文本路径
+
+阶段 3 回归测试（在阶段 2 基础上增加）：
+- 漫画图片发送
 - TTS 语音消息
+- 文件传输
 
 ### 8.3 CI 检查
 
@@ -848,75 +900,125 @@ python -m pytest tests/test_commands_backend.py tests/test_backend_ncatbot.py te
 | 两个后端都没配置 | `detect_backend()` 返回 `None`，`run_bot()` 警告并退出 QQ bot 线程 |
 | 两个后端都配置了 | ncatbot 优先 + 警告日志 |
 | `backend` 未启动时命令系统调用 `get_backend()` | 抛 `RuntimeError`，提示调用 `set_backend()` |
-| QQBot token 过期 | 捕获 401 → 自动刷新 token → 重试一次（保留 `get_app_access_token` 逻辑） |
-| ncatbot 断开重连 | 保留 ncatbot 自身重连机制，不在 BotBackend 层重试 |
-| 消息发送失败 | 后端 `send_xxx` 返回 `False`，命令函数检查并打日志（不抛异常） |
-| Web 端推送消息 | `_set_web_server_bot(backend)` 注入 backend，`self.qq_bot.api.*` → `backend.*` |
-| `IncomingMessage.reply()` 时 backend 已 stop | `get_backend()` 返回的对象仍可用，`send_xxx` 会失败，由调用方处理 |
-| `/bot` 动态 API 命令 | `getattr(bot.api, name)(**params)` → `await get_backend().call_raw_api(name, **params)` |
-| QQBot `call_raw_api` | 不支持，返回 `None` + 警告日志 |
+| QQBot token 过期 | 捕获 401 → 自动刷新 token → 重试一次 |
+| ncatbot 断开重连 | 保留 ncatbot 自身重连机制 |
+| 消息发送失败 | 后端 `send_xxx` 返回 `False`，命令函数检查并打日志 |
+| Web 端推送消息 | `_set_web_server_bot(backend)` 注入 backend |
+| QQBot 线程回调时主 loop 未启动 | 启动顺序保证：`start()` 必须在 `run_forever()` 之前；`_on_dispatch_safe` 中检查 `self._loop is None` 时直接 return |
+| QQBot 接收事件时主 loop 已关闭 | `run_coroutine_threadsafe` 返回的 Future 失败，仅打日志不抛 |
+| 命令调用 QQBot 不支持的能力 | `isinstance(backend, MediaBackend)` / `NcatbotAdminBackend` / `RawApiBackend` 判断失败时，命令回复"当前后端不支持" |
 | ncatbot 用户的旧 `.env` 无 `QQBOT_*` 配置 | 完全兼容，行为不变 |
 | QQBot 用户的 `.env` 无 `BOT_UIN`/`WS_URI` 配置 | 完全兼容，走 QQBot 路径 |
 
-## 10. 实施步骤（高层概览，详细计划在 writing-plans 阶段产出）
+## 10. 实施步骤（按 4 阶段组织）
 
-按依赖关系排序，每步可独立验证：
+### 阶段 1：文本消息链路（最优先）
 
-1. **新增核心抽象层**：创建 `nbot/commands_backend.py`（`IncomingMessage` + `BotBackend` Protocol + 全局 getter/setter）
-2. **新增 ncatbot 后端**：创建 `nbot/backends/__init__.py` + `nbot/backends/ncatbot_backend.py`
-3. **新增 QQBot 后端**：创建 `nbot/backends/qqbot_backend.py`，重构 `qqbot_service.py` 的 `answer_qqbot_event()`
-4. **新增启动协调**：创建 `nbot/bot_runner.py`，改造 `bot.py` 的 `run_bot()` 和主入口
-5. **改造 commands.py 事件入口**：替换 `handle_group_message/handle_private_message` → `handle_incoming_message`
-6. **改造 commands.py 全局 bot 引用**：删除 `bot = BotClient()`、`heartbeat_core = HeartbeatCore(bot.api)`
-7. **改造 commands.py 消息分发**：替换 `dispatch_message(msg, is_group)` → `dispatch_message(incoming)`
-8. **批量替换 commands.py 中 `bot.api.*` 调用**（约 100+ 处机械替换）
-9. **批量替换 commands.py 中 `msg.xxx` 属性访问**（约 100+ 处机械替换）
-10. **改造 `ai_commands.py`**：`register_ai_commands(bot=...)` → `register_ai_commands(backend=...)`
-11. **改造 `nbot/core/heartbeat.py`**：修正 `ncatbot.services.ai` bug（`nbot.services.ai`），`bot_api` 参数 → `get_backend()`
-12. **改造 `nbot/services/tts.py`**：删除 `MessageChain`/`Record` 依赖，调用 `backend.send_*_voice()`
-13. **改造 `nbot/gateway/tts_handler.py`**：同上
-14. **改造 `nbot/core/message_middleware.py`**：`bot.api.get_file_sync/download_file_sync` → `backend.*`
-15. **改造 `nbot/web/server.py`**：`self.qq_bot.api.*` → `backend.*`
-16. **更新 `.env.example`**：双轨并列模板
-17. **更新 `config.ini`**：双轨并列字段
-18. **新增测试**：`tests/test_commands_backend.py` + `tests/test_backend_ncatbot.py` + `tests/test_backend_qqbot.py`
-19. **手动回归测试**：ncatbot 模式 + QQBot 模式分别跑通核心命令
-20. **CI 验证**：`ruff check . && python -m compileall -q bot.py nbot tools && python -m pytest -q`
+1. 新建 `nbot/commands_backend.py`（`IncomingMessage` + `BotBackend` Protocol + 全局 getter/setter + `Capability` 常量）
+2. 新建 `nbot/backends/__init__.py` + `nbot/backends/ncatbot_backend.py`（仅实现 `BotBackend` 核心）
+3. 新建 `nbot/backends/qqbot_backend.py`（仅实现 `BotBackend` 核心 + `_on_dispatch_safe` 修复）
+4. 新建 `nbot/bot_runner.py`（`detect_backend` + `create_backend`）
+5. 改造 `bot.py` 的 `run_bot()`（`asyncio.run(start()) + run_forever()`）
+6. 改造 `commands.py` 事件入口（删除 `handle_group/private_message`，新增 `handle_incoming_message`）
+7. 改造 `commands.py` 全局 `bot` 引用（删除 `bot = BotClient()`）
+8. 改造 `commands.py` 中 `dispatch_message(msg, is_group)` → `dispatch_message(incoming)`
+9. 替换 `commands.py` 中 `msg.user_id/group_id/raw_message/sender.nickname` → `incoming.*`（**仅这两个属性 + reply 调用**）
+10. 替换 `commands.py` 中 `await bot.api.post_*_msg(user_id/group_id=..., text=...)` → `await get_backend().send_*_text(...)`（**仅这两类**）
+11. 替换 `commands.py` 中 `msg.reply("text")` → `await incoming.reply("text")`
+12. 更新 `.env.example`（双轨并列）
+13. 更新 `config.ini`（双轨并列）
+14. 新增 `tests/test_commands_backend.py` + `tests/test_backend_ncatbot.py` + `tests/test_backend_qqbot.py`
+15. 手动回归测试（阶段 1 验收）
+
+### 阶段 2：主路径批量替换
+
+16. 替换 `commands.py` 中所有 `bot.api.post_*_msg` 剩余调用
+17. 替换 `commands.py` 中 `bot.api.set_qq_profile/set_online_status/set_qq_avatar/send_like/set_group_admin/set_friend_add_request` → `isinstance(backend, NcatbotAdminBackend)` 判断
+18. 替换 `commands.py` 中 `bot.api.get_group_msg_history` → `isinstance(backend, NcatbotAdminBackend)` 判断
+19. 替换 `commands.py` 中 `getattr(bot.api, name)(**params)`（`/bot` 命令）→ `isinstance(backend, RawApiBackend)` 判断
+20. 改造 `ai_commands.py`（`register_ai_commands(bot=bot)` → `register_ai_commands(backend=...)`）
+21. 手动回归测试（阶段 2 验收）
+
+### 阶段 3：富媒体与边缘
+
+22. 改造 `nbot/services/tts.py`（删除 `MessageChain`/`Record`，调用 `backend.send_group_voice`）
+23. 改造 `nbot/gateway/tts_handler.py`（同上）
+24. 改造 `nbot/core/message_middleware.py`（`bot.api.get_file_sync/download_file_sync` → `isinstance(backend, NcatbotAdminBackend)`）
+25. 改造 `nbot/web/server.py`（`self.qq_bot.api.*` → `backend.*`）
+26. 改造 `commands.py` 中 `bot.api.post_group_file/upload_private_file` → `isinstance(backend, MediaBackend)` 判断
+27. 改造 `commands.py` 中 `bot.api.post_group_msg(rtf=MessageChain([Record(...)]))` → `isinstance(backend, MediaBackend)` 判断
+28. 手动回归测试（阶段 3 验收）
+
+### 阶段 4：清理 ncatbot 残留
+
+29. 修复 `nbot/core/heartbeat.py` 中 `from ncatbot.services.ai import ai_client` 笔误
+30. 改造 `nbot/core/heartbeat.py` 中 `bot_api` 参数 → 内部 `get_backend()` 获取
+31. 检查 `commands.py` / `ai_commands.py` 无 `import ncatbot` 残留
+32. 更新 `requirements.txt`（`ncatbot` 标注为可选）
+33. 完整 CI 验证（ruff / compileall / pytest）
 
 ## 11. 风险与缓解
 
 | 风险 | 影响 | 缓解 |
 |------|------|------|
-| `commands.py` 100+ 处替换引入回归 bug | 高 | 分批替换 + 每批跑回归测试 + 保留 monkey-patch 作为兜底 |
-| `IncomingMessage` dataclass 字段不足覆盖所有命令用法 | 中 | 先 grep `msg.\w+` 列出所有属性,确保 dataclass 字段完整 |
-| ncatbot `BotClient.run()` 与 `asyncio.run()` 冲突 | 高 | ncatbot backend 的 `run_forever` 直接调 `bot.run()`,**不**包 `asyncio.run`(避免双事件循环) |
-| QQBot `run_forever` 与 `asyncio.run()` 冲突 | 中 | QQBot backend 的 `run_forever` 内部已用独立线程,直接调 `self._ws_service.run_forever()` |
-| 老用户升级时命令行为变化 | 中 | monkey-patch 保留 + IncomingMessage.reply() 语义兼容 `msg.reply()` |
-| `register_ai_commands` 全局 bot 引用破环 | 中 | 同时维护 `bot` 和 `_backend` 全局,monkey-patch 兼容 |
-| `tts.py` 删除 `MessageChain` 后 QQBot 不支持私聊语音 | 低 | 降级为文本提示,不抛异常 |
+| `commands.py` 100+ 处替换引入回归 bug | 高 | 分 4 阶段 + 每阶段独立验证 + 保留 ncatbot monkey-patch 作为兜底 |
+| QQBot `_on_dispatch_safe` 跨线程调度失败 | 高 | rev. 2 已修复：`asyncio.get_running_loop()` + `run_coroutine_threadsafe` |
+| ncatbot `BotClient.run()` 与 `asyncio.run()` 冲突 | 高 | rev. 2 已修复：`start()` 异步 + `run_forever()` 同步分离 |
+| `IncomingMessage` 字段不足覆盖所有命令用法 | 中 | 第一版只支持 reply(text)，富媒体走 backend 显式方法 |
+| 老用户升级时命令行为变化 | 中 | monkey-patch 保留 + `IncomingMessage.reply(text)` 语义兼容 `msg.reply(text)` |
+| `register_ai_commands` 全局 bot 引用破环 | 中 | 保留 ai_commands.py 内部 `self.backend`，monkey-patch 兼容 |
+| `tts.py` 删除 `MessageChain` 后 QQBot 不支持私聊语音 | 低 | 降级为文本提示，不抛异常 |
+| 阶段 1 验收只覆盖 5-10 个命令，老用户感知不强 | 低 | 阶段 1 文档明确告知后续阶段计划 |
 
-## 12. 验收标准
+## 12. 验收标准（按阶段）
+
+### 阶段 1 验收标准
 
 1. ✅ `python bot.py` 在仅有 `BOT_UIN`+`WS_URI` 时正常运行（ncatbot 模式）
 2. ✅ `python bot.py` 在仅有 `QQBOT_APP_ID`+`QQBOT_APP_SECRET` 时正常运行（QQBot 模式）
-3. ✅ 60+ 命令在两种模式下行为一致
-4. ✅ `tests/test_commands_backend.py` 全部通过
-5. ✅ `ruff check .` 无新增警告
-6. ✅ `python -m compileall -q bot.py nbot tools` 无错误
-7. ✅ `python -m pytest -q` 全部通过
-8. ✅ `nbot/commands.py` 不再有 `import ncatbot`（`ncatbot.core` / `ncatbot.core.element` / `ncatbot.utils.*`）
-9. ✅ `nbot/services/tts.py` 不再有 `import ncatbot`
-10. ✅ `nbot/gateway/tts_handler.py` 不再有 `import ncatbot`
-11. ✅ `nbot/core/heartbeat.py` 不再有 `import ncatbot`
-12. ✅ `nbot/core/message_middleware.py` 不再有 `from nbot.commands import bot` 直接使用 `bot.api.*`
-13. ✅ `nbot/web/server.py` 不再有 `self.qq_bot.api.*`
-14. ✅ `.env.example` 包含双轨配置项
-15. ✅ `config.ini` 包含双轨配置段
+3. ✅ ncatbot 模式：AI 对话私聊可用
+4. ✅ ncatbot 模式：AI 对话群 @ 可用
+5. ✅ ncatbot 模式：`/roll` `/dice` `/email` 文本回复正常
+6. ✅ QQBot 模式：AI 对话私聊可用
+7. ✅ QQBot 模式：AI 对话群 @ 可用
+8. ✅ QQBot 模式：`/roll` `/dice` `/email` 文本回复正常
+9. ✅ `tests/test_commands_backend.py` 全部通过
+10. ✅ `tests/test_backend_ncatbot.py` 全部通过
+11. ✅ `tests/test_backend_qqbot.py` 全部通过（验证 `run_coroutine_threadsafe` 调用）
+12. ✅ `ruff check .` 无新增警告
+13. ✅ `python -m compileall -q bot.py nbot tools` 无错误
+14. ✅ ncatbot 老用户配置零修改（行为与重构前一致）
+15. ✅ `commands.py` 中 `await bot.api.post_*_msg` 仅剩 `post_group_msg(rtf=...)` 形式（富媒体暂保留）
+
+### 阶段 2 验收标准
+
+16. ✅ ncatbot 模式：60+ 命令文本路径行为完全一致（与重构前）
+17. ✅ QQBot 模式：文本命令 100% 可用
+18. ✅ QQBot 模式：管理类命令明确提示"当前后端不支持"
+19. ✅ `commands.py` 中不再有 `bot.api.post_*_msg` 调用
+20. ✅ `ai_commands.py` 不再有 `from nbot.commands import bot` 后的 `bot.api.*` 调用
+
+### 阶段 3 验收标准
+
+21. ✅ ncatbot 模式：富媒体/文件/语音/TTS 全部正常
+22. ✅ QQBot 模式：富媒体命令明确提示"当前后端不支持"
+23. ✅ `tts.py` / `tts_handler.py` 不再有 `import ncatbot`
+24. ✅ `message_middleware.py` / `server.py` 中不再有 `bot.api.*` 调用
+
+### 阶段 4 验收标准
+
+25. ✅ `grep -r "import ncatbot" nbot/commands.py nbot/ai_commands.py nbot/core/ nbot/services/ nbot/web/ nbot/gateway/ nbot/channels/` 无结果
+26. ✅ 仅 `nbot/commands_backend.py` 和 `nbot/backends/ncatbot_backend.py` 可有 ncatbot 引用
+27. ✅ `python -m compileall -q bot.py nbot tools` 通过
+28. ✅ `ruff check .` 无新增警告
+29. ✅ `python -m pytest -q` 全部通过
+30. ✅ `.env.example` / `config.ini` 包含双轨配置项
 
 ## 13. 后续工作（不在本次范围）
 
 - 完全移除 ncatbot 依赖（当所有用户都迁移到 QQBot 后）
 - 拆分 `commands.py` 4989 行单文件
-- 统一 `nbot/services/qqbot_service.py` 与 `nbot/backends/qqbot_backend.py` 的边界（消除重复的 WebSocket 管理）
-- 用 `botpy` 官方 SDK 替换手写的 `requests` + `websocket-client`（如果官方 SDK 成熟）
-- 引入 `contextvars` 替代全局 `get_backend()`（如未来需要多 backend 并存）
+- 统一 `nbot/services/qqbot_service.py` 与 `nbot/backends/qqbot_backend.py` 的边界
+- 用 `botpy` 官方 SDK 替换手写的 `requests` + `websocket-client`
+- 引入 `contextvars` 替代全局 `get_backend()`
+- 支持多 backend 并存（QQBot + Telegram + Feishu 同时运行）
