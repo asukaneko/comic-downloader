@@ -1,11 +1,17 @@
-# 阶段 4 注释: ncatbot 导入仅用于向后兼容 ncatbot 路径
-# - BotClient: 仍保留全局实例,供 NcatbotBackend 共享 + 维持 monkey-patch 类引用
-# - BotAPI / GroupMessage / PrivateMessage: 用于 ncatbot 类级别 monkey-patch
-#   (消息持久化自动记录),猴补丁机制必须在模块加载时执行
-# 阶段 5/未来工作: 可将 monkey-patch 迁出此文件,但向后兼容性意味着
-#   此处的 ncatbot 导入在 ncatbot 路径被移除前必须保留
-from ncatbot.core import BotClient, GroupMessage, PrivateMessage, BotAPI
-from ncatbot.utils.logger import get_log
+# 阶段 5: ncatbot 依赖基本从此文件移除
+# - BotClient / GroupMessage / PrivateMessage / BotAPI 已全部移除
+# - BotClient / monkey-patch 由 NcatbotBackend.start() 显式调用
+# - ncatbot 路径下,backend 在 start() 时:
+#   1. 创建 BotClient 实例并赋值给本模块的 bot 全局
+#   2. 包装 bot.api 为 BotApiAdapter
+#   3. 调用 nbot.ncatbot_monkey_patch.apply_patches() 应用类级别 monkey-patch
+# - QQBot 路径下,backend 不创建 BotClient,bot 保持 None,monkey-patch 不应用
+# - commands.py 内部 192+ 处 bot.api.* 调用通过 BotApiAdapter 走 backend 抽象
+#
+# 残留 ncatbot 依赖(阶段 5 暂保留,阶段 5+ 可彻底迁移):
+# - MessageChain / Music: /music 命令使用,QQBot 不支持
+#   (阶段 6+ 可将 /music 命令迁移到 backend 抽象层)
+bot = None
 from nbot.core.heartbeat import HeartbeatCore
 from nbot.core.switches import SwitchManager
 
@@ -37,17 +43,18 @@ from jmcomic import *
 from typing import Dict, List
 from datetime import datetime
 from PIL import Image as PILImage
-from ncatbot.core import (
-    MessageChain,  
-    Music,          
-)
+# 阶段 5 注释: MessageChain / Music 移至 /music / /random_music 等命令的函数内
+# 延迟导入(避免 commands.py 模块加载时强制依赖 ncatbot)
+# ncatbot 不可用时这些命令返回"不支持",但 commands.py 仍能加载
 #----------------------
 # region 全局变量设置
 #----------------------
 
 if_tts = False #判断是否开启TTS
 
-_log = get_log()
+# 阶段 5: 用标准 logging 替代 ncatbot get_log()
+import logging
+_log = logging.getLogger(__name__)
 
 def normalize_file_path(path: str) -> str:
     """
@@ -58,93 +65,17 @@ def normalize_file_path(path: str) -> str:
 
 bot_id,admin_id = load_config() # 加载配置,返回机器人qq号
 
-bot = BotClient()
-# 阶段 2: 包装 bot.api 为 BotApiAdapter,内部走 get_backend() 抽象
-# 这样 commands.py 中 192 处 bot.api.post_private_msg 等调用自动走
-# backend 抽象,不需要逐个替换。ncatbot 路径仍触发 BotAPI monkey-patch
-# (因为 BotApiAdapter.send_private_text 内部调 self.bot.api.post_private_msg,
-#  self.bot.api 仍是 ncatbot BotAPI 实例,monkey-patch 仍生效)。
-from nbot.bot_api_adapter import BotApiAdapter
-bot.api = BotApiAdapter(bot.api)
-heartbeat_core = HeartbeatCore(bot.api)
+# 阶段 5: bot 全局由 NcatbotBackend.start() 时设置
+# ncatbot 路径: backend 创建 BotClient 并赋值给本模块 bot 全局
+# QQBot 路径: bot 保持 None (本文件中所有 bot.api.* 调用会通过 BotApiAdapter 自动转发)
+heartbeat_core = HeartbeatCore(bot.api) if bot else HeartbeatCore(None)
 
 # ----------------------
-# region 统一消息发送与记录
+# region 统一消息发送与记录 (阶段 5: 迁出至 nbot.ncatbot_monkey_patch)
 # ----------------------
-# 记录机器人发送的所有消息到历史记录中
-# 通过直接补丁 BotAPI 和消息类，确保所有发送方式都能被记录
-
-# 防止重复应用补丁
-if not hasattr(BotAPI, '_nbot_patched'):
-    original_post_private_msg = BotAPI.post_private_msg
-    original_post_group_msg = BotAPI.post_group_msg
-    original_group_reply = GroupMessage.reply
-    original_private_reply = PrivateMessage.reply
-    pending_group_reply_context = {}
-
-    async def wrapped_post_private_msg(self, user_id, **kwargs):
-        content = kwargs.get('text', '')
-        if content and isinstance(content, str):
-            # 剥离 <||> 标记
-            from nbot.message_filter import MessageFilter
-            stripped = MessageFilter.strip_default_markers(content)
-            if stripped != content:
-                kwargs['text'] = stripped
-                content = stripped
-            try:
-                from nbot.services.chat_service import record_assistant_message
-                record_assistant_message(content, user_id=user_id)
-            except Exception:
-                pass
-        return await original_post_private_msg(self, user_id, **kwargs)
-
-    async def wrapped_post_group_msg(self, group_id, **kwargs):
-        content = kwargs.get('text', '')
-        if content and isinstance(content, str):
-            # 剥离 <||> 标记
-            from nbot.message_filter import MessageFilter
-            stripped = MessageFilter.strip_default_markers(content)
-            if stripped != content:
-                kwargs['text'] = stripped
-                content = stripped
-            try:
-                from nbot.services.chat_service import record_assistant_message, log_to_group_full_file
-                context_key = (str(group_id), content)
-                pending_users = pending_group_reply_context.get(context_key, [])
-                group_user_id = pending_users.pop(0) if pending_users else kwargs.get("group_user_id")
-                if pending_users:
-                    pending_group_reply_context[context_key] = pending_users
-                else:
-                    pending_group_reply_context.pop(context_key, None)
-                record_assistant_message(
-                    content,
-                    group_id=group_id,
-                    group_user_id=group_user_id,
-                )
-                log_to_group_full_file(group_id, bot_id, "机器人", content)
-            except Exception:
-                pass
-        return await original_post_group_msg(self, group_id, **kwargs)
-
-    async def wrapped_group_reply(self, text=None, **kwargs):
-        content = text if isinstance(text, str) else kwargs.get("text", "")
-        if content and isinstance(content, str):
-            # 剥离 <||> 标记
-            from nbot.message_filter import MessageFilter
-            stripped = MessageFilter.strip_default_markers(content)
-            if stripped != content:
-                text = stripped
-                kwargs["text"] = stripped
-            context_key = (str(self.group_id), stripped if stripped != content else content)
-            pending_group_reply_context.setdefault(context_key, []).append(str(self.user_id))
-        return await original_group_reply(self, text=text, **kwargs)
-
-    # 应用补丁到类级别
-    BotAPI.post_private_msg = wrapped_post_private_msg
-    BotAPI.post_group_msg = wrapped_post_group_msg
-    GroupMessage.reply = wrapped_group_reply
-    BotAPI._nbot_patched = True
-# ----------------------
+# 阶段 5 注释: BotAPI / GroupMessage / PrivateMessage 的类级别 monkey-patch
+# 已迁出至 nbot.ncatbot_monkey_patch.apply_patches()。
+# NcatbotBackend.start() 时显式调用,QQBot 路径不调用。
 
 command_handlers = {}
 
@@ -1989,6 +1920,13 @@ async def handle_df(msg, is_group=True):
 
 @register_command("/music",help_text = "/music <音乐名/id> -> 发送音乐",category = "3")
 async def handle_music(msg, is_group=True):
+    # 阶段 5: 延迟导入 ncatbot 特有类型
+    try:
+        from ncatbot.core import MessageChain, Music
+    except ImportError:
+        await msg.reply(text="当前后端不支持音乐命令")
+        return
+
     music_name = msg.raw_message[len("/music"):].strip()
     if not music_name:
         await msg.reply(text="请输入音乐名喵~")
@@ -2024,6 +1962,13 @@ async def handle_music(msg, is_group=True):
 
 @register_command("/random_music","/rm",help_text = "/random_music 或者 /rm -> 发送随机音乐",category = "3")
 async def handle_random_music(msg, is_group=True):
+    # 阶段 5: 延迟导入 ncatbot 特有类型
+    try:
+        from ncatbot.core import MessageChain, Music
+    except ImportError:
+        await msg.reply(text="当前后端不支持音乐命令")
+        return
+
     id = requests.get("https://api.mtbbs.top/Music/song/?id=2645495145").json()["data"]["id"]
     messagechain = MessageChain(
         Music(type="163",id=id)

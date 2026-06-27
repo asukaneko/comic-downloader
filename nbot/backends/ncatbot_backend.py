@@ -27,10 +27,17 @@ class NcatbotBackend:
     is_running = False
 
     def __init__(self):
-        # 延迟导入:ncatbot 模块只在 ncatbot 模式下需要
-        from ncatbot.core import BotClient
-        self.bot = BotClient()
+        # 阶段 5:延迟创建 BotClient,直到 start() 才真正实例化
+        # 这样 commands.py 模块加载时不需要 ncatbot 立即可用
+        self.bot = None
         self._dispatch_callback = None
+
+    def _ensure_bot(self):
+        """阶段 5 辅助:确保 BotClient 已创建"""
+        if self.bot is None:
+            from ncatbot.core import BotClient
+            self.bot = BotClient()
+        return self.bot
 
     def set_dispatcher(self, callback):
         """注入事件分发函数 —— 由 bot.py 启动时调用"""
@@ -39,9 +46,35 @@ class NcatbotBackend:
     # -------------------- BotBackend 核心 --------------------
 
     async def start(self) -> None:
-        """异步初始化:注册 ncatbot event handler"""
-        # 延迟导入:避免循环
+        """异步初始化:创建 BotClient + 包装 bot.api + 应用 monkey-patch + 注册 handler
 
+        阶段 5 实施: 全面接管 ncatbot 初始化逻辑
+        """
+        # 1. 创建 BotClient 实例
+        self._ensure_bot()
+
+        # 2. 包装 bot.api 为 BotApiAdapter (让 commands.py 内部 bot.api.* 走 backend 抽象)
+        from nbot.bot_api_adapter import BotApiAdapter
+        self.bot.api = BotApiAdapter(self.bot.api)
+
+        # 3. 把 bot 实例共享给 commands 模块(192+ 处 bot.api.* 仍能工作)
+        try:
+            import nbot.commands
+            nbot.commands.bot = self.bot
+            # 更新 heartbeat_core 的 bot_api 引用(避免 None 错误)
+            if hasattr(nbot.commands, "heartbeat_core") and nbot.commands.heartbeat_core is not None:
+                nbot.commands.heartbeat_core.bot_api = self.bot.api
+        except Exception as e:
+            _log.warning("set nbot.commands.bot failed: %s", e)
+
+        # 4. 应用 ncatbot 类级别 monkey-patch(消息持久化)
+        try:
+            from nbot.ncatbot_monkey_patch import apply_patches
+            apply_patches()
+        except Exception as e:
+            _log.warning("apply monkey-patch failed: %s", e)
+
+        # 5. 注册 event handler
         self.bot.add_group_event_handler(self._wrap_group)
         self.bot.add_private_event_handler(self._wrap_private)
         self.is_running = True
