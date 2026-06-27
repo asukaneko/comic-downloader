@@ -139,3 +139,155 @@ class NcatbotBackend:
         except Exception:
             pass
         return False
+
+    # -------------------- NcatbotAdminBackend (阶段 2 补全) --------------------
+    # 阶段 2 实施:实现所有 NcatbotAdminBackend Protocol 方法。
+    # QQBotBackend 不实现这些方法,isinstance() 判断为 False 时降级为提示。
+
+    async def set_qq_profile(self, **kwargs) -> bool:
+        """设置 QQ 资料(昵称/性别/年龄等)"""
+        try:
+            return await self.bot.api.set_qq_profile(**kwargs)
+        except Exception as e:
+            _log.exception("set_qq_profile error: %s", e)
+            return False
+
+    async def set_online_status(self, status: str) -> bool:
+        """设置在线状态"""
+        try:
+            return await self.bot.api.set_online_status(status)
+        except Exception as e:
+            _log.exception("set_online_status error: %s", e)
+            return False
+
+    async def set_qq_avatar(self, url: str) -> bool:
+        """设置 QQ 头像"""
+        try:
+            return await self.bot.api.set_qq_avatar(url)
+        except Exception as e:
+            _log.exception("set_qq_avatar error: %s", e)
+            return False
+
+    async def send_like(self, user_id: str, times: int = 1) -> bool:
+        """给用户点赞"""
+        try:
+            return await self.bot.api.send_like(user_id=user_id, times=times)
+        except Exception as e:
+            _log.exception("send_like error: %s", e)
+            return False
+
+    async def set_group_admin(
+        self, group_id: str, user_id: str, enable: bool
+    ) -> bool:
+        """设置群管理员"""
+        try:
+            return await self.bot.api.set_group_admin(
+                group_id=group_id, user_id=user_id, enable=enable
+            )
+        except Exception as e:
+            _log.exception("set_group_admin error: %s", e)
+            return False
+
+    async def set_friend_add_request(
+        self, flag: str, approve: bool, remark: str = ""
+    ) -> bool:
+        """处理好友添加请求"""
+        try:
+            return await self.bot.api.set_friend_add_request(
+                flag=flag, approve=approve, remark=remark
+            )
+        except Exception as e:
+            _log.exception("set_friend_add_request error: %s", e)
+            return False
+
+    async def get_group_msg_history(
+        self, group_id, count: int = 20, **kwargs
+    ) -> list:
+        """获取群历史消息
+
+        ncatbot 签名: get_group_msg_history(group_id, message_seq, count, reverse_order)
+        兼容 ncatbot 风格: 接受 **kwargs 透传 message_seq / reverse_order
+        """
+        try:
+            message_seq = kwargs.get("message_seq", 0)
+            reverse_order = kwargs.get("reverse_order", True)
+            result = await self.bot.api.get_group_msg_history(
+                group_id=group_id,
+                message_seq=message_seq,
+                count=count,
+                reverse_order=reverse_order,
+            )
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            _log.exception("get_group_msg_history error: %s", e)
+            return []
+
+    async def get_friend_list(self) -> list:
+        """获取好友列表"""
+        try:
+            result = await self.bot.api.get_friend_list()
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            _log.exception("get_friend_list error: %s", e)
+            return []
+
+    async def get_msg(self, message_id: str) -> dict:
+        """获取消息详情"""
+        try:
+            result = await self.bot.api.get_msg(message_id=message_id)
+            return result if isinstance(result, dict) else {}
+        except Exception as e:
+            _log.exception("get_msg error: %s", e)
+            return {}
+
+    async def get_recent_contact(self) -> list:
+        """获取最近联系人"""
+        try:
+            result = await self.bot.api.get_recent_contact()
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            _log.exception("get_recent_contact error: %s", e)
+            return []
+
+    async def get_file_sync(self, file_id: str) -> dict:
+        """同步获取文件信息(包装 ncatbot 同步 API)
+
+        阶段 3 实施:message_middleware.py 中用
+        """
+        try:
+            return self.bot.api.get_file_sync(file_id=file_id)
+        except Exception as e:
+            _log.exception("get_file_sync error: %s", e)
+            return {}
+
+    async def download_file_sync(
+        self, thread_count: int, headers, url: str
+    ) -> bytes:
+        """同步下载文件(包装 ncatbot 同步 API)
+
+        阶段 3 实施:message_middleware.py 中用
+        """
+        try:
+            return self.bot.api.download_file_sync(
+                thread_count=thread_count, headers=headers, url=url
+            )
+        except Exception as e:
+            _log.exception("download_file_sync error: %s", e)
+            return b""
+
+    # -------------------- RawApiBackend (阶段 2 补全) --------------------
+
+    async def call_raw_api(self, func_name: str, **params):
+        """透传 ncatbot 原生 API(用于 /bot 动态命令)
+
+        rev. 2 关键:ncatbot 路径直接 getattr 调原生 API
+        """
+        try:
+            method = getattr(self.bot.api, func_name, None)
+            if method is None:
+                _log.warning("call_raw_api: bot.api has no method %s", func_name)
+                return None
+            return await method(**params)
+        except Exception as e:
+            _log.exception("call_raw_api error: %s", e)
+            return None

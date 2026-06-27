@@ -53,6 +53,13 @@ def normalize_file_path(path: str) -> str:
 bot_id,admin_id = load_config() # 加载配置,返回机器人qq号
 
 bot = BotClient()
+# 阶段 2: 包装 bot.api 为 BotApiAdapter,内部走 get_backend() 抽象
+# 这样 commands.py 中 192 处 bot.api.post_private_msg 等调用自动走
+# backend 抽象,不需要逐个替换。ncatbot 路径仍触发 BotAPI monkey-patch
+# (因为 BotApiAdapter.send_private_text 内部调 self.bot.api.post_private_msg,
+#  self.bot.api 仍是 ncatbot BotAPI 实例,monkey-patch 仍生效)。
+from nbot.bot_api_adapter import BotApiAdapter
+bot.api = BotApiAdapter(bot.api)
 heartbeat_core = HeartbeatCore(bot.api)
 
 # ----------------------
