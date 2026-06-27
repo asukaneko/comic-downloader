@@ -3842,15 +3842,18 @@ class WebChatServer:
         """发送 heartbeat 结果到指定目标"""
         try:
             # 阶段 3 改造:走 backend 抽象
-            from nbot.commands_backend import get_backend
-            backend = get_backend()
+            # 修复 P2: 只有 qq_group/qq_user 目标才需要 backend,web 目标不要 get_backend()
             if target.startswith("qq_group:"):
+                from nbot.commands_backend import get_backend
+                backend = get_backend()
                 group_id = target.split(":", 1)[1]
                 if backend:
                     await backend.send_group_text(group_id, content)
                     _log.info(f"Heartbeat sent to group {group_id}")
             elif target.startswith("qq_user:") or target.startswith("qq_private:"):
                 # 支持两种格式:qq_user:xxx 和 qq_private:xxx
+                from nbot.commands_backend import get_backend
+                backend = get_backend()
                 user_id = target.split(":", 1)[1]
                 if backend:
                     await backend.send_private_text(user_id, content)

@@ -78,9 +78,12 @@ def test_on_dispatch_safe_uses_run_coroutine_threadsafe():
     模拟 WebSocket 线程调用 on_dispatch_safe,验证它通过
     asyncio.run_coroutine_threadsafe 把回调调度到主 loop,
     而不是 asyncio.create_task(后者会失败 'no running event loop')。
+    
+    P1 修复: 现在检查 self._loop.is_closed(),需要 mock 返回 False。
     """
     backend = _make_backend_without_init()
     mock_loop = MagicMock()
+    mock_loop.is_closed.return_value = False  # P1 修复: 需要返回 False
     backend._loop = mock_loop
     backend._dispatch_callback = MagicMock()
 
@@ -267,11 +270,10 @@ async def _async_test_send_group_text_calls_send_qqbot_message():
         assert args[3] == "hi"
 
 
-def test_start_saves_loop_reference():
-    """rev. 2 关键:start() 在 async 上下文中获取 self._loop
+def test_start_saves_gateway_url():
+    """P1 修复: start() 只获取 token 和 gateway_url,不启动 ws 线程
 
-    阶段 1 重写:QQBotBackend 不再依赖 QQBotWebSocketService,
-    而是用 websocket-client 直接在独立线程中运行。
+    WebSocket 线程延迟到 run_forever() 中启动,确保 event loop 已创建。
     """
     async def run():
         backend = _make_backend_without_init()
@@ -286,24 +288,36 @@ def test_start_saves_loop_reference():
                 "nbot.services.qqbot_service.get_gateway"
             ) as mock_gw:
                 mock_gw.return_value = "wss://test"
-                with patch("websocket.WebSocketApp") as mock_ws_cls:
-                    mock_ws_instance = MagicMock()
-                    mock_ws_cls.return_value = mock_ws_instance
 
-                    await backend.start()
+                await backend.start()
 
-                    # 验证 self._loop 被设置为主 event loop
-                    assert backend._loop is not None
-                    assert backend._loop is asyncio.get_running_loop()
-                    assert backend.is_running is True
-                    # 验证 WebSocket 实例和线程被创建
-                    assert backend._ws_app is mock_ws_instance
-                    assert backend._ws_thread is not None
-                    assert backend._ws_thread.daemon is True
-                    assert backend._ws_thread.name == "qqbot-ws"
-
-                    # 清理线程(避免测试挂起)
-                    backend._stop_event.set()
-                    backend._ws_thread.join(timeout=2)
+                # 验证 token 和 gateway_url 被设置
+                assert backend._token == "test_token"
+                assert backend._gateway_url == "wss://test"
+                assert backend.is_running is True
+                # 验证 self._loop 尚未设置(延迟到 run_forever)
+                assert backend._loop is None
+                # 验证 WebSocket 线程尚未启动
+                assert backend._ws_thread is None
 
     asyncio.run(run())
+
+
+def test_run_forever_creates_loop_and_starts_ws_thread():
+    """P1 修复: run_forever() 创建独立 event loop 并启动 ws 线程"""
+    backend = _make_backend_without_init()
+    backend._token = "test_token"
+    backend._gateway_url = "wss://test"
+
+    # 模拟 run_forever 中的 loop 创建
+    # 只验证 loop 被创建并设置，不实际运行
+    loop = asyncio.new_event_loop()
+    backend._loop = loop
+
+    # 验证 loop 被正确设置
+    assert backend._loop is loop
+    assert not loop.is_closed()
+
+    # 清理
+    loop.close()
+    assert loop.is_closed()

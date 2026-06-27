@@ -25,6 +25,7 @@ def _make_backend_without_init():
     """跳过 NcatbotBackend.__init__(避免实际创建 BotClient)"""
     backend = NcatbotBackend.__new__(NcatbotBackend)
     backend.bot = MagicMock()
+    backend._real_api = backend.bot.api  # P0 修复: 保存真实 API 引用
     backend._dispatch_callback = None
     backend.is_running = False
     return backend
@@ -157,3 +158,96 @@ def test_set_dispatcher_stores_callback():
     cb = MagicMock()
     backend.set_dispatcher(cb)
     assert backend._dispatch_callback is cb
+
+
+# ====================== P0 回归测试: ncatbot 发送链路不递归 ======================
+
+def test_start_wraps_api_but_backend_uses_real_api():
+    """P0 回归: start() 包装 bot.api 为 BotApiAdapter,但 backend 内部方法调真实 API 不递归"""
+    from unittest.mock import patch
+
+    async def run_test():
+        real_api = MagicMock()
+        real_api.post_group_msg = MagicMock(return_value=asyncio.Future())
+        real_api.post_group_msg.return_value.set_result(True)
+        real_api.post_private_msg = MagicMock(return_value=asyncio.Future())
+        real_api.post_private_msg.return_value.set_result(True)
+
+        fake_bot = MagicMock()
+        fake_bot.api = real_api
+
+        fake_client_class = MagicMock(return_value=fake_bot)
+
+        with patch("ncatbot.core.BotClient", fake_client_class):
+            with patch("nbot.ncatbot_monkey_patch.apply_patches"):
+                backend = NcatbotBackend()
+                await backend.start()
+
+        # start() 后 bot.api 被包装成 BotApiAdapter
+        from nbot.bot_api_adapter import BotApiAdapter
+        assert isinstance(fake_bot.api, BotApiAdapter)
+
+        # 但 backend 内部仍引用真实 API
+        assert backend._real_api is real_api
+
+        # 调用 backend.send_group_text 应直接调 real_api.post_group_msg,不经过 adapter
+        await backend.send_group_text("g1", "hi")
+        real_api.post_group_msg.assert_called_once_with(group_id="g1", text="hi")
+
+    asyncio.run(run_test())
+
+
+def test_adapter_text_uses_backend_without_recursion_on_ncatbot():
+    """P0 回归: adapter.post_group_msg(text=) 调 backend.send_group_text,
+    backend 调真实 API,不会循环回 adapter"""
+    from unittest.mock import patch
+
+    from nbot.commands_backend import set_backend
+
+    async def run_test():
+        real_api = MagicMock()
+        real_api.post_group_msg = MagicMock(return_value=asyncio.Future())
+        real_api.post_group_msg.return_value.set_result(True)
+
+        fake_bot = MagicMock()
+        fake_bot.api = real_api
+
+        with patch("ncatbot.core.BotClient", MagicMock(return_value=fake_bot)):
+            with patch("nbot.ncatbot_monkey_patch.apply_patches"):
+                backend = NcatbotBackend()
+                await backend.start()
+                set_backend(backend)
+
+        adapter = fake_bot.api  # BotApiAdapter
+        await adapter.post_group_msg("g1", text="hi")
+        real_api.post_group_msg.assert_called_once_with(group_id="g1", text="hi")
+
+    asyncio.run(run_test())
+
+
+def test_ncatbot_backend_get_file_sync_is_sync():
+    """P1 回归: get_file_sync 是同步方法,与 Protocol 一致"""
+    backend = _make_backend_without_init()
+    backend._real_api = MagicMock()
+    backend._real_api.get_file_sync = MagicMock(return_value={"path": "/tmp/test.jpg"})
+
+    # 直接调用,不应返回 coroutine
+    result = backend.get_file_sync("file_123")
+    assert isinstance(result, dict)
+    assert result == {"path": "/tmp/test.jpg"}
+    backend._real_api.get_file_sync.assert_called_once_with(file_id="file_123")
+
+
+def test_ncatbot_backend_download_file_sync_is_sync():
+    """P1 回归: download_file_sync 是同步方法,与 Protocol 一致"""
+    backend = _make_backend_without_init()
+    backend._real_api = MagicMock()
+    backend._real_api.download_file_sync = MagicMock(return_value=b"fake_data")
+
+    # 直接调用,不应返回 coroutine
+    result = backend.download_file_sync(1, {}, "http://example.com/file.jpg")
+    assert isinstance(result, bytes)
+    assert result == b"fake_data"
+    backend._real_api.download_file_sync.assert_called_once_with(
+        thread_count=1, headers={}, url="http://example.com/file.jpg"
+    )

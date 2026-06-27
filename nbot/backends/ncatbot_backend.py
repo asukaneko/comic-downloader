@@ -30,6 +30,7 @@ class NcatbotBackend:
         # 阶段 5:延迟创建 BotClient,直到 start() 才真正实例化
         # 这样 commands.py 模块加载时不需要 ncatbot 立即可用
         self.bot = None
+        self._real_api = None  # 包装前的真实 ncatbot BotAPI 引用
         self._dispatch_callback = None
 
     def _ensure_bot(self):
@@ -38,6 +39,15 @@ class NcatbotBackend:
             from ncatbot.core import BotClient
             self.bot = BotClient()
         return self.bot
+
+    @property
+    def _api(self):
+        """内部真实 API 引用,不经过 BotApiAdapter
+
+        修复 P0: backend 方法必须直接调真实 ncatbot BotAPI,
+        否则经过 adapter 会递归到 backend.send_*_text。
+        """
+        return self._real_api if self._real_api is not None else self.bot.api
 
     def set_dispatcher(self, callback):
         """注入事件分发函数 —— 由 bot.py 启动时调用"""
@@ -53,11 +63,14 @@ class NcatbotBackend:
         # 1. 创建 BotClient 实例
         self._ensure_bot()
 
-        # 2. 包装 bot.api 为 BotApiAdapter (让 commands.py 内部 bot.api.* 走 backend 抽象)
+        # 2. 保存真实 API 引用(供 backend 内部方法使用,避免 adapter 递归)
+        self._real_api = self.bot.api
+
+        # 3. 包装 bot.api 为 BotApiAdapter (让 commands.py 内部 bot.api.* 走 backend 抽象)
         from nbot.bot_api_adapter import BotApiAdapter
         self.bot.api = BotApiAdapter(self.bot.api)
 
-        # 3. 把 bot 实例共享给 commands 模块(192+ 处 bot.api.* 仍能工作)
+        # 4. 把 bot 实例共享给 commands 模块(192+ 处 bot.api.* 仍能工作)
         try:
             import nbot.commands
             nbot.commands.bot = self.bot
@@ -67,14 +80,14 @@ class NcatbotBackend:
         except Exception as e:
             _log.warning("set nbot.commands.bot failed: %s", e)
 
-        # 4. 应用 ncatbot 类级别 monkey-patch(消息持久化)
+        # 5. 应用 ncatbot 类级别 monkey-patch(消息持久化)
         try:
             from nbot.ncatbot_monkey_patch import apply_patches
             apply_patches()
         except Exception as e:
             _log.warning("apply monkey-patch failed: %s", e)
 
-        # 5. 注册 event handler
+        # 6. 注册 event handler
         self.bot.add_group_event_handler(self._wrap_group)
         self.bot.add_private_event_handler(self._wrap_private)
         self.is_running = True
@@ -92,10 +105,12 @@ class NcatbotBackend:
         self.is_running = False
 
     async def send_private_text(self, user_id: str, text: str) -> bool:
-        return await self.bot.api.post_private_msg(user_id=user_id, text=text)
+        # 修复 P0: 调用真实 API,避免经过 BotApiAdapter 导致递归
+        return await self._api.post_private_msg(user_id=user_id, text=text)
 
     async def send_group_text(self, group_id: str, text: str) -> bool:
-        return await self.bot.api.post_group_msg(group_id=group_id, text=text)
+        # 修复 P0: 调用真实 API,避免经过 BotApiAdapter 导致递归
+        return await self._api.post_group_msg(group_id=group_id, text=text)
 
     def supports(self, capability: str) -> bool:
         # ncatbot 实现所有能力
@@ -180,7 +195,7 @@ class NcatbotBackend:
     async def set_qq_profile(self, **kwargs) -> bool:
         """设置 QQ 资料(昵称/性别/年龄等)"""
         try:
-            return await self.bot.api.set_qq_profile(**kwargs)
+            return await self._api.set_qq_profile(**kwargs)
         except Exception as e:
             _log.exception("set_qq_profile error: %s", e)
             return False
@@ -188,7 +203,7 @@ class NcatbotBackend:
     async def set_online_status(self, status: str) -> bool:
         """设置在线状态"""
         try:
-            return await self.bot.api.set_online_status(status)
+            return await self._api.set_online_status(status)
         except Exception as e:
             _log.exception("set_online_status error: %s", e)
             return False
@@ -196,7 +211,7 @@ class NcatbotBackend:
     async def set_qq_avatar(self, url: str) -> bool:
         """设置 QQ 头像"""
         try:
-            return await self.bot.api.set_qq_avatar(url)
+            return await self._api.set_qq_avatar(url)
         except Exception as e:
             _log.exception("set_qq_avatar error: %s", e)
             return False
@@ -204,7 +219,7 @@ class NcatbotBackend:
     async def send_like(self, user_id: str, times: int = 1) -> bool:
         """给用户点赞"""
         try:
-            return await self.bot.api.send_like(user_id=user_id, times=times)
+            return await self._api.send_like(user_id=user_id, times=times)
         except Exception as e:
             _log.exception("send_like error: %s", e)
             return False
@@ -214,7 +229,7 @@ class NcatbotBackend:
     ) -> bool:
         """设置群管理员"""
         try:
-            return await self.bot.api.set_group_admin(
+            return await self._api.set_group_admin(
                 group_id=group_id, user_id=user_id, enable=enable
             )
         except Exception as e:
@@ -226,7 +241,7 @@ class NcatbotBackend:
     ) -> bool:
         """处理好友添加请求"""
         try:
-            return await self.bot.api.set_friend_add_request(
+            return await self._api.set_friend_add_request(
                 flag=flag, approve=approve, remark=remark
             )
         except Exception as e:
@@ -244,7 +259,7 @@ class NcatbotBackend:
         try:
             message_seq = kwargs.get("message_seq", 0)
             reverse_order = kwargs.get("reverse_order", True)
-            result = await self.bot.api.get_group_msg_history(
+            result = await self._api.get_group_msg_history(
                 group_id=group_id,
                 message_seq=message_seq,
                 count=count,
@@ -258,7 +273,7 @@ class NcatbotBackend:
     async def get_friend_list(self) -> list:
         """获取好友列表"""
         try:
-            result = await self.bot.api.get_friend_list()
+            result = await self._api.get_friend_list()
             return result if isinstance(result, list) else []
         except Exception as e:
             _log.exception("get_friend_list error: %s", e)
@@ -267,7 +282,7 @@ class NcatbotBackend:
     async def get_msg(self, message_id: str) -> dict:
         """获取消息详情"""
         try:
-            result = await self.bot.api.get_msg(message_id=message_id)
+            result = await self._api.get_msg(message_id=message_id)
             return result if isinstance(result, dict) else {}
         except Exception as e:
             _log.exception("get_msg error: %s", e)
@@ -276,32 +291,34 @@ class NcatbotBackend:
     async def get_recent_contact(self) -> list:
         """获取最近联系人"""
         try:
-            result = await self.bot.api.get_recent_contact()
+            result = await self._api.get_recent_contact()
             return result if isinstance(result, list) else []
         except Exception as e:
             _log.exception("get_recent_contact error: %s", e)
             return []
 
-    async def get_file_sync(self, file_id: str) -> dict:
+    def get_file_sync(self, file_id: str) -> dict:
         """同步获取文件信息(包装 ncatbot 同步 API)
 
         阶段 3 实施:message_middleware.py 中用
+        修复 P1: 改为同步方法,与 NcatbotAdminBackend Protocol 及调用方一致
         """
         try:
-            return self.bot.api.get_file_sync(file_id=file_id)
+            return self._api.get_file_sync(file_id=file_id)
         except Exception as e:
             _log.exception("get_file_sync error: %s", e)
             return {}
 
-    async def download_file_sync(
+    def download_file_sync(
         self, thread_count: int, headers, url: str
     ) -> bytes:
         """同步下载文件(包装 ncatbot 同步 API)
 
         阶段 3 实施:message_middleware.py 中用
+        修复 P1: 改为同步方法,与 NcatbotAdminBackend Protocol 及调用方一致
         """
         try:
-            return self.bot.api.download_file_sync(
+            return self._api.download_file_sync(
                 thread_count=thread_count, headers=headers, url=url
             )
         except Exception as e:
@@ -325,7 +342,7 @@ class NcatbotBackend:
         try:
             from ncatbot.core.element import Image, MessageChain
             rtf = MessageChain([Image(image_path)])
-            return await self.bot.api.post_group_msg(
+            return await self._api.post_group_msg(
                 group_id=group_id, rtf=rtf
             )
         except Exception as e:
@@ -339,7 +356,7 @@ class NcatbotBackend:
         try:
             from ncatbot.core.element import Image, MessageChain
             rtf = MessageChain([Image(image_path)])
-            return await self.bot.api.post_private_msg(
+            return await self._api.post_private_msg(
                 user_id=user_id, rtf=rtf
             )
         except Exception as e:
@@ -353,7 +370,7 @@ class NcatbotBackend:
         try:
             from ncatbot.core.element import MessageChain, Record
             rtf = MessageChain([Record(voice_path)])
-            return await self.bot.api.post_group_msg(
+            return await self._api.post_group_msg(
                 group_id=group_id, rtf=rtf
             )
         except Exception as e:
@@ -365,7 +382,7 @@ class NcatbotBackend:
     ) -> bool:
         """发送群文件"""
         try:
-            return await self.bot.api.post_group_file(
+            return await self._api.post_group_file(
                 group_id=group_id, file=file_path
             )
         except Exception as e:
@@ -377,7 +394,7 @@ class NcatbotBackend:
     ) -> bool:
         """发送私聊文件"""
         try:
-            return await self.bot.api.upload_private_file(
+            return await self._api.upload_private_file(
                 user_id=user_id, file=file_path
             )
         except Exception as e:
@@ -391,11 +408,11 @@ class NcatbotBackend:
         """引用回复消息"""
         try:
             if is_group and target_id:
-                return await self.bot.api.post_group_msg(
+                return await self._api.post_group_msg(
                     group_id=target_id, text=text, message_id=message_id
                 )
             if target_id:
-                return await self.bot.api.post_private_msg(
+                return await self._api.post_private_msg(
                     user_id=target_id, text=text, message_id=message_id
                 )
             _log.warning("reply_message: target_id required")
@@ -412,7 +429,7 @@ class NcatbotBackend:
         rev. 2 关键:ncatbot 路径直接 getattr 调原生 API
         """
         try:
-            method = getattr(self.bot.api, func_name, None)
+            method = getattr(self._api, func_name, None)
             if method is None:
                 _log.warning("call_raw_api: bot.api has no method %s", func_name)
                 return None

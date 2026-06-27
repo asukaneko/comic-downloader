@@ -60,8 +60,10 @@ class QQBotBackend:
             "https://sandbox.api.sgroup.qq.com" if sandbox
             else "https://api.sgroup.qq.com"
         )
-        # rev. 2: 在 start() 中获取主 asyncio loop,供 run_coroutine_threadsafe 使用
+        # 修复 P1: QQBotBackend 自己维护一个独立事件 loop,
+        # 在 run_forever() 中创建并运行,避免依赖 asyncio.run() 的临时 loop
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._gateway_url: str | None = None
 
     def set_dispatcher(self, callback):
         self._dispatch_callback = callback
@@ -69,17 +71,15 @@ class QQBotBackend:
     # -------------------- BotBackend 核心 --------------------
 
     async def start(self) -> None:
-        """异步初始化:获取 token + 启动 WebSocket 线程 + 保存主 loop
+        """异步初始化:获取 token + 保存 gateway_url
 
-        rev. 2: 在异步上下文中获取主 event loop 引用,供跨线程调度使用
+        修复 P1: WebSocket 线程改到 run_forever() 中启动,
+        确保 event loop 已创建后再开始接收事件。
         """
         from nbot.services.qqbot_service import (
             get_app_access_token,
             get_gateway,
         )
-
-        # rev. 2 关键:在 async 上下文中捕获主 loop
-        self._loop = asyncio.get_running_loop()
 
         if websocket is None:
             _log.error(
@@ -97,20 +97,11 @@ class QQBotBackend:
             _log.error("QQBotBackend: 获取 access_token 失败")
             return
 
-        gateway_url = get_gateway(self._token, self._api_base)
+        self._gateway_url = get_gateway(self._token, self._api_base)
         self._stop_event.clear()
-
-        # 在独立线程中跑 WebSocketApp
-        self._ws_thread = threading.Thread(
-            target=self._ws_run_loop,
-            args=(gateway_url,),
-            name="qqbot-ws",
-            daemon=True,
-        )
-        self._ws_thread.start()
         self.is_running = True
         _log.info(
-            "QQBotBackend started (sandbox=%s, api_base=%s)",
+            "QQBotBackend initialized (sandbox=%s, api_base=%s)",
             self._creds["sandbox"],
             self._api_base,
         )
@@ -133,7 +124,7 @@ class QQBotBackend:
         _log.info("QQBot websocket opened")
 
     def _on_ws_message(self, ws, message: str) -> None:
-        """WebSocket 收到消息 —— rev. 2 关键:跨线程调度到主 event loop"""
+        """WebSocket 收到消息 —— 跨线程调度到 self._loop"""
         try:
             payload = json.loads(message)
         except json.JSONDecodeError:
@@ -190,24 +181,58 @@ class QQBotBackend:
         _log.info("QQBot websocket closed: %s %s", close_status_code, close_msg)
 
     def run_forever(self) -> None:
-        """同步阻塞入口 —— 等待 WebSocket 线程结束
+        """同步阻塞入口 —— 创建并运行事件 loop + 启动 WebSocket 线程
 
-        rev. 2: 同步方法,直接阻塞,不外层包 asyncio.run()
+        修复 P1: 这里创建真正长期存活的事件 loop,供 WebSocket 线程
+        run_coroutine_threadsafe 投递消息。避免 asyncio.run() 临时 loop
+        在 start() 结束后被关闭导致无法调度。
         """
-        if self._ws_thread is not None:
-            self._ws_thread.join()
-        else:
-            _log.warning(
-                "QQBotBackend.run_forever called but ws_thread is None"
-            )
+        if self._gateway_url is None:
+            _log.error("QQBotBackend.run_forever called before start()")
+            return
 
-    async def stop(self) -> None:
-        """异步停止"""
+        # 创建独立事件 loop(不要依赖 asyncio.run 的临时 loop)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        self._loop = loop
+
+        self._stop_event.clear()
+        self._ws_thread = threading.Thread(
+            target=self._ws_run_loop,
+            args=(self._gateway_url,),
+            name="qqbot-ws",
+            daemon=True,
+        )
+        self._ws_thread.start()
+        _log.info("QQBotBackend started, entering event loop")
+
+        try:
+            loop.run_forever()
+        finally:
+            _log.info("QQBotBackend event loop stopped")
+            self._stop()
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
+            self._loop = None
+
+    def _stop(self) -> None:
+        """内部同步停止(ws_app / 心跳 / ws_thread)"""
         self.is_running = False
         self._stop_event.set()
         if self._ws_app is not None:
             try:
                 self._ws_app.close()
+            except Exception:
+                pass
+        if self._ws_thread is not None:
+            self._ws_thread.join(timeout=5)
+
+    async def stop(self) -> None:
+        """异步停止"""
+        self._stop()
+        if self._loop is not None:
+            try:
+                self._loop.call_soon_threadsafe(self._loop.stop)
             except Exception:
                 pass
 
@@ -263,12 +288,11 @@ class QQBotBackend:
     # -------------------- 事件转换 --------------------
 
     def _on_dispatch_safe(self, payload: dict) -> None:
-        """WebSocket 线程回调 —— rev. 2 关键修复
+        """WebSocket 线程回调
 
-        rev. 2: 不能直接 asyncio.create_task()(该线程可能没有运行中的 event loop)
-        必须用 asyncio.run_coroutine_threadsafe 把协程调度到主 event loop
+        用 asyncio.run_coroutine_threadsafe 把协程调度到 self._loop。
         """
-        if self._loop is None or self._dispatch_callback is None:
+        if self._loop is None or self._loop.is_closed() or self._dispatch_callback is None:
             _log.debug("qqbot dispatch skipped: loop or callback not ready")
             return
         try:
