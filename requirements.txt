@@ -3,7 +3,9 @@
 # 安装: pip install -r requirements.txt
 # ============================================
 
-# QQ Bot 框架
+# QQ Bot 框架 (可选, 阶段 4: 保留向后兼容)
+# ncatbot 仍可作为可选项,通过 .env 中的 BOT_UIN + WS_URI 配置 + NapCat 使用
+# 新部署建议使用 QQ Bot 官方机器人(无需 NapCat,通过 QQBOT_APP_ID + QQBOT_APP_SECRET 配置)
 ncatbot == 3.8.5
 
 # AI

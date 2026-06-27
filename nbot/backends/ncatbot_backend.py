@@ -290,7 +290,7 @@ class NcatbotBackend:
         改用 post_group_file 发送图片(若 file 存在)。
         """
         try:
-            from ncatbot.core.element import MessageChain, Image
+            from ncatbot.core.element import Image, MessageChain
             rtf = MessageChain([Image(image_path)])
             return await self.bot.api.post_group_msg(
                 group_id=group_id, rtf=rtf
@@ -304,7 +304,7 @@ class NcatbotBackend:
     ) -> bool:
         """发送私聊图片"""
         try:
-            from ncatbot.core.element import MessageChain, Image
+            from ncatbot.core.element import Image, MessageChain
             rtf = MessageChain([Image(image_path)])
             return await self.bot.api.post_private_msg(
                 user_id=user_id, rtf=rtf

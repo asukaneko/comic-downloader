@@ -34,7 +34,9 @@ class HeartbeatCore:
         pass
 
     async def process_user(self, user_id, interval):
-        from ncatbot.services.ai import ai_client
+        # 阶段 4 修复:`ncatbot.services.ai` 是潜伏 bug —— ncatbot 没有这个模块
+        # 修正为 `nbot.services.ai`
+        from nbot.services.ai import ai_client
         from nbot.services.chat_service import load_canonical_qq_messages, load_prompt
 
         user_id = str(user_id)

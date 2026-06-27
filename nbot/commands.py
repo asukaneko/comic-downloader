@@ -1,3 +1,9 @@
+# 阶段 4 注释: ncatbot 导入仅用于向后兼容 ncatbot 路径
+# - BotClient: 仍保留全局实例,供 NcatbotBackend 共享 + 维持 monkey-patch 类引用
+# - BotAPI / GroupMessage / PrivateMessage: 用于 ncatbot 类级别 monkey-patch
+#   (消息持久化自动记录),猴补丁机制必须在模块加载时执行
+# 阶段 5/未来工作: 可将 monkey-patch 迁出此文件,但向后兼容性意味着
+#   此处的 ncatbot 导入在 ncatbot 路径被移除前必须保留
 from ncatbot.core import BotClient, GroupMessage, PrivateMessage, BotAPI
 from ncatbot.utils.logger import get_log
 from nbot.core.heartbeat import HeartbeatCore
