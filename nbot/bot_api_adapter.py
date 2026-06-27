@@ -18,6 +18,7 @@ import logging
 from typing import Any
 
 from nbot.commands_backend import (
+    MediaBackend,
     NcatbotAdminBackend,
     get_backend,
 )
@@ -57,10 +58,18 @@ class BotApiAdapter:
 
     async def post_group_file(self, group_id, **kwargs):
         """群文件 —— 阶段 3: 改用 backend.send_group_file"""
+        file_path = kwargs.get("file")
+        backend = get_backend()
+        if file_path and isinstance(backend, MediaBackend):
+            return await backend.send_group_file(group_id, file_path)
         return await self._real.post_group_file(group_id, **kwargs)
 
     async def post_private_file(self, user_id, **kwargs):
         """私聊文件 —— 阶段 3 改造"""
+        file_path = kwargs.get("file")
+        backend = get_backend()
+        if file_path and isinstance(backend, MediaBackend):
+            return await backend.send_private_file(user_id, file_path)
         return await self._real.post_private_file(user_id, **kwargs)
 
     async def upload_private_file(self, user_id, file, name=None, **kwargs):
@@ -68,6 +77,10 @@ class BotApiAdapter:
 
         ncatbot 3.8.5 签名: upload_private_file(user_id, file, name)
         """
+        backend = get_backend()
+        if isinstance(backend, MediaBackend):
+            # 优先用 backend 抽象
+            return await backend.send_private_file(user_id, file)
         if name is not None:
             return await self._real.upload_private_file(
                 user_id, file, name, **kwargs

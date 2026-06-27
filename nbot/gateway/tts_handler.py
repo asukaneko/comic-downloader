@@ -94,7 +94,7 @@ class GatewayTTSHandler:
         import os as _os
 
         try:
-            from ncatbot.core.element import MessageChain, Record
+            from nbot.commands_backend import MediaBackend, get_backend
 
             # 解析 conversation_id 获取目标
             parts = conversation_id.split(":")
@@ -114,10 +114,19 @@ class GatewayTTSHandler:
             file_size = _os.path.getsize(abs_audio_path)
             _log.info("[TTS] 准备发送语音 path=%s size=%d", abs_audio_path, file_size)
 
-            # 构建语音消息
-            rtf = MessageChain([Record(abs_audio_path)])
+            # 阶段 3:优先走 backend 抽象
+            backend = get_backend()
+            if isinstance(backend, MediaBackend):
+                if msg_type == "group":
+                    await backend.send_group_voice(target_id, abs_audio_path)
+                    _log.info("[TTS] 语音已发送到群 %s (via backend)", target_id)
+                    return
+                _log.warning("[TTS] 私聊语音暂不支持 (backend),降级为文本")
+                return
 
-            # 发送语音
+            # 兼容旧 ncatbot 路径
+            from ncatbot.core.element import MessageChain, Record
+            rtf = MessageChain([Record(abs_audio_path)])
             if msg_type == "group":
                 await self._qq_bot.api.post_group_msg(group_id=target_id, rtf=rtf)
                 _log.info("[TTS] 语音已发送到群 %s", target_id)

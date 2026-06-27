@@ -275,6 +275,102 @@ class NcatbotBackend:
             _log.exception("download_file_sync error: %s", e)
             return b""
 
+    # -------------------- MediaBackend (阶段 3 补全) --------------------
+    # 阶段 3 实施:实现 MediaBackend Protocol 的富媒体发送方法
+    # 阶段 1-2 期间 post_group_file / upload_private_file 走 ncatbot 原生
+    # 阶段 3 通过 BotApiAdapter 走 backend 抽象
+
+    async def send_group_image(
+        self, group_id: str, image_path: str
+    ) -> bool:
+        """发送群图片 —— 通过 upload_private_file 语义发送群图片
+
+        ncatbot 没有专门的 send_group_image;通过 post_group_msg + image 占位
+        或 post_group_file 实现。这里用 post_group_msg(text="") 不发图,
+        改用 post_group_file 发送图片(若 file 存在)。
+        """
+        try:
+            from ncatbot.core.element import MessageChain, Image
+            rtf = MessageChain([Image(image_path)])
+            return await self.bot.api.post_group_msg(
+                group_id=group_id, rtf=rtf
+            )
+        except Exception as e:
+            _log.exception("send_group_image error: %s", e)
+            return False
+
+    async def send_private_image(
+        self, user_id: str, image_path: str
+    ) -> bool:
+        """发送私聊图片"""
+        try:
+            from ncatbot.core.element import MessageChain, Image
+            rtf = MessageChain([Image(image_path)])
+            return await self.bot.api.post_private_msg(
+                user_id=user_id, rtf=rtf
+            )
+        except Exception as e:
+            _log.exception("send_private_image error: %s", e)
+            return False
+
+    async def send_group_voice(
+        self, group_id: str, voice_path: str
+    ) -> bool:
+        """发送群语音"""
+        try:
+            from ncatbot.core.element import MessageChain, Record
+            rtf = MessageChain([Record(voice_path)])
+            return await self.bot.api.post_group_msg(
+                group_id=group_id, rtf=rtf
+            )
+        except Exception as e:
+            _log.exception("send_group_voice error: %s", e)
+            return False
+
+    async def send_group_file(
+        self, group_id: str, file_path: str
+    ) -> bool:
+        """发送群文件"""
+        try:
+            return await self.bot.api.post_group_file(
+                group_id=group_id, file=file_path
+            )
+        except Exception as e:
+            _log.exception("send_group_file error: %s", e)
+            return False
+
+    async def send_private_file(
+        self, user_id: str, file_path: str
+    ) -> bool:
+        """发送私聊文件"""
+        try:
+            return await self.bot.api.upload_private_file(
+                user_id=user_id, file=file_path
+            )
+        except Exception as e:
+            _log.exception("send_private_file error: %s", e)
+            return False
+
+    async def reply_message(
+        self, message_id: str, text: str, *,
+        is_group: bool = False, target_id: str = ""
+    ) -> bool:
+        """引用回复消息"""
+        try:
+            if is_group and target_id:
+                return await self.bot.api.post_group_msg(
+                    group_id=target_id, text=text, message_id=message_id
+                )
+            if target_id:
+                return await self.bot.api.post_private_msg(
+                    user_id=target_id, text=text, message_id=message_id
+                )
+            _log.warning("reply_message: target_id required")
+            return False
+        except Exception as e:
+            _log.exception("reply_message error: %s", e)
+            return False
+
     # -------------------- RawApiBackend (阶段 2 补全) --------------------
 
     async def call_raw_api(self, func_name: str, **params):

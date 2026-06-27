@@ -2013,12 +2013,16 @@ class WebChatServer:
                             import asyncio
 
                             async def _send():
+                                # 阶段 3 改造:走 backend 抽象
+                                from nbot.commands_backend import get_backend
+                                backend = get_backend()
                                 if session_type == "qq_group":
-                                    await self.qq_bot.api.post_group_msg(group_id=qq_id, text=response_text)
+                                    await backend.send_group_text(qq_id, response_text)
                                 else:
-                                    await self.qq_bot.api.post_private_msg(user_id=qq_id, text=response_text)
+                                    await backend.send_private_text(qq_id, response_text)
 
                             loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
                             asyncio.set_event_loop(loop)
                             loop.run_until_complete(_send())
                             loop.close()
@@ -2540,16 +2544,13 @@ class WebChatServer:
 
                 async def send_qq_message():
                     try:
+                        # 阶段 3 改造:走 backend 抽象
+                        from nbot.commands_backend import get_backend
+                        backend = get_backend()
                         if target_type == "qq_group":
-                            # 发送到群聊
-                            await self.qq_bot.api.post_group_msg(
-                                group_id=target_id, text=result
-                            )
+                            await backend.send_group_text(target_id, result)
                         else:
-                            # 发送到私聊
-                            await self.qq_bot.api.post_private_msg(
-                                user_id=target_id, text=result
-                            )
+                            await backend.send_private_text(target_id, result)
                         _log.info(
                             f"Workflow result sent to QQ {target_type}: {target_id}"
                         )
@@ -3840,22 +3841,19 @@ class WebChatServer:
     async def _send_heartbeat_to_target(self, target: str, content: str):
         """发送 heartbeat 结果到指定目标"""
         try:
+            # 阶段 3 改造:走 backend 抽象
+            from nbot.commands_backend import get_backend
+            backend = get_backend()
             if target.startswith("qq_group:"):
                 group_id = target.split(":", 1)[1]
-                if self.qq_bot:
-                    # 发送消息到 QQ 群
-                    await self.qq_bot.api.post_group_msg(
-                        group_id=group_id, text=content
-                    )
+                if backend:
+                    await backend.send_group_text(group_id, content)
                     _log.info(f"Heartbeat sent to group {group_id}")
             elif target.startswith("qq_user:") or target.startswith("qq_private:"):
-                # 支持两种格式：qq_user:xxx 和 qq_private:xxx
+                # 支持两种格式:qq_user:xxx 和 qq_private:xxx
                 user_id = target.split(":", 1)[1]
-                if self.qq_bot:
-                    # 发送消息到 QQ 用户
-                    await self.qq_bot.api.post_private_msg(
-                        user_id=user_id, text=content
-                    )
+                if backend:
+                    await backend.send_private_text(user_id, content)
                     _log.info(f"Heartbeat sent to user {user_id}")
             elif target.startswith("web:"):
                 # 发送到指定 Web 会话

@@ -77,6 +77,11 @@ def remove_brackets_content(text: str) -> str:
 
 
 def tts(content: str):
+    """生成 TTS 语音 —— 阶段 3 改造:返回 MessageChain (ncatbot 兼容)
+
+    阶段 3:仍返回 MessageChain,但保留向后兼容。
+    新代码应使用 generate_tts_audio() + backend.send_group_voice。
+    """
     from ncatbot.core.element import MessageChain, Record
 
     file_path = os.path.join(cache_address, "tts/")
@@ -114,6 +119,35 @@ def tts(content: str):
     except Exception as e:
         _log.error("TTS生成失败(tts): %s", str(e))
         return MessageChain([])
+
+
+async def tts_and_send(content: str, target_id: str, is_group: bool = True) -> bool:
+    """阶段 3 新增:生成 TTS 并通过 backend 发送
+
+    Args:
+        content: 要转换的文本
+        target_id: 群 ID 或用户 ID
+        is_group: True=群聊, False=私聊
+
+    Returns:
+        True=成功, False=失败或后端不支持
+    """
+    from nbot.commands_backend import get_backend, MediaBackend
+
+    audio_path = generate_tts_audio(content)
+    if not audio_path:
+        return False
+
+    backend = get_backend()
+    if not isinstance(backend, MediaBackend):
+        _log.warning("tts_and_send: 当前后端不支持语音消息")
+        return False
+
+    if is_group:
+        return await backend.send_group_voice(target_id, audio_path)
+    # QQBot 不支持私聊语音,降级提示
+    _log.warning("tts_and_send: 私聊语音暂不支持,降级为文本")
+    return False
 
 
 def generate_tts_audio(content: str) -> str | None:

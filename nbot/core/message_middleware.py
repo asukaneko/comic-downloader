@@ -454,10 +454,18 @@ def _try_get_file_via_napcat(file_id: str, fallback_mime: str = "application/oct
         if not hasattr(bot, "api") or not bot.api:
             return None
 
-        # 使用同步版本（ncatbot BotAPI 继承 SYNC_API_MIXIN）
+        # 阶段 3 改造:通过 BotApiAdapter 走 backend.get_file_sync
+        # 兼容 ncatbot 路径(同步 API 直接调)
         file_info = None
         try:
-            file_info = bot.api.get_file_sync(file_id)
+            # 优先用 backend 抽象(NcatbotAdminBackend Protocol)
+            from nbot.commands_backend import NcatbotAdminBackend, get_backend
+            backend = get_backend()
+            if isinstance(backend, NcatbotAdminBackend):
+                # NcatbotBackend.get_file_sync 内部包装 ncatbot 同步 API
+                file_info = backend.get_file_sync(file_id)
+            else:
+                file_info = bot.api.get_file_sync(file_id)
         except Exception as e:
             _log.debug(f"[QQ Attachment] get_file_sync 异常: {e}")
             return None
@@ -541,7 +549,20 @@ def _try_download_via_napcat(url: str) -> Optional[str]:
             return None
 
         _log.info(f"[QQ Attachment] 策略2: 尝试 NapCat download_file_sync...")
-        result = bot.api.download_file_sync(thread_count=1, headers="", url=url)
+        # 阶段 3 改造:通过 BotApiAdapter 走 backend.download_file_sync
+        try:
+            from nbot.commands_backend import NcatbotAdminBackend, get_backend
+            backend = get_backend()
+            if isinstance(backend, NcatbotAdminBackend):
+                result = backend.download_file_sync(1, "", url)
+            else:
+                result = bot.api.download_file_sync(
+                    thread_count=1, headers="", url=url
+                )
+        except Exception:
+            result = bot.api.download_file_sync(
+                thread_count=1, headers="", url=url
+            )
 
         if not result:
             return None
