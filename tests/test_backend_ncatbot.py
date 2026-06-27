@@ -1,6 +1,6 @@
 """测试 nbot.backends.ncatbot_backend.NcatbotBackend"""
 import asyncio
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -164,8 +164,6 @@ def test_set_dispatcher_stores_callback():
 
 def test_start_wraps_api_but_backend_uses_real_api():
     """P0 回归: start() 包装 bot.api 为 BotApiAdapter,但 backend 内部方法调真实 API 不递归"""
-    from unittest.mock import patch
-
     async def run_test():
         real_api = MagicMock()
         real_api.post_group_msg = MagicMock(return_value=asyncio.Future())
@@ -177,10 +175,14 @@ def test_start_wraps_api_but_backend_uses_real_api():
         fake_bot.api = real_api
 
         fake_client_class = MagicMock(return_value=fake_bot)
+        backend = NcatbotBackend()
 
-        with patch("ncatbot.core.BotClient", fake_client_class):
+        def fake_ensure_bot(self):
+            self.bot = fake_client_class()
+            return self.bot
+
+        with patch.object(NcatbotBackend, "_ensure_bot", fake_ensure_bot):
             with patch("nbot.ncatbot_monkey_patch.apply_patches"):
-                backend = NcatbotBackend()
                 await backend.start()
 
         # start() 后 bot.api 被包装成 BotApiAdapter
@@ -200,8 +202,6 @@ def test_start_wraps_api_but_backend_uses_real_api():
 def test_adapter_text_uses_backend_without_recursion_on_ncatbot():
     """P0 回归: adapter.post_group_msg(text=) 调 backend.send_group_text,
     backend 调真实 API,不会循环回 adapter"""
-    from unittest.mock import patch
-
     from nbot.commands_backend import set_backend
 
     async def run_test():
@@ -212,9 +212,14 @@ def test_adapter_text_uses_backend_without_recursion_on_ncatbot():
         fake_bot = MagicMock()
         fake_bot.api = real_api
 
-        with patch("ncatbot.core.BotClient", MagicMock(return_value=fake_bot)):
+        backend = NcatbotBackend()
+
+        def fake_ensure_bot(self):
+            self.bot = fake_bot
+            return self.bot
+
+        with patch.object(NcatbotBackend, "_ensure_bot", fake_ensure_bot):
             with patch("nbot.ncatbot_monkey_patch.apply_patches"):
-                backend = NcatbotBackend()
                 await backend.start()
                 set_backend(backend)
 

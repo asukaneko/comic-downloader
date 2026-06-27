@@ -119,6 +119,13 @@ class QQBotBackend:
             self._ws_app.run_forever()
         except Exception as e:
             _log.exception("QQBot websocket loop error: %s", e)
+        finally:
+            loop = self._loop
+            if loop is not None and not loop.is_closed():
+                try:
+                    loop.call_soon_threadsafe(loop.stop)
+                except Exception:
+                    pass
 
     def _on_ws_open(self, ws) -> None:
         _log.info("QQBot websocket opened")

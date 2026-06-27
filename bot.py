@@ -14,10 +14,6 @@ from nbot.logging_config import configure_ncatbot_log_file_name
 os.environ.setdefault("GITHUB_PROXY", "")
 configure_ncatbot_log_file_name(sys.argv, os.environ)
 
-from ncatbot.utils.config import config as ncatbot_config  # noqa: E402
-from ncatbot.utils.logger import get_log  # noqa: E402
-
-
 def _load_env_file():
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     if os.path.exists(env_path):
@@ -27,9 +23,12 @@ def _load_env_file():
 
 
 _load_env_file()
+_log = logging.getLogger("bot")
 
 
 def _apply_runtime_ncatbot_config():
+    from ncatbot.utils.config import config as ncatbot_config
+
     bot_uin = os.getenv("BOT_UIN")
     if bot_uin:
         ncatbot_config.set_bot_uin(bot_uin)
@@ -49,11 +48,6 @@ def _apply_runtime_ncatbot_config():
     webui_uri = os.getenv("WEBUI_URI")
     if webui_uri:
         ncatbot_config.set_webui_uri(webui_uri)
-
-
-_apply_runtime_ncatbot_config()
-
-_log = get_log()
 
 
 def _generate_self_signed_cert(cert_dir: str) -> tuple:
@@ -295,6 +289,8 @@ def run_bot():
         return
 
     _log.info("Starting NekoBot with backend: %s", backend_name)
+    if backend_name == "ncatbot":
+        _apply_runtime_ncatbot_config()
     backend = create_backend(backend_name)
     set_backend(backend)
 

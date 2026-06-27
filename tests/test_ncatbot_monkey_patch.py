@@ -8,6 +8,7 @@
 2. _nbot_patched 标志正确设置
 """
 import sys
+import types
 from unittest.mock import patch as mock_patch
 
 import pytest
@@ -15,9 +16,34 @@ import pytest
 from nbot.ncatbot_monkey_patch import apply_patches, is_applied
 
 
+def _install_fake_ncatbot_core(monkeypatch):
+    class FakeBotAPI:
+        async def post_private_msg(self, user_id, **kwargs):
+            return True
+
+        async def post_group_msg(self, group_id, **kwargs):
+            return True
+
+    class FakeGroupMessage:
+        group_id = "g1"
+        user_id = "u1"
+
+        async def reply(self, text=None, **kwargs):
+            return True
+
+    fake_ncatbot = types.ModuleType("ncatbot")
+    fake_core = types.ModuleType("ncatbot.core")
+    fake_core.BotAPI = FakeBotAPI
+    fake_core.GroupMessage = FakeGroupMessage
+    fake_ncatbot.core = fake_core
+    monkeypatch.setitem(sys.modules, "ncatbot", fake_ncatbot)
+    monkeypatch.setitem(sys.modules, "ncatbot.core", fake_core)
+
+
 @pytest.fixture(autouse=True)
-def _reset_patch_state():
+def _reset_patch_state(monkeypatch):
     """每个测试前重置 _nbot_patched 标志 + _applied 模块状态"""
+    _install_fake_ncatbot_core(monkeypatch)
     from ncatbot.core import BotAPI
     if hasattr(BotAPI, "_nbot_patched"):
         delattr(BotAPI, "_nbot_patched")
