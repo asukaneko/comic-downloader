@@ -7966,6 +7966,14 @@ def main(params):
                             return;
                         }
                         
+                        const defaultTtsConfig = { enabled: false, model_id: '', voice: '' };
+                        const defaultProactiveChat = {
+                            enabled: false,
+                            interval_minutes: 60,
+                            idle_minutes: 10,
+                            visible_only: true
+                        };
+
                         // 构建会话详情对象
                         this.viewingSession = {
                             id: sessionId,
@@ -7976,16 +7984,42 @@ def main(params):
                             message_count: targetSession.message_count || 0,
                             created_at: targetSession.created_at || targetSession.last_time || new Date().toISOString(),
                             last_time: targetSession.last_time || targetSession.created_at || new Date().toISOString(),
-                            last_message: targetSession.last_message || '无'
+                            last_message: targetSession.last_message || '无',
+                            tags: [...(targetSession.tags || [])],
+                            favorite: !!targetSession.favorite,
+                            pinned: !!targetSession.pinned,
+                            read_only: true,
+                            _isTemp: true,
+                            proactive_chat: {
+                                ...defaultProactiveChat,
+                                ...(targetSession.proactive_chat || {})
+                            },
+                            tts_config: {
+                                ...defaultTtsConfig,
+                                ...(targetSession.tts_config || {})
+                            },
+                            customPrompts: [],
+                            messages: []
                         };
+                        this.customPromptsDirty = false;
+                        this.sessionQrCode = '';
+                        this.sessionShareUrl = '';
+                        this.sessionIsPublic = false;
+                        this.publicSharePasswordRequired = false;
+                        this.publicShareExpiresAt = null;
+                        this.isEditingSessionTitle = false;
+                        this.editingSessionTitle = '';
                         
                         // 如果是QQ会话，加载完整的消息历史
                         if (sessionType === 'qq_private' || sessionType === 'qq_group') {
                             try {
                                 const qqType = sessionType === 'qq_private' ? 'private' : 'group';
                                 const res = await api.get(`/api/qq/messages/${qqType}/${sessionId}`);
-                                if (res.data && Array.isArray(res.data)) {
-                                    this.viewingSession.messages = res.data;
+                                const messages = Array.isArray(res.data)
+                                    ? res.data
+                                    : (res.data?.messages || []);
+                                if (Array.isArray(messages)) {
+                                    this.viewingSession.messages = messages;
                                 }
                             } catch (e) {
                                 console.error('加载QQ消息历史失败:', e);
@@ -8088,12 +8122,19 @@ def main(params):
                             visible_only: true,
                             ...(session.proactive_chat || {})
                         },
-                        tts_config: session.tts_config || { enabled: false, model_id: '', voice: '' },
+                        tts_config: {
+                            enabled: false,
+                            model_id: '',
+                            voice: '',
+                            ...(session.tts_config || {})
+                        },
                         character_runtime_snapshot: session.character_runtime_snapshot || null,
                         character_runtime_timeline: session.character_runtime_timeline || [],
                         customPrompts: [...(session.custom_prompts || [])].map(cp => ({ ...cp })),
                     };
                     this.customPromptsDirty = false;
+                    this.isEditingSessionTitle = false;
+                    this.editingSessionTitle = '';
                     // 重置公开状态
                     this.sessionQrCode = '';
                     this.sessionShareUrl = '';
@@ -8135,6 +8176,13 @@ def main(params):
                                     visible_only: true,
                                     ...(res.data.proactive_chat || {})
                                 },
+                                tts_config: {
+                                    enabled: false,
+                                    model_id: '',
+                                    voice: '',
+                                    ...(this.viewingSession.tts_config || {}),
+                                    ...(res.data.tts_config || {})
+                                },
                                 message_count: res.data.message_count || this.viewingSession.message_count,
                                 customPrompts: mergedCustomPrompts,
                             };
@@ -8154,10 +8202,16 @@ def main(params):
 
                 // 保存会话详情弹窗中的 TTS 配置
                 async saveViewingSessionTTS() {
-                    if (!this.viewingSession?.id) return;
+                    if (!this.viewingSession?.id || this.viewingSession._isTemp) return;
+                    this.viewingSession.tts_config = {
+                        enabled: false,
+                        model_id: '',
+                        voice: '',
+                        ...(this.viewingSession.tts_config || {})
+                    };
                     try {
                         await api.put(`/api/sessions/${this.viewingSession.id}`, {
-                            tts_config: this.viewingSession.tts_config || { enabled: false, model_id: '', voice: '' }
+                            tts_config: this.viewingSession.tts_config
                         });
                         // 同步到 sessions 列表
                         const s = this.sessions.find(s => s.id === this.viewingSession.id);
@@ -8769,7 +8823,9 @@ def main(params):
                 },
 
                 startSessionTitleEdit() {
-                    if (!this.viewingSession) return;
+                    if (!this.viewingSession || this.viewingSession.read_only || this.viewingSession._isTemp) {
+                        return;
+                    }
                     this.editingSessionTitle = this.viewingSession.name || '';
                     this.isEditingSessionTitle = true;
                     this.$nextTick(() => {
@@ -8783,6 +8839,10 @@ def main(params):
 
                 async saveSessionTitle() {
                     if (!this.isEditingSessionTitle || !this.viewingSession) return;
+                    if (this.viewingSession.read_only || this.viewingSession._isTemp) {
+                        this.isEditingSessionTitle = false;
+                        return;
+                    }
                     const newTitle = this.editingSessionTitle.trim();
                     if (!newTitle) {
                         this.showToast('会话标题不能为空', 'warning');

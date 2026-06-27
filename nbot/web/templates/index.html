@@ -10133,7 +10133,7 @@
                                     </button>
                                 </div>
                                 <button
-                                    v-else
+                                    v-else-if="!viewingSession.read_only && !viewingSession._isTemp"
                                     class="session-title-display"
                                     @click="startSessionTitleEdit"
                                     title="点击修改会话标题"
@@ -10141,6 +10141,7 @@
                                     <span>{{ viewingSession.name }}</span>
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                <span v-else>{{ viewingSession.name }}</span>
                             </div>
                             <div class="detail-item" v-if="viewingSession.sender_name">
                                 <label>绑定角色</label>
@@ -10191,7 +10192,7 @@
                     </div>
 
                     <!-- TTS 语音合成配置 -->
-                    <div class="form-section">
+                    <div class="form-section" v-if="!viewingSession._isTemp">
                         <div class="form-section-title">
                             <i class="fas fa-volume-up" style="color: var(--primary-color);"></i> TTS 语音合成
                         </div>
@@ -10474,7 +10475,7 @@
                     </div>
 
                     <!-- 公开分享 -->
-                    <div class="form-section" v-if="viewingSession.id">
+                    <div class="form-section" v-if="viewingSession.id && !viewingSession._isTemp">
                         <div class="form-section-title">
                             <i class="fas fa-share-alt" style="color: var(--accent-primary);"></i> 公开分享
                         </div>

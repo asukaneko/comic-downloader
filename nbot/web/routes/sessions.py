@@ -942,6 +942,7 @@ def register_session_routes(app, server):
         session["proactive_chat"] = _normalize_proactive_chat_config(
             session.get("proactive_chat")
         )
+        session["tts_config"] = _normalize_tts_config(session.get("tts_config"))
         if not isinstance(session.get("message_favorites"), list):
             session["message_favorites"] = []
         else:
