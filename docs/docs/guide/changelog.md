@@ -1,5 +1,42 @@
 # 更新日志
 
+## [3.0.5] - 2026-06-27
+
+### 🧠 记忆系统重构
+
+- 引入结构化分类存储：将记忆按 `user_persona`（用户人格）、`character_persona`（角色人格）、`important_event`（重要事件）、`recent_digest`（近期摘要）四大类别组织，兼容历史别名
+- 新增 `normalize_memory_category` / `describe_memory_path` 工具方法，统一路径与类别的双向映射
+- `MemoryFS` 增加 `path_user_persona` / `path_character_persona` / `path_recent_digest` / `path_important_events` 等结构化路径辅助方法
+- `build_prompt_context` 改为按四类结构化路径读取，旧版 `diary/daily` 流水账不再直接注入
+- 自动记忆提取结果自动按类别写入 `MemoryFS`，结构化记忆优先持久化到 `memory_fs.json`
+
+### ⚙️ Pipeline 架构
+
+- 新增 `nbot/core/background_tasks.py` 统一后台任务调度：基于 `ThreadPoolExecutor` 提供串行锁 (`serial_key`) 与去重 (`unique_key`)，通过环境变量 `NBOT_BACKGROUND_TASK_WORKERS` 控制并发度
+- `AIPipeline` 将自动记忆抽取、剧情选项生成等非关键操作改为后台任务异步执行，主回复不再被阻塞
+- 剧情选项生成新增 `on_plot_choices_ready` 回调与 `plot_choices_pending` 状态，前端可按需拉取结果
+- `MemoryFS` 注入提前到 Pipeline 阶段，新增 `_inject_memory_fs_direct` 方法，使用 `memory_fs.context` 键（优先级 58），避免与角色运行时重复注入
+- `CharacterRuntime._inject_memory_fs` 适配新的注入键，确保 `target_id` 不一致时不再注入旧 key
+
+### 🖥️ Web UI 改进
+
+- 记忆页面重构为基于 `MemoryFS` 的角色卡片式记忆管理，按结构化分类展示用户人格、角色人格、重要事件、近期摘要
+- Review 面板 UI 重构并过滤无关日志，专注于审查与质量评分信息
+- 会话模式选项卡切换增加方向感知滑动动画，跟随切换方向自然滑动
+- 优化会话详情展示逻辑，统一临时会话编辑限制的提示与 TTS 配置处理
+
+### 🐛 Bug 修复
+
+- 修复临时会话的编辑限制逻辑，避免在错误上下文中拦截合法操作
+- 改进 TTS 配置获取与处理路径，覆盖配置缺失场景
+
+### 📖 文档
+
+- 补充结构化记忆分类、后台任务调度、Pipeline 阶段注入等模块文档
+- 同步更新 `MemoryFS` 文档，新增结构化分类与 `normalize_memory_category` 用法
+
+---
+
 ## [3.0.4] - 2026-06-23
 
 ### ⚙️ 核心功能

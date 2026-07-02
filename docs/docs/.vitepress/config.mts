@@ -135,6 +135,7 @@ export default defineConfig({
                     { text: 'prompt - 提示词管理', link: '/guide/nbot/core/prompt.md' },
                     { text: 'switches - 开关管理', link: '/guide/nbot/core/switches.md' },
                     { text: 'heartbeat - 心跳引擎', link: '/guide/nbot/core/heartbeat.md' },
+                    { text: 'background_tasks - 后台任务调度', link: '/guide/nbot/core/background_tasks.md' },
                     {
                       text: '协议详细实现',
                       collapsed: true,
