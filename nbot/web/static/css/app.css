@@ -1359,9 +1359,11 @@
         /* 消息下方的进度卡片容器 */
         .message-thinking-cards-wrapper {
             display: flex;
+            flex: 0 0 100%;
+            width: 100%;
             margin-bottom: 16px;
         }
-        
+
         .message-thinking-cards-wrapper .message-thinking-cards {
             flex: 1;
             margin-left: 52px; /* 与消息内容对齐（头像宽度 + 间距） */
@@ -1469,9 +1471,11 @@
         /* 消息下方的 Todo 卡片容器 */
         .message-todo-cards-wrapper {
             display: flex;
+            flex: 0 0 100%;
+            width: 100%;
             margin-bottom: 16px;
         }
-        
+
         .message-todo-cards-wrapper .message-todo-cards {
             flex: 1;
             margin-left: 52px;
@@ -1597,6 +1601,8 @@
 
         .message-change-cards-wrapper {
             display: flex;
+            flex: 0 0 100%;
+            width: 100%;
             margin-bottom: 16px;
         }
 
