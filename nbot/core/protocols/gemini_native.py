@@ -184,13 +184,11 @@ class GeminiNativeProtocol(ModelProtocol):
                 thinking_content += part.get("thought", "")
             if "functionCall" in part:
                 fc = part["functionCall"]
+                raw_args = fc.get("args", {})
                 tool_call = {
-                    "id": f"call_{uuid.uuid4().hex[:12]}",
-                    "type": "function",
-                    "function": {
-                        "name": fc.get("name", ""),
-                        "arguments": json.dumps(fc.get("args", {}), ensure_ascii=False),
-                    },
+                    "id": fc.get("id") or f"call_{uuid.uuid4().hex[:12]}",
+                    "name": fc.get("name", ""),
+                    "arguments": raw_args if isinstance(raw_args, dict) else {},
                 }
                 # 保留 thoughtSignature，后续请求必须原样回传
                 # thoughtSignature 可能在 functionCall 内部或 part 级别
@@ -230,10 +228,11 @@ class GeminiNativeProtocol(ModelProtocol):
                     return {"type": "content", "content": text}
             if "functionCall" in part:
                 fc = part["functionCall"]
+                raw_args = fc.get("args", {})
                 tool_call = {
-                    "id": f"call_{uuid.uuid4().hex[:12]}",
+                    "id": fc.get("id") or f"call_{uuid.uuid4().hex[:12]}",
                     "name": fc.get("name", ""),
-                    "arguments": fc.get("args", {}),
+                    "arguments": raw_args if isinstance(raw_args, dict) else {},
                 }
                 sig = fc.get("thoughtSignature") or part.get("thoughtSignature")
                 if sig:
@@ -345,6 +344,9 @@ class GeminiNativeProtocol(ModelProtocol):
                             "args": args,
                         }
                     }
+                    call_id = tc.get("id")
+                    if call_id:
+                        fc_part["functionCall"]["id"] = call_id
                     # 保留 thoughtSignature，Gemini API 要求后续请求原样回传
                     sig = tc.get("_thought_signature")
                     if sig:
@@ -374,6 +376,7 @@ class GeminiNativeProtocol(ModelProtocol):
                     "role": "user",
                     "parts": [{
                         "functionResponse": {
+                            "id": msg.get("tool_call_id", ""),
                             "name": func_name,
                             "response": response_data,
                         }

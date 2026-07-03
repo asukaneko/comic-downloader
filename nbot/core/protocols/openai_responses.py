@@ -145,11 +145,8 @@ class OpenAIResponsesProtocol(ModelProtocol):
                         arguments = {}
                 tool_calls.append({
                     "id": item.get("call_id", ""),
-                    "type": "function",
-                    "function": {
-                        "name": item.get("name", ""),
-                        "arguments": json.dumps(arguments) if isinstance(arguments, dict) else arguments,
-                    },
+                    "name": item.get("name", ""),
+                    "arguments": arguments if isinstance(arguments, dict) else {},
                 })
 
             elif item_type == "reasoning":

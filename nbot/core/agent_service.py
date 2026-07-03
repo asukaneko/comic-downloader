@@ -531,6 +531,7 @@ def run_tool_call_loop(
                     tool_history_message = {
                         "role": "tool",
                         "tool_call_id": tool_call.get("id", ""),
+                        "name": tool_call.get("name", ""),
                         "content": json.dumps(tool_result, ensure_ascii=False),
                     }
 

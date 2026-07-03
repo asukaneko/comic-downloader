@@ -115,13 +115,11 @@ class AnthropicMessagesProtocol(ModelProtocol):
             elif block_type == "thinking":
                 thinking_content += block.get("thinking", "")
             elif block_type == "tool_use":
+                raw_input = block.get("input", {})
                 tool_calls.append({
                     "id": block.get("id", ""),
-                    "type": "function",
-                    "function": {
-                        "name": block.get("name", ""),
-                        "arguments": json.dumps(block.get("input", {})),
-                    },
+                    "name": block.get("name", ""),
+                    "arguments": raw_input if isinstance(raw_input, dict) else {},
                 })
 
         content = repair_mojibake_text(content)

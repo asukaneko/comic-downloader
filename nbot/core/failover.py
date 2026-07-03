@@ -262,6 +262,7 @@ class FailoverState:
                 remaining = max(0.0, health.cooldown_until - now)
                 summary[model_id] = {
                     "daily_failures": daily,
+                    "consecutive_failures": health.consecutive_failures,
                     "last_failure_code": health.last_failure_code,
                     "cooldown_remaining": round(remaining, 1),
                     "available": now >= health.cooldown_until,

@@ -231,7 +231,13 @@ def sanitize_messages_for_chat_api(
 
         if role == "assistant" and allow_tools and message.get("tool_calls"):
             clean["content"] = content if content is not None else ""
-            clean["tool_calls"] = message.get("tool_calls")
+            stripped_tool_calls = []
+            for tc in message.get("tool_calls") or []:
+                if not isinstance(tc, dict):
+                    continue
+                stripped = {k: v for k, v in tc.items() if not k.startswith("_")}
+                stripped_tool_calls.append(stripped)
+            clean["tool_calls"] = stripped_tool_calls
         else:
             if content is None:
                 content = ""
