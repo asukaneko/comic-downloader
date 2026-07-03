@@ -8,8 +8,9 @@
 
 配置来源（优先级从高到低）：
   1. 调用方传入的 image_gen_config 字典
-  2. data/web/ai_models.json 中 purpose == "image_generation" 的模型
-  3. 内置默认值
+  2. WebChatServer.active_models_by_purpose['image_generation'] 当前选中的模型
+  3. data/web/ai_models.json 中 purpose == "image_generation" 的第一个启用模型
+  4. 内置默认值
 """
 
 import base64
@@ -39,11 +40,25 @@ SEND_IMAGE_TAG_PATTERN = re.compile(
 
 
 def get_image_generation_config() -> dict | None:
-    """从 ai_models.json 加载 purpose == "image_generation" 的模型配置。
+    """从 ai_models.json 加载当前选中的图片生成模型配置。
+
+    优先使用 WebChatServer 中 active_models_by_purpose['image_generation']
+    标记的"当前选中"模型；找不到时回退到第一个启用的 image_generation 模型。
 
     Returns:
         配置字典，未找到返回 None。
     """
+    try:
+        from nbot.web.server import WebChatServer
+
+        server = WebChatServer.get_instance()
+        if server is not None:
+            config = get_image_generation_config_from_server(server)
+            if config:
+                return config
+    except Exception as exc:
+        _log.debug("[ImageService] 从 server 读取图片生成配置失败，回退: %s", exc)
+
     try:
         from nbot.web.utils.config_loader import get_model_config_by_purpose
 
@@ -51,6 +66,47 @@ def get_image_generation_config() -> dict | None:
     except Exception as exc:
         _log.debug("[ImageService] 加载图片生成配置失败: %s", exc)
         return None
+
+
+def get_image_generation_config_from_server(server) -> dict | None:
+    """从 WebChatServer 的 active_models_by_purpose 中获取当前选中的图片生成模型配置。
+
+    Args:
+        server: WebChatServer 实例。
+
+    Returns:
+        标准化后的配置字典，未找到返回 None。
+    """
+    if server is None:
+        return None
+
+    active_id = (getattr(server, "active_models_by_purpose", {}) or {}).get(
+        "image_generation"
+    )
+    if not active_id:
+        return None
+
+    for model in getattr(server, "ai_models", []) or []:
+        if model.get("id") == active_id and model.get("enabled", True):
+            return _build_image_generation_config(model)
+
+    return None
+
+
+def _build_image_generation_config(model: dict) -> dict:
+    """将原始模型字典标准化为图片生成调用所需的配置。"""
+    from nbot.web.utils.config_loader import resolve_runtime_api_key
+
+    provider_type = model.get("provider_type", "openai_compatible")
+    return {
+        "api_key": resolve_runtime_api_key(model.get("api_key", ""), provider_type),
+        "base_url": model.get("base_url", ""),
+        "model": model.get("model", ""),
+        "provider_type": provider_type,
+        "provider": model.get("provider", "custom"),
+        "append_base_url_path": model.get("append_base_url_path", True),
+        "size": model.get("size", ""),
+    }
 
 
 def is_image_generation_enabled() -> bool:
