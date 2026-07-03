@@ -276,20 +276,27 @@ class OpenAIResponsesProtocol(ModelProtocol):
                             "content": [{"type": "output_text", "text": content}],
                         })
                     for tc in tool_calls:
+                        # 兼容扁平格式 {id,name,arguments} 和嵌套格式 {type,function:{name,arguments}}
                         if tc.get("type") == "function":
                             func = tc.get("function", {})
+                            tc_name = func.get("name", "")
+                            tc_id = tc.get("id", "")
                             args = func.get("arguments", "{}")
-                            if isinstance(args, str):
-                                try:
-                                    args = json.loads(args)
-                                except Exception:
-                                    args = {}
-                            input_items.append({
-                                "type": "function_call",
-                                "name": func.get("name", ""),
-                                "arguments": args,
-                                "call_id": tc.get("id", ""),
-                            })
+                        else:
+                            tc_name = tc.get("name", "")
+                            tc_id = tc.get("id", "")
+                            args = tc.get("arguments", "{}")
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except Exception:
+                                args = {}
+                        input_items.append({
+                            "type": "function_call",
+                            "name": tc_name,
+                            "arguments": args,
+                            "call_id": tc_id,
+                        })
                 elif content:
                     input_items.append({
                         "type": "message",

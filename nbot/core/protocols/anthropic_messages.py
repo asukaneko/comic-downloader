@@ -227,20 +227,27 @@ class AnthropicMessagesProtocol(ModelProtocol):
                     if anthropic_content:
                         blocks.append({"type": "text", "text": anthropic_content})
                     for tc in tool_calls:
+                        # 兼容扁平格式 {id,name,arguments} 和嵌套格式 {type,function:{name,arguments}}
                         if tc.get("type") == "function":
                             func = tc.get("function", {})
+                            tc_name = func.get("name", "")
+                            tc_id = tc.get("id", "")
                             args = func.get("arguments", "{}")
-                            if isinstance(args, str):
-                                try:
-                                    args = json.loads(args)
-                                except Exception:
-                                    args = {}
-                            blocks.append({
-                                "type": "tool_use",
-                                "id": tc.get("id", ""),
-                                "name": func.get("name", ""),
-                                "input": args,
-                            })
+                        else:
+                            tc_name = tc.get("name", "")
+                            tc_id = tc.get("id", "")
+                            args = tc.get("arguments", "{}")
+                        if isinstance(args, str):
+                            try:
+                                args = json.loads(args)
+                            except Exception:
+                                args = {}
+                        blocks.append({
+                            "type": "tool_use",
+                            "id": tc_id,
+                            "name": tc_name,
+                            "input": args,
+                        })
                     if blocks:
                         anthropic_messages.append({"role": "assistant", "content": blocks})
                     else:
