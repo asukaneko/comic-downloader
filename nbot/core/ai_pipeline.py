@@ -2376,7 +2376,7 @@ class AIPipeline:
                 return
             # 取最近的用户消息作为生图灵感来源
             user_text = ""
-            for msg in reversed(ctx.working_messages or []):
+            for msg in reversed(ctx.messages or []):
                 if msg.get("role") == "user":
                     user_text = str(msg.get("content") or "").strip()
                     if user_text:
