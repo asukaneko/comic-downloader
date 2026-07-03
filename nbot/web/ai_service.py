@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import os
@@ -7,30 +6,21 @@ import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Any
+
 from nbot.channels.registry import get_channel_adapter
 from nbot.channels.web import WebChannelAdapter
 from nbot.core import (
-    build_continue_chat_response,
-    build_chat_completion_payload,
     ChatRequest,
     ChatResponse,
-    extract_tool_call_history,
-    normalize_chat_completion_data,
-    prepare_chat_context,
-    repair_mojibake_text,
-    resolve_chat_completion_url,
-    response_json_utf8,
-    ToolLoopExit,
-    ToolLoopHooks,
-    ToolLoopSession,
     WebSessionStore,
-    run_tool_loop_session,
+    repair_mojibake_text,
+    response_json_utf8,
 )
 from nbot.core.ai_pipeline import (
     AIPipeline,
-    PipelineContext,
     PipelineCallbacks,
+    PipelineContext,
     PipelineResult,
 )
 from nbot.core.background_tasks import submit_background_task
@@ -49,7 +39,7 @@ except ImportError:
 _log = logging.getLogger(__name__)
 
 
-def _runtime_timeline_state_signature(entry: Dict) -> tuple:
+def _runtime_timeline_state_signature(entry: dict) -> tuple:
     ignore_keys = {"timestamp", "message_id", "message_index"}
     return tuple(
         (key, entry.get(key))
@@ -58,7 +48,7 @@ def _runtime_timeline_state_signature(entry: Dict) -> tuple:
     )
 
 
-def _resolve_session_character_name(server, session: Dict) -> str:
+def _resolve_session_character_name(server, session: dict) -> str:
     if not isinstance(session, dict):
         session = {}
 
@@ -130,7 +120,7 @@ def _build_channel_assistant_message(
     session_id: str,
     adapter=None,
     sender: str = "AI",
-    metadata: Optional[Dict] = None,
+    metadata: dict | None = None,
 ):
     channel_adapter = adapter or get_channel_adapter("web") or WebChannelAdapter()
     return channel_adapter.build_assistant_message(
@@ -339,7 +329,6 @@ class WebProgressReporter:
 
     def on_done(self, ctx) -> None:
         if self.progress_card:
-            from nbot.core.progress_card import StepType
             self.progress_card.complete("✅ 处理完成")
 
     def on_waiting_confirmation(self, ctx, command: str, request_id: str) -> None:
@@ -393,7 +382,7 @@ class WebCallbacks(PipelineCallbacks):
 
     # ---- 会话 / 消息 I/O ----
 
-    def load_messages(self, ctx: PipelineContext) -> List[Dict]:
+    def load_messages(self, ctx: PipelineContext) -> list[dict]:
         import copy
         session = self.session_store.get_session(self.session_id)
         if session:
@@ -411,7 +400,7 @@ class WebCallbacks(PipelineCallbacks):
             getattr(self.server, "personality", {}).get("systemPrompt") or ""
         ).strip()
 
-    def save_assistant_message(self, ctx: PipelineContext, message: Dict) -> None:
+    def save_assistant_message(self, ctx: PipelineContext, message: dict) -> None:
         if not message.get("sender"):
             # 群聊模式：使用发言角色名称
             speaker_name = ctx.metadata.get("group_speaker_name", "")
@@ -439,8 +428,8 @@ class WebCallbacks(PipelineCallbacks):
     def build_model_call(self, ctx, tools):
         """Web 频道使用服务器的 AI 方法，支持故障转移队列。"""
         server = self.server
-        from nbot.web.utils.config_loader import get_model_configs_by_purpose
         from nbot.services.ai import refresh_runtime_ai_config
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
 
         runtime_ai = refresh_runtime_ai_config()
         purpose = runtime_ai.get("purpose", "chat")
@@ -485,7 +474,7 @@ class WebCallbacks(PipelineCallbacks):
 
     # ---- 输出 / 回复 ----
 
-    def send_response(self, ctx: PipelineContext, message: Dict) -> None:
+    def send_response(self, ctx: PipelineContext, message: dict) -> None:
         if ctx.metadata.get("streamed"):
             # 流式已发送，无需再次发送
             return
@@ -504,7 +493,7 @@ class WebCallbacks(PipelineCallbacks):
         )
         self._try_send_push(message)
 
-    def on_stream_start(self, ctx: PipelineContext, message: Dict) -> None:
+    def on_stream_start(self, ctx: PipelineContext, message: dict) -> None:
         # 群聊模式：在消息中附加 sender 以便前端区分不同角色的气泡
         if ctx and ctx.metadata:
             speaker_name = ctx.metadata.get("group_speaker_name", "")
@@ -571,7 +560,7 @@ class WebCallbacks(PipelineCallbacks):
         if streamed_msg and streamed_msg.get("content"):
             self._try_send_push(streamed_msg)
 
-    def _try_send_push(self, message: Dict) -> None:
+    def _try_send_push(self, message: dict) -> None:
         """尝试发送浏览器推送通知（仅在用户不在页面时）。"""
         try:
             from nbot.web.routes.push import send_web_push
@@ -597,7 +586,7 @@ class WebCallbacks(PipelineCallbacks):
     # ---- 表情包 ----
 
     def send_sticker(
-        self, ctx: PipelineContext, sticker_info: Dict[str, Any]
+        self, ctx: PipelineContext, sticker_info: dict[str, Any]
     ) -> None:
         """Web 频道通过 Socket.IO 发送表情包图片消息（裸图，无气泡包裹）"""
         import uuid
@@ -621,6 +610,34 @@ class WebCallbacks(PipelineCallbacks):
         )
         # 同时保存到会话历史
         self.session_store.append_message(self.session_id, sticker_message)
+
+    # ---- 角色生图 ----
+
+    def send_image(
+        self, ctx: PipelineContext, image_info: dict[str, Any]
+    ) -> None:
+        """Web 频道通过 Socket.IO 发送 AI 生成的图片（裸图，无气泡包裹）"""
+        import uuid
+        image_message = {
+            "id": str(uuid.uuid4()),
+            "role": "assistant",
+            "content": "",
+            "timestamp": __import__("datetime").datetime.now().astimezone().isoformat(),
+            "sender": "AI",
+            "source": "generated_image",
+            "image": {
+                "url": image_info.get("url", ""),
+                "prompt": image_info.get("prompt", ""),
+                "trigger": image_info.get("trigger", "tag"),
+            },
+        }
+        self.server.socketio.emit(
+            "ai_response",
+            {"session_id": self.session_id, "message": image_message},
+            room=self.session_id,
+        )
+        # 同时保存到会话历史
+        self.session_store.append_message(self.session_id, image_message)
 
     # ---- 进度 ----
 
@@ -663,7 +680,7 @@ class WebCallbacks(PipelineCallbacks):
             )
         return ""
 
-    def get_workspace_context(self, ctx: PipelineContext) -> Dict:
+    def get_workspace_context(self, ctx: PipelineContext) -> dict:
         # 从会话中获取角色名
         character_name = ""
         target_id = ""
@@ -739,7 +756,6 @@ class WebCallbacks(PipelineCallbacks):
 
             # 保存角色运行时上下文摘要
             if hasattr(ctx, 'character_turn') and ctx.character_turn:
-                from nbot.character.models import CharacterTurnContext
                 turn = ctx.character_turn
                 messages = session.get("messages", [])
                 assistant_message_id = None
@@ -938,7 +954,7 @@ class WebCallbacks(PipelineCallbacks):
         except Exception:
             pass
 
-    def resolve_attachment_data(self, ctx: PipelineContext, attachment: Dict) -> Optional[Dict]:
+    def resolve_attachment_data(self, ctx: PipelineContext, attachment: dict) -> dict | None:
         """Web 频道附件解析：静态文件 / 工作区文件 / 数据 URL。"""
         att_path = attachment.get("path", "")
         att_url = attachment.get("url", "")
@@ -1000,7 +1016,7 @@ class WebCallbacks(PipelineCallbacks):
                 ext = os.path.splitext(att_name)[1].lower()
                 from nbot.core.ai_pipeline import AIPipeline
                 if att_type in AIPipeline.TEXT_MIME_TYPES or ext in AIPipeline.TEXT_EXTENSIONS:
-                    with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                    with open(file_path, encoding="utf-8", errors="replace") as f:
                         result["text_content"] = f.read()
                 return result
         except Exception:
@@ -1033,9 +1049,10 @@ class WebCallbacks(PipelineCallbacks):
 
 # ---- Web 频道的 model_call 辅助函数 ----
 
-def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> Dict:
+def _call_web_ai(server, messages: list[dict], tools: list, stop_event=None) -> dict:
     """Web 频道的 model_call 实现。"""
     import requests
+
     from nbot.services.ai import refresh_runtime_ai_config
 
     if stop_event and stop_event.is_set():
@@ -1078,7 +1095,7 @@ def _call_web_ai(server, messages: List[Dict], tools: list, stop_event=None) -> 
 
 def _stream_to_web(
     server,
-    messages: List[Dict],
+    messages: list[dict],
     tools: list,
     session_id: str,
     stop_event=None,
@@ -1090,13 +1107,14 @@ def _stream_to_web(
     按优先级依次使用不同模型。首个 chunk 到达后不再切换模型。
     """
     import requests
-    from nbot.core.model_adapter import normalize_usage_dict
-    from nbot.services.ai import refresh_runtime_ai_config, apply_model_config
+
     from nbot.core.failover import (
+        _extract_status_code,
         classify_http_error,
         get_failover_state,
-        _extract_status_code,
     )
+    from nbot.core.model_adapter import normalize_usage_dict
+    from nbot.services.ai import apply_model_config, refresh_runtime_ai_config
 
     stream_started_at = time.perf_counter()
     runtime_ai = refresh_runtime_ai_config()
@@ -1230,7 +1248,7 @@ def _stream_to_web(
     )
 
     # chunk 去重：部分提供商返回累积文本而非增量
-    content_parts: List[str] = []
+    content_parts: list[str] = []
 
     def normalize_chunk(raw: str) -> str:
         """从累积文本中提取新增部分。"""
@@ -1469,8 +1487,8 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                 if hook_runtime:
                     _ebus = getattr(hook_runtime, "_event_bus", None)
                     if _ebus:
-                        from nbot.review.pipeline import get_review_pipeline
                         from nbot.plot.graph_manager import get_plot_graph_manager
+                        from nbot.review.pipeline import get_review_pipeline
                         get_review_pipeline(event_bus=_ebus)
                         get_plot_graph_manager(event_bus=_ebus)
                 # Register Socket.IO notifier for hook trigger events
@@ -1505,7 +1523,7 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         try:
                             custom_presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
                             if os.path.exists(custom_presets_file):
-                                with open(custom_presets_file, "r", encoding="utf-8") as f:
+                                with open(custom_presets_file, encoding="utf-8") as f:
                                     custom_presets = json.load(f)
                                 if isinstance(custom_presets, list):
                                     for preset in custom_presets:
@@ -1534,8 +1552,8 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         # 过滤掉没有档案的角色ID，避免发言角色无法加载设定
                         if valid_character_ids and set(valid_character_ids) != set(group.character_ids):
                             group.character_ids = valid_character_ids
-                        from nbot.group.scheduler import SpeakerScheduler
                         from nbot.group.narrator import NarratorCharacter
+                        from nbot.group.scheduler import SpeakerScheduler
                         group_context = {
                             "group": group,
                             "character_profiles": profiles,
@@ -1663,7 +1681,10 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     _group = group_context.get("group")
                     if _group and getattr(_group.config, "allow_character_cross_talk", True):
                         try:
-                            from nbot.group.cross_talk import collect_mentions_from_round, process_cross_talk
+                            from nbot.group.cross_talk import (
+                                collect_mentions_from_round,
+                                process_cross_talk,
+                            )
                             _round_msgs = [
                                 {"role": "assistant", "content": r["content"], "sender": r["speaker_name"]}
                                 for r in _speaker_results
@@ -1900,7 +1921,7 @@ def _update_web_token_stats(server, usage: dict, session_id: str, metadata: dict
         pass
 
 
-def get_ai_response(self, messages: List[Dict]) -> str:
+def get_ai_response(self, messages: list[dict]) -> str:
     """获取 AI 回复"""
     if not self.ai_client:
         _log.warning("AI client not initialized")
@@ -1937,7 +1958,7 @@ def get_ai_response(self, messages: List[Dict]) -> str:
         return f"AI 服务出错: {str(e)}"
 
 
-def stream_ai_response(self, messages: List[Dict], session_id: str, callback):
+def stream_ai_response(self, messages: list[dict], session_id: str, callback):
     """流式获取 AI 回复，通过回调逐段发送内容
 
     Args:
@@ -1967,9 +1988,9 @@ def stream_ai_response(self, messages: List[Dict], session_id: str, callback):
 
 def stream_provider_response_to_web(
     server,
-    messages: List[Dict],
+    messages: list[dict],
     session_id: str,
-    message: Dict,
+    message: dict,
     thinking_content: str = None,
 ) -> str:
     """Stream provider chunks directly to the web chat bubble."""
@@ -2069,7 +2090,7 @@ def stream_provider_response_to_web(
 
 
 def stream_send_response(
-    server, session_id: str, message: Dict, thinking_content: str = None
+    server, session_id: str, message: dict, thinking_content: str = None
 ):
     """通过 WebSocket 发送流式响应
 
@@ -2138,7 +2159,7 @@ def stream_send_response(
 
 
 def get_ai_response_with_images(
-    server, messages: List[Dict], image_urls: List[str], user_question: str = None
+    server, messages: list[dict], image_urls: list[str], user_question: str = None
 ) -> str:
     """获取带图片的 AI 回复（多模态）"""
     try:
@@ -2254,10 +2275,10 @@ def get_ai_response_with_images(
 
 def get_ai_response_with_tools(
 server,
-    messages: List[Dict],
-    tools: List[Dict],
+    messages: list[dict],
+    tools: list[dict],
     stop_event=None,
-) -> Dict:
+) -> dict:
     """调用 AI 并支持工具
 
     Args:
@@ -2291,13 +2312,13 @@ server,
             api_timeout = max(timeout, 30)  # 无工具调用时至少 30 秒
 
         # 故障转移：获取同用途模型列表
-        from nbot.web.utils.config_loader import get_model_configs_by_purpose
         from nbot.core.failover import (
-            get_failover_state,
-            classify_http_error,
             _extract_status_code,
+            classify_http_error,
+            get_failover_state,
         )
         from nbot.services.ai import apply_model_config
+        from nbot.web.utils.config_loader import get_model_configs_by_purpose
 
         failover = get_failover_state()
         model_configs = get_model_configs_by_purpose("chat")

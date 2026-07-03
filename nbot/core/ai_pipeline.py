@@ -15,6 +15,7 @@
 import copy
 import json
 import logging
+import os
 import threading
 from abc import ABC
 from dataclasses import dataclass, field
@@ -549,6 +550,22 @@ class PipelineCallbacks(ABC):
         """
         pass
 
+    # ---- 角色生图 ----
+
+    def send_image(
+        self, ctx: PipelineContext, image_info: Dict[str, Any]
+    ) -> None:
+        """发送 AI 生成的图片（单独消息）。默认空实现，由各频道覆写。
+
+        Args:
+            ctx: 管道上下文
+            image_info: 图片信息字典 {url, prompt, trigger}
+                - url: 可直接外链的图片 URL，或本地 /static/... 路径
+                - prompt: 用于生成该图片的 prompt
+                - trigger: "tag"（LLM 主动标签）或 "auto"（概率触发）
+        """
+        pass
+
     # ---- 角色运行时 ----
 
     def get_character_context(self, ctx: PipelineContext):
@@ -945,6 +962,17 @@ class AIPipeline:
                     priority=35,  # 在角色卡(30)之后、角色状态(40)之前
                     scope="session",
                 )
+
+        # 角色生图能力说明（仅在非 agent 模式、且功能开启时注入）
+        if ctx.metadata.get("session_mode") != "agent":
+            try:
+                from nbot.services.image_service import (
+                    build_image_capability_injection,
+                )
+
+                build_image_capability_injection(ctx.prompt_stack)
+            except Exception as exc:
+                _log.debug("[ImageGen] 注入生图能力说明失败: %s", exc)
 
         # PromptStack 合成最终 system prompt
         self._emit_hook("prompt.before_render", ctx)
@@ -2204,7 +2232,7 @@ class AIPipeline:
         callbacks: PipelineCallbacks,
         result: PipelineResult,
     ) -> None:
-        """角色运行时 after_turn → 自动记忆 → on_response_complete → 表情包。"""
+        """角色运行时 after_turn → 自动记忆 → on_response_complete → 表情包 → 角色生图。"""
         self._phase_character_runtime_after_turn(ctx, callbacks, result)
         if ctx.metadata.get("session_mode") != "agent":
             self._phase_auto_memory(ctx, callbacks, result)
@@ -2212,6 +2240,9 @@ class AIPipeline:
 
         # 表情包发送：基于角色心情，按配置概率单独发送
         self._try_send_sticker(ctx, callbacks, result)
+
+        # 角色生图：解析 [send_image: ...] 内联标签，按概率兜底
+        self._try_send_image(ctx, callbacks, result)
 
     def _try_send_sticker(
         self,
@@ -2270,6 +2301,135 @@ class AIPipeline:
             )
         except Exception as exc:
             _log.warning("[Sticker] 发送失败: %s", exc)
+
+    def _try_send_image(
+        self,
+        ctx: PipelineContext,
+        callbacks: PipelineCallbacks,
+        result: PipelineResult,
+    ) -> None:
+        """解析 LLM 回复中的 [send_image: ...] 标签，按概率兜底触发角色生图。
+
+        触发逻辑：
+          1. 若 final_content 含 [send_image: <prompt>] 标签，剥离后逐条生图。
+          2. 标签不存在时，按 settings.json 中的 probability 概率兜底生图（参照 sticker）。
+          3. agent 会话模式、错误结果、不支持的频道、不在线的图片生成模型：均跳过。
+        """
+        from nbot.services.image_service import (
+            call_image_generation,
+            extract_send_image_tags,
+            get_image_generation_config,
+            get_image_generation_size,
+            is_image_generation_enabled,
+            is_image_generation_feature_enabled,
+            save_image_to_uploads,
+            should_send_image_probability,
+        )
+
+        # agent 模式不触发（避免误生图）
+        if ctx.metadata.get("session_mode") == "agent":
+            return
+
+        # 出错时不生图
+        if result.error:
+            return
+
+        # 仅 web / qq 频道支持（与 sticker 一致）
+        channel = (
+            ctx.metadata.get("source", "")
+            or getattr(ctx.chat_request, "channel", "")
+            or ctx.metadata.get("channel_type", "")
+        )
+        if channel not in ("web", "qq"):
+            return
+
+        # 功能开关
+        if not is_image_generation_feature_enabled():
+            return
+
+        # 模型配置
+        config = get_image_generation_config()
+        if not config or not is_image_generation_enabled():
+            _log.debug("[ImageGen] 未配置图片生成模型，跳过")
+            return
+
+        # 解析 LLM 显式标签
+        prompts: List[str] = []
+        if result.final_content:
+            cleaned_content, prompts = extract_send_image_tags(result.final_content)
+            if cleaned_content != result.final_content:
+                # 回写剥离后的内容，保持与 sticker 类似的轻量处理
+                result.final_content = cleaned_content
+                if result.assistant_message and isinstance(result.assistant_message, dict):
+                    result.assistant_message["content"] = cleaned_content
+                if ctx.streamed_message and isinstance(ctx.streamed_message, dict):
+                    ctx.streamed_message["content"] = cleaned_content
+                if ctx.metadata.get("streamed") and hasattr(callbacks, "save_assistant_message"):
+                    try:
+                        callbacks.save_assistant_message(ctx, ctx.streamed_message)
+                    except Exception as exc:
+                        _log.debug("[ImageGen] 流式消息内容回写失败: %s", exc)
+
+        # 兜底概率触发：仅在没有显式标签时考虑
+        if not prompts:
+            if not should_send_image_probability():
+                return
+            # 取最近的用户消息作为生图灵感来源
+            user_text = ""
+            for msg in reversed(ctx.working_messages or []):
+                if msg.get("role") == "user":
+                    user_text = str(msg.get("content") or "").strip()
+                    if user_text:
+                        break
+            if not user_text:
+                return
+            # 限制 prompt 长度，避免 prompt 过载
+            user_text = user_text[:200]
+            prompt = (
+                f"Anime-style illustration inspired by the conversation context: {user_text}"
+            )
+            prompts = [prompt]
+            triggers = ["auto"]
+        else:
+            triggers = ["tag"] * len(prompts)
+
+        size = get_image_generation_size()
+
+        for prompt, trigger in zip(prompts, triggers):
+            if not prompt:
+                continue
+            image_url_or_b64 = call_image_generation(prompt, config, size=size)
+            if not image_url_or_b64:
+                _log.warning("[ImageGen] prompt 生成失败: %s", prompt[:80])
+                continue
+
+            # 若返回的是远程 URL，下载到本地 uploads 以保证 QQ 也能稳定发送
+            final_url = image_url_or_b64
+            if image_url_or_b64.startswith("http"):
+                try:
+                    upload_dir = os.path.join(
+                        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                        "nbot", "web", "static", "uploads", "character_images",
+                    )
+                    saved = save_image_to_uploads(image_url_or_b64, upload_dir, prefix="char")
+                    if saved:
+                        final_url = saved
+                except Exception as exc:
+                    _log.debug("[ImageGen] 本地化图片失败，使用远程 URL: %s", exc)
+
+            try:
+                callbacks.send_image(
+                    ctx,
+                    {"url": final_url, "prompt": prompt, "trigger": trigger},
+                )
+                _log.info(
+                    "[ImageGen] 图片已发送: channel=%s trigger=%s url=%s",
+                    channel,
+                    trigger,
+                    final_url[:80],
+                )
+            except Exception as exc:
+                _log.warning("[ImageGen] 发送失败: %s", exc)
 
     def _phase_assemble_result(
         self,

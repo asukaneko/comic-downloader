@@ -23,6 +23,7 @@ _DYNAMIC_SECTION_KEYS = (
     "character.reaction_plan",
     "character.memories",
     "character.memories_legacy",
+    "character.image_capability",
     "real_time.continuity",
     "plot.real_time_sync",
     "knowledge.rag",

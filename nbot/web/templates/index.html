@@ -1526,14 +1526,23 @@
                                                 </template>
                                                 <!-- 单气泡模式（默认，向后兼容） -->
                                                 <div
-                                                    v-else-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming || msg.source === 'sticker')"
+                                                    v-else-if="!(msg.role === 'user' && editingMessageId === msg.id) && (msg.content || msg.is_streaming || msg.source === 'sticker' || msg.source === 'generated_image')"
                                                     class="message-body"
-                                                    :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming, 'sticker-body': msg.source === 'sticker' }"
+                                                    :class="{ 'streaming-text': msg.is_streaming, 'markdown-body': !msg.is_streaming, 'sticker-body': msg.source === 'sticker' || msg.source === 'generated_image' }"
                                                     v-html="renderMessageBody(msg)"
                                                 ></div>
                                                 <!-- AI 表情包图片（nekos.best，裸图无气泡） -->
                                                 <div v-if="msg.source === 'sticker' && msg.sticker" class="sticker-image-wrapper">
                                                     <img :src="msg.sticker.url" class="sticker-image" @error="handleStickerError" loading="lazy">
+                                                </div>
+                                                <!-- AI 角色生图（LLM 触发的 [send_image: ...]，裸图无气泡） -->
+                                                <div v-if="msg.source === 'generated_image' && msg.image && msg.image.url" class="generated-image-wrapper">
+                                                    <a :href="msg.image.url" target="_blank" rel="noopener noreferrer" class="generated-image-link" :title="msg.image.prompt || '点击查看原图'">
+                                                        <img :src="msg.image.url" class="generated-image" @error="handleImageError" loading="lazy">
+                                                    </a>
+                                                    <div v-if="msg.image.prompt" class="generated-image-caption" :title="msg.image.prompt">
+                                                        {{ msg.image.prompt }}
+                                                    </div>
                                                 </div>
                                                 <!-- 用户消息编辑态：直接在原位置替换 -->
                                                 <div v-if="msg.role === 'user' && editingMessageId === msg.id" class="user-edit-inline" @click.stop>
@@ -7421,6 +7430,29 @@
                                         <input type="range" min="0" max="100" :value="(settings.sticker_probability || 50)" @input="onStickerProbabilityChange" class="probability-slider">
                                         <span class="sticker-prob-value">{{ settings.sticker_probability || 50 }}%</span>
                                     </div>
+                                    <div class="setting-toggle-card" :class="{ 'is-on': settings.features.image_generation }" @click="toggleImageGeneration()">
+                                        <div class="setting-toggle-icon"><i class="fas fa-image"></i></div>
+                                        <div class="setting-toggle-info">
+                                            <div class="setting-toggle-title">AI 角色生图</div>
+                                            <div class="setting-toggle-desc">角色可在对话中主动发图（需配置图片生成模型）</div>
+                                        </div>
+                                        <label class="toggle-switch" :class="{ active: settings.features.image_generation }"><div class="toggle-slider"></div></label>
+                                    </div>
+                                    <div v-if="settings.features.image_generation" class="sticker-prob-row">
+                                        <span class="sticker-prob-label">兜底发图概率</span>
+                                        <input type="range" min="0" max="100" :value="(imageGenProbabilityValue)" @input="onImageGenProbabilityChange" class="probability-slider">
+                                        <span class="sticker-prob-value">{{ imageGenProbabilityValue }}%</span>
+                                        <select @change="onImageGenSizeChange" :value="imageGenSizeValue" class="image-gen-size-select" title="默认图片尺寸">
+                                            <option value="1024x1024">1024×1024</option>
+                                            <option value="1024x1792">1024×1792</option>
+                                            <option value="1792x1024">1792×1024</option>
+                                            <option value="512x512">512×512</option>
+                                        </select>
+                                    </div>
+                                    <div v-if="settings.features.image_generation && !imageGenModelReady" class="setting-hint">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        尚未配置图片生成模型（AI 模型 → 添加 purpose=image_generation 的模型）
+                                    </div>
                                 </div>
                             </div>
 
@@ -12761,7 +12793,13 @@
                             workflow: true,
                             web: true,
                             skills_prompt_injection: false,
-                            live2d: true
+                            live2d: true,
+                            sticker: false,
+                            image_generation: false
+                        },
+                        image_generation: {
+                            probability: 0,
+                            size: '1024x1024'
                         },
                         onboarding: {
                             completed: false,
@@ -14119,9 +14157,28 @@
                 // 获取注册的频道列表（排除内置频道）
                 registeredChannels() {
                     return (this.channels || []).filter(ch => !ch.builtin && ch.enabled);
+                },
+
+                // 角色生图兜底概率（计算属性，原 NbotMethods 中同名方法被误用为属性，导致界面显示 "function () { [native code] }%"）
+                imageGenProbabilityValue() {
+                    const cfg = this.settings && this.settings.image_generation;
+                    const v = cfg && typeof cfg.probability === 'number' ? cfg.probability : 0;
+                    return Math.max(0, Math.min(100, v));
+                },
+
+                // 角色生图默认尺寸（计算属性）
+                imageGenSizeValue() {
+                    const cfg = this.settings && this.settings.image_generation;
+                    return (cfg && cfg.size) || '1024x1024';
+                },
+
+                // 是否已配置可用的图片生成模型（计算属性）
+                imageGenModelReady() {
+                    const models = this.aiModels || [];
+                    return models.some(m => m.purpose === 'image_generation' && m.enabled !== false);
                 }
             },
-            
+
             async mounted() {
                 document.title = 'NekoBot Dashboard';
                 // 初始化主题

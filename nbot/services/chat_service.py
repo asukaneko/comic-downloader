@@ -1,46 +1,41 @@
-import os
-import json
 import datetime
-import time
-import re
-import copy
+import json
 import logging
-from typing import Any, Dict, List, Optional
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
-from nbot.services.ai import (
-    ai_client, user_messages, group_messages, MAX_HISTORY_LENGTH,
-    refresh_runtime_ai_config,
-)
-from nbot.core import (
-    AgentService,
-    build_chat_completion_payload,
-    ChatRequest,
-    ChatResponse,
-    clean_response_content,
-    extract_display_text,
-    normalize_chat_completion_data,
-    prepare_chat_context,
-    prompt_manager,
-    message_manager,
-    QQSessionStore,
-    resolve_chat_completion_url,
-    resolve_loop_final_content,
-    ToolLoopSession,
-    ToolLoopExit,
-    build_qq_session_id,
-    dump_json,
-    run_tool_loop_session,
-)
+import os
+import re
+import time
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+
 from nbot.channels.qq import QQChannelAdapter
 from nbot.channels.registry import get_channel_adapter, register_channel_handler
+from nbot.core import (
+    AgentService,
+    ChatRequest,
+    ChatResponse,
+    QQSessionStore,
+    build_qq_session_id,
+    clean_response_content,
+    dump_json,
+    extract_display_text,
+    message_manager,
+    prompt_manager,
+)
 from nbot.core.ai_pipeline import (
     AIPipeline,
-    PipelineContext,
     PipelineCallbacks,
+    PipelineContext,
     PipelineResult,
     handle_tool_confirmation,
 )
 from nbot.core.message import create_message
+from nbot.services.ai import (
+    MAX_HISTORY_LENGTH,
+    ai_client,
+    group_messages,
+    refresh_runtime_ai_config,
+    user_messages,
+)
 
 # 工作区管理
 try:
@@ -53,9 +48,13 @@ except ImportError:
 # 工具调用支持
 try:
     from nbot.services.tools import (
-        TOOL_DEFINITIONS, execute_tool,
-        get_pending_by_session, execute_pending_command, reject_pending_command,
-        _CONFIRM_KEYWORDS, _REJECT_KEYWORDS,
+        _CONFIRM_KEYWORDS,
+        _REJECT_KEYWORDS,
+        TOOL_DEFINITIONS,
+        execute_pending_command,
+        execute_tool,
+        get_pending_by_session,
+        reject_pending_command,
     )
     TOOLS_AVAILABLE = True
 except ImportError:
@@ -85,10 +84,10 @@ _log = logging.getLogger(__name__)
 # 群聊 @mention 跨角色对话消息队列
 # _run_qq_chat_request 产生跨角色对话后存入此队列，
 # 由 commands.py 在发送主回复后逐条发送
-_cross_talk_queue: List[Dict[str, str]] = []
+_cross_talk_queue: list[dict[str, str]] = []
 
 
-def pop_cross_talk_messages() -> List[Dict[str, str]]:
+def pop_cross_talk_messages() -> list[dict[str, str]]:
     """取出并清空跨角色对话消息队列。
 
     Returns:
@@ -107,7 +106,7 @@ def _get_project_root() -> str:
 def _load_json_file(path: str, default=None):
     try:
         if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
     except Exception as e:
         print(f"[QQ Character] failed to load {path}: {e}")
@@ -164,7 +163,7 @@ def _load_session_prompt_text(user_id: str = None, group_id: str = None) -> str:
         return ""
     try:
         if os.path.exists(prompt_file):
-            with open(prompt_file, "r", encoding="utf-8") as f:
+            with open(prompt_file, encoding="utf-8") as f:
                 return f.read().strip()
     except Exception as e:
         print(f"[QQ Character] failed to load session prompt: {e}")
@@ -236,7 +235,7 @@ def load_canonical_qq_messages(
     group_id: str = None,
     group_user_id: str = None,
     include_memories: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     session_id = get_qq_session_id(
         user_id=str(user_id) if user_id else None,
         group_id=str(group_id) if group_id else None,
@@ -272,10 +271,10 @@ def load_canonical_qq_messages(
 
 
 def _normalize_canonical_qq_messages(
-    messages: List[Dict[str, Any]],
+    messages: list[dict[str, Any]],
     *,
     session_mode: str = "",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     normalized = []
     is_agent = session_mode == "agent"
     for msg in messages:
@@ -318,7 +317,7 @@ class QQCallbacks(PipelineCallbacks):
         self.group_id = str(group_id) if group_id else None
         self.group_user_id = str(group_user_id) if group_user_id else None
 
-    def load_messages(self, ctx: PipelineContext) -> List[Dict[str, Any]]:
+    def load_messages(self, ctx: PipelineContext) -> list[dict[str, Any]]:
         """从 QQSessionStore 加载历史消息。"""
         is_agent = ctx.metadata.get("session_mode") == "agent"
         return load_canonical_qq_messages(
@@ -359,12 +358,12 @@ class QQCallbacks(PipelineCallbacks):
         return search_knowledge_base(query, self.user_id, self.group_id)
 
     def save_assistant_message(
-        self, ctx: PipelineContext, message: Dict[str, Any]
+        self, ctx: PipelineContext, message: dict[str, Any]
     ) -> None:
         """QQ 消息通过 BotAPI 补丁自动保存，Token 统计由 on_response_complete 处理。"""
         self.qq_store.save()
 
-    def get_workspace_context(self, ctx: PipelineContext) -> Dict[str, Any]:
+    def get_workspace_context(self, ctx: PipelineContext) -> dict[str, Any]:
         # 从系统获取当前角色名
         character_name = _resolve_qq_character_name(self.user_id, self.group_id)
         return get_workspace_context(self.user_id, self.group_id, self.group_user_id, character_name)
@@ -449,7 +448,7 @@ class QQCallbacks(PipelineCallbacks):
 
     def check_confirmation(
         self, ctx: PipelineContext, user_input: str
-    ) -> Optional[str]:
+    ) -> str | None:
         """QQ 确认关键词检测。"""
         if not TOOLS_AVAILABLE or not get_pending_by_session:
             return None
@@ -513,7 +512,7 @@ class QQCallbacks(PipelineCallbacks):
         )
 
     def send_response(
-        self, ctx: PipelineContext, message: Dict[str, Any]
+        self, ctx: PipelineContext, message: dict[str, Any]
     ) -> None:
         """QQ 频道通过 BotAPI 补丁自动发送消息，此处为空操作。"""
         pass
@@ -521,7 +520,7 @@ class QQCallbacks(PipelineCallbacks):
     # ---- 表情包 ----
 
     def send_sticker(
-        self, ctx: PipelineContext, sticker_info: Dict[str, Any]
+        self, ctx: PipelineContext, sticker_info: dict[str, Any]
     ) -> None:
         """QQ 频道通过 BotAPI 发送表情包图片（单独消息）"""
         try:
@@ -560,6 +559,48 @@ class QQCallbacks(PipelineCallbacks):
             )
         except Exception as e:
             print(f"[Sticker] QQ 表情包发送失败: {e}")
+
+    # ---- 角色生图 ----
+
+    def send_image(
+        self, ctx: PipelineContext, image_info: dict[str, Any]
+    ) -> None:
+        """QQ 频道通过 BotAPI 发送 AI 生成的图片（单独消息）"""
+        try:
+            import nbot.commands as _cmd_mod
+            bot_instance = getattr(_cmd_mod, "bot", None)
+            if not bot_instance or not hasattr(bot_instance, "api"):
+                _log.warning("[ImageGen] QQ Bot 实例不可用，跳过发送")
+                return
+
+            image_url = image_info.get("url", "")
+            if not image_url:
+                return
+
+            api = bot_instance.api
+            if self.user_id:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(api.post_private_msg(self.user_id, image=image_url))
+                finally:
+                    loop.close()
+            elif self.group_id:
+                import asyncio
+                loop = asyncio.new_event_loop()
+                try:
+                    loop.run_until_complete(api.post_group_msg(self.group_id, image=image_url))
+                finally:
+                    loop.close()
+
+            _log.info(
+                "[ImageGen] QQ 图片已发送: target=%s trigger=%s url=%s",
+                self.user_id or self.group_id,
+                image_info.get("trigger", ""),
+                image_url[:80],
+            )
+        except Exception as exc:
+            _log.error("[ImageGen] QQ 图片发送失败: %s", exc)
 
 
 def search_knowledge_base(query: str, user_id: str = None, group_id: str = None) -> str:
@@ -989,8 +1030,8 @@ def _run_qq_chat_request(
                     if isinstance(p, dict) and cid in p:
                         profiles[cid] = p[cid]
                 # Build group context
-                from nbot.group.scheduler import SpeakerScheduler
                 from nbot.group.narrator import NarratorCharacter
+                from nbot.group.scheduler import SpeakerScheduler
                 group_context = {
                     "group": group,
                     "character_profiles": profiles,
@@ -1305,7 +1346,7 @@ def generate_today_summary(user_id=None, group_id=None) -> str:
         if not os.path.exists(file_path):
             return "今天群里还没有记录到消息喵~"
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 text = f.read().strip()
         except Exception:
             return "读取群聊记录失败喵~"
@@ -1361,7 +1402,7 @@ def generate_today_summary(user_id=None, group_id=None) -> str:
 
                 # 记录 token 用量
                 try:
-                    from nbot.core.token_stats import get_token_stats_manager, PURPOSE_UTILITY
+                    from nbot.core.token_stats import PURPOSE_UTILITY, get_token_stats_manager
                     usage = getattr(response, "usage", None)
                     if usage:
                         stats_mgr = get_token_stats_manager()

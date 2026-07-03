@@ -7709,6 +7709,53 @@ def main(params):
                     }
                 },
 
+                // 角色生图开关切换
+                async toggleImageGeneration() {
+                    const newValue = !this.settings.features.image_generation;
+                    this.settings.features.image_generation = newValue;
+                    try {
+                        await api.put('/api/settings', { features: { image_generation: newValue } });
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
+                        this.showToast(newValue ? 'AI 角色生图已开启' : 'AI 角色生图已关闭', 'info');
+                    } catch (e) {
+                        this.settings.features.image_generation = !newValue;
+                        this.showToast('角色生图设置保存失败', 'error');
+                    }
+                },
+
+                // 角色生图兜底概率变更
+                async onImageGenProbabilityChange(event) {
+                    const value = parseInt(event.target.value, 10);
+                    if (!this.settings.image_generation || typeof this.settings.image_generation !== 'object') {
+                        this.$set(this.settings, 'image_generation', {});
+                    }
+                    this.settings.image_generation.probability = value;
+                    try {
+                        await api.put('/api/settings', { image_generation: { probability: value } });
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
+                    } catch (e) {
+                        console.warn('[ImageGen] 概率设置保存失败:', e);
+                    }
+                },
+
+                // 角色生图默认尺寸变更
+                async onImageGenSizeChange(event) {
+                    const value = event.target.value;
+                    if (!this.settings.image_generation || typeof this.settings.image_generation !== 'object') {
+                        this.$set(this.settings, 'image_generation', {});
+                    }
+                    this.settings.image_generation.size = value;
+                    try {
+                        await api.put('/api/settings', { image_generation: { size: value } });
+                        this.settingsSnapshot = JSON.stringify(this.settings);
+                        this.settingsDirty = false;
+                    } catch (e) {
+                        console.warn('[ImageGen] 尺寸设置保存失败:', e);
+                    }
+                },
+
                 // ========== API Key 管理 ==========
                 async loadApiKeys() {
                     try {
@@ -15559,8 +15606,8 @@ def main(params):
                 },
 
                 renderMessageBody(msg) {
-                    // 表情包消息：不渲染文本内容，隐藏 message-body
-                    if (msg?.source === 'sticker') {
+                    // 表情包/生图消息：不渲染文本内容，隐藏 message-body
+                    if (msg?.source === 'sticker' || msg?.source === 'generated_image') {
                         return '';
                     }
                     let content = this.parseMessageContent(msg?.content || '', msg);
@@ -15584,7 +15631,7 @@ def main(params):
                 },
 
                 getMessageBubbles(msg) {
-                    if (!msg || msg.source === 'sticker') {
+                    if (!msg || msg.source === 'sticker' || msg.source === 'generated_image') {
                         return [];
                     }
                     const parsedContent = this.parseMessageContent(msg.content || '', msg);

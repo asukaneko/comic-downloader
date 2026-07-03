@@ -1,18 +1,17 @@
-import base64
 import io
 import json
 import logging
+import mimetypes
 import os
 import re
-import mimetypes
 import urllib.error
 import urllib.request
 import uuid
 import zipfile
 from datetime import datetime
 
-from flask import g, jsonify, request, send_from_directory, send_file
-from werkzeug.utils import secure_filename
+import requests
+from flask import g, jsonify, request, send_file
 
 _log = logging.getLogger(__name__)
 
@@ -131,17 +130,17 @@ def _post_card_to_platform(server, character):
     chunks = []
 
     def add_field(name, value):
-        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
-        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+        chunks.append(f"--{boundary}\r\n".encode())
+        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
         chunks.append(str(value).encode("utf-8"))
         chunks.append(b"\r\n")
 
     def add_file(name, filename, content, content_type):
-        chunks.append(f"--{boundary}\r\n".encode("utf-8"))
+        chunks.append(f"--{boundary}\r\n".encode())
         chunks.append(
-            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode("utf-8")
+            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode()
         )
-        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode("utf-8"))
+        chunks.append(f"Content-Type: {content_type}\r\n\r\n".encode())
         chunks.append(content)
         chunks.append(b"\r\n")
 
@@ -155,7 +154,7 @@ def _post_card_to_platform(server, character):
         with open(portrait_path, "rb") as f:
             add_file("avatar", os.path.basename(portrait_path), f.read(), content_type)
 
-    chunks.append(f"--{boundary}--\r\n".encode("utf-8"))
+    chunks.append(f"--{boundary}--\r\n".encode())
     body = b"".join(chunks)
     headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
     token = _role_card_platform_token(server)
@@ -214,8 +213,7 @@ def compile_personality_prompt(personality_data, session_context=None, user_name
 
 def _do_generate_portrait_bg(server, task_id, character_name, description, basic_info, personality, image_gen_config):
     """后台执行 AI 立绘生成任务，完成后通过 SocketIO 推送结果"""
-    import requests
-    import time
+    from nbot.services.image_service import call_image_generation, save_image_to_uploads
 
     task = server.portrait_generation_tasks.get(task_id)
     if not task:
@@ -250,127 +248,29 @@ def _do_generate_portrait_bg(server, task_id, character_name, description, basic
             image_prompt += " Style: High-quality anime illustration, detailed, vibrant colors, professional character art."
             image_prompt += " Format: Portrait orientation, upper body or bust shot, clean background or simple gradient."
 
-        api_key = image_gen_config.get('api_key', '')
-        full_url = image_gen_config.get('base_url', '')
-        model = image_gen_config.get('model', 'dall-e-3')
-        image_size = image_gen_config.get('size', '1024x1024')
-
-        if 'volces' in full_url.lower() or 'ark' in full_url.lower():
-            width, height = image_size.split('x')
-            pixels = int(width) * int(height)
-            if pixels < 3686400:
-                image_size = '1920x1920'
-
-        if not full_url:
+        if not image_gen_config.get('base_url'):
             task["status"] = "failed"
             task["error"] = "未配置图片生成API地址"
             task["updated_at"] = datetime.now().isoformat()
             _log.error(f"[PortraitBG] {character_name}: 未配置API地址")
             return
 
-        provider_type = image_gen_config.get('provider_type', 'openai_compatible')
-
-        # 使用较长的超时时间（5分钟）确保大部分模型都能返回
-        _API_TIMEOUT = 300
-
-        if provider_type in ['openai_compatible', 'openai'] or 'openai' in full_url.lower():
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "prompt": image_prompt,
-                "n": 1,
-                "size": image_size
-            }
-            response = requests.post(full_url, headers=headers, json=payload, timeout=_API_TIMEOUT)
-            if response.status_code != 200:
-                raise Exception(f"图片生成API错误: {response.text}")
-            result = response.json()
-            _log.info(f"[PortraitBG] API响应: {json.dumps(result, ensure_ascii=False)[:500]}")
-
-            image_url = None
-            data_list = result.get("data", [])
-            if data_list:
-                item = data_list[0]
-                image_url = item.get("url") or item.get("b64_json")
-            if not image_url and result.get("choices"):
-                content = result["choices"][0].get("message", {}).get("content", "")
-                if content:
-                    md_match = re.search(r'!\[.*?\]\((https?://\S+)\)', content)
-                    if md_match:
-                        image_url = md_match.group(1)
-                    elif content.startswith("http"):
-                        image_url = content.strip()
-                    elif content.startswith("data:"):
-                        image_url = content
-                    else:
-                        image_url = content
-            if not image_url and result.get("images"):
-                image_url = result["images"][0].get("url")
-
-        elif provider_type == 'siliconflow' or 'siliconflow' in full_url.lower():
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "prompt": image_prompt,
-                "image_size": image_size,
-                "batch_size": 1
-            }
-            response = requests.post(full_url, headers=headers, json=payload, timeout=_API_TIMEOUT)
-            if response.status_code != 200:
-                raise Exception(f"图片生成API错误: {response.text}")
-            result = response.json()
-            image_url = result.get("images", [{}])[0].get("url")
-
-        else:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "prompt": image_prompt,
-                "n": 1,
-                "size": image_size
-            }
-            response = requests.post(full_url, headers=headers, json=payload, timeout=_API_TIMEOUT)
-            if response.status_code != 200:
-                raise Exception(f"图片生成API错误: {response.text}")
-            result = response.json()
-            image_url = result.get("data", [{}])[0].get("url") or result.get("images", [{}])[0].get("url")
-
-        if not image_url:
+        image_size = image_gen_config.get('size', '1024x1024')
+        image_data = call_image_generation(image_prompt, image_gen_config, size=image_size)
+        if not image_data:
             raise Exception("未能获取生成的图片URL")
 
-        # 创建上传目录
         upload_dir = os.path.join(server.base_dir, "nbot", "web", "static", "uploads", "portraits")
-        os.makedirs(upload_dir, exist_ok=True)
-
-        new_filename = f"portrait_ai_{uuid.uuid4().hex[:16]}.png"
-        filepath = os.path.join(upload_dir, new_filename)
-
-        # 判断是URL还是base64数据
-        if image_url.startswith("data:"):
-            image_bytes = base64.b64decode(image_url.split(",", 1)[1])
-            with open(filepath, 'wb') as f:
-                f.write(image_bytes)
-        elif image_url.startswith("http"):
-            image_response = requests.get(image_url, timeout=120)
-            if image_response.status_code != 200:
-                raise Exception("下载生成的图片失败")
-            with open(filepath, 'wb') as f:
-                f.write(image_response.content)
-        else:
-            image_bytes = base64.b64decode(image_url)
-            with open(filepath, 'wb') as f:
-                f.write(image_bytes)
-
-        portrait_url = f"/static/uploads/portraits/{new_filename}"
+        portrait_url = save_image_to_uploads(
+            image_data,
+            upload_dir,
+            prefix="portrait_ai",
+        )
+        if not portrait_url:
+            raise Exception("保存生成的图片失败")
+        # 兼容绝对路径返回（与旧行为一致：写完整 /static URL）
+        if not portrait_url.startswith("/static/"):
+            portrait_url = f"/static/uploads/portraits/{portrait_url}"
         _log.info(f"[PortraitBG] AI立绘生成成功: {character_name} -> {portrait_url}")
 
         # 更新任务状态
@@ -563,7 +463,7 @@ def register_personality_routes(app, server):
         presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
         if os.path.exists(presets_file):
             try:
-                with open(presets_file, "r", encoding="utf-8") as f:
+                with open(presets_file, encoding="utf-8") as f:
                     server.custom_personality_presets = json.load(f)
             except Exception as e:
                 _log.error(f"加载自定义角色卡预设文件失败: {e}")
@@ -647,7 +547,7 @@ def register_personality_routes(app, server):
         presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
         if os.path.exists(presets_file):
             try:
-                with open(presets_file, "r", encoding="utf-8") as f:
+                with open(presets_file, encoding="utf-8") as f:
                     server.custom_personality_presets = json.load(f)
             except Exception as e:
                 _log.error(f"Failed to load custom personality presets: {e}")
@@ -776,7 +676,7 @@ def register_personality_routes(app, server):
 
             # 记录 token 用量
             try:
-                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                from nbot.core.token_stats import PURPOSE_WEB_FEATURE, get_token_stats_manager
                 usage = getattr(response, "usage", None)
                 if usage:
                     stats_mgr = get_token_stats_manager()
@@ -912,7 +812,7 @@ def register_personality_routes(app, server):
 
             # 记录 token 用量
             try:
-                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                from nbot.core.token_stats import PURPOSE_WEB_FEATURE, get_token_stats_manager
                 usage = getattr(response, "usage", None)
                 if usage:
                     stats_mgr = get_token_stats_manager()
@@ -1136,7 +1036,7 @@ def register_personality_routes(app, server):
 
             # 记录 token 用量
             try:
-                from nbot.core.token_stats import get_token_stats_manager, PURPOSE_WEB_FEATURE
+                from nbot.core.token_stats import PURPOSE_WEB_FEATURE, get_token_stats_manager
                 usage = getattr(response, "usage", None)
                 if usage:
                     stats_mgr = get_token_stats_manager()
@@ -1277,7 +1177,7 @@ def register_personality_routes(app, server):
             presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
             if os.path.exists(presets_file):
                 try:
-                    with open(presets_file, "r", encoding="utf-8") as f:
+                    with open(presets_file, encoding="utf-8") as f:
                         presets = json.load(f)
                 except Exception as e:
                     _log.error(f"加载自定义角色卡预设文件失败: {e}")
@@ -1369,7 +1269,7 @@ def register_personality_routes(app, server):
             presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
             if os.path.exists(presets_file):
                 try:
-                    with open(presets_file, "r", encoding="utf-8") as f:
+                    with open(presets_file, encoding="utf-8") as f:
                         existing_presets = json.load(f)
                 except Exception as e:
                     _log.error(f"加载自定义角色卡预设文件失败: {e}")
@@ -1595,7 +1495,7 @@ def register_personality_routes(app, server):
             presets_file = os.path.join(server.data_dir, "custom_personality_presets.json")
             if os.path.exists(presets_file):
                 try:
-                    with open(presets_file, "r", encoding="utf-8") as f:
+                    with open(presets_file, encoding="utf-8") as f:
                         presets = json.load(f)
                     for preset in presets:
                         portrait = preset.get("portrait", "")
