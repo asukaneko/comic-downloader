@@ -1020,6 +1020,17 @@ def register_session_routes(app, server):
             session["plot_real_time_sync"] = bool(data.get("plot_real_time_sync"))
         if "plot_choice_style" in data:
             session["plot_choice_style"] = str(data.get("plot_choice_style") or "")
+        if "auto_state_interval" in data:
+            # 会话级 auto_state 触发轮次；null 表示使用全局默认，0 表示禁用，正整数表示每 N 轮触发
+            raw_val = data.get("auto_state_interval")
+            if raw_val is None:
+                session["auto_state_interval"] = None
+            else:
+                try:
+                    val = int(raw_val)
+                    session["auto_state_interval"] = max(0, min(50, val))
+                except (TypeError, ValueError):
+                    session["auto_state_interval"] = None
         if "tts_config" in data:
             session["tts_config"] = _normalize_tts_config(data.get("tts_config"))
 

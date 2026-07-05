@@ -1017,6 +1017,9 @@ def _run_qq_chat_request(
             _sess = _wcs.session_store.get_session(_sid) if _sid else {}
             if (_sess or {}).get("session_mode"):
                 ctx.metadata["session_mode"] = _sess["session_mode"]
+            # 注入会话级 auto_state 触发轮次（None 表示用全局默认）
+            if (_sess or {}).get("auto_state_interval") is not None:
+                ctx.metadata["auto_state_interval"] = _sess["auto_state_interval"]
     except Exception:
         pass
 

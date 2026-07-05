@@ -13985,6 +13985,47 @@ def main(params):
                     }
                 },
 
+                async saveAutoStateSettings() {
+                    if (!this.viewingSession?.id) return;
+                    const val = this.viewingSession.auto_state_interval;
+                    // null = 全局默认；0 = 禁用；正整数 = 每 N 轮触发
+                    let payloadVal = val;
+                    if (payloadVal !== null && payloadVal !== undefined) {
+                        const n = parseInt(payloadVal, 10);
+                        if (isNaN(n) || n < 0) {
+                            payloadVal = null;
+                        } else if (n > 50) {
+                            payloadVal = 50;
+                        } else {
+                            payloadVal = n;
+                        }
+                    }
+                    this.isLoading = true;
+                    try {
+                        const res = await api.put(`/api/sessions/${this.viewingSession.id}`, {
+                            auto_state_interval: payloadVal
+                        });
+                        if (res.data?.session && res.data.session.auto_state_interval !== undefined) {
+                            this.viewingSession.auto_state_interval = res.data.session.auto_state_interval;
+                        } else {
+                            this.viewingSession.auto_state_interval = payloadVal;
+                        }
+                        // 同步到 currentSession 和会话列表
+                        if (this.currentSession?.id === this.viewingSession.id) {
+                            this.currentSession.auto_state_interval = this.viewingSession.auto_state_interval;
+                        }
+                        const sessionInList = this.sessions.find(s => s.id === this.viewingSession.id);
+                        if (sessionInList) {
+                            sessionInList.auto_state_interval = this.viewingSession.auto_state_interval;
+                        }
+                        this.showToast('自动状态评估设置已保存', 'success');
+                    } catch (e) {
+                        this.showToast('自动状态评估设置保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
                 async exportAllConfig() {
                     if (!this.configExportPassword) {
                         this.showToast('请输入导出密码', 'error');

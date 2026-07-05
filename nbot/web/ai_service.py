@@ -1448,6 +1448,9 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
         ctx.metadata.setdefault("disabled_prompt_keys", _session_data.get("disabled_prompt_keys", []))
         # 注入用户自定义提示词
         ctx.metadata.setdefault("custom_prompts", _session_data.get("custom_prompts", []))
+        # 注入会话级 auto_state 触发轮次（None 表示用全局默认）
+        if _session_data.get("auto_state_interval") is not None:
+            ctx.metadata.setdefault("auto_state_interval", _session_data["auto_state_interval"])
     # 注入价格信息供公共 token 统计使用
     try:
         active_model_id = getattr(server, "active_model_id", None)

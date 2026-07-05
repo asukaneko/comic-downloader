@@ -407,7 +407,18 @@ def update_state_from_recent_turns(
     else:
         _STATE_TURN_COUNTERS[key] = _STATE_TURN_COUNTERS.get(key, 0) + 1
 
-    if _STATE_TURN_COUNTERS[key] < _STATE_TURN_INTERVAL:
+    # 会话级触发轮次覆盖：优先使用 metadata.auto_state_interval
+    # 值为 0 或负数表示禁用 auto_state；正整数表示每 N 轮触发一次
+    session_interval = _clamp_int(
+        metadata.get("auto_state_interval"),
+        _STATE_TURN_INTERVAL,  # 默认值
+        0, 50,  # 合理范围：0~50
+    )
+    if session_interval <= 0:
+        _log.debug("[AutoState] disabled for this session (auto_state_interval=0)")
+        return state, relationship, False
+
+    if _STATE_TURN_COUNTERS[key] < session_interval:
         return state, relationship, False
 
     buffered_turns = list(_STATE_TURN_BUFFER[key])
@@ -433,7 +444,7 @@ def update_state_from_recent_turns(
     new_state, new_relationship = _apply_ai_adjustment(state, relationship, adjustment)
     _log.info(
         "[AutoState] applied %d-turn state adjustment: character=%s mood=%s intensity=%.2f reason=%s",
-        _STATE_TURN_INTERVAL,
+        session_interval,
         state.character_id,
         new_state.mood,
         new_state.mood_intensity,

@@ -10374,6 +10374,43 @@
                         </div>
                     </div>
 
+                    <!-- 自动状态评估配置 -->
+                    <div class="form-section" v-if="viewingSession.id && !viewingSession.read_only && !viewingSession.is_archive && (viewingSession.session_mode !== 'agent')">
+                        <div class="form-section-title">
+                            <i class="fas fa-wave-square" style="color: #ab47bc;"></i> 自动状态评估
+                            <span class="form-hint">控制角色情绪/关系状态的 AI 评估频率</span>
+                        </div>
+                        <div class="proactive-chat-panel">
+                            <div class="proactive-chat-head">
+                                <div>
+                                    <strong>{{ viewingSession.auto_state_interval === 0 ? '已禁用' : (viewingSession.auto_state_interval == null ? '默认' : ('每 ' + viewingSession.auto_state_interval + ' 轮')) }}</strong>
+                                    <span>AI 根据最近对话自动调整角色心情、好感度等状态。设置为 0 则禁用本会话的自动评估。</span>
+                                </div>
+                            </div>
+                            <div class="proactive-chat-grid">
+                                <label>
+                                    <span>触发轮次</span>
+                                    <select v-model.number="viewingSession.auto_state_interval" class="form-select">
+                                        <option :value="null">全局默认（2 轮）</option>
+                                        <option :value="0">禁用</option>
+                                        <option :value="1">每轮</option>
+                                        <option :value="2">每 2 轮</option>
+                                        <option :value="3">每 3 轮</option>
+                                        <option :value="5">每 5 轮</option>
+                                        <option :value="8">每 8 轮</option>
+                                        <option :value="10">每 10 轮</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <div class="proactive-chat-actions">
+                                <button class="btn btn-primary btn-small" @click="saveAutoStateSettings" :disabled="isLoading">
+                                    <i class="fas fa-save"></i> 保存设置
+                                </button>
+                                <span class="form-hint">仅对当前会话有效，不影响全局配置。</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- 角色运行时状态 -->
                     <div class="form-section" v-if="viewingSession.character_runtime_snapshot">
                         <div class="form-section-title">
