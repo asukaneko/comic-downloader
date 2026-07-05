@@ -2284,7 +2284,7 @@ class WebChatServer:
             workflow["session_id"] = session_id
             self._save_data("workflows")
 
-        # 构建工作流执行提示
+        # 构建工作流执行提示（与 agent 模式保持一致，不附加额外指令）
         system_prompt = workflow.get(
             "description", "你是一个工作流助手，请按照工作流配置执行任务。"
         )
@@ -2292,7 +2292,7 @@ class WebChatServer:
 
         # 构建消息
         messages = [
-            {"role": "system", "content": f"{system_prompt}\n\n{CORE_INSTRUCTIONS}"}
+            {"role": "system", "content": system_prompt}
         ]
 
         # 添加历史上下文（不再按条数限制，由 token 预算控制）
@@ -2346,7 +2346,10 @@ class WebChatServer:
                         create_message(**manager_payload),
                     )
         else:
-            messages.append({"role": "user", "content": "[定时触发] 请执行工作流任务"})
+            # 定时触发且无内容：使用工作流自身的描述/提示作为用户消息
+            workflow_desc = workflow.get("description", "").strip() or workflow.get("prompt", "").strip()
+            if workflow_desc:
+                messages.append({"role": "user", "content": workflow_desc})
 
         # 调用 AI（支持多轮工具调用）
         # 复用统一的 run_tool_call_loop，保证多提供商兼容性：
