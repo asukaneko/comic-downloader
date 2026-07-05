@@ -2472,6 +2472,7 @@ class WebChatServer:
             "name": f"[工作流] {workflow['name']}",
             "type": "workflow",
             "workflow_id": workflow["id"],
+            "session_mode": "agent",
             "created_at": datetime.now().isoformat(),
             "messages": [
                 {"role": "system", "content": workflow.get("description", "")}
