@@ -30995,3 +30995,67 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     line-height: 1.5;
 }
 .rv-plot-info { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+
+/* ===== 剧情选项风格选择弹窗 ===== */
+.plot-style-hint {
+    margin: 0 0 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+.plot-style-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.plot-style-option {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-areas: "radio label" "radio desc";
+    align-items: center;
+    gap: 2px 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.plot-style-option:hover {
+    border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--border-color));
+}
+.plot-style-option.active {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+.plot-style-option input[type="radio"] {
+    grid-area: radio;
+    accent-color: var(--accent-primary);
+    width: 16px;
+    height: 16px;
+}
+.plot-style-option-label {
+    grid-area: label;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.plot-style-option-desc {
+    grid-area: desc;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+.plot-style-custom {
+    margin-top: 12px;
+    width: 100%;
+    resize: vertical;
+}
+.plot-style-current {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.plot-style-current i { color: var(--accent-primary); }

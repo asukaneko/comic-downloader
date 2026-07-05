@@ -64,6 +64,8 @@ def _ensure_plot_choices(server, session_id: str) -> bool:
     from nbot.plot.choice_generator import PlotChoiceGenerator
     from nbot.plot.models import PlotNode, PlotChoice as PlotChoiceModel
 
+    plot_choice_style = str(session.get("plot_choice_style") or "")
+
     generator = PlotChoiceGenerator()
     try:
         loop = _asyncio.new_event_loop()
@@ -74,6 +76,7 @@ def _ensure_plot_choices(server, session_id: str) -> bool:
                     turn_context,
                     recent_history=recent_history,
                     session_id=session_id or "",
+                    style=plot_choice_style,
                 )
             )
         finally:
@@ -131,6 +134,11 @@ def register_plot_routes(app, server):
         sessions = getattr(server, "sessions", {})
         if session_id in sessions:
             sessions[session_id]["plot_mode"] = enabled
+            # 开启时可随请求携带风格，先落库再生成首批选项
+            if "plot_choice_style" in data:
+                sessions[session_id]["plot_choice_style"] = str(
+                    data.get("plot_choice_style") or ""
+                )
             try:
                 server._save_data("sessions")
             except Exception:
@@ -279,6 +287,8 @@ def register_plot_routes(app, server):
         from nbot.plot.choice_generator import PlotChoiceGenerator
         from nbot.plot.models import PlotChoice as PlotChoiceModel
 
+        plot_choice_style = str(session.get("plot_choice_style") or "")
+
         generator = PlotChoiceGenerator()
         try:
             loop = _asyncio.new_event_loop()
@@ -289,6 +299,7 @@ def register_plot_routes(app, server):
                         turn_context,
                         recent_history=recent_history,
                         session_id=conversation_id or "",
+                        style=plot_choice_style,
                     )
                 )
             finally:

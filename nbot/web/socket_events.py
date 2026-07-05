@@ -255,6 +255,11 @@ def register_socket_events(server):
                     plot_real_time_sync = session_data.get("plot_real_time_sync")
                 if plot_real_time_sync:
                     req_metadata["plot_real_time_sync"] = True
+                plot_choice_style = data.get("plot_choice_style")
+                if plot_choice_style is None:
+                    plot_choice_style = session_data.get("plot_choice_style")
+                if plot_choice_style:
+                    req_metadata["plot_choice_style"] = str(plot_choice_style)
 
             chat_request = adapter.build_chat_request(
                 conversation_id=session_id,

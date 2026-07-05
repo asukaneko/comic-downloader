@@ -73,6 +73,43 @@ _SYSTEM_PROMPT = """\
 只返回 JSON 数组，不要包含其他内容。"""
 
 
+# 预设风格：key -> 追加到 system prompt 的风格要求文本。
+# 前端下拉的既定选项与此一一对应；自定义风格直接传原文，不走此表。
+_STYLE_PRESETS: Dict[str, str] = {
+    "default": "",
+    "sweet": (
+        "整体氛围偏甜蜜暧昧：三个选择都带上恰到好处的心动、亲近或试探，"
+        "在推进剧情的同时让彼此的关系更靠近一步，语气温柔、有暖意。"
+    ),
+    "suspense": (
+        "整体氛围偏悬疑紧张：三个选择都带上不安、悬念或压迫感，"
+        "引入疑点、未解之谜或潜在危机，让玩家有'接下来会发生什么'的紧张预期。"
+    ),
+    "daily": (
+        "整体氛围偏日常轻松：三个选择自然、生活化、带点小趣味，"
+        "像真实相处里的闲聊与小事，不必强行制造大冲突，但仍要带来新的小进展。"
+    ),
+    "dramatic": (
+        "整体氛围偏戏剧转折：三个选择都倾向于制造强烈的情节起伏，"
+        "用意外、抉择、冲突或重大事件推动剧情，让局面产生明显变化。"
+    ),
+}
+
+
+def _build_system_prompt(style: str = "") -> str:
+    """在基础 system prompt 后追加本次的风格要求（若有）。"""
+    style_text = (style or "").strip()
+    if not style_text:
+        return _SYSTEM_PROMPT
+    return (
+        _SYSTEM_PROMPT
+        + "\n\n【本次剧情风格要求】\n"
+        + style_text
+        + "\n注意：风格只影响三个选择的语气与取向，"
+        "上文'必须推进剧情'的铁律与文本写法要求仍然全部适用。"
+    )
+
+
 def _format_recent_history(recent_history: Optional[List[Dict[str, Any]]]) -> str:
     """把最近几轮对话整理成给生成器看的纯文本，用于避免重复并提供新剧情素材。"""
     if not recent_history:
@@ -216,6 +253,7 @@ class PlotChoiceGenerator:
         session_context: Optional[Dict[str, Any]] = None,
         recent_history: Optional[List[Dict[str, Any]]] = None,
         session_id: str = "",
+        style: str = "",
     ) -> List[Dict[str, Any]]:
         """Generate 3 plot choices based on the AI response.
 
@@ -226,6 +264,8 @@ class PlotChoiceGenerator:
             recent_history: 最近几轮对话（[{role, content}, ...]），
                 用于避免选项重复已聊内容并为新剧情提供素材
             session_id: 会话ID，用于token统计
+            style: 本次剧情选项的风格要求文本（空=默认风格），
+                追加到 system prompt 以影响三个选择的语气与取向
 
         Returns:
             list[dict]: [{level, text, intent}, ...]
@@ -240,7 +280,7 @@ class PlotChoiceGenerator:
         try:
             response = ai_client.chat_completion(
                 messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": _build_system_prompt(style)},
                     {"role": "user", "content": user_prompt},
                 ],
                 stream=False,

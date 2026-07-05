@@ -1287,11 +1287,14 @@ class AIPipeline:
         try:
             response_text = result.final_content or ""
             recent_history = self._extract_plot_recent_history(ctx)
+            metadata = getattr(ctx.chat_request, "metadata", {}) or {}
+            plot_choice_style = str(metadata.get("plot_choice_style") or "")
             choices = await generator.generate(
                 response_text,
                 _plot_turn_context_dict(turn_context),
                 recent_history=recent_history,
                 session_id=conversation_id or "",
+                style=plot_choice_style,
             )
             if not choices:
                 return

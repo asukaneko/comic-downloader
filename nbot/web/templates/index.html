@@ -2290,6 +2290,12 @@
                                         <button class="btn btn-ghost btn-xs" @click="loadPlotGraph()">
                                             <i class="fas fa-project-diagram"></i> 故事图
                                         </button>
+                                        <button class="btn btn-ghost btn-xs" @click="openPlotStyleModal(false)" title="编辑剧情选项的语气与风格">
+                                            <i class="fas fa-pen"></i> 编辑回复风格
+                                        </button>
+                                    </div>
+                                    <div v-if="plotStyleLabel" class="plot-style-current">
+                                        <i class="fas fa-masks-theater"></i> 当前风格：{{ plotStyleLabel }}
                                     </div>
                                     <!-- Inline Path Bar (主线路径条) -->
                                     <div v-if="plotMainPath.length" class="plot-path">
@@ -9121,6 +9127,40 @@
             </div>
         </div>
 
+        <!-- 剧情选项风格选择模态框 -->
+        <div v-if="showPlotStyleModal" class="modal-overlay" @click.self="cancelPlotStyle()">
+            <div class="modal" style="max-width: 560px; max-height: 82vh;">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-masks-theater"></i> 剧情选项风格</span>
+                    <button class="modal-close" @click="cancelPlotStyle()">&times;</button>
+                </div>
+                <div class="modal-body" style="overflow-y: auto;">
+                    <p class="plot-style-hint">选择剧情选项的整体语气与取向，之后可在角色状态面板随时修改。</p>
+                    <div class="plot-style-options">
+                        <label v-for="preset in plotStylePresets" :key="preset.key"
+                               class="plot-style-option"
+                               :class="{ active: plotStyleModalConfig.presetKey === preset.key }">
+                            <input type="radio" name="plotStylePreset" :value="preset.key" v-model="plotStyleModalConfig.presetKey">
+                            <span class="plot-style-option-label">{{ preset.label }}</span>
+                            <span class="plot-style-option-desc">{{ preset.desc }}</span>
+                        </label>
+                    </div>
+                    <textarea v-if="plotStyleModalConfig.presetKey === 'custom'"
+                              v-model="plotStyleModalConfig.customText"
+                              class="form-input plot-style-custom"
+                              rows="4"
+                              placeholder="描述你想要的选项风格，例如：三个选择都偏冷峻克制，多用短句和留白……"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="cancelPlotStyle()">取消</button>
+                    <button class="btn btn-primary" @click="confirmPlotStyle()"
+                            :disabled="plotStyleModalConfig.presetKey === 'custom' && !plotStyleModalConfig.customText.trim()">
+                        <i class="fas fa-check"></i> {{ plotStyleModalConfig.isFirstEnable ? '开启剧情模式' : '应用风格' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- 归档提取模态框 (v-show: DOM常驻，切换无延迟) -->
         <div v-show="showRestoreArchiveModal" class="modal-overlay" @click.self="showRestoreArchiveModal = false">
             <div class="modal restore-archive-modal">
@@ -12070,6 +12110,18 @@
                     plotRealTimeSync: false,
                     plotChoices: [],
                     plotChoicesLoading: false,
+                    // 剧情选项风格（会话级）
+                    plotChoiceStyle: '',
+                    showPlotStyleModal: false,
+                    plotStyleModalConfig: { presetKey: 'default', customText: '', isFirstEnable: false },
+                    plotStylePresets: [
+                        { key: 'default', label: '默认推进', desc: '按剧情自然往前推进，语气中性。', text: '' },
+                        { key: 'sweet', label: '甜蜜暧昧', desc: '带心动与亲近，让关系更近一步。', text: '整体氛围偏甜蜜暧昧：三个选择都带上恰到好处的心动、亲近或试探，在推进剧情的同时让彼此的关系更靠近一步，语气温柔、有暖意。' },
+                        { key: 'suspense', label: '悬疑紧张', desc: '带悬念与压迫感，制造紧张预期。', text: '整体氛围偏悬疑紧张：三个选择都带上不安、悬念或压迫感，引入疑点、未解之谜或潜在危机，让玩家有"接下来会发生什么"的紧张预期。' },
+                        { key: 'daily', label: '日常轻松', desc: '自然生活化，带点小趣味。', text: '整体氛围偏日常轻松：三个选择自然、生活化、带点小趣味，像真实相处里的闲聊与小事，不必强行制造大冲突，但仍要带来新的小进展。' },
+                        { key: 'dramatic', label: '戏剧转折', desc: '强烈起伏，用意外与抉择推动。', text: '整体氛围偏戏剧转折：三个选择都倾向于制造强烈的情节起伏，用意外、抉择、冲突或重大事件推动剧情，让局面产生明显变化。' },
+                        { key: 'custom', label: '自定义', desc: '自己描述想要的选项风格。', text: '' },
+                    ],
                     // 移动端：true=显示输入框，false=显示剧情选项（仅 ≤640px 生效）
                     plotMobileInputMode: false,
                     plotCurrentNode: null,
@@ -13223,6 +13275,13 @@
             computed: {
                 hasVisiblePlotChoices() {
                     return !!(this.plotMode && this.plotChoices && this.plotChoices.length > 0);
+                },
+                // 当前剧情风格的可读标签（供状态面板显示；默认/空不显示）
+                plotStyleLabel() {
+                    const text = (this.plotChoiceStyle || '').trim();
+                    if (!text) return '';
+                    const preset = (this.plotStylePresets || []).find(p => p.text && p.text === text);
+                    return preset ? preset.label : '自定义';
                 },
                 // 移动端剧情选项视图：≤640px、有可见选项、且未切到输入框模式
                 isMobilePlotChoiceView() {

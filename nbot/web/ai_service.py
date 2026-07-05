@@ -1441,6 +1441,10 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
             ctx.metadata.setdefault("plot_mode", True)
             if _session_data.get("plot_real_time_sync"):
                 ctx.metadata.setdefault("plot_real_time_sync", True)
+            if _session_data.get("plot_choice_style"):
+                ctx.metadata.setdefault(
+                    "plot_choice_style", _session_data.get("plot_choice_style")
+                )
         ctx.metadata.setdefault("disabled_prompt_keys", _session_data.get("disabled_prompt_keys", []))
         # 注入用户自定义提示词
         ctx.metadata.setdefault("custom_prompts", _session_data.get("custom_prompts", []))

@@ -3039,6 +3039,10 @@ class WebChatServer:
                 metadata.setdefault("plot_mode", True)
                 if session_data.get("plot_real_time_sync"):
                     metadata.setdefault("plot_real_time_sync", True)
+                if session_data.get("plot_choice_style"):
+                    metadata.setdefault(
+                        "plot_choice_style", session_data.get("plot_choice_style")
+                    )
         except Exception:
             pass
         metadata["_gateway_trace_id"] = trace_id

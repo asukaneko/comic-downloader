@@ -5998,6 +5998,10 @@ def main(params):
                     this.currentSession = session;
                     this.plotMode = !!session.plot_mode || localStorage.getItem('plot_mode_' + session.id) === '1';
                     this.plotRealTimeSync = !!session.plot_real_time_sync || localStorage.getItem('plot_real_time_sync_' + session.id) === '1';
+                    this.plotChoiceStyle = session.plot_choice_style || localStorage.getItem('plot_choice_style_' + session.id) || '';
+                    if (this.plotChoiceStyle) {
+                        localStorage.setItem('plot_choice_style_set_' + session.id, '1');
+                    }
                     this.plotChoices = [];
                     if (this.plotMode) {
                         this.loadPlotChoices();
@@ -17012,7 +17016,22 @@ def main(params):
     // ============================================================
 
     async togglePlotMode() {
-        this.plotMode = !this.plotMode;
+        const sid = this.currentSession?.id || this.currentSession?.session_id;
+        // 开启且该会话从未设过风格：先弹风格弹窗，选完再真正开启
+        if (!this.plotMode) {
+            const hasStyle = !!(this.plotChoiceStyle && this.plotChoiceStyle.trim())
+                || (sid && localStorage.getItem('plot_choice_style_set_' + sid) === '1');
+            if (!hasStyle) {
+                this.openPlotStyleModal(true);
+                return;
+            }
+        }
+        await this._applyPlotMode(!this.plotMode);
+    },
+
+    // 真正切换剧情模式（开启时把当前风格随请求带上）
+    async _applyPlotMode(enabled) {
+        this.plotMode = enabled;
         const sid = this.currentSession?.id || this.currentSession?.session_id;
         if (sid) {
             localStorage.setItem('plot_mode_' + sid, this.plotMode ? '1' : '0');
@@ -17029,7 +17048,11 @@ def main(params):
                 this.plotChoices = [];
             }
             try {
-                const res = await api.post('/api/plot/toggle', { session_id: sid, enabled: this.plotMode });
+                const payload = { session_id: sid, enabled: this.plotMode };
+                if (this.plotMode) {
+                    payload.plot_choice_style = this.plotChoiceStyle || '';
+                }
+                await api.post('/api/plot/toggle', payload);
                 // If choices were generated on server, they'll be loaded below
                 // If not (already had choices), also load them
             } catch (e) {
@@ -17043,6 +17066,83 @@ def main(params):
         } else {
             this.plotChoices = [];
             this.plotChoicesLoading = false;
+        }
+    },
+
+    // 打开风格选择弹窗；isFirstEnable=true 表示由"开启剧情模式"触发
+    openPlotStyleModal(isFirstEnable) {
+        const currentText = (this.plotChoiceStyle || '').trim();
+        let presetKey = 'default';
+        let customText = '';
+        if (currentText) {
+            const preset = (this.plotStylePresets || []).find(p => p.text && p.text === currentText);
+            if (preset) {
+                presetKey = preset.key;
+            } else {
+                presetKey = 'custom';
+                customText = currentText;
+            }
+        }
+        this.plotStyleModalConfig = { presetKey, customText, isFirstEnable: !!isFirstEnable };
+        this.showPlotStyleModal = true;
+    },
+
+    cancelPlotStyle() {
+        this.showPlotStyleModal = false;
+    },
+
+    async confirmPlotStyle() {
+        const cfg = this.plotStyleModalConfig || {};
+        let styleText = '';
+        if (cfg.presetKey === 'custom') {
+            styleText = (cfg.customText || '').trim();
+            if (!styleText) {
+                this.showToast('请填写自定义风格内容', 'warning');
+                return;
+            }
+        } else {
+            const preset = (this.plotStylePresets || []).find(p => p.key === cfg.presetKey);
+            styleText = preset ? (preset.text || '') : '';
+        }
+
+        this.plotChoiceStyle = styleText;
+        const sid = this.currentSession?.id || this.currentSession?.session_id;
+        if (sid) {
+            if (this.currentSession) this.currentSession.plot_choice_style = styleText;
+            const sessionInList = this.sessions?.find?.(s => s.id === sid);
+            if (sessionInList) sessionInList.plot_choice_style = styleText;
+            localStorage.setItem('plot_choice_style_' + sid, styleText);
+            localStorage.setItem('plot_choice_style_set_' + sid, '1');
+        }
+        this.showPlotStyleModal = false;
+
+        if (cfg.isFirstEnable) {
+            // 首次开启：风格随 toggle 请求一起提交并生成首批选项
+            await this._applyPlotMode(true);
+            return;
+        }
+
+        // 非首次：持久化风格；若已在剧情模式则重新生成让新风格立即生效
+        if (sid) {
+            try {
+                await api.put('/api/sessions/' + sid, { plot_choice_style: styleText });
+            } catch (e) {
+                console.debug('confirmPlotStyle persist:', e.message);
+            }
+        }
+        this.showToast('剧情风格已更新', 'success');
+        if (this.plotMode && sid) {
+            this.plotChoicesLoading = true;
+            try {
+                const res = await api.post('/api/plot/' + sid + '/regenerate-choices', {});
+                if (res.data && res.data.choices) {
+                    this.plotChoices = this.normalizePlotChoices(res.data.choices);
+                }
+            } catch (e) {
+                console.debug('confirmPlotStyle regenerate:', e.message);
+            } finally {
+                this.plotChoicesLoading = false;
+            }
         }
     },
 

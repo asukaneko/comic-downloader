@@ -162,6 +162,7 @@ def _normalize_session_record(session_id, session):
         else [],
         "plot_mode": bool(session.get("plot_mode")),
         "plot_real_time_sync": bool(session.get("plot_real_time_sync")),
+        "plot_choice_style": str(session.get("plot_choice_style") or ""),
     }
     if not normalized.get("character_id") and normalized.get("sender_name"):
         normalized["character_id"] = normalized["sender_name"]

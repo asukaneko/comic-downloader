@@ -722,6 +722,7 @@ def register_session_routes(app, server):
                     "prompt_stack_debug": session.get("prompt_stack_debug", []),
                     "plot_mode": bool(session.get("plot_mode")),
                     "plot_real_time_sync": bool(session.get("plot_real_time_sync")),
+                    "plot_choice_style": str(session.get("plot_choice_style") or ""),
                 }
             )
 
@@ -870,6 +871,7 @@ def register_session_routes(app, server):
             "session_mode": data.get("session_mode", "character"),
             "plot_mode": bool(data.get("plot_mode")),
             "plot_real_time_sync": bool(data.get("plot_real_time_sync")),
+            "plot_choice_style": str(data.get("plot_choice_style") or ""),
         }
 
         # 群聊模式：附加群聊关联字段
@@ -1016,6 +1018,8 @@ def register_session_routes(app, server):
             session["plot_mode"] = bool(data.get("plot_mode"))
         if "plot_real_time_sync" in data:
             session["plot_real_time_sync"] = bool(data.get("plot_real_time_sync"))
+        if "plot_choice_style" in data:
+            session["plot_choice_style"] = str(data.get("plot_choice_style") or "")
         if "tts_config" in data:
             session["tts_config"] = _normalize_tts_config(data.get("tts_config"))
 
