@@ -1274,40 +1274,59 @@ def _stream_to_web(
         if stop_event and stop_event.is_set():
             break
         line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else raw_line
-        if line and line.startswith("data: "):
+        if not line:
+            continue
+        # 兼容 SSE（data: 前缀）与裸 JSON 两种格式
+        if line.startswith("data: "):
             data_str = line[6:]
-            if data_str.strip() == "[DONE]":
-                break
-            try:
-                data = json.loads(data_str)
-                parsed = protocol.parse_stream_chunk(data)
-                if parsed:
-                    ptype = parsed.get("type", "")
-                    if ptype == "content":
-                        raw = repair_mojibake_text(parsed.get("content", ""))
-                        if raw:
-                            chunk = normalize_chunk(raw)
-                            if chunk:
-                                if not first_chunk_logged:
-                                    first_chunk_logged = True
-                                    _log.info(
-                                        "[StreamTiming] session=%s first provider chunk after %.3fs",
-                                        session_id,
-                                        time.perf_counter() - stream_started_at,
-                                    )
-                                content_parts.append(chunk)
-                                yield {"content": chunk}
-                    elif ptype == "usage":
-                        yield {"usage": parsed.get("usage", {})}
-                    elif ptype == "stop":
-                        pass
-                else:
-                    # 兼容：直接从 data 中提取 usage（OpenAI stream_options）
-                    usage = normalize_usage_dict(data.get("usage"))
-                    if usage:
-                        yield {"usage": usage}
-            except json.JSONDecodeError:
-                continue
+        elif line.startswith("data:"):
+            data_str = line[5:]
+        else:
+            # 非 SSE 格式，跳过（如 Gemini 默认 JSON 数组流的括号行）
+            continue
+        data_str = data_str.strip()
+        if not data_str:
+            continue
+        if data_str == "[DONE]":
+            break
+        try:
+            data = json.loads(data_str)
+        except json.JSONDecodeError:
+            continue
+        try:
+            parsed = protocol.parse_stream_chunk(data)
+            if parsed:
+                ptype = parsed.get("type", "")
+                if ptype == "content":
+                    raw = repair_mojibake_text(parsed.get("content", ""))
+                    if raw:
+                        chunk = normalize_chunk(raw)
+                        if chunk:
+                            if not first_chunk_logged:
+                                first_chunk_logged = True
+                                _log.info(
+                                    "[StreamTiming] session=%s first provider chunk after %.3fs",
+                                    session_id,
+                                    time.perf_counter() - stream_started_at,
+                                )
+                            content_parts.append(chunk)
+                            yield {"content": chunk}
+                elif ptype == "usage":
+                    yield {"usage": parsed.get("usage", {})}
+                elif ptype == "stop":
+                    pass
+            else:
+                # 兼容：直接从 data 中提取 usage（OpenAI stream_options）
+                usage = normalize_usage_dict(data.get("usage"))
+                if usage:
+                    yield {"usage": usage}
+        except Exception as chunk_exc:
+            # 单个 chunk 解析异常不应中断整个流
+            _log.debug(
+                "[StreamParse] session=%s chunk parse failed: %s | data=%s",
+                session_id, chunk_exc, str(data)[:200],
+            )
+            continue
     # 流结束后注入模型信息
     yield {"_model_id": used_model_id, "_model_name": model}
 

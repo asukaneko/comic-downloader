@@ -223,18 +223,27 @@ class GeminiNativeProtocol(ModelProtocol):
         self,
         chunk_data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        candidates = chunk_data.get("candidates", [])
+        candidates = chunk_data.get("candidates") or []
         if not candidates:
+            # 可能是只含 usageMetadata 的尾部 chunk
+            usage = self._parse_usage(chunk_data)
+            if usage:
+                return {"type": "usage", "usage": usage}
             return None
 
-        parts = candidates[0].get("content", {}).get("parts", [])
+        candidate = candidates[0] if isinstance(candidates[0], dict) else {}
+        # content 字段可能为 None（流结束 chunk 只含 finishReason）
+        content_obj = candidate.get("content") or {}
+        parts = content_obj.get("parts") or [] if isinstance(content_obj, dict) else []
         for part in parts:
+            if not isinstance(part, dict):
+                continue
             if "text" in part:
-                text = repair_mojibake_text(part["text"])
+                text = repair_mojibake_text(part.get("text", ""))
                 if text:
                     return {"type": "content", "content": text}
             if "functionCall" in part:
-                fc = part["functionCall"]
+                fc = part.get("functionCall") or {}
                 raw_args = fc.get("args", {})
                 tool_call = {
                     "id": fc.get("id") or f"call_{uuid.uuid4().hex[:12]}",
