@@ -440,8 +440,8 @@ def init_default_tools(server):
             "enabled": True,
             "parameters": {"type": "object", "properties": {}},
             "implementation": {
-                "type": "python",
-                "code": "import datetime; return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')",
+                "type": "builtin",
+                "handler": "get_date_time",
             },
         },
         {
