@@ -449,7 +449,8 @@ def register_socket_events(server):
             if effective_session_id:
                 followup_prompt = (
                     "The pending exec_command is resolved. Use the execution result already in context "
-                    "to continue answering the user, and do not call exec_command again."
+                    "to continue answering the user. If additional commands are needed, you may call "
+                    "exec_command again — each non-whitelisted command will require its own confirmation."
                 )
                 server._trigger_ai_response(
                     effective_session_id,
@@ -459,43 +460,6 @@ def register_socket_events(server):
                 )
             _log.info(
                 f"[confirm_exec] result emitted sid={request.sid}, session={effective_session_id}, approved={approved}"
-            )
-            return
-
-            if approved:
-                exec_result = execute_pending_command(request_id)
-                if exec_result.get("executed"):
-                    cmd = exec_result.get("command", "")
-                    stdout = exec_result.get("stdout", "")
-                    stderr = exec_result.get("stderr", "")
-                    result_content = f"[系统] 用户已确认执行命令 `{cmd}`。\n\n执行结果:\n{stdout}"
-                    if stderr:
-                        result_content += f"\n\n错误输出:\n{stderr}"
-                else:
-                    error_msg = exec_result.get("error", "命令执行失败")
-                    result_content = f"[系统] 执行命令失败: {error_msg}"
-            else:
-                reject_result = reject_pending_command(request_id)
-                cmd = reject_result.get("command", "")
-                result_content = f"[系统] 用户已拒绝执行命令 `{cmd}`。"
-
-            # 追加到会话消息
-            adapter_sock = getattr(server, "web_channel_adapter", None) or get_channel_adapter("web") or WebChannelAdapter()
-            sys_message = adapter_sock.build_message(
-                role="user",
-                content=result_content,
-                sender="system",
-                conversation_id=session_id,
-            )
-            server.session_store.append_message(session_id, sys_message)
-            server.socketio.emit("new_message", sys_message, room=session_id)
-
-            # 触发 AI 继续处理
-            server._trigger_ai_response(
-                session_id,
-                "请根据上述执行结果继续",
-                "system",
-                channel_id="web",
             )
         except Exception as e:
             _log.error(f"[confirm_exec] 处理出错: {e}", exc_info=True)

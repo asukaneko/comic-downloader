@@ -456,21 +456,36 @@ class QQCallbacks(PipelineCallbacks):
             session_id = get_qq_session_id(
                 self.user_id, self.group_id, self.group_user_id
             )
+            session_type = "qq_private" if self.user_id else "qq_group"
             stripped = (user_input or "").strip().lower()
-            is_confirm = any(
-                kw == stripped or (len(stripped) <= 4 and kw in stripped)
-                for kw in _CONFIRM_KEYWORDS
+            if not stripped:
+                return None
+            # 去掉末尾标点，便于匹配"确认。"等
+            stripped_clean = stripped.rstrip("。.!！?？~~")
+            # 单字/单字符关键词仅精确匹配，避免"是否""boy"等误判
+            _confirm_exact = {"是", "y", "ok", "执行"}
+            _reject_exact = {"否", "n", "cancel"}
+            multi_confirm = _CONFIRM_KEYWORDS - _confirm_exact
+            multi_reject = _REJECT_KEYWORDS - _reject_exact
+
+            is_confirm = (
+                stripped in _CONFIRM_KEYWORDS
+                or stripped_clean in _CONFIRM_KEYWORDS
+                or any(stripped_clean == kw for kw in multi_confirm)
+                or stripped_clean in _confirm_exact
             )
-            is_reject = any(
-                kw == stripped or (len(stripped) <= 4 and kw in stripped)
-                for kw in _REJECT_KEYWORDS
+            is_reject = (
+                stripped in _REJECT_KEYWORDS
+                or stripped_clean in _REJECT_KEYWORDS
+                or any(stripped_clean == kw for kw in multi_reject)
+                or stripped_clean in _reject_exact
             )
             if is_confirm and not is_reject:
-                request_id = get_pending_by_session(session_id)
+                request_id = get_pending_by_session(session_id, session_type=session_type)
                 if request_id:
                     return "confirm"
-            elif is_reject:
-                request_id = get_pending_by_session(session_id)
+            elif is_reject and not is_confirm:
+                request_id = get_pending_by_session(session_id, session_type=session_type)
                 if request_id:
                     return "reject"
         except Exception:
@@ -950,8 +965,11 @@ def _run_qq_chat_request(
     # === 确认/拒绝待执行命令检测 ===
     if content and TOOLS_AVAILABLE:
         session_id_check = get_qq_session_id(user_id, group_id, group_user_id)
+        _session_type_check = "qq_private" if user_id else "qq_group"
         content = handle_tool_confirmation(
-            content, session_id_check, log_prefix="QQ Confirm"
+            content, session_id_check,
+            log_prefix="QQ Confirm",
+            session_type=_session_type_check,
         )
         chat_request.content = content
 

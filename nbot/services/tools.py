@@ -74,31 +74,99 @@ EXEC_BLACKLIST_PATTERNS = [
 _pending_executions: Dict[str, Dict] = {}
 # session_id -> request_id（用于 QQ 通道通过 session 查找）
 _session_pending: Dict[str, str] = {}
+# 待执行命令过期时间（秒），默认 10 分钟
+PENDING_EXECUTION_TTL = 600
 
 # 确认关键词（QQ 通道用于检测用户是否同意执行）
 _CONFIRM_KEYWORDS = {'确认', '同意', '确认执行', '是', 'yes', 'y', 'ok', '执行'}
 _REJECT_KEYWORDS = {'取消', '拒绝', '否', '不执行', 'no', 'n', 'cancel'}
 
-def store_pending_execution(session_id: str, command: str, timeout: int = 30) -> str:
+def _pending_key(session_id: str, session_type: str = "") -> str:
+    """构造 _session_pending 的复合 key，避免跨频道 session_id 冲突。"""
+    if session_type:
+        return f"{session_type}:{session_id}"
+    return session_id
+
+def _cleanup_expired_pending_executions() -> None:
+    """清理过期的待执行命令，避免内存泄漏。"""
+    if not _pending_executions:
+        return
+    now = time.time()
+    expired_ids = [
+        rid for rid, info in _pending_executions.items()
+        if now - info.get('timestamp', 0) > PENDING_EXECUTION_TTL
+    ]
+    for rid in expired_ids:
+        info = _pending_executions.pop(rid, None)
+        session_id = (info or {}).get('session_id', '')
+        session_type = (info or {}).get('session_type', '')
+        key = _pending_key(session_id, session_type)
+        if _session_pending.get(key) == rid:
+            del _session_pending[key]
+    if expired_ids:
+        _log.info(f"[PendingExec] 清理过期待执行命令: {len(expired_ids)} 条")
+
+def store_pending_execution(
+    session_id: str,
+    command: str,
+    timeout: int = 30,
+    session_type: str = "",
+) -> str:
     """存储待确认的命令，返回 request_id"""
+    _cleanup_expired_pending_executions()
     request_id = uuid.uuid4().hex
     _pending_executions[request_id] = {
         'command': command,
         'timeout': timeout,
         'session_id': session_id,
+        'session_type': session_type,
         'timestamp': time.time(),
     }
-    _session_pending[session_id] = request_id
-    _log.info(f"[PendingExec] 存储待确认命令: request_id={request_id[:8]}, session={session_id}, cmd={command[:80]}")
+    key = _pending_key(session_id, session_type)
+    # 覆盖前清理旧 pending 的 _pending_executions 残留
+    old_request_id = _session_pending.get(key)
+    if old_request_id and old_request_id != request_id:
+        _pending_executions.pop(old_request_id, None)
+    _session_pending[key] = request_id
+    _log.info(f"[PendingExec] 存储待确认命令: request_id={request_id[:8]}, key={key}, cmd={command[:80]}")
     return request_id
 
-def get_pending_by_session(session_id: str) -> Optional[str]:
+def get_pending_by_session(session_id: str, session_type: str = "") -> Optional[str]:
     """通过 session_id 查找待确认命令的 request_id"""
-    return _session_pending.get(session_id)
+    _cleanup_expired_pending_executions()
+    key = _pending_key(session_id, session_type)
+    request_id = _session_pending.get(key)
+    if not request_id:
+        return None
+    info = _pending_executions.get(request_id)
+    if not info:
+        # _session_pending 中有映射但 _pending_executions 中已无，清理残留
+        _session_pending.pop(key, None)
+        return None
+    # 检查是否过期
+    if time.time() - info.get('timestamp', 0) > PENDING_EXECUTION_TTL:
+        _pending_executions.pop(request_id, None)
+        _session_pending.pop(key, None)
+        _log.info(f"[PendingExec] 待执行命令已过期: request_id={request_id[:8]}")
+        return None
+    return request_id
 
 def get_pending_info(request_id: str) -> Optional[Dict]:
     """查看待执行命令信息"""
-    return _pending_executions.get(request_id)
+    _cleanup_expired_pending_executions()
+    info = _pending_executions.get(request_id)
+    if not info:
+        return None
+    if time.time() - info.get('timestamp', 0) > PENDING_EXECUTION_TTL:
+        _pending_executions.pop(request_id, None)
+        session_id = info.get('session_id', '')
+        session_type = info.get('session_type', '')
+        key = _pending_key(session_id, session_type)
+        if _session_pending.get(key) == request_id:
+            del _session_pending[key]
+        _log.info(f"[PendingExec] 待执行命令已过期: request_id={request_id[:8]}")
+        return None
+    return info
 
 def execute_pending_command(request_id: str) -> Dict[str, Any]:
     """执行待确认的命令，返回执行结果"""
@@ -869,8 +937,8 @@ class ToolExecutor:
             # 不在白名单：返回确认请求（由 execute_tool 负责存储待执行状态）
             if not is_whitelisted:
                 return {
-                    "success": False,
-                    "error": "需要用户确认",
+                    "success": True,
+                    "pending": True,
                     "command": command,
                     "require_confirmation": True,
                     "main_command": main_cmd,
@@ -1847,7 +1915,8 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any], context: Dict = None
         request_id = store_pending_execution(
             context['session_id'],
             result.get('command', ''),
-            arguments.get('timeout', 30)
+            arguments.get('timeout', 30),
+            session_type=str(context.get('session_type', '')),
         )
         result['request_id'] = request_id
     return result

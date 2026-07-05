@@ -341,6 +341,7 @@ def answer_telegram_update(
         parsed["content"],
         f"telegram:{parsed['chat_id']}",
         log_prefix="Telegram",
+        session_type="telegram",
     )
 
     chat_request = adapter.build_chat_request(

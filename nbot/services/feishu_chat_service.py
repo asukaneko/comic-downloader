@@ -560,7 +560,7 @@ class FeishuChatService:
 
         # === 确认/拒绝待执行命令检测 ===
         content = handle_tool_confirmation(
-            content, session_id, log_prefix="FeishuChat"
+            content, session_id, log_prefix="FeishuChat", session_type="feishu"
         )
 
         # 使用飞书适配器构建 ChatRequest

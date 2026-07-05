@@ -453,10 +453,16 @@ def answer_qqbot_event(
     if not token:
         raise ValueError("获取 QQ Bot app_access_token 失败")
 
+    _qqbot_session_type = (
+        "qqbot_group"
+        if (parsed.get("metadata") or {}).get("qqbot_scene") == "group"
+        else "qqbot_private"
+    )
     content = handle_tool_confirmation(
         parsed["content"],
         parsed["conversation_id"],
         log_prefix="QQBot",
+        session_type=_qqbot_session_type,
     )
     session_id = parsed["conversation_id"]
     channel_id = channel.get("id", "")

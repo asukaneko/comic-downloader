@@ -307,6 +307,7 @@ def answer_feishu_event(
         parsed["content"],
         f"feishu:{parsed['chat_id']}",
         log_prefix="Feishu",
+        session_type="feishu",
     )
 
     # 注入飞书凭证到附件，供中间件下载使用

@@ -2663,6 +2663,9 @@ class AIPipeline:
 
 _CONFIRM_KEYWORDS = {"确认", "同意", "确认执行", "是", "yes", "y", "ok", "执行"}
 _REJECT_KEYWORDS = {"取消", "拒绝", "否", "不执行", "no", "n", "cancel"}
+# 单字/单字符关键词容易误判（如"是"、"y"），单独维护并要求精确匹配
+_CONFIRM_EXACT = {"是", "y", "ok", "执行"}
+_REJECT_EXACT = {"否", "n", "cancel"}
 
 
 def handle_tool_confirmation(
@@ -2670,6 +2673,7 @@ def handle_tool_confirmation(
     session_id: str,
     *,
     log_prefix: str = "",
+    session_type: str = "",
 ) -> str:
     """检测并处理工具确认/拒绝。
 
@@ -2678,16 +2682,44 @@ def handle_tool_confirmation(
     如果是拒绝，则拒绝待处理命令并返回拒绝文本。
     如果不是确认/拒绝，返回原始 content。
 
+    匹配规则（严格，避免误判）：
+    - 用户输入去空白并转小写后，必须完全等于某个关键词；
+    - 或者是关键词加上标点（如"确认。"、"yes!"）。
+
+    Args:
+        session_type: 可选的频道类型（如 "qq_private"/"qq_group"/"web"/"feishu"），
+            用于构造复合 key 避免跨频道 session_id 冲突。
+
     Returns:
         替换后的消息内容（原始内容 或 确认/拒绝结果文本）
     """
     stripped = (content or "").strip().lower()
-    is_confirm = stripped in _CONFIRM_KEYWORDS or (
-        len(stripped) <= 4 and any(kw in stripped for kw in _CONFIRM_KEYWORDS)
+    if not stripped:
+        return content
+
+    # 去掉末尾常见标点，便于匹配"确认。"、"yes!"等
+    stripped_clean = stripped.rstrip("。.!！?？~~")
+
+    # 多字关键词允许包含匹配（但要求整句就是该词或其加标点形式）
+    multi_confirm = _CONFIRM_KEYWORDS - _CONFIRM_EXACT
+    multi_reject = _REJECT_KEYWORDS - _REJECT_EXACT
+
+    is_confirm = (
+        stripped in _CONFIRM_KEYWORDS
+        or stripped_clean in _CONFIRM_KEYWORDS
+        or any(stripped_clean == kw for kw in multi_confirm)
     )
-    is_reject = stripped in _REJECT_KEYWORDS or (
-        len(stripped) <= 4 and any(kw in stripped for kw in _REJECT_KEYWORDS)
+    # 单字/单字符关键词仅精确匹配，避免"是否""boy"等误判
+    if not is_confirm:
+        is_confirm = stripped_clean in _CONFIRM_EXACT
+
+    is_reject = (
+        stripped in _REJECT_KEYWORDS
+        or stripped_clean in _REJECT_KEYWORDS
+        or any(stripped_clean == kw for kw in multi_reject)
     )
+    if not is_reject:
+        is_reject = stripped_clean in _REJECT_EXACT
 
     if not (is_confirm or is_reject):
         return content
@@ -2705,7 +2737,7 @@ def handle_tool_confirmation(
         if not get_pending_by_session:
             return content
 
-        request_id = get_pending_by_session(session_id)
+        request_id = get_pending_by_session(session_id, session_type=session_type)
         if not request_id:
             return content
 
