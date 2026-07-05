@@ -226,6 +226,16 @@ class WebSessionStore:
         session = self.get_session(session_id) or {}
         if self._filter_message(session_id, message, session) is None:
             return messages
+        # 幂等：若同 id 消息已存在（如流式消息在剥离 [send_image:] 标签后被再次持久化），
+        # 更新原条目而非追加，避免出现两个内容相同的气泡。
+        msg_id = message.get("id")
+        if msg_id:
+            for idx, existing in enumerate(messages):
+                if existing.get("id") == msg_id:
+                    messages[idx] = message
+                    if self.save_callback:
+                        self.save_callback()
+                    return messages
         messages.append(message)
         if self.save_callback:
             self.save_callback()
