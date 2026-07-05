@@ -2142,13 +2142,13 @@ class AIPipeline:
                 )
                 # 使用模型配置的 failover_timeout，0 表示使用默认 120s
                 request_timeout = config.get("failover_timeout", 0) or 120
-                _log.warning("[FailoverDebug] model=%s msg_count=%d has_tools=%s payload_keys=%s",
+                _log.info("[FailoverDebug] model=%s msg_count=%d has_tools=%s payload_keys=%s",
                     model_name, len(messages), str(bool(tools)), str(list(payload.keys())))
                 resp = requests.post(
                     url, json=payload, headers=headers, timeout=request_timeout
                 )
                 if resp.status_code != 200:
-                    _log.warning("[FailoverDebug] url=%s status=%d body=%s", url, resp.status_code, resp.text[:500])
+                    _log.info("[FailoverDebug] url=%s status=%d body=%s", url, resp.status_code, resp.text[:500])
                 resp.raise_for_status()
                 normalized = protocol.parse_response(
                     response_json_utf8(resp),
