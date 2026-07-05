@@ -88,6 +88,12 @@ class GeminiNativeProtocol(ModelProtocol):
             else:
                 url = f"{url_base}/models/{model}:{action}"
 
+        # 流式请求统一加 alt=sse，让 Gemini 返回 SSE 格式（data: ... 前缀）
+        # 否则默认返回 JSON 数组流，难以用 SSE 解析器处理
+        if stream and "streamGenerateContent" in url and "alt=sse" not in url:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}alt=sse"
+
         # Google 官方 API 需要 ?key=xxx 认证
         if api_key and ("googleapis.com" in url or "google.com" in url):
             separator = "&" if "?" in url else "?"

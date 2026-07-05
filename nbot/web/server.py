@@ -2394,6 +2394,8 @@ class WebChatServer:
                     _log.info("Tool result: %s", tool_result)
                     return tool_result
 
+                import time as _time
+                _wf_start = _time.perf_counter()
                 loop_result = run_tool_call_loop(
                     messages,
                     model_call,
@@ -2401,10 +2403,42 @@ class WebChatServer:
                     max_iterations=50,
                     max_consecutive_errors=3,
                 )
+                _wf_duration_ms = (_time.perf_counter() - _wf_start) * 1000.0
 
                 final_response = resolve_loop_final_content(
                     loop_result, default_content="工作流执行完成"
                 )
+
+                # 记录 token 用量到统计（多轮工具调用累计值）
+                try:
+                    if loop_result.usage and loop_result.usage.get("total_tokens"):
+                        actual_model = loop_result.model_name or workflow.get("model", "") or getattr(self, "ai_model", "") or ""
+                        input_price = None
+                        output_price = None
+                        active_model_id = getattr(self, "active_model_id", None)
+                        if active_model_id:
+                            for m in getattr(self, "ai_models", []) or []:
+                                if m.get("id") == active_model_id:
+                                    input_price = m.get("input_price")
+                                    output_price = m.get("output_price")
+                                    break
+                        # 首字符时间：工作流为非流式聚合，TTFT ≈ 完整时间
+                        self.token_stats_manager.record_usage(
+                            loop_result.usage.get("prompt_tokens", 0),
+                            loop_result.usage.get("completion_tokens", 0),
+                            total_tokens=loop_result.usage.get("total_tokens", 0),
+                            model=actual_model,
+                            session_id=session_id,
+                            channel_type="web",
+                            user_id=session_id,
+                            source="workflow",
+                            duration_ms=_wf_duration_ms,
+                            ttft_ms=_wf_duration_ms,
+                            input_price=input_price,
+                            output_price=output_price,
+                        )
+                except Exception as e:
+                    _log.warning("记录工作流 token 统计失败: %s", e)
 
                 # 保存 AI 回复到会话
                 assistant_message = _build_workflow_assistant_message(

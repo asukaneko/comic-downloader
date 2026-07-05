@@ -1130,6 +1130,7 @@ def _stream_to_web(
         base_url,
         model=model,
         append_base_url_path=append_base_url_path,
+        stream=True,
         api_key=api_key,
     )
     headers = protocol.build_headers(api_key, stream=True)
@@ -1170,6 +1171,7 @@ def _stream_to_web(
                 cfg.get("base_url", ""),
                 model=cfg.get("model", ""),
                 append_base_url_path=cfg.get("append_base_url_path", True),
+                stream=True,
                 api_key=cfg.get("api_key", ""),
             )
             cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=True)
@@ -1629,6 +1631,8 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     for speaker in round_robin_speakers:
                         try:
                             sp_ctx = _context_for_speaker(speaker)
+                            import time as _time
+                            _sp_start = _time.perf_counter()
                             sp_result = pipeline.process(
                                 sp_ctx, callbacks,
                                 tools=tools,
@@ -1636,12 +1640,17 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                                 hook_runtime=hook_runtime,
                                 group_context=group_context,
                             )
+                            _sp_duration_ms = (_time.perf_counter() - _sp_start) * 1000.0
                             _speaker_results.append({
                                 "speaker_id": speaker,
                                 "speaker_name": sp_ctx.metadata.get("group_speaker_name", speaker),
                                 "content": sp_result.final_content or "",
                                 "assistant_message": sp_result.assistant_message,
                             })
+                            if not sp_result.metadata:
+                                sp_result.metadata = {}
+                            sp_result.metadata.setdefault("duration_ms", _sp_duration_ms)
+                            sp_result.metadata.setdefault("ttft_ms", _sp_duration_ms)
                             _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
                         except Exception as sp_err:
                             _log.error("group sequential speaker %s failed: %s", speaker, sp_err)
@@ -1653,6 +1662,8 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     def _run_speaker(speaker_id):
                         try:
                             sp_ctx = _context_for_speaker(speaker_id)
+                            import time as _time
+                            _sp_start = _time.perf_counter()
                             sp_result = pipeline.process(
                                 sp_ctx, callbacks,
                                 tools=tools,
@@ -1660,12 +1671,17 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                                 hook_runtime=hook_runtime,
                                 group_context=group_context,
                             )
+                            _sp_duration_ms = (_time.perf_counter() - _sp_start) * 1000.0
                             _speaker_results.append({
                                 "speaker_id": speaker_id,
                                 "speaker_name": sp_ctx.metadata.get("group_speaker_name", speaker_id),
                                 "content": sp_result.final_content or "",
                                 "assistant_message": sp_result.assistant_message,
                             })
+                            if not sp_result.metadata:
+                                sp_result.metadata = {}
+                            sp_result.metadata.setdefault("duration_ms", _sp_duration_ms)
+                            sp_result.metadata.setdefault("ttft_ms", _sp_duration_ms)
                             _update_web_token_stats(server, sp_result.usage, session_id, sp_result.metadata)
                         except Exception as sp_err:
                             _speaker_errors.append((speaker_id, sp_err))
@@ -1734,6 +1750,8 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     if not chat_request.metadata:
                         chat_request.metadata = {}
                     chat_request.metadata["group_round_complete"] = True
+                import time as _time
+                _pipe_start = _time.perf_counter()
                 result = pipeline.process(
                     ctx, callbacks,
                     tools=tools,
@@ -1741,9 +1759,16 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                     hook_runtime=hook_runtime,
                     group_context=group_context,
                 )
+                _pipe_duration_ms = (_time.perf_counter() - _pipe_start) * 1000.0
 
             # 更新 token 统计（并行发送模式下 result 为 None）
             if result:
+                # 注入时间指标到 metadata，供 _update_web_token_stats 提取
+                if not result.metadata:
+                    result.metadata = {}
+                result.metadata.setdefault("duration_ms", _pipe_duration_ms)
+                # 非流式调用：TTFT ≈ 完整时间
+                result.metadata.setdefault("ttft_ms", _pipe_duration_ms)
                 _update_web_token_stats(server, result.usage, session_id, result.metadata)
 
             # === AI 完成后，记录 Gateway 事件（Web 异步场景）===
@@ -1916,6 +1941,10 @@ def _update_web_token_stats(server, usage: dict, session_id: str, metadata: dict
         except Exception:
             pass
 
+        # 从 metadata 提取时间指标（由调用方测量并传入）
+        duration_ms = (metadata or {}).get("duration_ms")
+        ttft_ms = (metadata or {}).get("ttft_ms")
+
         get_token_stats_manager().record_usage(
             usage.get("prompt_tokens", 0),
             usage.get("completion_tokens", 0),
@@ -1925,6 +1954,8 @@ def _update_web_token_stats(server, usage: dict, session_id: str, metadata: dict
             channel_type="web",
             user_id=session_id,
             source="web",
+            duration_ms=duration_ms,
+            ttft_ms=ttft_ms,
             input_price=input_price,
             output_price=output_price,
         )

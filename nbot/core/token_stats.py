@@ -257,6 +257,7 @@ class TokenStatsManager:
         source: str = "api",
         purpose: str = PURPOSE_CHAT,
         duration_ms: Optional[float] = None,
+        ttft_ms: Optional[float] = None,
         input_price: Optional[float] = None,
         output_price: Optional[float] = None,
     ):
@@ -264,6 +265,8 @@ class TokenStatsManager:
 
         Args:
             purpose: 用途分类，使用 PURPOSE_* 常量
+            duration_ms: 完整响应时间（毫秒）
+            ttft_ms: 首字符时间（Time To First Token，毫秒）
         """
         try:
             prompt_tokens = max(0, int(prompt_tokens or 0))
@@ -387,6 +390,11 @@ class TokenStatsManager:
                     record["duration_ms"] = max(0.0, float(duration_ms))
                 except (TypeError, ValueError):
                     pass
+            if ttft_ms is not None:
+                try:
+                    record["ttft_ms"] = max(0.0, float(ttft_ms))
+                except (TypeError, ValueError):
+                    pass
 
             records = stats.setdefault("records", [])
             records.append(record)
@@ -448,6 +456,8 @@ class TokenStatsManager:
                     "estimated_cost": f"{float(stats.get('estimated_cost', 0) or 0):.2f}",
                     "active_sessions": len(stats.get("sessions", {})),
                     "avg_response_time": "0",
+                    "avg_ttft": "0",
+                    "avg_duration": "0",
                     "history": [],
                     "recent_records": recent_records,
                     "records": recent_records,
@@ -480,6 +490,7 @@ class TokenStatsManager:
         message_count = sum(h.get("message_count", 0) for h in history)
         total_cost = sum(float(h.get("cost", 0) or 0) for h in history)
         durations = []
+        ttfts = []
         for record in records:
             try:
                 duration = float(record.get("duration_ms", 0) or 0)
@@ -487,8 +498,24 @@ class TokenStatsManager:
                 continue
             if duration > 0:
                 durations.append(duration)
+            try:
+                ttft = float(record.get("ttft_ms", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if ttft > 0:
+                ttfts.append(ttft)
         avg_response_time = (
             f"{(sum(durations) / len(durations) / 1000):.1f}"
+            if durations
+            else "0"
+        )
+        avg_ttft = (
+            f"{(sum(ttfts) / len(ttfts) / 1000):.2f}"
+            if ttfts
+            else "0"
+        )
+        avg_duration = (
+            f"{(sum(durations) / len(durations) / 1000):.2f}"
             if durations
             else "0"
         )
@@ -523,6 +550,8 @@ class TokenStatsManager:
             "estimated_cost": f"{total_cost:.2f}",
             "active_sessions": active_sessions,
             "avg_response_time": avg_response_time,
+            "avg_ttft": avg_ttft,
+            "avg_duration": avg_duration,
             "history": history,
             "recent_records": recent_records,
             "records": recent_records,

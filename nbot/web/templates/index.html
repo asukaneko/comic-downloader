@@ -6566,15 +6566,6 @@
                         <!-- 用量概览 -->
                         <div class="usage-overview">
                             <div class="overview-card token-fade-up">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #ec4899, #f43f5e);">
-                                    <i class="fas fa-comments"></i>
-                                </div>
-                                <div class="overview-content">
-                                    <div class="overview-label">{{ $t('tokens.overview_calls') }}</div>
-                                    <div class="overview-value">{{ formatNumber(tokenStats.message_count || 0) }}</div>
-                                </div>
-                            </div>
-                            <div class="overview-card token-fade-up">
                                 <div class="overview-icon" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">
                                     <i class="fas fa-microchip"></i>
                                 </div>
@@ -6602,12 +6593,21 @@
                                 </div>
                             </div>
                             <div class="overview-card token-fade-up">
-                                <div class="overview-icon" style="background: linear-gradient(135deg, #f59e0b, #f97316);">
-                                    <i class="fas fa-tachometer-alt"></i>
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #10b981, #34d399);">
+                                    <i class="fas fa-bolt"></i>
                                 </div>
                                 <div class="overview-content">
-                                    <div class="overview-label">{{ $t('tokens.avg_response_time') }}</div>
-                                    <div class="overview-value">{{ tokenStats.avg_response_time || '0' }}s</div>
+                                    <div class="overview-label">{{ $t('tokens.avg_ttft') }}</div>
+                                    <div class="overview-value">{{ formatTtft(tokenStats.avg_ttft) }}s</div>
+                                </div>
+                            </div>
+                            <div class="overview-card token-fade-up">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #8b5cf6, #a78bfa);">
+                                    <i class="fas fa-hourglass-half"></i>
+                                </div>
+                                <div class="overview-content">
+                                    <div class="overview-label">{{ $t('tokens.avg_duration') }}</div>
+                                    <div class="overview-value">{{ formatDuration(tokenStats.avg_duration) }}s</div>
                                 </div>
                             </div>
                             <div class="overview-card token-fade-up">
@@ -6736,6 +6736,8 @@
                                             <th>输入 Token</th>
                                             <th>输出 Token</th>
                                             <th>总计</th>
+                                            <th>{{ $t('tokens.table_ttft') }}</th>
+                                            <th>{{ $t('tokens.table_duration') }}</th>
                                             <th>预估费用</th>
                                         </tr>
                                     </thead>
@@ -6749,6 +6751,8 @@
                                             <td>{{ formatNumber(record.input) }}</td>
                                             <td>{{ formatNumber(record.output) }}</td>
                                             <td>{{ formatNumber(record.total || (record.input + record.output)) }}</td>
+                                            <td>{{ formatTtft(record.ttft_ms) }}</td>
+                                            <td>{{ formatDuration(record.duration_ms) }}</td>
                                             <td>¥{{ record.cost }}</td>
                                         </tr>
                                     </tbody>

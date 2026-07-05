@@ -16561,6 +16561,25 @@ def main(params):
                     return num.toLocaleString('zh-CN');
                 },
 
+                // 格式化 TTFT / Duration 字段
+                // - 已是秒的字符串（后端 avg_ttft/avg_duration）：直接回显
+                // - 毫秒数值（record.ttft_ms / record.duration_ms）：转为秒
+                formatTtft(value) {
+                    if (value === undefined || value === null || value === '') return '-';
+                    if (typeof value === 'string') {
+                        const n = parseFloat(value);
+                        if (isNaN(n)) return value;
+                        return n > 0 ? n.toFixed(2) : '0';
+                    }
+                    const ms = parseFloat(value);
+                    if (isNaN(ms) || ms <= 0) return '-';
+                    return (ms / 1000).toFixed(2);
+                },
+
+                formatDuration(value) {
+                    return this.formatTtft(value);
+                },
+
                 sparklinePoints(type) {
                     let data = [];
                     if (type === 'messages' && this.messageTrendData) {

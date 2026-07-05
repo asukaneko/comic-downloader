@@ -99,6 +99,7 @@ def _record_channel_token_stats(ctx: "PipelineContext", result: "PipelineResult"
       - source: 来源标识
     可选:
       - input_price / output_price: 自定义价格（元/百万token）
+      - duration_ms / ttft_ms: 时间指标（毫秒）
     """
     try:
         usage = result.usage if result else {}
@@ -128,6 +129,9 @@ def _record_channel_token_stats(ctx: "PipelineContext", result: "PipelineResult"
 
         input_price = ctx.metadata.get("input_price")
         output_price = ctx.metadata.get("output_price")
+        # 时间指标：优先从 result.metadata，回退到 ctx.metadata
+        duration_ms = meta.get("duration_ms") or ctx.metadata.get("duration_ms")
+        ttft_ms = meta.get("ttft_ms") or ctx.metadata.get("ttft_ms")
 
         get_token_stats_manager().record_usage(
             usage.get("prompt_tokens", 0),
@@ -138,6 +142,8 @@ def _record_channel_token_stats(ctx: "PipelineContext", result: "PipelineResult"
             channel_type=channel_type,
             user_id=user_id,
             source=source,
+            duration_ms=duration_ms,
+            ttft_ms=ttft_ms,
             input_price=input_price,
             output_price=output_price,
         )
@@ -529,6 +535,18 @@ class PipelineCallbacks(ABC):
         self, ctx: PipelineContext, result: PipelineResult
     ) -> None:
         """AI 响应完成后的回调。默认自动记录 token 用量。"""
+        # 计算 duration_ms / ttft_ms（非流式调用 TTFT ≈ duration）
+        try:
+            start_time = ctx.metadata.pop("_pipeline_start_time", None)
+            if start_time is not None:
+                import time as _time
+                duration_ms = (_time.perf_counter() - start_time) * 1000.0
+                if result.metadata is None:
+                    result.metadata = {}
+                result.metadata.setdefault("duration_ms", duration_ms)
+                result.metadata.setdefault("ttft_ms", duration_ms)
+        except Exception:
+            pass
         _record_channel_token_stats(ctx, result)
 
     # ---- 表情包 ----
@@ -664,6 +682,9 @@ class AIPipeline:
         self._hook_runtime = hook_runtime
         self._group_context = group_context
         self._reset_hook_runtime_turn()
+        # 记录管道起始时间，供 on_response_complete 计算 duration
+        import time as _time
+        ctx.metadata.setdefault("_pipeline_start_time", _time.perf_counter())
         self._emit_hook("conversation.before_receive", ctx)
 
         # Phase 0: 群聊发言角色选择（群聊模式下）
@@ -2012,8 +2033,11 @@ class AIPipeline:
     ) -> None:
         """运行流式模型调用。"""
         import uuid
+        import time as _time
         message_id = str(uuid.uuid4())
         full_content = ""
+        stream_start = _time.perf_counter()
+        ttft_ms = None
 
         try:
             for event in streamer(ctx.messages, stop_event=ctx.stop_event):
@@ -2044,7 +2068,8 @@ class AIPipeline:
                     continue
 
                 if not full_content:
-                    # 首块
+                    # 首块：记录 TTFT（Time To First Token）
+                    ttft_ms = (_time.perf_counter() - stream_start) * 1000.0
                     msg = {"role": "assistant", "content": "", "id": message_id}
                     self._emit_hook("model.on_stream_chunk", ctx)
                     callbacks.on_stream_start(ctx, msg)
@@ -2063,6 +2088,14 @@ class AIPipeline:
             full_content = full_content or f"流式输出失败: {e}"
 
         ctx.final_content = full_content
+        # 记录流式响应的时间指标
+        duration_ms = (_time.perf_counter() - stream_start) * 1000.0
+        ctx.metadata["duration_ms"] = duration_ms
+        if ttft_ms is not None:
+            ctx.metadata["ttft_ms"] = ttft_ms
+        else:
+            # 没收到任何 chunk（失败兜底），TTFT ≈ duration
+            ctx.metadata["ttft_ms"] = duration_ms
         # 流式在首块到达前就失败（如 400），需要创建消息并把错误文本送到前端
         if full_content and not ctx.streamed_message:
             msg = {"role": "assistant", "content": "", "id": message_id}
