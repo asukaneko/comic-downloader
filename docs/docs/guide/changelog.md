@@ -1,5 +1,37 @@
 # 更新日志
 
+## [3.0.7] - 2026-07-05
+
+### 🌐 WebDAV 备份与同步
+
+- 新增 WebDAV 配置备份与同步功能：填写 WebDAV 根地址（兼容坚果云等主流服务），自动创建 `nekobot/` 目录并上传/下载加密后的 `config.nbotcfg` 配置包，实现多端配置同步
+- Web 设置页面新增「WebDAV 备份」标签页，提供「保存配置 / 测试连接 / 查询远程 / 立即备份 / 立即同步」完整操作面板，配置密码支持掩码脱敏与回填
+- 新增 `include_portraits` 参数，可选将角色立绘文件一并上传到 `nekobot/portraits/` 子目录，同步时自动恢复到本地 `static/uploads/portraits/`
+- 立绘同步支持 PROPFIND 优先、清单文件回退的双策略：坚果云等限制 PROPFIND 的服务器仍可正常工作
+- 新增 `nbot/web/webdav_backup.py` 核心模块与 `nbot/web/routes/webdav_backup.py` 路由模块，提供 `/api/webdav/{config,test,info,backup,sync}` 五个 API
+- 操作结果展示支持错误状态样式、Toast 进度提示与立绘上传/下载统计
+
+### ⚙️ 核心功能
+
+- 支持会话级 AI 自动状态评估轮次配置：新增 `auto_state_interval` 字段（可为 null / 0 / 1-50），允许为单个会话自定义评估频率，前端设置面板提供「全局默认 / 禁用 / 每 N 轮」三档选择
+- 优化工具确认系统的会话隔离：为 QQ 私聊/群聊、QQBot、飞书、Telegram、Web 等频道传入 `session_type`，构建复合键避免跨频道 `session_id` 冲突
+- 工具确认关键词匹配优化：建立 `_CONFIRM_EXACT` / `_REJECT_EXACT` 精确匹配集合，防止「是否」误判为「是」、「boy」误判为「y」等单字误判；支持去除末尾标点后再匹配
+- 引入 `PENDING_EXECUTION_TTL`（600 秒）自动清理过期待执行命令，防止内存泄漏；`get_pending_by_session` / `get_pending_info` 增加过期检查
+- `ToolExecutor` 确认请求返回值由 `success=False` 改为 `success=True, pending=True`，语义更准确
+- 调整 `FailoverDebug` 调试日志等级，从 `warning` 降为 `info`，减少误报噪音
+
+### 🖥️ Web UI 改进
+
+- 重构设置页面 UI：将分散的设置卡片合并为单张大玻璃卡片，统一区块间距管理（`:not(:first-child)` 替换内联 `margin-top`），浅色主题与移动端样式同步优化
+- 移除冗余的内联 `style="margin-top: 28px;"` 属性，HTML 模板结构更整洁
+
+### 📖 文档
+
+- 新增 `nbot/web/webdav_backup.md` WebDAV 备份同步模块文档
+- 同步更新 VitePress 侧边栏导航，登记 `webdav_backup` 条目
+
+---
+
 ## [3.0.6] - 2026-07-05
 
 ### 🎬 剧情模式

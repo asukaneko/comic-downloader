@@ -239,6 +239,7 @@ export default defineConfig({
                     { text: 'server - 服务入口', link: '/guide/nbot/web/server.md' },
                     { text: 'routes - API路由', link: '/guide/nbot/web/routes.md' },
                     { text: 'file_gateway - 文件网关', link: '/guide/nbot/web/file_gateway.md' },
+                    { text: 'webdav_backup - WebDAV 备份同步', link: '/guide/nbot/web/webdav_backup.md' },
                     { text: 'socket_events - Socket事件', link: '/guide/nbot/web/socket_events.md' },
                     { text: 'sessions_db - 会话数据库', link: '/guide/nbot/web/sessions_db.md' },
                     { text: 'persistence - 数据持久化', link: '/guide/nbot/web/persistence.md' },
