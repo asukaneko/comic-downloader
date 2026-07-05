@@ -7166,44 +7166,47 @@
                     <div v-if="currentPage === 'settings'" class="fade-in">
                         <div class="settings-page">
 
-                            <!-- Header -->
-                            <div class="settings-header">
-                                <div class="settings-header-left">
-                                    <div class="settings-header-title">
-                                        <i class="fas fa-cog"></i>
-                                        {{ $t('page.settings') }}
+                            <!-- Top Card: Header + Tabs merged -->
+                            <div class="settings-top-card">
+                                <div class="settings-header">
+                                    <div class="settings-header-left">
+                                        <div class="settings-header-title">
+                                            <i class="fas fa-cog"></i>
+                                            {{ $t('page.settings') }}
+                                        </div>
+                                        <div class="settings-header-desc">管理服务端口、功能开关、数据维护、配置迁移与版本更新</div>
                                     </div>
-                                    <div class="settings-header-desc">管理服务端口、功能开关、数据维护、配置迁移与版本更新</div>
+                                    <div class="settings-header-actions">
+                                        <button class="btn btn-secondary" @click="refreshSettings" :disabled="isLoading">
+                                            <i class="fas fa-rotate"></i> 刷新
+                                        </button>
+                                        <button class="btn btn-primary" @click="saveSettings" :disabled="isLoading">
+                                            <i class="fas fa-save"></i> 保存设置
+                                        </button>
+                                    </div>
                                 </div>
-                                <div class="settings-header-actions">
-                                    <button class="btn btn-secondary" @click="refreshSettings" :disabled="isLoading">
-                                        <i class="fas fa-rotate"></i> 刷新
-                                    </button>
-                                    <button class="btn btn-primary" @click="saveSettings" :disabled="isLoading">
-                                        <i class="fas fa-save"></i> 保存设置
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Tab Navigation -->
-                            <div class="settings-tabs">
-                                <div class="settings-tab" :class="{ active: settingsTab === 'basic' }" @click="settingsTab = 'basic'">
-                                    <i class="fas fa-sliders"></i> 基础设置
-                                </div>
-                                <div class="settings-tab" :class="{ active: settingsTab === 'features' }" @click="settingsTab = 'features'">
-                                    <i class="fas fa-toggle-on"></i> 功能开关
-                                </div>
-                                <div class="settings-tab" :class="{ active: settingsTab === 'data' }" @click="settingsTab = 'data'">
-                                    <i class="fas fa-database"></i> 数据维护
-                                </div>
-                                <div class="settings-tab" :class="{ active: settingsTab === 'transfer' }" @click="settingsTab = 'transfer'">
-                                    <i class="fas fa-exchange-alt"></i> 配置迁移
-                                </div>
-                                <div class="settings-tab" :class="{ active: settingsTab === 'ssl' }" @click="settingsTab = 'ssl'">
-                                    <i class="fas fa-shield-halved"></i> SSL / 服务
-                                </div>
-                                <div class="settings-tab" :class="{ active: settingsTab === 'update' }" @click="settingsTab = 'update'">
-                                    <i class="fas fa-arrow-up-right-dots"></i> 版本更新
+                                <div class="settings-tabs">
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'basic' }" @click="settingsTab = 'basic'">
+                                        <i class="fas fa-sliders"></i> 基础设置
+                                    </div>
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'features' }" @click="settingsTab = 'features'">
+                                        <i class="fas fa-toggle-on"></i> 功能开关
+                                    </div>
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'data' }" @click="settingsTab = 'data'">
+                                        <i class="fas fa-database"></i> 数据维护
+                                    </div>
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'transfer' }" @click="settingsTab = 'transfer'">
+                                        <i class="fas fa-exchange-alt"></i> 配置迁移
+                                    </div>
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'webdav' }" @click="settingsTab = 'webdav'">
+                                        <i class="fas fa-cloud-arrow-up"></i> WebDAV 备份
+                                    </div>
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'ssl' }" @click="settingsTab = 'ssl'">
+                                        <i class="fas fa-shield-halved"></i> SSL / 服务
+                                    </div>
+                                    <div class="settings-tab" :class="{ active: settingsTab === 'update' }" @click="settingsTab = 'update'">
+                                        <i class="fas fa-arrow-up-right-dots"></i> 版本更新
+                                    </div>
                                 </div>
                             </div>
 
@@ -7577,6 +7580,142 @@
                                             <i class="fas fa-info-circle"></i>
                                             导出内容包含：系统设置、AI 模型、API Keys、频道、Skills、Tools、定时任务、人格、聊天记录和角色立绘，打包为 ZIP 文件。导入支持 ZIP 和旧版 .nbotcfg 格式。<b>不包含登录令牌。</b>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tab: WebDAV 备份 -->
+                            <div v-if="settingsTab === 'webdav'" class="settings-section">
+                                <div class="settings-section-header">
+                                    <div class="settings-section-title"><i class="fas fa-cloud-arrow-up"></i> WebDAV 备份与同步</div>
+                                    <div class="settings-section-desc">填写 WebDAV 根地址，系统自动在该地址下创建 nekobot/ 文件夹存放加密配置包，多端通过拉取同一文件实现同步</div>
+                                </div>
+                                <div class="settings-card">
+                                    <div class="webdav-status-bar" v-if="webdavConfig.last_error">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <span>上次错误：{{ webdavConfig.last_error }}</span>
+                                    </div>
+                                    <div class="webdav-status-bar success" v-else-if="webdavConfig.last_backup_at || webdavConfig.last_sync_at">
+                                        <i class="fas fa-circle-check"></i>
+                                        <span>
+                                            上次备份：{{ webdavConfig.last_backup_at ? formatDateTime(webdavConfig.last_backup_at) : '从未' }}
+                                            ／ 上次同步：{{ webdavConfig.last_sync_at ? formatDateTime(webdavConfig.last_sync_at) : '从未' }}
+                                            <span v-if="webdavConfig.last_file_size">（{{ formatBytes(webdavConfig.last_file_size) }}）</span>
+                                        </span>
+                                    </div>
+
+                                    <div class="settings-grid" style="grid-template-columns: 1fr;">
+                                        <div class="form-group">
+                                            <label class="form-label">WebDAV 根地址</label>
+                                            <input v-model="webdavForm.url" type="text" class="form-input" placeholder="https://dav.jianguoyun.com/dav/">
+                                            <div class="form-hint">
+                                                WebDAV 服务根地址（如坚果云 <code>https://dav.jianguoyun.com/dav/</code>）。
+                                                系统会自动在该地址下创建 <code>nekobot/</code> 文件夹，
+                                                并将加密配置文件存为 <code>nekobot/config.nbotcfg</code>
+                                            </div>
+                                            <div class="form-hint" v-if="webdavConfig.resolved_file_url" style="margin-top: 6px; color: var(--color-success, #10b981);">
+                                                <i class="fas fa-link"></i> 解析后的文件位置：<code>{{ webdavConfig.resolved_file_url }}</code>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="settings-grid">
+                                        <div class="form-group">
+                                            <label class="form-label">WebDAV 用户名</label>
+                                            <input v-model="webdavForm.username" type="text" class="form-input" placeholder="HTTP Basic Auth 用户名（可选）">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">WebDAV 密码</label>
+                                            <input v-model="webdavForm.password" type="password" class="form-input" :placeholder="webdavConfig.has_password ? '已保存（输入新值可覆盖）' : 'HTTP Basic Auth 密码（可选）'">
+                                        </div>
+                                    </div>
+                                    <div class="settings-grid">
+                                        <div class="form-group">
+                                            <label class="form-label">配置包加密密码</label>
+                                            <input v-model="webdavForm.encryption_password" type="password" class="form-input" :placeholder="webdavConfig.has_encryption_password ? '已保存（输入新值可覆盖）' : '用于加密/解密 .nbotcfg'">
+                                            <div class="form-hint">备份和同步使用同一密码；忘记密码将无法恢复已上传的备份</div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">启用 WebDAV 备份</label>
+                                            <div class="toggle-row">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" v-model="webdavForm.enabled">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                                <span class="toggle-row-label" v-text="webdavForm.enabled ? '已开启' : '已关闭'"></span>
+                                            </div>
+                                            <div class="form-hint">开关仅用于标记是否启用，实际备份/同步需点击下方按钮</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="webdav-actions-row">
+                                        <button class="btn btn-secondary" @click="saveWebdavConfig" :disabled="isLoading">
+                                            <i class="fas fa-save"></i> 保存配置
+                                        </button>
+                                        <button class="btn btn-secondary" @click="testWebdavConnection" :disabled="isLoading || isWebdavBusy" title="测试连接并自动创建 nekobot 文件夹">
+                                            <i class="fas fa-plug-circle-check"></i> {{ isWebdavBusy ? '测试中...' : '测试并初始化' }}
+                                        </button>
+                                        <button class="btn btn-secondary" @click="refreshWebdavInfo" :disabled="isLoading || isWebdavBusy">
+                                            <i class="fas fa-circle-info"></i> 查询远程
+                                        </button>
+                                        <button class="btn btn-primary" @click="webdavBackupNow" :disabled="isLoading || isWebdavBusy">
+                                            <i class="fas fa-cloud-arrow-up"></i> {{ isWebdavBusy ? '备份中...' : '立即备份' }}
+                                        </button>
+                                        <button class="btn btn-primary" @click="webdavSyncNow" :disabled="isLoading || isWebdavBusy">
+                                            <i class="fas fa-cloud-arrow-down"></i> {{ isWebdavBusy ? '同步中...' : '立即同步' }}
+                                        </button>
+                                    </div>
+
+                                    <div v-if="webdavTestResult" class="webdav-result-panel" :class="{ 'is-ok': webdavTestResult.ok, 'is-err': !webdavTestResult.ok }">
+                                        <div class="webdav-result-title"><i class="fas" :class="webdavTestResult.ok ? 'fa-circle-check' : 'fa-circle-xmark'"></i> 连接测试</div>
+                                        <div class="webdav-result-body">
+                                            <div>状态：{{ webdavTestResult.ok ? '成功' : '失败' }}<span v-if="webdavTestResult.status_code"> (HTTP {{ webdavTestResult.status_code }})</span></div>
+                                            <div v-if="webdavTestResult.folder_exists !== undefined">
+                                                <code>nekobot/</code> 文件夹：{{ webdavTestResult.folder_exists ? '已就绪' : '未创建' }}
+                                                <span v-if="webdavTestResult.folder_created" style="color: var(--color-success, #10b981);">（本次新建）</span>
+                                            </div>
+                                            <div v-if="webdavTestResult.exists !== undefined">配置文件：{{ webdavTestResult.exists ? '已存在' : '尚未创建' }}</div>
+                                            <div v-if="webdavTestResult.last_modified">最后修改：{{ webdavTestResult.last_modified }}</div>
+                                            <div v-if="webdavTestResult.content_length">文件大小：{{ formatBytes(webdavTestResult.content_length) }}</div>
+                                            <div v-if="webdavTestResult.message" class="webdav-result-message">{{ webdavTestResult.message }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="webdavRemoteInfo" class="webdav-result-panel" :class="{ 'is-ok': webdavRemoteInfo.ok, 'is-err': !webdavRemoteInfo.ok }">
+                                        <div class="webdav-result-title"><i class="fas fa-server"></i> 远程文件信息</div>
+                                        <div class="webdav-result-body">
+                                            <div v-if="!webdavRemoteInfo.exists && webdavRemoteInfo.ok" class="webdav-result-message">{{ webdavRemoteInfo.message || '远程文件尚未创建' }}</div>
+                                            <template v-if="webdavRemoteInfo.exists">
+                                                <div>大小：{{ formatBytes(webdavRemoteInfo.size) }}</div>
+                                                <div>最后修改：{{ webdavRemoteInfo.last_modified }}</div>
+                                            </template>
+                                            <div v-if="webdavRemoteInfo.message && webdavRemoteInfo.exists === false">{{ webdavRemoteInfo.message }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="webdavBackupResult" class="webdav-result-panel is-ok">
+                                        <div class="webdav-result-title"><i class="fas fa-circle-check"></i> 备份成功</div>
+                                        <div class="webdav-result-body">
+                                            <div>已上传大小：{{ formatBytes(webdavBackupResult.size) }}</div>
+                                            <div>时间：{{ formatDateTime(webdavBackupResult.uploaded_at) }}</div>
+                                            <div v-if="webdavBackupResult.last_modified">服务器最后修改：{{ webdavBackupResult.last_modified }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div v-if="webdavSyncResult" class="webdav-result-panel is-ok">
+                                        <div class="webdav-result-title"><i class="fas fa-circle-check"></i> 同步成功</div>
+                                        <div class="webdav-result-body">
+                                            <div>已导入配置项：{{ (webdavSyncResult.imported || []).length }} 个</div>
+                                            <div v-if="(webdavSyncResult.skipped || []).length">已跳过：{{ (webdavSyncResult.skipped || []).length }} 个</div>
+                                            <div v-if="webdavSyncResult.exported_at">备份生成时间：{{ formatDateTime(webdavSyncResult.exported_at) }}</div>
+                                            <div>同步时间：{{ formatDateTime(webdavSyncResult.synced_at) }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="config-transfer-note" style="margin-top: 16px;">
+                                        <i class="fas fa-info-circle"></i>
+                                        填写 WebDAV 根地址后，系统会自动在该地址下创建 <code>nekobot/</code> 文件夹存放加密配置文件 <code>config.nbotcfg</code>。
+                                        备份会上传该文件；同步会从同一位置拉取并应用到本地（覆盖现有配置）。建议多端使用相同的加密密码。
+                                        不含登录令牌与角色立绘（如需迁移立绘请使用「配置迁移」标签的 ZIP 导出）。
                                     </div>
                                 </div>
                             </div>
@@ -12900,6 +13039,36 @@
                     configExportPassword: '',
                     configImportPassword: '',
                     configImportFileName: '',
+                    // WebDAV backup state
+                    webdavConfig: {
+                        enabled: false,
+                        url: '',
+                        resolved_file_url: '',
+                        folder: 'nekobot',
+                        filename: 'config.nbotcfg',
+                        username: '',
+                        password: '',
+                        encryption_password: '',
+                        has_password: false,
+                        has_encryption_password: false,
+                        last_backup_at: '',
+                        last_sync_at: '',
+                        last_error: '',
+                        last_file_size: 0,
+                        last_modified: '',
+                    },
+                    webdavForm: {
+                        enabled: false,
+                        url: '',
+                        username: '',
+                        password: '',
+                        encryption_password: '',
+                    },
+                    isWebdavBusy: false,
+                    webdavTestResult: null,
+                    webdavRemoteInfo: null,
+                    webdavBackupResult: null,
+                    webdavSyncResult: null,
                     sslValidationFiles: [],
                     sslValidationCustomFilename: '',
                     sslEditingFile: '',

@@ -76,6 +76,7 @@ from nbot.web.routes import (
     register_update_routes,
     register_voice_routes,
     register_web_agent_routes,
+    register_webdav_backup_routes,
     register_workflow_routes,
     register_workspace_misc_routes,
     register_workspace_private_routes,
@@ -2913,6 +2914,7 @@ class WebChatServer:
         register_workspace_misc_routes(self.app, self)
         register_config_legacy_routes(self.app, self)
         register_config_transfer_routes(self.app, self)
+        register_webdav_backup_routes(self.app, self)
         register_update_routes(self.app, self)
         register_login_token_routes(self.app, self)
 

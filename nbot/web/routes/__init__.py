@@ -36,6 +36,7 @@ from nbot.web.routes.tts_playground import register_tts_playground_routes
 from nbot.web.routes.update import register_update_routes
 from nbot.web.routes.voice import register_voice_routes
 from nbot.web.routes.web_agent import register_web_agent_routes
+from nbot.web.routes.webdav_backup import register_webdav_backup_routes
 from nbot.web.routes.workflows import register_workflow_routes
 from nbot.web.routes.world_book import register_world_book_routes
 from nbot.web.routes.workspace_private import register_workspace_private_routes
@@ -81,6 +82,7 @@ __all__ = [
     "register_update_routes",
     "register_voice_routes",
     "register_web_agent_routes",
+    "register_webdav_backup_routes",
     "register_workflow_routes",
     "register_world_book_routes",
     "register_workspace_private_routes",

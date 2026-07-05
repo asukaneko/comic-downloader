@@ -2010,6 +2010,7 @@ const NbotMethods = {
                         case 'settings':
                             await this.loadSettings();
                             await this.loadSslValidationFiles();
+                            await this.loadWebdavConfig();
                             break;
                         case 'skills':
                             await this.loadSkills();
@@ -14114,6 +14115,266 @@ def main(params):
                     } finally {
                         this.isLoading = false;
                     }
+                },
+
+                // ── WebDAV 备份与同步 ─────────────────────────────
+
+                async loadWebdavConfig() {
+                    try {
+                        const res = await api.get('/api/webdav/config');
+                        const cfg = res.data || {};
+                        this.webdavConfig = {
+                            enabled: !!cfg.enabled,
+                            url: cfg.url || '',
+                            resolved_file_url: cfg.resolved_file_url || '',
+                            folder: cfg.folder || 'nekobot',
+                            filename: cfg.filename || 'config.nbotcfg',
+                            username: cfg.username || '',
+                            password: cfg.password || '',
+                            encryption_password: cfg.encryption_password || '',
+                            has_password: !!cfg.has_password,
+                            has_encryption_password: !!cfg.has_encryption_password,
+                            last_backup_at: cfg.last_backup_at || '',
+                            last_sync_at: cfg.last_sync_at || '',
+                            last_error: cfg.last_error || '',
+                            last_file_size: cfg.last_file_size || 0,
+                            last_modified: cfg.last_modified || '',
+                        };
+                        // 同步到表单（密码字段留空，避免回填掩码字符串）
+                        this.webdavForm = {
+                            enabled: !!cfg.enabled,
+                            url: cfg.url || '',
+                            username: cfg.username || '',
+                            password: '',
+                            encryption_password: '',
+                        };
+                    } catch (e) {
+                        console.error('加载 WebDAV 配置失败:', e);
+                    }
+                },
+
+                async saveWebdavConfig() {
+                    this.isLoading = true;
+                    try {
+                        const payload = {
+                            enabled: this.webdavForm.enabled,
+                            url: this.webdavForm.url,
+                            username: this.webdavForm.username,
+                        };
+                        // 仅当用户输入了非掩码字符串时才提交密码
+                        if (this.webdavForm.password && !this.webdavForm.password.includes('*')) {
+                            payload.password = this.webdavForm.password;
+                        }
+                        if (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*')) {
+                            payload.encryption_password = this.webdavForm.encryption_password;
+                        }
+                        const res = await api.put('/api/webdav/config', payload);
+                        if (res.data?.success) {
+                            const cfg = res.data.config || {};
+                            this.webdavConfig = {
+                                ...this.webdavConfig,
+                                ...cfg,
+                                has_password: !!cfg.has_password,
+                                has_encryption_password: !!cfg.has_encryption_password,
+                            };
+                            this.webdavForm.password = '';
+                            this.webdavForm.encryption_password = '';
+                            this.showToast('WebDAV 配置已保存', 'success');
+                        } else {
+                            this.showToast(res.data?.error || '保存失败', 'error');
+                        }
+                    } catch (e) {
+                        this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async testWebdavConnection() {
+                    this.isWebdavBusy = true;
+                    this.webdavTestResult = null;
+                    try {
+                        const payload = {};
+                        if (this.webdavForm.url) payload.url = this.webdavForm.url;
+                        if (this.webdavForm.username) payload.username = this.webdavForm.username;
+                        if (this.webdavForm.password && !this.webdavForm.password.includes('*')) {
+                            payload.password = this.webdavForm.password;
+                        }
+                        const res = await api.post('/api/webdav/test', payload);
+                        this.webdavTestResult = {
+                            ok: !!res.data?.success && !!res.data?.ok,
+                            status_code: res.data?.status_code,
+                            exists: res.data?.exists,
+                            folder_exists: res.data?.folder_exists,
+                            folder_created: res.data?.folder_created,
+                            resolved_file_url: res.data?.resolved_file_url || '',
+                            last_modified: res.data?.last_modified || '',
+                            content_length: res.data?.content_length || 0,
+                            message: res.data?.message || (res.data?.success ? '连接成功' : '连接失败'),
+                        };
+                        if (!this.webdavTestResult.ok) {
+                            this.showToast(this.webdavTestResult.message || '测试失败', 'error');
+                        } else {
+                            // 测试成功后刷新配置以同步 resolved_file_url
+                            await this.loadWebdavConfig();
+                            // 文件 HEAD 返回 403 等警告场景下 ok=true，用 info 提示用户
+                            const hasWarning = this.webdavTestResult.status_code === 403;
+                            this.showToast(
+                                this.webdavTestResult.message || '连接成功',
+                                hasWarning ? 'info' : 'success'
+                            );
+                        }
+                    } catch (e) {
+                        this.webdavTestResult = {
+                            ok: false,
+                            message: e.response?.data?.error || e.message,
+                        };
+                        this.showToast('测试失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isWebdavBusy = false;
+                    }
+                },
+
+                async refreshWebdavInfo() {
+                    this.isWebdavBusy = true;
+                    this.webdavRemoteInfo = null;
+                    try {
+                        const res = await api.get('/api/webdav/info');
+                        this.webdavRemoteInfo = {
+                            ok: !!res.data?.success && !!res.data?.ok,
+                            exists: !!res.data?.exists,
+                            size: res.data?.size || 0,
+                            last_modified: res.data?.last_modified || '',
+                            message: res.data?.message || '',
+                        };
+                    } catch (e) {
+                        this.webdavRemoteInfo = {
+                            ok: false,
+                            message: e.response?.data?.error || e.message,
+                        };
+                        this.showToast('查询远程失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isWebdavBusy = false;
+                    }
+                },
+
+                async webdavBackupNow() {
+                    if (!this.webdavForm.url && !this.webdavConfig.url) {
+                        this.showToast('请先填写 WebDAV 根地址', 'error');
+                        return;
+                    }
+                    const hasEncPassword = (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*'))
+                        || this.webdavConfig.has_encryption_password;
+                    if (!hasEncPassword) {
+                        this.showToast('请填写配置包加密密码', 'error');
+                        return;
+                    }
+                    this.showConfirm({
+                        title: '立即备份到 WebDAV',
+                        messageBefore: '确认立即将当前配置加密后上传到 WebDAV 服务器？',
+                        highlight: this.webdavConfig.resolved_file_url || 'nekobot/config.nbotcfg',
+                        messageAfter: '该操作会覆盖远程同名文件。',
+                        confirmText: '立即备份',
+                        cancelText: '取消',
+                        icon: 'fa-cloud-arrow-up',
+                        iconColor: 'var(--accent-primary)',
+                        onConfirm: async () => {
+                            this.isWebdavBusy = true;
+                            this.webdavBackupResult = null;
+                            this.webdavTestResult = null;
+                            this.webdavRemoteInfo = null;
+                            this.webdavSyncResult = null;
+                            try {
+                                const payload = {};
+                                if (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*')) {
+                                    payload.password = this.webdavForm.encryption_password;
+                                }
+                                const res = await api.post('/api/webdav/backup', payload);
+                                if (res.data?.success) {
+                                    this.webdavBackupResult = {
+                                        size: res.data.size || 0,
+                                        uploaded_at: res.data.uploaded_at || '',
+                                        last_modified: res.data.last_modified || '',
+                                    };
+                                    this.showToast(`备份成功 (${this.formatBytes(res.data.size || 0)})`, 'success');
+                                    await this.loadWebdavConfig();
+                                } else {
+                                    this.showToast(res.data?.error || '备份失败', 'error');
+                                }
+                            } catch (e) {
+                                this.showToast('备份失败: ' + (e.response?.data?.error || e.message), 'error');
+                            } finally {
+                                this.isWebdavBusy = false;
+                            }
+                        }
+                    });
+                },
+
+                async webdavSyncNow() {
+                    if (!this.webdavForm.url && !this.webdavConfig.url) {
+                        this.showToast('请先填写 WebDAV 根地址', 'error');
+                        return;
+                    }
+                    const hasEncPassword = (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*'))
+                        || this.webdavConfig.has_encryption_password;
+                    if (!hasEncPassword) {
+                        this.showToast('请填写配置包加密密码', 'error');
+                        return;
+                    }
+                    this.showConfirm({
+                        title: '从 WebDAV 同步配置',
+                        messageBefore: '确认从 WebDAV 服务器拉取配置并覆盖本地现有配置？',
+                        highlight: this.webdavConfig.resolved_file_url || 'nekobot/config.nbotcfg',
+                        messageAfter: '此操作不可撤销，本地配置将被远程版本覆盖。',
+                        confirmText: '立即同步',
+                        cancelText: '取消',
+                        icon: 'fa-cloud-arrow-down',
+                        iconColor: 'var(--color-danger, #ef4444)',
+                        danger: true,
+                        onConfirm: async () => {
+                            this.isWebdavBusy = true;
+                            this.webdavSyncResult = null;
+                            this.webdavTestResult = null;
+                            this.webdavRemoteInfo = null;
+                            this.webdavBackupResult = null;
+                            try {
+                                const payload = {};
+                                if (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*')) {
+                                    payload.password = this.webdavForm.encryption_password;
+                                }
+                                const res = await api.post('/api/webdav/sync', payload);
+                                if (res.data?.success) {
+                                    this.webdavSyncResult = {
+                                        imported: res.data.imported || [],
+                                        skipped: res.data.skipped || [],
+                                        exported_at: res.data.exported_at || '',
+                                        synced_at: res.data.synced_at || '',
+                                        size: res.data.size || 0,
+                                    };
+                                    const cnt = (res.data.imported || []).length;
+                                    this.showToast(`同步成功，已导入 ${cnt} 项配置`, 'success');
+                                    // 同步后重新加载各类配置
+                                    await Promise.all([
+                                        this.loadSettings(),
+                                        this.loadAIConfig(),
+                                        this.loadAIModels(),
+                                        this.loadChannels(),
+                                        this.loadSkills(),
+                                        this.loadTools(),
+                                        this.loadPersonality(),
+                                        this.loadHeartbeat()
+                                    ]);
+                                    await this.loadWebdavConfig();
+                                } else {
+                                    this.showToast(res.data?.error || '同步失败', 'error');
+                                }
+                            } catch (e) {
+                                this.showToast('同步失败: ' + (e.response?.data?.error || e.message), 'error');
+                            } finally {
+                                this.isWebdavBusy = false;
+                            }
+                        }
+                    });
                 },
 
                 // ── SSL 证书文件验证管理 ─────────────────────────────

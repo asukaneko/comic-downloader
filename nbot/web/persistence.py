@@ -336,6 +336,18 @@ def init_default_data(server):
             "live2d": True,
         },
         "log_cleanup": dict(DEFAULT_LOG_CLEANUP),
+        "webdav_backup": {
+            "enabled": False,
+            "url": "",
+            "username": "",
+            "password": "",
+            "encryption_password": "",
+            "last_backup_at": "",
+            "last_sync_at": "",
+            "last_error": "",
+            "last_file_size": 0,
+            "last_modified": "",
+        },
     }
     server.channels_config = _merge_channel_configs([])
     _sync_channel_registry(server)
@@ -646,6 +658,14 @@ def load_all_data(server):
                     merged_features = dict(server.settings.get("features") or {})
                     merged_features.update(saved_settings["features"])
                     saved_settings["features"] = merged_features
+                if isinstance(saved_settings.get("log_cleanup"), dict):
+                    merged_lc = dict(server.settings.get("log_cleanup") or {})
+                    merged_lc.update(saved_settings["log_cleanup"])
+                    saved_settings["log_cleanup"] = merged_lc
+                if isinstance(saved_settings.get("webdav_backup"), dict):
+                    merged_wd = dict(server.settings.get("webdav_backup") or {})
+                    merged_wd.update(saved_settings["webdav_backup"])
+                    saved_settings["webdav_backup"] = merged_wd
                 server.settings.update(saved_settings)
 
         # 加载登录 Token（持久化存储，重启后仍然有效）
