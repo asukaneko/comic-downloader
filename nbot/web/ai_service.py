@@ -2482,7 +2482,11 @@ server,
                         raise
                     failover.record_failure(mid, status)
                     failover_last_error = e
-                    _log.warning("[Failover] workflow model=%s failed (%s %d), trying next", mname, category, status)
+                    # 打印异常类型和内容，便于诊断空 choices / 解析失败等问题
+                    _log.warning(
+                        "[Failover] workflow model=%s failed (%s %d): %r, trying next",
+                        mname, category, status, e,
+                    )
                     continue
             else:
                 raise failover_last_error or RuntimeError("All workflow models failed")
@@ -2568,8 +2572,9 @@ server,
     except Exception as e:
         _log.error(f"AI with tools error: {e}")
         # 回退到普通 AI 调用（遍历故障转移队列，不依赖全局配置）
+        # 注意：必须传 tools，否则模型（尤其 Gemini）会把 tool_call 写成 JSON 文本
+        # 而不是走结构化 tool_calling 协议，导致 run_tool_call_loop 把它当 final_content
         if model_configs:
-            from nbot.core.model_adapter import response_json_utf8
             for cfg in model_configs:
                 try:
                     cfg_pt = cfg.get("provider_type", "openai_compatible")
@@ -2584,6 +2589,8 @@ server,
                     cfg_payload = cfg_protocol.build_payload(
                         cfg.get("model", ""),
                         messages,
+                        tools=tools if tools else None,
+                        tool_choice="auto" if tools else None,
                         stream=False,
                         base_url=cfg.get("base_url", ""),
                         provider_type=cfg_pt,
@@ -2599,9 +2606,15 @@ server,
                         model=cfg.get("model", ""),
                         base_url=cfg.get("base_url", ""),
                         provider_type=cfg_pt,
+                        fallback_tool_parser=server._parse_tool_call_from_text,
                     )
-                    return {"content": normalized.content or ""}
-                except Exception:
+                    return normalized.to_dict()
+                except Exception as fallback_err:
+                    _log.warning(
+                        "[Failover] workflow fallback model=%s failed: %s",
+                        cfg.get("model", ""),
+                        fallback_err,
+                    )
                     continue
         # 所有模型都失败
         return {"content": f"AI 服务暂时不可用: {e}"}
