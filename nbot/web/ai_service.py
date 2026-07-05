@@ -1437,6 +1437,10 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
     ctx.metadata.setdefault("source", "web")
     # 注入会话级提示词栈禁用列表
     if _session_data:
+        # 同步 session_mode 到 ctx.metadata，让 ai_pipeline 能识别 agent 模式
+        # 跳过角色记忆注入（character.memories_legacy / MemoryFS 等）
+        if _session_data.get("session_mode"):
+            ctx.metadata.setdefault("session_mode", _session_data["session_mode"])
         if _session_data.get("plot_mode"):
             ctx.metadata.setdefault("plot_mode", True)
             if _session_data.get("plot_real_time_sync"):
