@@ -2349,96 +2349,59 @@ class WebChatServer:
             messages.append({"role": "user", "content": "[定时触发] 请执行工作流任务"})
 
         # 调用 AI（支持多轮工具调用）
+        # 复用统一的 run_tool_call_loop，保证多提供商兼容性：
+        #   - Gemini: 保留 _thought_signature 签名链
+        #   - OpenAI 严格校验: tool 消息携带 name、id 与 assistant.tool_calls 一致
+        #   - content_filter 短路、consecutive_errors 上限、StopIteration 优雅停止
         def run_workflow_with_tools():
             try:
+                from nbot.core.agent_service import (
+                    resolve_loop_final_content,
+                    run_tool_call_loop,
+                )
                 from nbot.services.tools import execute_tool, get_all_tool_definitions
 
                 all_tools = get_all_tool_definitions(include_workspace=True)
                 tool_context = {"session_id": session_id, "session_type": "workflow"}
 
-                max_iterations = 50  # 最大迭代次数，防止无限循环
-                final_response = None
+                def model_call(messages_batch, stop_event=None):
+                    return self._get_ai_response_with_tools(
+                        messages_batch, all_tools, stop_event=stop_event
+                    )
 
-                for iteration in range(max_iterations):
-                    _log.info(f"Workflow iteration {iteration + 1}")
+                def tool_executor(tool_call, thinking_content, iteration, tool_messages):
+                    # run_tool_call_loop 传入扁平结构：
+                    # {id, name, arguments(dict|str), _thought_signature?}
+                    tool_name = tool_call.get("name", "")
+                    raw_args = tool_call.get("arguments", {})
+                    arguments = (
+                        json.loads(raw_args)
+                        if isinstance(raw_args, str)
+                        else (raw_args or {})
+                    )
+                    _log.info(
+                        "Workflow tool exec iter=%d: %s args=%s",
+                        iteration + 1,
+                        tool_name,
+                        arguments,
+                    )
+                    tool_result = execute_tool(
+                        tool_name, arguments, context=tool_context
+                    )
+                    _log.info("Tool result: %s", tool_result)
+                    return tool_result
 
-                    # 调用 AI（支持工具）
-                    response = self._get_ai_response_with_tools(messages, all_tools)
+                loop_result = run_tool_call_loop(
+                    messages,
+                    model_call,
+                    tool_executor,
+                    max_iterations=50,
+                    max_consecutive_errors=3,
+                )
 
-                    # 检查是否有工具调用
-                    if "tool_calls" in response and response["tool_calls"]:
-                        tool_calls = response["tool_calls"]
-
-                        # 添加 AI 的回复到消息历史
-                        # 提取文本内容（兼容列表和字符串格式）
-                        raw_content = response.get("content", "")
-                        if isinstance(raw_content, list):
-                            text_parts = []
-                            for block in raw_content:
-                                if isinstance(block, dict) and block.get("type") == "text":
-                                    text_parts.append(block.get("text", ""))
-                            raw_content = "\n".join(text_parts)
-
-                        # thinking 存到 _thinking_content，由协议层决定是否重建 blocks
-                        thinking = response.get("thinking_content", "")
-                        assistant_msg = {
-                            "role": "assistant",
-                            "content": raw_content,
-                        }
-                        if thinking:
-                            assistant_msg["_thinking_content"] = thinking
-                        if tool_calls:
-                            # 重建为 API 标准格式：{id, type:"function", function:{name, arguments}}
-                            assistant_msg["tool_calls"] = [
-                                {
-                                    "id": tc.get("id", str(uuid.uuid4())),
-                                    "type": "function",
-                                    "function": {
-                                        "name": tc.get("function", {}).get("name") or tc.get("name", ""),
-                                        "arguments": tc.get("function", {}).get("arguments") if isinstance(tc.get("function", {}).get("arguments"), str) else json.dumps(tc.get("arguments", tc.get("function", {}).get("arguments", {})), ensure_ascii=False),
-                                    },
-                                }
-                                for tc in tool_calls
-                            ]
-                        messages.append(assistant_msg)
-
-                        # 执行所有工具调用
-                        for tool_call in tool_calls:
-                            func = tool_call.get("function", {})
-                            tool_name = func.get("name") or tool_call.get("name", "")
-                            raw_args = func.get("arguments") or tool_call.get("arguments", {})
-                            arguments = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-
-                            _log.info(
-                                f"Executing tool: {tool_name} with args: {arguments}"
-                            )
-
-                            # 执行工具
-                            tool_result = execute_tool(
-                                tool_name, arguments, context=tool_context
-                            )
-
-                            # 添加工具结果到消息历史
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.get("id", ""),
-                                    "content": json.dumps(
-                                        tool_result, ensure_ascii=False
-                                    ),
-                                }
-                            )
-
-                            _log.info(f"Tool result: {tool_result}")
-
-                    else:
-                        # AI 没有调用工具，得到最终回复
-                        final_response = response.get("content", "")
-                        break
-
-                # 如果没有得到最终回复，使用最后一次 AI 回复
-                if not final_response:
-                    final_response = messages[-1].get("content", "工作流执行完成")
+                final_response = resolve_loop_final_content(
+                    loop_result, default_content="工作流执行完成"
+                )
 
                 # 保存 AI 回复到会话
                 assistant_message = _build_workflow_assistant_message(
