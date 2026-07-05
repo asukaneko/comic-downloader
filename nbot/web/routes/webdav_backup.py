@@ -74,11 +74,17 @@ def register_webdav_backup_routes(app, server):
 
         请求体可选:
           - password: 临时加密密码（不持久化），优先于配置中的 encryption_password
+          - include_portraits: 是否同时上传立绘文件（默认 false）
         """
         data = request.json or {}
         password_override = str(data.get("password") or "").strip() or None
+        include_portraits = bool(data.get("include_portraits"))
         try:
-            result = upload_backup(server, password_override=password_override)
+            result = upload_backup(
+                server,
+                password_override=password_override,
+                include_portraits=include_portraits,
+            )
         except WebDAVBackupError as exc:
             return jsonify({"success": False, "error": str(exc)}), 400
         return jsonify({"success": True, **result})
@@ -89,11 +95,17 @@ def register_webdav_backup_routes(app, server):
 
         请求体可选:
           - password: 临时加密密码（不持久化），优先于配置中的 encryption_password
+          - include_portraits: 是否同时拉取立绘文件（默认 false）
         """
         data = request.json or {}
         password_override = str(data.get("password") or "").strip() or None
+        include_portraits = bool(data.get("include_portraits"))
         try:
-            result = pull_backup(server, password_override=password_override)
+            result = pull_backup(
+                server,
+                password_override=password_override,
+                include_portraits=include_portraits,
+            )
         except WebDAVBackupError as exc:
             return jsonify({"success": False, "error": str(exc)}), 400
         return jsonify({"success": True, **result})

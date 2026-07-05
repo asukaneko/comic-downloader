@@ -14269,9 +14269,13 @@ def main(params):
                         this.showToast('请填写配置包加密密码', 'error');
                         return;
                     }
+                    const includePortraits = !!this.webdavIncludePortraits;
+                    const portraitsHint = includePortraits
+                        ? '（已勾选包含角色立绘，立绘将上传到 nekobot/portraits/ 子目录）'
+                        : '';
                     this.showConfirm({
                         title: '立即备份到 WebDAV',
-                        messageBefore: '确认立即将当前配置加密后上传到 WebDAV 服务器？',
+                        messageBefore: '确认立即将当前配置加密后上传到 WebDAV 服务器？' + (portraitsHint ? `\n${portraitsHint}` : ''),
                         highlight: this.webdavConfig.resolved_file_url || 'nekobot/config.nbotcfg',
                         messageAfter: '该操作会覆盖远程同名文件。',
                         confirmText: '立即备份',
@@ -14285,7 +14289,7 @@ def main(params):
                             this.webdavRemoteInfo = null;
                             this.webdavSyncResult = null;
                             try {
-                                const payload = {};
+                                const payload = { include_portraits: includePortraits };
                                 if (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*')) {
                                     payload.password = this.webdavForm.encryption_password;
                                 }
@@ -14295,14 +14299,21 @@ def main(params):
                                         size: res.data.size || 0,
                                         uploaded_at: res.data.uploaded_at || '',
                                         last_modified: res.data.last_modified || '',
+                                        portraits: res.data.portraits || null,
                                     };
-                                    this.showToast(`备份成功 (${this.formatBytes(res.data.size || 0)})`, 'success');
+                                    const portraitInfo = res.data.portraits
+                                        ? `, 立绘 ${res.data.portraits.uploaded || 0}/${res.data.portraits.total || 0}`
+                                        : '';
+                                    this.showToast(`备份成功 (${this.formatBytes(res.data.size || 0)}${portraitInfo})`, 'success');
                                     await this.loadWebdavConfig();
                                 } else {
+                                    this.webdavBackupResult = { error: res.data?.error || '备份失败' };
                                     this.showToast(res.data?.error || '备份失败', 'error');
                                 }
                             } catch (e) {
-                                this.showToast('备份失败: ' + (e.response?.data?.error || e.message), 'error');
+                                const errMsg = e.response?.data?.error || e.message;
+                                this.webdavBackupResult = { error: errMsg };
+                                this.showToast('备份失败: ' + errMsg, 'error');
                             } finally {
                                 this.isWebdavBusy = false;
                             }
@@ -14321,9 +14332,13 @@ def main(params):
                         this.showToast('请填写配置包加密密码', 'error');
                         return;
                     }
+                    const includePortraits = !!this.webdavIncludePortraits;
+                    const portraitsHint = includePortraits
+                        ? '（已勾选包含角色立绘，将从 nekobot/portraits/ 下载并恢复立绘文件）'
+                        : '';
                     this.showConfirm({
                         title: '从 WebDAV 同步配置',
-                        messageBefore: '确认从 WebDAV 服务器拉取配置并覆盖本地现有配置？',
+                        messageBefore: '确认从 WebDAV 服务器拉取配置并覆盖本地现有配置？' + (portraitsHint ? `\n${portraitsHint}` : ''),
                         highlight: this.webdavConfig.resolved_file_url || 'nekobot/config.nbotcfg',
                         messageAfter: '此操作不可撤销，本地配置将被远程版本覆盖。',
                         confirmText: '立即同步',
@@ -14338,7 +14353,7 @@ def main(params):
                             this.webdavRemoteInfo = null;
                             this.webdavBackupResult = null;
                             try {
-                                const payload = {};
+                                const payload = { include_portraits: includePortraits };
                                 if (this.webdavForm.encryption_password && !this.webdavForm.encryption_password.includes('*')) {
                                     payload.password = this.webdavForm.encryption_password;
                                 }
@@ -14350,9 +14365,13 @@ def main(params):
                                         exported_at: res.data.exported_at || '',
                                         synced_at: res.data.synced_at || '',
                                         size: res.data.size || 0,
+                                        portraits: res.data.portraits || null,
                                     };
                                     const cnt = (res.data.imported || []).length;
-                                    this.showToast(`同步成功，已导入 ${cnt} 项配置`, 'success');
+                                    const portraitInfo = res.data.portraits
+                                        ? `, 立绘 ${res.data.portraits.downloaded || 0}/${res.data.portraits.total || 0}`
+                                        : '';
+                                    this.showToast(`同步成功，已导入 ${cnt} 项配置${portraitInfo}`, 'success');
                                     // 同步后重新加载各类配置
                                     await Promise.all([
                                         this.loadSettings(),
@@ -14366,10 +14385,13 @@ def main(params):
                                     ]);
                                     await this.loadWebdavConfig();
                                 } else {
+                                    this.webdavSyncResult = { error: res.data?.error || '同步失败' };
                                     this.showToast(res.data?.error || '同步失败', 'error');
                                 }
                             } catch (e) {
-                                this.showToast('同步失败: ' + (e.response?.data?.error || e.message), 'error');
+                                const errMsg = e.response?.data?.error || e.message;
+                                this.webdavSyncResult = { error: errMsg };
+                                this.showToast('同步失败: ' + errMsg, 'error');
                             } finally {
                                 this.isWebdavBusy = false;
                             }

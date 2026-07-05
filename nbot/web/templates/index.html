@@ -7647,6 +7647,14 @@
                                         </div>
                                     </div>
 
+                                    <div class="webdav-portraits-toggle">
+                                        <label class="checkbox-line">
+                                            <input type="checkbox" v-model="webdavIncludePortraits">
+                                            <span>备份/同步时包含角色立绘</span>
+                                            <span class="form-hint" style="margin-left: 6px;">（上传到 nekobot/portraits/ 子目录，文件较大时耗时更长）</span>
+                                        </label>
+                                    </div>
+
                                     <div class="webdav-actions-row">
                                         <button class="btn btn-secondary" @click="saveWebdavConfig" :disabled="isLoading">
                                             <i class="fas fa-save"></i> 保存配置
@@ -7692,22 +7700,53 @@
                                         </div>
                                     </div>
 
-                                    <div v-if="webdavBackupResult" class="webdav-result-panel is-ok">
-                                        <div class="webdav-result-title"><i class="fas fa-circle-check"></i> 备份成功</div>
+                                    <div v-if="webdavBackupResult" class="webdav-result-panel" :class="{ 'is-ok': !webdavBackupResult.error, 'is-err': webdavBackupResult.error }">
+                                        <div class="webdav-result-title"><i class="fas" :class="webdavBackupResult.error ? 'fa-circle-xmark' : 'fa-circle-check'"></i> 备份结果</div>
                                         <div class="webdav-result-body">
-                                            <div>已上传大小：{{ formatBytes(webdavBackupResult.size) }}</div>
-                                            <div>时间：{{ formatDateTime(webdavBackupResult.uploaded_at) }}</div>
-                                            <div v-if="webdavBackupResult.last_modified">服务器最后修改：{{ webdavBackupResult.last_modified }}</div>
+                                            <div v-if="webdavBackupResult.error">错误：{{ webdavBackupResult.error }}</div>
+                                            <div v-else>
+                                                <div>已上传大小：{{ formatBytes(webdavBackupResult.size) }}</div>
+                                                <div>时间：{{ formatDateTime(webdavBackupResult.uploaded_at) }}</div>
+                                                <div v-if="webdavBackupResult.last_modified">服务器最后修改：{{ webdavBackupResult.last_modified }}</div>
+                                                <div v-if="webdavBackupResult.portraits">
+                                                    立绘：{{ webdavBackupResult.portraits.uploaded || 0 }}/{{ webdavBackupResult.portraits.total || 0 }} 上传成功
+                                                    <span v-if="webdavBackupResult.portraits.failed > 0" style="color: var(--color-danger, #ef4444);">（{{ webdavBackupResult.portraits.failed }} 失败）</span>
+                                                    <span v-if="webdavBackupResult.portraits.skipped > 0">，{{ webdavBackupResult.portraits.skipped }} 跳过</span>
+                                                </div>
+                                                <div v-if="webdavBackupResult.portraits && webdavBackupResult.portraits.errors && webdavBackupResult.portraits.errors.length" class="webdav-result-message">
+                                                    <details>
+                                                        <summary>查看错误详情</summary>
+                                                        <ul style="margin: 4px 0 0 16px; padding: 0;">
+                                                            <li v-for="err in webdavBackupResult.portraits.errors" :key="err">{{ err }}</li>
+                                                        </ul>
+                                                    </details>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div v-if="webdavSyncResult" class="webdav-result-panel is-ok">
-                                        <div class="webdav-result-title"><i class="fas fa-circle-check"></i> 同步成功</div>
+                                    <div v-if="webdavSyncResult" class="webdav-result-panel" :class="{ 'is-ok': !webdavSyncResult.error, 'is-err': webdavSyncResult.error }">
+                                        <div class="webdav-result-title"><i class="fas" :class="webdavSyncResult.error ? 'fa-circle-xmark' : 'fa-circle-check'"></i> 同步结果</div>
                                         <div class="webdav-result-body">
-                                            <div>已导入配置项：{{ (webdavSyncResult.imported || []).length }} 个</div>
-                                            <div v-if="(webdavSyncResult.skipped || []).length">已跳过：{{ (webdavSyncResult.skipped || []).length }} 个</div>
-                                            <div v-if="webdavSyncResult.exported_at">备份生成时间：{{ formatDateTime(webdavSyncResult.exported_at) }}</div>
-                                            <div>同步时间：{{ formatDateTime(webdavSyncResult.synced_at) }}</div>
+                                            <div v-if="webdavSyncResult.error">错误：{{ webdavSyncResult.error }}</div>
+                                            <div v-else>
+                                                <div>已导入配置项：{{ (webdavSyncResult.imported || []).length }} 个</div>
+                                                <div v-if="(webdavSyncResult.skipped || []).length">已跳过：{{ (webdavSyncResult.skipped || []).length }} 个</div>
+                                                <div v-if="webdavSyncResult.exported_at">备份生成时间：{{ formatDateTime(webdavSyncResult.exported_at) }}</div>
+                                                <div>同步时间：{{ formatDateTime(webdavSyncResult.synced_at) }}</div>
+                                                <div v-if="webdavSyncResult.portraits">
+                                                    立绘：{{ webdavSyncResult.portraits.downloaded || 0 }}/{{ webdavSyncResult.portraits.total || 0 }} 下载成功
+                                                    <span v-if="webdavSyncResult.portraits.failed > 0" style="color: var(--color-danger, #ef4444);">（{{ webdavSyncResult.portraits.failed }} 失败）</span>
+                                                </div>
+                                                <div v-if="webdavSyncResult.portraits && webdavSyncResult.portraits.errors && webdavSyncResult.portraits.errors.length" class="webdav-result-message">
+                                                    <details>
+                                                        <summary>查看错误详情</summary>
+                                                        <ul style="margin: 4px 0 0 16px; padding: 0;">
+                                                            <li v-for="err in webdavSyncResult.portraits.errors" :key="err">{{ err }}</li>
+                                                        </ul>
+                                                    </details>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -7715,7 +7754,8 @@
                                         <i class="fas fa-info-circle"></i>
                                         填写 WebDAV 根地址后，系统会自动在该地址下创建 <code>nekobot/</code> 文件夹存放加密配置文件 <code>config.nbotcfg</code>。
                                         备份会上传该文件；同步会从同一位置拉取并应用到本地（覆盖现有配置）。建议多端使用相同的加密密码。
-                                        不含登录令牌与角色立绘（如需迁移立绘请使用「配置迁移」标签的 ZIP 导出）。
+                                        勾选「包含角色立绘」后，立绘文件会上传到 <code>nekobot/portraits/</code> 子目录并在同步时恢复。
+                                        不含登录令牌（如需迁移令牌请使用「配置迁移」标签的 ZIP 导出）。
                                     </div>
                                 </div>
                             </div>
@@ -13065,6 +13105,7 @@
                         encryption_password: '',
                     },
                     isWebdavBusy: false,
+                    webdavIncludePortraits: false,
                     webdavTestResult: null,
                     webdavRemoteInfo: null,
                     webdavBackupResult: null,

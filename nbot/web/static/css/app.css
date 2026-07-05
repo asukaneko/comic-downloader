@@ -28392,6 +28392,37 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
         .webdav-status-bar i {
             font-size: 14px;
         }
+        .webdav-portraits-toggle {
+            margin: 14px 0 4px;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+        }
+        .webdav-portraits-toggle .checkbox-line {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .webdav-portraits-toggle .checkbox-line input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent-primary);
+        }
+        .webdav-portraits-toggle .form-hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        [data-theme="light"] .webdav-portraits-toggle {
+            background: rgba(15, 23, 42, 0.03);
+            border-color: rgba(203, 213, 225, 0.5);
+        }
         .webdav-actions-row {
             display: flex;
             flex-wrap: wrap;

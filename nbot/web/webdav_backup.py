@@ -3,10 +3,14 @@
 用户只需填写 WebDAV 根地址（如 https://dav.jianguoyun.com/dav/），
 本模块会在该地址下自动创建 ``nekobot`` 文件夹，并将加密后的
 ``config.nbotcfg`` 配置包放置其中，实现多端备份与同步。
+
+可选包含立绘：勾选后立绘文件会上传到 ``nekobot/portraits/`` 子目录，
+同步时下载并恢复到本地 ``static/uploads/portraits/``。
 """
 
 import json
 import logging
+import os
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -14,8 +18,10 @@ from urllib.parse import urlparse
 import requests
 
 from nbot.web.config_transfer import (
+    _PORTRAIT_URL_PREFIX,
     ConfigTransferError,
     apply_bundle,
+    build_plain_bundle,
     decrypt_bundle,
     encrypt_bundle,
 )
@@ -30,6 +36,10 @@ LARGE_FILE_THRESHOLD = 50 * 1024 * 1024
 # 远程文件夹名与配置文件名（用户无需填写）
 BACKUP_FOLDER = "nekobot"
 BACKUP_FILENAME = "config.nbotcfg"
+# 立绘子目录名
+PORTRAITS_SUBDIR = "portraits"
+# 立绘清单文件名（记录立绘文件列表，PROPFIND 不可用时回退使用）
+PORTRAITS_MANIFEST_FILENAME = "portraits-manifest.json"
 
 
 class WebDAVBackupError(RuntimeError):
@@ -173,8 +183,17 @@ def _update_status(server, **fields) -> None:
     server._save_data("settings")
 
 
-def _ensure_folder_exists(base_url: str, auth, headers) -> dict[str, Any]:
-    """确保 nekobot 文件夹存在，不存在则通过 MKCOL 创建。
+def _ensure_folder_exists(
+    base_url: str,
+    auth,
+    headers,
+    subfolder: str | None = None,
+) -> dict[str, Any]:
+    """确保目标文件夹存在，不存在则通过 MKCOL 创建。
+
+    subfolder=None 时操作 {base}/nekobot/；
+    subfolder="portraits" 时操作 {base}/nekobot/portraits/，
+    且会先确保父目录 nekobot/ 存在。
 
     返回 {ok, exists, created, message, status_code}。
 
@@ -182,7 +201,18 @@ def _ensure_folder_exists(base_url: str, auth, headers) -> dict[str, Any]:
     但 MKCOL/PUT 仍然可用，因此 PROPFIND 403 时不直接判定失败，
     会继续尝试 MKCOL。只有 MKCOL 返回 401/403 才视为真正的权限失败。
     """
-    folder_url = _resolve_folder_url(base_url)
+    # 如有子目录，先确保父目录 nekobot/ 存在
+    if subfolder:
+        parent_result = _ensure_folder_exists(base_url, auth, headers, subfolder=None)
+        if not parent_result.get("ok"):
+            return parent_result
+
+    folder_url = (
+        f"{base_url}/{BACKUP_FOLDER}/{subfolder}/"
+        if subfolder
+        else _resolve_folder_url(base_url)
+    )
+    folder_name = f"{BACKUP_FOLDER}/{subfolder}" if subfolder else BACKUP_FOLDER
     result = {"ok": False, "exists": False, "created": False, "message": "", "status_code": None}
 
     # 1. 先用 PROPFIND 检查文件夹是否已存在
@@ -199,7 +229,7 @@ def _ensure_folder_exists(base_url: str, auth, headers) -> dict[str, Any]:
         if resp.status_code in (207, 200):
             result["ok"] = True
             result["exists"] = True
-            result["message"] = f"文件夹 {BACKUP_FOLDER}/ 已存在"
+            result["message"] = f"文件夹 {folder_name}/ 已存在"
             return result
         if resp.status_code == 401:
             # 401 是明确的认证失败
@@ -233,7 +263,7 @@ def _ensure_folder_exists(base_url: str, auth, headers) -> dict[str, Any]:
             result["ok"] = True
             result["exists"] = True
             result["created"] = True
-            result["message"] = f"文件夹 {BACKUP_FOLDER}/ 已创建"
+            result["message"] = f"文件夹 {folder_name}/ 已创建"
             return result
         if mkcol_resp.status_code == 405:
             # Method Not Allowed 通常表示文件夹已存在
@@ -378,10 +408,15 @@ def test_connection(server, config_override: dict[str, Any] | None = None) -> di
         return result
 
 
-def upload_backup(server, password_override: str | None = None) -> dict[str, Any]:
+def upload_backup(
+    server,
+    password_override: str | None = None,
+    include_portraits: bool = False,
+) -> dict[str, Any]:
     """构建加密 .nbotcfg 配置包并上传到 WebDAV 服务器。
 
     password_override 优先于配置中保存的 encryption_password。
+    include_portraits=True 时同时上传立绘文件到 nekobot/portraits/ 子目录。
     """
     cfg = _resolve_raw_config(server)
     base_url = _normalize_base_url(cfg.get("url"))
@@ -410,7 +445,7 @@ def upload_backup(server, password_override: str | None = None) -> dict[str, Any
     payload_size = len(payload_bytes)
     _log.info(f"[WebDAV] 上传备份到 {file_url}, 加密包大小 {payload_size} bytes")
 
-    # 3. PUT 上传
+    # 3. PUT 上传配置包
     put_headers = {
         "User-Agent": "NekoBot-WebDAV/1.0",
         "Content-Type": "application/octet-stream",
@@ -440,6 +475,16 @@ def upload_backup(server, password_override: str | None = None) -> dict[str, Any
         _update_status(server, last_error=msg)
         raise WebDAVBackupError(msg)
 
+    # 4. 可选：上传立绘文件
+    portraits_result = None
+    if include_portraits:
+        try:
+            portraits_result = _upload_portraits(server, base_url, auth, headers)
+        except WebDAVBackupError as exc:
+            # 立绘上传失败不中断主流程，仅记录错误
+            _log.warning(f"[WebDAV] 立绘上传失败: {exc}")
+            portraits_result = {"ok": False, "error": str(exc), "uploaded": 0, "total": 0}
+
     now = datetime.now().isoformat()
     last_modified = resp.headers.get("Last-Modified", "")
     _update_status(
@@ -452,11 +497,10 @@ def upload_backup(server, password_override: str | None = None) -> dict[str, Any
 
     # 触发内部日志
     try:
-        server.log_message(
-            "info",
-            f"WebDAV 备份已上传 ({payload_size} bytes)",
-            important=False,
-        )
+        log_msg = f"WebDAV 备份已上传 ({payload_size} bytes)"
+        if portraits_result:
+            log_msg += f", 立绘 {portraits_result.get('uploaded', 0)}/{portraits_result.get('total', 0)}"
+        server.log_message("info", log_msg, important=False)
     except Exception:  # noqa: BLE001
         pass
 
@@ -467,13 +511,19 @@ def upload_backup(server, password_override: str | None = None) -> dict[str, Any
         "status_code": resp.status_code,
         "last_modified": last_modified,
         "file_url": file_url,
+        "portraits": portraits_result,
     }
 
 
-def pull_backup(server, password_override: str | None = None) -> dict[str, Any]:
+def pull_backup(
+    server,
+    password_override: str | None = None,
+    include_portraits: bool = False,
+) -> dict[str, Any]:
     """从 WebDAV 服务器拉取 .nbotcfg 文件，解密并应用到本地。
 
     password_override 优先于配置中保存的 encryption_password。
+    include_portraits=True 时同时从 nekobot/portraits/ 拉取立绘文件并恢复。
     返回应用结果（imported/skipped 等）。
     """
     cfg = _resolve_raw_config(server)
@@ -544,6 +594,15 @@ def pull_backup(server, password_override: str | None = None) -> dict[str, Any]:
         _update_status(server, last_error=f"应用配置失败: {exc}")
         raise WebDAVBackupError(f"应用配置失败: {exc}") from exc
 
+    # 可选：拉取立绘文件
+    portraits_result = None
+    if include_portraits:
+        try:
+            portraits_result = _download_portraits(server, base_url, auth, headers)
+        except WebDAVBackupError as exc:
+            _log.warning(f"[WebDAV] 立绘拉取失败: {exc}")
+            portraits_result = {"ok": False, "error": str(exc), "downloaded": 0, "total": 0}
+
     now = datetime.now().isoformat()
     last_modified = resp.headers.get("Last-Modified", "")
     _update_status(
@@ -555,11 +614,13 @@ def pull_backup(server, password_override: str | None = None) -> dict[str, Any]:
     )
 
     try:
-        server.log_message(
-            "info",
-            f"WebDAV 同步完成，已导入配置项 {len(result.get('imported', []))} 个",
-            important=True,
-        )
+        log_msg = f"WebDAV 同步完成，已导入配置项 {len(result.get('imported', []))} 个"
+        if portraits_result:
+            log_msg += (
+                f", 立绘 {portraits_result.get('downloaded', 0)}/"
+                f"{portraits_result.get('total', 0)}"
+            )
+        server.log_message("info", log_msg, important=True)
     except Exception:  # noqa: BLE001
         pass
 
@@ -572,6 +633,7 @@ def pull_backup(server, password_override: str | None = None) -> dict[str, Any]:
         "skipped": result.get("skipped", []),
         "exported_at": result.get("exported_at"),
         "file_url": file_url,
+        "portraits": portraits_result,
     }
 
 
@@ -717,6 +779,323 @@ def get_remote_info(server) -> dict[str, Any]:
         info["message"] = f"查询失败: {exc}"
 
     return info
+
+
+# ============================================================
+# 立绘文件处理
+# ============================================================
+
+
+def _resolve_portraits_dir_url(base_url: str) -> str:
+    """返回立绘子目录的完整 URL：{base}/nekobot/portraits/"""
+    return f"{base_url}/{BACKUP_FOLDER}/{PORTRAITS_SUBDIR}/"
+
+
+def _resolve_portrait_file_url(base_url: str, filename: str) -> str:
+    """返回单个立绘文件的完整 URL"""
+    return f"{base_url}/{BACKUP_FOLDER}/{PORTRAITS_SUBDIR}/{filename}"
+
+
+def _resolve_manifest_url(base_url: str) -> str:
+    """返回立绘清单文件的完整 URL"""
+    return f"{base_url}/{BACKUP_FOLDER}/{PORTRAITS_MANIFEST_FILENAME}"
+
+
+def _collect_local_portraits(server) -> list[dict[str, str]]:
+    """收集本地所有被引用的立绘文件。
+
+    返回 [{url, filename, local_path}] 列表。
+    基于 config_transfer._collect_portrait_paths 的逻辑，但返回更详细的信息。
+    """
+    from nbot.web.config_transfer import _collect_portrait_paths
+
+    bundle = build_plain_bundle(server)
+    portraits_map = _collect_portrait_paths(server, bundle)
+
+    result = []
+    for zip_path, local_path in portraits_map.items():
+        # zip_path 形如 "portraits/xxx.png"，提取文件名
+        filename = zip_path.split("/")[-1] if "/" in zip_path else zip_path
+        url = f"{_PORTRAIT_URL_PREFIX}{filename}"
+        result.append({
+            "url": url,
+            "filename": filename,
+            "local_path": local_path,
+        })
+    return result
+
+
+def _upload_portraits(server, base_url, auth, headers) -> dict[str, Any]:
+    """上传本地立绘文件到 WebDAV 服务器的 nekobot/portraits/ 子目录。
+
+    同时上传一个 portraits-manifest.json 清单文件，用于同步时回退查询。
+    """
+    portraits = _collect_local_portraits(server)
+    if not portraits:
+        _log.info("[WebDAV] 没有立绘文件需要上传")
+        return {"ok": True, "uploaded": 0, "total": 0, "skipped": 0}
+
+    # 1. 确保 portraits 子目录存在
+    folder_result = _ensure_folder_exists(base_url, auth, headers, subfolder=PORTRAITS_SUBDIR)
+    if not folder_result.get("ok"):
+        raise WebDAVBackupError(folder_result.get("message") or "立绘子目录创建失败")
+
+    # 2. 逐个上传立绘文件
+    uploaded = 0
+    skipped = 0
+    failed = 0
+    errors = []
+    put_headers = {
+        "User-Agent": "NekoBot-WebDAV/1.0",
+        "Content-Type": "application/octet-stream",
+    }
+
+    for item in portraits:
+        filename = item["filename"]
+        local_path = item["local_path"]
+
+        if not os.path.isfile(local_path):
+            _log.warning(f"[WebDAV] 立绘文件不存在: {local_path}")
+            skipped += 1
+            continue
+
+        file_url = _resolve_portrait_file_url(base_url, filename)
+        try:
+            file_size = os.path.getsize(local_path)
+            with open(local_path, "rb") as f:
+                data = f.read()
+        except OSError as exc:
+            _log.warning(f"[WebDAV] 读取立绘文件失败 {local_path}: {exc}")
+            failed += 1
+            errors.append(f"{filename}: 读取失败")
+            continue
+
+        try:
+            resp = requests.request(
+                "PUT",
+                file_url,
+                auth=auth,
+                headers=put_headers,
+                data=data,
+                timeout=DEFAULT_TIMEOUT * 2 if file_size > LARGE_FILE_THRESHOLD else DEFAULT_TIMEOUT,
+                allow_redirects=True,
+            )
+        except requests.exceptions.RequestException as exc:
+            _log.warning(f"[WebDAV] 上传立绘失败 {filename}: {exc}")
+            failed += 1
+            errors.append(f"{filename}: {exc}")
+            continue
+
+        if resp.status_code in (200, 201, 204):
+            uploaded += 1
+            _log.debug(f"[WebDAV] 立绘已上传: {filename} ({file_size} bytes)")
+        else:
+            _log.warning(f"[WebDAV] 立绘上传被拒绝 {filename}: HTTP {resp.status_code}")
+            failed += 1
+            errors.append(f"{filename}: HTTP {resp.status_code}")
+
+    # 3. 上传清单文件
+    manifest = {
+        "version": 1,
+        "exported_at": datetime.now().isoformat(),
+        "portraits": [item["filename"] for item in portraits],
+        "count": len(portraits),
+    }
+    manifest_url = _resolve_manifest_url(base_url)
+    try:
+        manifest_bytes = json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        requests.request(
+            "PUT",
+            manifest_url,
+            auth=auth,
+            headers=put_headers,
+            data=manifest_bytes,
+            timeout=DEFAULT_TIMEOUT,
+            allow_redirects=True,
+        )
+    except requests.exceptions.RequestException as exc:
+        _log.warning(f"[WebDAV] 上传立绘清单失败: {exc}")
+
+    _log.info(
+        f"[WebDAV] 立绘上传完成: {uploaded}/{len(portraits)} 成功, "
+        f"{skipped} 跳过, {failed} 失败"
+    )
+
+    return {
+        "ok": failed == 0,
+        "uploaded": uploaded,
+        "skipped": skipped,
+        "failed": failed,
+        "total": len(portraits),
+        "errors": errors[:10],  # 最多返回 10 条错误
+    }
+
+
+def _list_remote_portraits(base_url, auth, headers) -> list[str]:
+    """列出远程 nekobot/portraits/ 目录下的所有立绘文件名。
+
+    优先使用 PROPFIND，失败时回退到 portraits-manifest.json。
+    返回文件名列表（不含路径前缀）。
+    """
+    portraits_dir_url = _resolve_portraits_dir_url(base_url)
+    filenames = []
+
+    # 1. 尝试 PROPFIND
+    propfind_body = """<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:">
+  <D:prop>
+    <D:displayname/>
+    <D:resourcetype/>
+  </D:prop>
+</D:propfind>"""
+    try:
+        resp = requests.request(
+            "PROPFIND",
+            portraits_dir_url,
+            auth=auth,
+            headers={**headers, "Depth": "1", "Content-Type": "application/xml"},
+            data=propfind_body,
+            timeout=DEFAULT_TIMEOUT,
+            allow_redirects=True,
+        )
+        if resp.status_code == 207:
+            filenames = _parse_propfind_filenames(resp)
+            if filenames:
+                _log.info(f"[WebDAV] PROPFIND 列出 {len(filenames)} 个立绘文件")
+                return filenames
+    except requests.exceptions.RequestException as exc:
+        _log.warning(f"[WebDAV] PROPFIND 立绘目录失败: {exc}")
+
+    # 2. 回退：读取清单文件
+    manifest_url = _resolve_manifest_url(base_url)
+    try:
+        resp = requests.request(
+            "GET",
+            manifest_url,
+            auth=auth,
+            headers=headers,
+            timeout=DEFAULT_TIMEOUT,
+            allow_redirects=True,
+        )
+        if resp.status_code == 200:
+            manifest = json.loads(resp.text or "{}")
+            filenames = manifest.get("portraits") or []
+            _log.info(f"[WebDAV] 从清单文件读取到 {len(filenames)} 个立绘文件")
+            return filenames
+    except (requests.exceptions.RequestException, json.JSONDecodeError) as exc:
+        _log.warning(f"[WebDAV] 读取立绘清单失败: {exc}")
+
+    return []
+
+
+def _parse_propfind_filenames(resp) -> list[str]:
+    """从 PROPFIND 响应中解析立绘文件名列表（排除目录本身）。"""
+    try:
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(resp.text or "")
+        # 命名空间
+        ns = {"D": "DAV:"}
+        filenames = []
+
+        for response in root.findall(".//D:response", ns):
+            href_elem = response.find(".//D:href", ns)
+            if href_elem is None or not href_elem.text:
+                continue
+            href = href_elem.text
+
+            # 跳过目录本身（以 / 结尾）
+            if href.endswith("/"):
+                continue
+
+            # 提取文件名（URL 解码后取最后一段）
+            from urllib.parse import unquote
+            decoded = unquote(href)
+            filename = decoded.rstrip("/").split("/")[-1]
+
+            # 跳过清单文件本身
+            if filename == PORTRAITS_MANIFEST_FILENAME:
+                continue
+
+            if filename:
+                filenames.append(filename)
+
+        return filenames
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(f"[WebDAV] 解析 PROPFIND 立绘列表失败: {exc}")
+        return []
+
+
+def _download_portraits(server, base_url, auth, headers) -> dict[str, Any]:
+    """从 WebDAV 服务器下载立绘文件并恢复到本地。
+
+    策略：
+    1. PROPFIND 列出 nekobot/portraits/ 下所有文件
+    2. 回退到 portraits-manifest.json 清单
+    3. 逐个 GET 下载并写入 static/uploads/portraits/
+    """
+    # 1. 列出远程立绘文件
+    filenames = _list_remote_portraits(base_url, auth, headers)
+    if not filenames:
+        _log.info("[WebDAV] 远程没有立绘文件可下载")
+        return {"ok": True, "downloaded": 0, "total": 0, "skipped": 0}
+
+    # 2. 确保本地立绘目录存在
+    static_root = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+    upload_dir = os.path.join(static_root, "uploads", "portraits")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # 3. 逐个下载
+    downloaded = 0
+    failed = 0
+    errors = []
+
+    for filename in filenames:
+        file_url = _resolve_portrait_file_url(base_url, filename)
+        try:
+            resp = requests.request(
+                "GET",
+                file_url,
+                auth=auth,
+                headers=headers,
+                timeout=DEFAULT_TIMEOUT * 2,
+                allow_redirects=True,
+            )
+        except requests.exceptions.RequestException as exc:
+            _log.warning(f"[WebDAV] 下载立绘失败 {filename}: {exc}")
+            failed += 1
+            errors.append(f"{filename}: {exc}")
+            continue
+
+        if resp.status_code != 200:
+            _log.warning(f"[WebDAV] 立绘下载失败 {filename}: HTTP {resp.status_code}")
+            failed += 1
+            errors.append(f"{filename}: HTTP {resp.status_code}")
+            continue
+
+        # 写入本地文件
+        local_path = os.path.join(upload_dir, filename)
+        try:
+            with open(local_path, "wb") as f:
+                f.write(resp.content)
+            downloaded += 1
+            _log.debug(f"[WebDAV] 立绘已下载: {filename} ({len(resp.content)} bytes)")
+        except OSError as exc:
+            _log.warning(f"[WebDAV] 写入立绘文件失败 {filename}: {exc}")
+            failed += 1
+            errors.append(f"{filename}: 写入失败")
+
+    _log.info(
+        f"[WebDAV] 立绘下载完成: {downloaded}/{len(filenames)} 成功, {failed} 失败"
+    )
+
+    return {
+        "ok": failed == 0,
+        "downloaded": downloaded,
+        "failed": failed,
+        "total": len(filenames),
+        "errors": errors[:10],
+    }
 
 
 def host_from_url(url: str) -> str:
