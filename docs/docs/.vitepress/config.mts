@@ -185,6 +185,7 @@ export default defineConfig({
                     { text: 'tts - 语音合成', link: '/guide/nbot/services/tts.md' },
                     { text: 'stt - 语音识别', link: '/guide/nbot/services/stt.md' },
                     { text: 'sticker_service - 表情包服务', link: '/guide/nbot/services/sticker_service.md' },
+                    { text: 'image_service - 图片生成服务', link: '/guide/nbot/services/image_service.md' },
                     { text: 'tools - 工具系统', link: '/guide/nbot/services/tools.md' },
                     { text: 'chat_service - 聊天服务', link: '/guide/nbot/services/chat_service.md' },
                     { text: 'todo_tools - 待办工具', link: '/guide/nbot/services/todo_tools.md' },

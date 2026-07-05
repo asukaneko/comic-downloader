@@ -88,3 +88,45 @@ _DEFAULT_CHOICES = [
 ## AI 调用
 
 使用 `ai_client.chat_completion()` 发送请求，system prompt 包含完整的分支设计指令。token 用量通过 `token_stats` 模块记录（purpose: `PURPOSE_PLOT`）。
+
+## 风格选择（v3.0.6+）
+
+会话可通过 `plot_choice_style` 字段指定本次剧情选项的整体语气与取向。
+
+### 预设风格
+
+| key | 名称 | 说明 |
+|-----|------|------|
+| `default` | 默认 | 不追加任何风格要求，沿用基础 system prompt |
+| `sweet` | 甜蜜暧昧 | 三个选择都带心动、亲近或试探，让关系更靠近一步 |
+| `suspense` | 悬疑紧张 | 三个选择都带不安、悬念或压迫感，引入疑点与潜在危机 |
+| `daily` | 日常轻松 | 三个选择自然、生活化、带点小趣味，不必强行制造大冲突 |
+| `dramatic` | 戏剧转折 | 三个选择都倾向于制造强烈情节起伏，用意外、抉择、冲突推动剧情 |
+
+### 自定义风格
+
+除预设外，前端允许输入任意自定义风格描述（如"偏幽默吐槽""偏诗意抒情"），原样追加到 system prompt 的"本次剧情风格要求"段落中。
+
+### 风格注入逻辑
+
+风格要求由 `_build_system_prompt(style)` 在基础 system prompt 末尾追加：
+
+```text
+【本次剧情风格要求】
+<style 原文>
+注意：风格只影响三个选择的语气与取向，上文"必须推进剧情"的铁律与文本写法要求仍然全部适用。
+```
+
+### 会话字段传递路径
+
+```text
+Web 前端 (plotChoiceStyle)
+  → socket_events  → req.metadata.plot_choice_style
+  → ai_pipeline    → ctx.metadata.plot_choice_style
+  → PlotChoiceGenerator.generate(style=...)
+  → 持久化层 plot_choice_style 字段
+```
+
+## AI 调用
+
+使用 `ai_client.chat_completion()` 发送请求，system prompt 包含完整的分支设计指令。token 用量通过 `token_stats` 模块记录（purpose: `PURPOSE_PLOT`）。

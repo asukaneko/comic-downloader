@@ -1,5 +1,52 @@
 # 更新日志
 
+## [3.0.6] - 2026-07-05
+
+### 🎬 剧情模式
+
+- 新增剧情选项风格选择功能：会话可设置 `plot_choice_style` 字段，自定义 AI 生成选项的整体语气与取向
+- 内置四种预设风格：**甜蜜暧昧** / **悬疑紧张** / **日常轻松** / **戏剧转折**，也支持自定义风格描述
+- 后端 `PlotChoiceGenerator` 在 system prompt 末尾追加风格要求，动态影响三个选项的生成
+- 前端开启剧情模式时自动弹出风格选择弹窗，并支持随时修改当前会话的风格
+- 风格字段在会话持久化层、API 路由（plot / sessions / ai_service / socket_events / server）中完整传递与恢复
+
+### 🖼️ AI 角色生图
+
+- 新增 `nbot/services/image_service.py` 图片生成服务模块，封装 OpenAI 兼容 / SiliconFlow / 自定义协议的图片生成 API 调用
+- 角色支持在对话中**主动发送图片**：新增 `send_image` 回调方法，解析 LLM 回复中的 `[send_image: ...]` 标签并按概率兜底触发生图
+- 新增 `character.image_capability` 动态 PromptStack 段，向角色 system prompt 注入"主动发图"能力说明，让 LLM 知道何时何地可以发图
+- 统一图片生成配置来源优先级：调用方传入 > WebChatServer 当前选中模型 > `ai_models.json` 首个启用模型 > 内置默认值
+- 从 `WebChatServer.active_models_by_purpose['image_generation']` 动态读取"当前选中"的图片生成模型，无需重启即可切换
+- 重构立绘生成逻辑，复用统一图片生成与保存管线
+- 新增 Web 设置界面：AI 角色生图开关、兜底发图概率滑块、默认图片尺寸选择器
+- 新增消息渲染：AI 生成的图片以裸图形式展示，附带 prompt 描述，支持点击查看原图
+
+### ⚙️ 核心功能
+
+- 统一所有协议层（Anthropic / Gemini / OpenAI）工具调用格式，将嵌套的 `function` 结构扁平化为统一的 `{name, arguments}` 格式，工具参数保持字典类型传递
+- 兼容 OpenAI 协议层 `tool_calls` 的扁平与嵌套两种格式（`{id, name, arguments}` 与 `{type, function: {name, arguments}}`）
+- 为 Gemini 工具调用与函数响应补充 `id` 字段，确保请求-响应关联完整性；在工具历史消息中补充 `name` 字段
+- 过滤工具调用中的私有前缀键（`_` 开头），避免内部属性泄露
+- 故障转移摘要中新增 `consecutive_failures` 字段，增强断连状态追踪能力
+
+### 🖥️ Web UI 改进
+
+- 为消息卡片容器（`.message-thinking-cards-wrapper`、`.message-todo-cards-wrapper`、`.message-change-cards-wrapper`）添加全宽布局样式，使其占满整行
+- 新增 AI 角色生图相关 CSS 样式（生成图片包裹容器、提示卡片、亮色模式适配）
+
+### 🐛 Bug 修复
+
+- `session_store.store_message` 添加消息存储幂等性处理：消息携带 `id` 且已存在时直接更新原条目，避免流式消息在剥离 `[send_image:]` 标签后被重复持久化产生两个内容相同气泡
+- 修复生图灵感来源的消息获取逻辑：将 `ctx.working_messages` 改为 `ctx.messages`，正确获取最近的用户消息作为生图灵感来源
+
+### 📖 文档
+
+- 新增 `nbot/services/image_service.md` 图片生成服务模块文档
+- 补充 `plot/choice_generator.md` 剧情选项风格功能说明
+- 同步更新 VitePress 侧边栏导航，登记 `image_service` 条目
+
+---
+
 ## [3.0.5] - 2026-06-27
 
 ### 🧠 记忆系统重构
