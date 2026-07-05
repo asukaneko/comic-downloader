@@ -213,6 +213,46 @@ def get_qq_character_context(
     )
 
 
+def get_qqbot_character_context(
+    user_id: str,
+    group_openid: Optional[str] = None,
+    personality_name: str = "default",
+) -> Optional[CharacterIdentity]:
+    """从 QQ Bot 官方接口消息中解析角色身份"""
+    if not _is_channel_runtime_enabled("qqbot"):
+        return None
+
+    user_id = str(user_id or "anonymous")
+    group_openid = str(group_openid or "")
+    conversation_id = (
+        f"qqbot:group:{group_openid}" if group_openid else f"qqbot:private:{user_id}"
+    )
+
+    if group_openid:
+        scope_id = _make_scope_id(
+            channel="qqbot",
+            default_scope="group_user",
+            conversation_id=conversation_id,
+            user_id=user_id,
+            group_id=group_openid,
+        )
+    else:
+        scope_id = build_scope_id(
+            ChannelRuntimeContext(
+                channel="qqbot", conversation_id=conversation_id,
+                scene="private", user_id=user_id,
+            ),
+            "user",
+        )
+
+    return CharacterIdentity(
+        character_id=personality_name,
+        target_id=user_id,
+        scope_id=scope_id,
+        channel="qqbot",
+    )
+
+
 def get_feishu_character_context(
     user_id: str,
     chat_id: Optional[str] = None,

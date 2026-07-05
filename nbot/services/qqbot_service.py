@@ -292,7 +292,22 @@ class QQBotCallbacks(PipelineCallbacks):
         return context
 
     def get_character_context(self, ctx: PipelineContext):
-        return None
+        """返回 QQ Bot 官方接口的角色身份标识"""
+        from nbot.character.adapters.nekobot import get_qqbot_character_context
+
+        personality_name = str(
+            getattr(self.server, "personality", {}).get("name") or "default"
+        ).strip() or "default"
+        metadata = self.parsed.get("metadata") or {}
+        scene = metadata.get("qqbot_scene", "")
+        group_openid = metadata.get("qqbot_group_openid", "") if scene == "group" else ""
+        user_id = str(self.parsed.get("user_id") or "").strip()
+
+        return get_qqbot_character_context(
+            user_id=user_id,
+            group_openid=group_openid,
+            personality_name=personality_name,
+        )
 
     def get_character_runtime(self, ctx: PipelineContext):
         from nbot.character.adapters.nekobot import get_character_runtime_from_server
