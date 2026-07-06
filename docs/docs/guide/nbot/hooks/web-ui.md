@@ -51,6 +51,7 @@ Hook 系统提供完整的 Web 管理界面，支持可视化创建、编辑、�
 | 作用域 | 下拉选择 | `global` / `character` / `conversation` / `user` |
 | 角色/会话/用户 ID | 文本输入 | 作用域非 global 时显示对应的 ID 输入框 |
 | 触发模式 | 下拉选择 | `always`（每次触发）/ `once_per_conversation`（每会话一次） |
+| 条件逻辑 | 下拉选择 | `and`（全部满足）/ `or`（任一满足） |
 | 描述 | 文本输入 | 可选描述 |
 | 启用 | 开关 | 是否启用 |
 
@@ -136,12 +137,13 @@ JSON 文本编辑区，配置频道白名单/黑名单：
 | `scope` | `str` | `"global"` | 作用域 |
 | `event` | `str` | — | 监听事件（必填，支持通配符） |
 | `priority` | `int` | `100` | 执行优先级（越小越先） |
-| `conditions` | `dict` | `{}` | 触发条件（AND 逻辑） |
+| `conditions` | `dict` | `{}` | 触发条件（默认 AND 逻辑，可通过 `condition_logic` 切换为 OR） |
 | `actions` | `list[dict]` | `[]` | 执行动作列表 |
 | `permissions` | `dict` | `{}` | 频道权限限制 |
 | `timeout_ms` | `int` | `3000` | 执行超时（毫秒） |
 | `max_retries` | `int` | `0` | 失败重试次数 |
 | `trigger_mode` | `str` | `"always"` | 触发模式 |
+| `condition_logic` | `str` | `"and"` | 多条件组合逻辑 |
 | `character_id` | `str` | `""` | 绑定角色 ID |
 | `conversation_id` | `str` | `""` | 绑定会话 ID |
 | `user_id` | `str` | `""` | 绑定用户 ID |
@@ -163,3 +165,14 @@ JSON 文本编辑区，配置频道白名单/黑名单：
 |------|------|
 | `always` | 每次条件满足都会触发 |
 | `once_per_conversation` | 每个会话最多触发一次，状态持久化到磁盘，重启后仍有效 |
+
+### 条件逻辑说明
+
+`condition_logic` 字段控制「触发条件」中各项之间的组合关系：
+
+| 模式 | 说明 |
+|------|------|
+| `and`（默认） | 所有条件同时满足才触发 |
+| `or` | 任一条件满足即触发 |
+
+界面会在基本信息区提供下拉选择器，Hook 卡片会以标识区分当前使用的逻辑（AND / OR），提示文案随选择动态更新。非法值会在保存时回退为 `and`。

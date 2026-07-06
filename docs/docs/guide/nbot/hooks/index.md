@@ -6,7 +6,7 @@
 
 **核心设计原则：**
 - 事件驱动：Pipeline 在关键节点发出 `RuntimeEvent`，Hook 通过模式匹配订阅事件
-- 条件过滤：支持身份、频道、情绪、关系阈值、时间段等多维条件（AND 逻辑）
+- 条件过滤：支持身份、频道、情绪、关系阈值、时间段等多维条件（AND/OR 可切换）
 - 安全限制：每轮最多触发 20 个 Hook，事件链最大深度 5 层，防止失控
 - 可扩展：内置 8 种动作类型，支持通过 `register()` 注册自定义动作
 
@@ -129,6 +129,7 @@ hook = ConversationHook(
 | `timeout_ms` | `int` | `3000` | 单次执行超时（毫秒） |
 | `max_retries` | `int` | `0` | 失败重试次数（失败、超时、部分失败均会重试） |
 | `trigger_mode` | `str` | `"always"` | 触发模式：`always` / `once_per_conversation` |
+| `condition_logic` | `str` | `"and"` | 多条件组合逻辑：`"and"`（全部满足）/ `"or"`（任一满足） |
 | `permissions` | `dict` | `{}` | 权限限制（见下表） |
 
 **trigger_mode 字段说明：**
@@ -193,7 +194,7 @@ stats = manager.get_stats()
 
 ## 条件系统
 
-`ConditionEvaluator` 评估 Hook 的触发条件，所有条件之间为 AND 逻辑（全部满足才触发）。
+`ConditionEvaluator` 评估 Hook 的触发条件，条件之间的逻辑关系由 `condition_logic` 字段控制：默认 AND（全部满足才触发），可切换为 OR（任一满足即触发）。
 
 ### 支持的条件类型
 

@@ -1,5 +1,60 @@
 # 更新日志
 
+## [3.0.8] - 2026-07-06
+
+### 🪝 Hook 条件组合
+
+- 新增 Hook 条件 `condition_logic` 字段，支持在「全部满足（AND）」与「任一满足（OR）」之间切换，灵活组合多维触发条件
+- `ConditionEvaluator` 接收 `logic` 参数评估条件；`ConversationHook` 模型默认值 `"and"`，并加入序列化/反序列化与非法值回退校验
+- `HookManager` 持久化字段中纳入 `condition_logic`，触发评估时按钩子自身配置选择逻辑
+- Web 管理界面新增条件逻辑选择器（AND/OR 下拉框），Hook 卡片展示当前逻辑标识，提示文案随选择动态更新
+
+### ⚙️ 核心功能
+
+- **AI 响应耗时指标**：为流式/非流式调用新增 TTFT（首字符时间）与完整耗时统计，覆盖管道、多轮发言者、工作流三种执行路径
+  - `TokenStats.record_usage()` 新增 `ttft_ms` 字段
+  - Token 统计概览新增「平均首字符时间」与「平均完整耗时」聚合
+  - 前端 Token 面板移除「调用次数」卡片，替换为 TTFT/Duration 卡片，记录表格同步新增两列
+- **流式响应健壮性增强**：Gemini Native 协议在 candidates/content/parts 为 `None`、仅含 `usageMetadata` 尾部 chunk、finishReason chunk 等边界场景下不再抛异常
+- **SSE 解析兼容**：`ai_service.py` 同时支持 `data:` 与 `data: ` 两种前缀，自动跳过非 SSE 行（如 Gemini 默认 JSON 数组流），单 chunk 解析失败降级为 debug 日志继续处理
+- **故障转移稳健化**：回退调用透传 `tools`/`tool_choice`，强制走结构化 tool_calling 协议；引入 `fallback_tool_parser` 解析回退场景的工具调用，异常日志携带详细信息便于诊断
+- **Gemini JSON Schema 兼容**：`additionalProperties` 加入 Gemini 不支持字段集合，避免 API 拒绝请求
+- **工作流工具调用重构**：`run_workflow_with_tools` 改为复用 `run_tool_call_loop` 统一循环，提供 `model_call`/`tool_executor` 回调，`max_consecutive_errors=3` 提升稳定性
+
+### 🔌 多平台适配
+
+- **QQ 官方机器人角色身份解析**：`nbot/character/adapters/nekobot.py` 新增 `get_qqbot_character_context`，从 QQ Bot 消息中解析角色身份标识，支持群聊（`group_user` 作用域）和私聊（`user` 作用域）场景
+- `nbot/services/qqbot_service.py` 实现 `get_character_context` 方法接入上述解析逻辑，替代原空实现
+
+### 🖥️ Web UI 改进
+
+- **角色卡片重做**：重构角色画廊卡片样式，新增背景光斑装饰与悬停动效；角色详情页采用侧栏布局，将统计与状态移至侧栏面板
+- **对话控制面板**：角色详情页新增「对话控制」面板，集中展示回复格式、行为规则与示例对话
+- **浅色主题支持**：角色卡片体系新增 `[data-theme="light"]` 样式适配，`.character-detail-badge`、`.character-detail-rules`、`.character-detail-example` 等新组件样式同步上线
+- **响应式优化**：调整角色详情页断点布局，`.character-gallery-cover-shade` 重命名为 `.character-gallery-cover-overlay` 并优化渐变覆盖
+
+### 🤖 Agent 模式会话
+
+- 在 `ai_service` 中将工作流会话的 `session_mode` 同步到 `ctx.metadata`，使 `AIPipeline` 能够识别 agent 模式
+- agent 模式下自动跳过角色记忆注入（如 `character.memories_legacy` / `MemoryFS` 等），避免上下文污染
+- 工作流会话配置新增 `session_mode: "agent"` 字段；定时触发使用工作流自身描述/提示作为用户消息，移除系统提示中多余的 `CORE_INSTRUCTIONS`
+
+### 🛠️ 工具系统
+
+- `get_date_time` 工具的实现从内联 Python 代码切换为 `builtin` 处理器，避免动态执行带来的语法/安全风险
+
+### 📖 文档
+
+- 补充 `hooks/conditions.md` 与 `hooks/index.md` 关于 `condition_logic` 字段与 AND/OR 评估逻辑的说明
+- 在 `hooks/web-ui.md` 增补条件逻辑选择器相关字段与界面说明
+- 更新 `token_stats.md`，新增 `ttft_ms` 字段、avg_ttft/avg_duration 聚合指标
+- 更新 `core/ai_pipeline.md` 与 `core/workflow.md`，补充 agent 模式会话与 `session_mode` 字段说明
+- 更新 `channels/qqbot.md`，补充 `get_qqbot_character_context` 角色身份解析说明
+- 更新 `services/tools.md`，明确 `get_date_time` 走 builtin 处理器
+- 同步更新 VitePress 侧边栏导航（如有新增文档条目）
+
+---
+
 ## [3.0.7] - 2026-07-05
 
 ### 🌐 WebDAV 备份与同步

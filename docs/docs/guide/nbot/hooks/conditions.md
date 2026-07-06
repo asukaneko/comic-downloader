@@ -1,6 +1,27 @@
 # 条件参考
 
-条件系统决定 Hook 是否在事件匹配后实际执行。所有条件之间为 **AND 逻辑**——必须全部满足才会触发。
+条件系统决定 Hook 是否在事件匹配后实际执行。多个条件之间的逻辑关系由 `condition_logic` 字段控制，默认为 **AND**（全部满足才触发），可切换为 **OR**（任一满足即触发）。
+
+## 条件逻辑字段
+
+在 Hook 顶层可设置 `condition_logic` 字段（`"and"` / `"or"`），控制 `conditions` 中各条件项的组合方式：
+
+```json
+{
+  "condition_logic": "or",
+  "conditions": {
+    "mood_is": "happy",
+    "affection_gte": 80
+  }
+}
+```
+
+| 值 | 说明 |
+|----|------|
+| `"and"`（默认） | 所有条件同时满足才触发 |
+| `"or"` | 任一条件满足即触发 |
+
+非法值会在 `ConversationHook` 初始化时回退为 `"and"`。
 
 ## 条件字段总览
 
@@ -164,6 +185,8 @@
 
 ## 条件组合示例
 
+> 所有示例默认使用 AND 逻辑（`condition_logic: "and"` 或省略）。如需 OR 逻辑请显式设置 `condition_logic: "or"`。
+
 ### 高好感度 + 开心时注入提示词
 
 ```json
@@ -199,6 +222,22 @@
   }
 }
 ```
+
+### OR 逻辑示例
+
+`condition_logic: "or"` 模式下，`conditions` 中任一项满足即触发：
+
+```json
+{
+  "condition_logic": "or",
+  "conditions": {
+    "mood_is": "happy",
+    "affection_gte": 90
+  }
+}
+```
+
+上述 Hook 表示：角色心情为 `happy` **或** 好感度 ≥ 90 时触发。适合「任意一个强信号就介入」的场景，例如紧急提醒或情绪切换。
 
 ## 安全机制
 

@@ -286,3 +286,14 @@ def answer(server, raw_event):
 | ProgressCard/TodoCard 保持 Web 专属 | 这些是 UI 组件，其他频道无对应概念 |
 | `model_call` 有默认实现 | 简单频道无需关心 AI API 调用细节 |
 | 管道不持有任何频道引用 | 通过回调完全解耦，新增频道不影响管道代码 |
+
+## Agent 模式会话
+
+`AIPipeline` 支持识别 `session_mode: "agent"` 模式的会话（如工作流触发的会话），与普通角色对话区分：
+
+- `ai_service` 在创建会话时将 `session_mode` 同步到 `ctx.metadata["session_mode"]`
+- 管道在 `session_mode == "agent"` 时跳过**角色记忆注入**（`character.memories_legacy` / `MemoryFS` 等）
+- agent 模式下不再追加 `CORE_INSTRUCTIONS`，避免与工作流自身指令冲突
+- 定时触发场景下，使用工作流自身的描述/提示作为用户消息，而非固定的 `[定时触发] ...` 文本
+
+适合需要以「无角色身份」执行 AI 调度的场景，例如工作流 / 自动化任务 / 计划任务。

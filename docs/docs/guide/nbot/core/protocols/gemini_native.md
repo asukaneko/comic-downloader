@@ -106,10 +106,24 @@ finish_reason 映射：`STOP` → `"stop"`，`MAX_TOKENS` → `"length"`，其�
 - `functionCall` → `{"type": "tool_call_start", "tool_call": {...}}`（含 `_thought_signature`）
 - `usageMetadata` 非空 → `{"type": "usage", "usage": {...}}`
 
+### 边界场景处理
+
+为提升流式响应的健壮性，解析器在以下场景中**不会抛异常**，而是安全降级：
+
+| 场景 | 行为 |
+|------|------|
+| `candidates` / `content` / `parts` 为 `None` | 返回 `{"type": "content", "content": ""}` |
+| `candidates` 为空数组 | 返回 `{"type": "content", "content": ""}` |
+| chunk 仅含 `usageMetadata`（无 content） | 返回 `{"type": "usage", "usage": {...}}` |
+| chunk 仅含 `finishReason`（流结束，content 为 None） | 返回 `{"type": "content", "content": ""}` |
+| `candidate` / `part` 不是 dict 类型 | 跳过该节点继续处理 |
+
+Gemini 流式请求默认携带 `?alt=sse` 参数，确保返回标准 SSE 格式（部分代理会自动追加）。
+
 ## 注意事项
 
 - 认证：Google 官方 API 使用 URL query 参数 `?key=`，非 Google 的中转服务使用 `Authorization: Bearer`
-- JSON Schema 清理：`_strip_json_schema_extras` 只移除 Gemini 明确拒绝的字段，不影响其他提供商
+- JSON Schema 清理：`_strip_json_schema_extras` 移除 Gemini 明确拒绝的字段（包括 `additionalProperties` 等扩展字段）
 - `tool_choice` 参数当前被忽略（Gemini 不直接支持）
 - `maxOutputTokens` 通过 `generationConfig` 传递
 - `extra_body` 支持 `temperature`、`topP`、`topK`、`responseMimeType`、`responseSchema` 等

@@ -22,8 +22,9 @@
 | `total` | int | 总 Token 数 |
 | `cost` | float | 估算费用（美元） |
 | `source` | string | 来源标识 |
-| `purpose` | string | 用途分类（`chat` / `plot` / `memory` / `review` / `vision` / `stt` / `image_gen`） |
+| `purpose` | `string` | 用途分类（`chat` / `plot` / `memory` / `review` / `vision` / `stt` / `image_gen`） |
 | `duration_ms` | float | 响应耗时（毫秒，可选） |
+| `ttft_ms` | float | 首字符时间 Time-to-First-Token（毫秒，可选，非流式 ≈ duration） |
 
 ## 模型定价
 
@@ -87,6 +88,7 @@ manager.record_usage(
     source="web",               # 来源标识
     purpose="chat",             # 用途分类（默认 chat）
     duration_ms=1234.5,         # 响应耗时 ms（可选）
+    ttft_ms=210.3,              # 首字符时间 ms（可选）
 )
 ```
 
@@ -134,6 +136,21 @@ print(stats["history"])            # 每日汇总历史
 | `models` | 模型维度统计 |
 | `users` | 用户维度统计 |
 | `purposes` | 用途维度统计（按 purpose 聚合 input/output/total/message_count/cost） |
+| `avg_ttft` | 平均首字符时间（秒，仅在存在 `ttft_ms` 记录时计算） |
+| `avg_duration` | 平均完整耗时（秒，仅在存在 `duration_ms` 记录时计算） |
+
+## 响应耗时指标
+
+NekoBot 在以下三种执行路径上自动采集耗时指标，并写入 `TokenStats`：
+
+| 路径 | 记录位置 | `ttft_ms` 来源 | `duration_ms` 来源 |
+|------|---------|----------------|-------------------|
+| AI Pipeline 流式 | `ai_pipeline.py` | 流式首块到达时间 | 管道整体耗时 |
+| AI Pipeline 非流式 | `ai_pipeline.py` | ≈ `duration_ms` | 完整调用耗时 |
+| 多轮发言者 | `ai_service.py` | 首块时间 | 整体调用耗时 |
+| 工作流执行 | `server.py` | ≈ `duration_ms`（工作流为非流式聚合） | 工作流整体耗时 |
+
+`get_stats()` 返回的 `avg_ttft` / `avg_duration` 仅在存在对应字段时返回数值。前端 Token 用量面板新增 TTFT/Duration 卡片，记录表格同步展示两列；前端的 `formatTtft()` / `formatDuration()` 会把毫秒自动格式化为秒显示。
 
 ### get_rankings()
 

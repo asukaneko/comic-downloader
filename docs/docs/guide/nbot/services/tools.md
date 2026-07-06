@@ -34,10 +34,15 @@ result = ToolExecutor.search_web(
 
 ### 获取时间
 
+返回当前日期、时间、星期、ISO 时间戳：
+
 ```python
 result = ToolExecutor.get_date_time()
-# 返回: {"date": "2025-01-01", "time": "12:00:00", ...}
+# 返回: {"success": True, "date": "2026-07-06", "time": "12:00:00",
+#         "weekday": "Monday", "weekday_cn": "周一", "timestamp": "2026-07-06T12:00:00"}
 ```
+
+> `get_date_time` 通过 `builtin` 处理器实现（`type: "builtin"`, `handler: "get_date_time"`），避免动态执行 Python 代码带来的语法/安全风险。
 
 ### HTTP 请求
 

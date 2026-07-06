@@ -141,6 +141,30 @@ def _extract_attachments(data):
 
 `QQBotChannelAdapter` 完整实现了 `CharacterChannelAdapter` 协议，可接入角色运行时系统。
 
+### 角色身份解析
+
+`nbot/character/adapters/nekobot.py` 提供 `get_qqbot_character_context(user_id, group_openid, personality_name)` 工厂函数，用于从 QQ Bot 消息中解析角色身份：
+
+```python
+from nbot.character.adapters.nekobot import get_qqbot_character_context
+
+identity = get_qqbot_character_context(
+    user_id="user_openid_123",
+    group_openid="group_openid_456",  # 群聊传入，私聊留空
+    personality_name="my_character",
+)
+# → CharacterIdentity(character_id=..., target_id=..., scope_id=..., channel="qqbot")
+```
+
+`QQBotService.get_character_context` 调用上述函数并返回角色身份上下文。不同场景下的 `scope_id`：
+
+| 场景 | `scope_id` 模板 | 用途 |
+|------|----------------|------|
+| 群聊 | `qqbot:group:{group_openid}:user:{user_openid}` | 群内多角色隔离 |
+| 私聊 | `qqbot:user:{user_openid}` | 个人记忆作用域 |
+
+> 当 `CHANNEL_RUNTIME_ENABLED["qqbot"]` 未启用时，函数返回 `None`，调用方应回退到默认角色身份。
+
 ### 运行时上下文
 
 ```python

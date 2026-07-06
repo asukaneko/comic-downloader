@@ -205,6 +205,26 @@ print(f"执行日志: {result.logs}")
 {"type": "message", "config": {"content": "天气: {weather.result.temperature}°C"}}
 ```
 
+## Agent 模式会话
+
+工作流创建的会话对象支持 `session_mode: "agent"` 字段：
+
+```json
+{
+  "session_id": "wf_xxx",
+  "session_mode": "agent"
+}
+```
+
+启用 agent 模式后：
+
+- `ai_service` 会把 `session_mode` 同步到 `ctx.metadata`，`AIPipeline` 据此识别 agent 模式会话
+- agent 模式下自动**跳过角色记忆注入**（`character.memories_legacy` / `MemoryFS` 等），避免上下文污染
+- 定时触发使用工作流自身描述/提示作为用户消息，移除系统提示中多余的 `CORE_INSTRUCTIONS`，与 agent 模式保持一致
+- 工具调用循环统一复用 `run_tool_call_loop`，与主对话/工作流保持同一套错误处理与退出语义
+
+该模式适合让工作流会话以「无角色身份」的方式直接响应调度系统，绕开角色卡片的情感/状态/记忆层。
+
 ## Web 界面
 
 工作流可以在 Web 后台的可视化编辑器中创建和编辑：
