@@ -4142,6 +4142,9 @@
                                             <span class="hk-meta-item">
                                                 <i class="fas fa-repeat"></i> {{ (h.trigger_mode || 'always') === 'once_per_conversation' ? '每会话一次' : '持续触发' }}
                                             </span>
+                                            <span class="hk-meta-item" v-if="h.conditions && Object.keys(h.conditions).length">
+                                                <i class="fas fa-filter"></i> {{ (h.condition_logic || 'and') === 'or' ? 'OR' : 'AND' }}
+                                            </span>
                                         </div>
                                         <div class="hk-status">
                                             <span class="hk-status-dot" :class="{ active: h.enabled }"></span>
@@ -4436,10 +4439,17 @@
                                     <div class="hk-form-section">
                                         <div class="hk-form-section-title">
                                             <i class="fas fa-filter"></i> 触发条件
-                                            <span class="hk-form-hint">（AND 逻辑，全部满足才触发）</span>
                                             <a href="https://asukaneko.github.io/nekobot/guide/nbot/hooks/conditions.html" target="_blank" class="hk-doc-link" title="查看条件参考"><i class="fas fa-book"></i></a>
                                         </div>
                                         <div class="form-group">
+                                            <label class="form-label">条件逻辑</label>
+                                            <select v-model="newHook.condition_logic" class="form-select">
+                                                <option value="and">AND（全部满足才触发）</option>
+                                                <option value="or">OR（任一满足即触发）</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <span class="hk-form-hint" style="display:block; margin-bottom: 4px;">{{ newHook.condition_logic === 'or' ? 'OR 逻辑：任一条件满足即触发' : 'AND 逻辑：全部条件满足才触发' }}</span>
                                             <textarea v-model="newHook.conditionsStr" class="form-textarea hk-code-textarea" rows="3" placeholder='留空表示无条件触发&#10;示例: { "channel": "web", "mood_is": "happy", "affection_gte": 70 }'></textarea>
                                         </div>
                                         <div class="hk-condition-keys">
@@ -12414,6 +12424,7 @@
                     newHook: {
                         name: '', event: '', scope: 'global', priority: 100,
                         trigger_mode: 'always',
+                        condition_logic: 'and',
                         enabled: true, description: '', character_id: '',
                         conversation_id: '', user_id: '',
                         conditionsStr: '', actions: [], actionsStr: [],

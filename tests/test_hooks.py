@@ -547,6 +547,102 @@ def test_hook_template_presets_are_available_in_create_form():
         assert key in script
 
 
+# ── condition_logic (AND / OR) ──────────────────────────────────
+
+
+def test_condition_or_logic_one_match():
+    """OR 逻辑：任一条件满足即返回 True"""
+    evt = RuntimeEvent(type="t", character_id="c1")
+    ctx = {"mood": "sad", "affection": 30}
+    conds = {"character_id": "c1", "mood_is": "happy", "affection_gte": 80}
+    # AND 下应失败（mood 和 affection 不匹配）
+    assert _eval(conds, event=evt, context=ctx) is False
+    # OR 下应通过（character_id 匹配）
+    evaluator = ConditionEvaluator()
+    assert evaluator.evaluate(conds, evt, ctx, logic="or") is True
+
+
+def test_condition_or_logic_none_match():
+    """OR 逻辑：无任何条件满足返回 False"""
+    evt = RuntimeEvent(type="t", character_id="c_other")
+    ctx = {"mood": "sad", "affection": 30}
+    conds = {"character_id": "c1", "mood_is": "happy", "affection_gte": 80}
+    evaluator = ConditionEvaluator()
+    assert evaluator.evaluate(conds, evt, ctx, logic="or") is False
+
+
+def test_condition_or_logic_empty_passes():
+    """空条件在 OR 下也应返回 True"""
+    evt = RuntimeEvent(type="t")
+    evaluator = ConditionEvaluator()
+    assert evaluator.evaluate({}, evt, {}, logic="or") is True
+
+
+def test_conversation_hook_condition_logic_default():
+    """默认 condition_logic 应为 'and'"""
+    h = ConversationHook(name="n", event="e")
+    assert h.condition_logic == "and"
+
+
+def test_conversation_hook_condition_logic_roundtrip():
+    """condition_logic 应正确序列化/反序列化"""
+    h = ConversationHook(name="n", event="e", condition_logic="or")
+    d = h.to_dict()
+    assert d["condition_logic"] == "or"
+    h2 = ConversationHook.from_dict(d)
+    assert h2.condition_logic == "or"
+
+
+def test_conversation_hook_invalid_condition_logic_defaults_to_and():
+    """非法 condition_logic 应回退到 'and'"""
+    h = ConversationHook(name="n", event="e", condition_logic="bad")
+    assert h.condition_logic == "and"
+
+
+def test_hook_manager_emit_with_or_logic():
+    """HookManager 应使用 hook.condition_logic 评估条件"""
+    with tempfile.TemporaryDirectory() as tmp:
+        mgr = HookManager(data_dir=tmp)
+        h = ConversationHook(
+            name="or_test",
+            event="e",
+            condition_logic="or",
+            conditions={"character_id": "c1", "affection_gte": 80},
+            actions=[{"type": "log", "message": "hit"}],
+        )
+        mgr.add_hook(h)
+
+        # character_id 不匹配但 affection 满足 → OR 下应触发
+        evt = RuntimeEvent(type="e", character_id="c_other")
+        ctx = {"affection": 90}
+        logs = _loop().run_until_complete(mgr.emit_event(evt, context=ctx))
+        assert len(logs) == 1
+
+        mgr.reset_turn()
+
+        # AND 下同样数据应不触发
+        h.condition_logic = "and"
+        mgr._save_hooks()
+        logs = _loop().run_until_complete(mgr.emit_event(evt, context=ctx))
+        assert len(logs) == 0
+
+
+def test_hook_manager_update_condition_logic():
+    """update_hook 应能更新 condition_logic 字段"""
+    with tempfile.TemporaryDirectory() as tmp:
+        mgr = HookManager(data_dir=tmp)
+        h = ConversationHook(name="n", event="e")
+        mgr.add_hook(h)
+        assert mgr.get_hook(h.id).condition_logic == "and"
+
+        mgr.update_hook(h.id, condition_logic="or")
+        assert mgr.get_hook(h.id).condition_logic == "or"
+
+        # 非法值回退到 and
+        mgr.update_hook(h.id, condition_logic="invalid")
+        assert mgr.get_hook(h.id).condition_logic == "and"
+
+
 # ── 别名兼容（文档事件名 → 代码事件名）──────────────────────────
 
 

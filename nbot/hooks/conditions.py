@@ -31,6 +31,10 @@ class ConditionEvaluator:
     - energy_gte / energy_lte: int — 精力阈值
     - time_range: [str, str] — 时间范围（HH:MM 格式）
     - event_source: str — 事件来源模块匹配
+
+    条件逻辑（condition_logic）：
+    - "and"（默认）：所有条件全部满足才返回 True
+    - "or"：任一条件满足即返回 True
     """
 
     def evaluate(
@@ -38,17 +42,28 @@ class ConditionEvaluator:
         conditions: Dict[str, Any],
         event: RuntimeEvent,
         context: Dict[str, Any],
+        *,
+        logic: str = "and",
     ) -> bool:
-        """评估所有条件，全部满足返回 True
+        """评估所有条件
 
         Args:
             conditions: 条件字典
             event: 当前事件
             context: 额外上下文（如角色状态、关系数据）
+            logic: 条件之间的逻辑关系，"and" 全部满足 / "or" 任一满足
         """
         if not conditions:
             return True
 
+        if logic == "or":
+            for key, expected in conditions.items():
+                if self._evaluate_one(key, expected, event, context):
+                    return True
+            _log.debug("[HookCondition] OR 逻辑下无任何条件满足")
+            return False
+
+        # 默认 AND 逻辑
         for key, expected in conditions.items():
             if not self._evaluate_one(key, expected, event, context):
                 _log.debug(

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 VALID_TRIGGER_MODES = frozenset({"always", "once_per_conversation"})
+VALID_CONDITION_LOGIC = frozenset({"and", "or"})
 
 
 def _new_id(prefix: str = "hook") -> str:
@@ -92,6 +93,7 @@ class ConversationHook:
     timeout_ms: int = 3000
     max_retries: int = 0
     trigger_mode: str = "always"  # always / once_per_conversation
+    condition_logic: str = "and"  # and / or — 多个条件之间的逻辑关系
 
     # 关联
     character_id: str = ""  # scope=character 时绑定的角色 ID
@@ -110,6 +112,8 @@ class ConversationHook:
             self.updated_at = self.created_at
         if self.trigger_mode not in VALID_TRIGGER_MODES:
             self.trigger_mode = "always"
+        if self.condition_logic not in VALID_CONDITION_LOGIC:
+            self.condition_logic = "and"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -126,6 +130,7 @@ class ConversationHook:
             "timeout_ms": self.timeout_ms,
             "max_retries": self.max_retries,
             "trigger_mode": self.trigger_mode,
+            "condition_logic": self.condition_logic,
             "character_id": self.character_id,
             "conversation_id": self.conversation_id,
             "user_id": self.user_id,
@@ -149,6 +154,7 @@ class ConversationHook:
             timeout_ms=data.get("timeout_ms", 3000),
             max_retries=data.get("max_retries", 0),
             trigger_mode=data.get("trigger_mode", "always"),
+            condition_logic=data.get("condition_logic", "and"),
             character_id=data.get("character_id", ""),
             conversation_id=data.get("conversation_id", ""),
             user_id=data.get("user_id", ""),

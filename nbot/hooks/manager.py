@@ -17,6 +17,7 @@ from nbot.hooks.actions import ActionExecutor
 from nbot.hooks.conditions import ConditionEvaluator
 from nbot.hooks.event_bus import ConversationEventBus, match_event_pattern
 from nbot.hooks.models import (
+    VALID_CONDITION_LOGIC,
     VALID_TRIGGER_MODES,
     ConversationHook,
     HookExecutionLog,
@@ -93,7 +94,7 @@ class HookManager:
     _UPDATABLE_FIELDS = frozenset({
         "name", "description", "enabled", "scope", "event", "priority",
         "conditions", "actions", "permissions", "timeout_ms", "max_retries",
-        "trigger_mode", "character_id", "conversation_id", "user_id",
+        "trigger_mode", "condition_logic", "character_id", "conversation_id", "user_id",
     })
 
     def update_hook(self, hook_id: str, **fields) -> bool:
@@ -106,6 +107,8 @@ class HookManager:
                 continue
             if key == "trigger_mode" and value not in VALID_TRIGGER_MODES:
                 value = "always"
+            if key == "condition_logic" and value not in VALID_CONDITION_LOGIC:
+                value = "and"
             setattr(hook, key, value)
         hook.updated_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         self._save_hooks()
@@ -176,7 +179,9 @@ class HookManager:
                 break
             if hook.id in self._turn_hook_ids_executed:
                 continue
-            if not self._condition_evaluator.evaluate(hook.conditions, event, ctx):
+            if not self._condition_evaluator.evaluate(
+                hook.conditions, event, ctx, logic=hook.condition_logic
+            ):
                 continue
             if self._has_triggered_for_conversation(hook, event):
                 continue
