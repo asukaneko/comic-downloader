@@ -3148,11 +3148,16 @@
                                     class="character-gallery-card"
                                     @click="selectCharacterCard(preset)"
                                 >
+                                    <!-- 背景光斑 -->
+                                    <div class="character-gallery-blob character-gallery-blob-1"></div>
+                                    <div class="character-gallery-blob character-gallery-blob-2"></div>
+                                    <!-- 立绘区域 -->
                                     <div class="character-gallery-cover" :class="{ 'has-portrait': preset.portrait }">
                                         <img v-if="preset.portrait" :src="preset.portrait" :alt="preset.name">
                                         <i v-else :class="preset.avatar || preset.icon || 'fas fa-user-circle'"></i>
-                                        <div class="character-gallery-cover-shade"></div>
+                                        <div class="character-gallery-cover-overlay"></div>
                                     </div>
+                                    <!-- 信息区域 -->
                                     <div class="character-gallery-card-body">
                                         <div class="character-gallery-card-title-row">
                                             <h3>{{ preset.name || '未命名角色' }}</h3>
@@ -3183,70 +3188,102 @@
                                         <i v-else :class="selectedCharacterCard.avatar || selectedCharacterCard.icon || 'fas fa-user-circle'"></i>
                                     </div>
                                     <div class="character-detail-main">
-                                        <div class="character-detail-kicker"><i class="fas fa-id-card"></i> Character Profile</div>
-                                        <h2>{{ selectedCharacterCard.name || '未命名角色' }}</h2>
-                                        <p>{{ selectedCharacterCard.description || selectedCharacterCard.basicInfo || '这个角色还没有填写简介。' }}</p>
-                                        <div v-if="selectedCharacterCard.tags && selectedCharacterCard.tags.length" class="character-detail-tags">
-                                            <span v-for="tag in selectedCharacterCard.tags" :key="tag">{{ tag }}</span>
+                                        <div class="character-detail-head">
+                                            <div class="character-detail-kicker"><i class="fas fa-id-card"></i> Character Profile</div>
+                                            <h2>{{ selectedCharacterCard.name || '未命名角色' }}</h2>
+                                            <p>{{ selectedCharacterCard.description || selectedCharacterCard.basicInfo || '这个角色还没有填写简介。' }}</p>
+                                            <div v-if="selectedCharacterCard.tags && selectedCharacterCard.tags.length" class="character-detail-tags">
+                                                <span v-for="tag in selectedCharacterCard.tags" :key="tag">{{ tag }}</span>
+                                            </div>
+                                            <div class="character-detail-actions">
+                                                <button class="btn btn-primary" @click="editSelectedCharacterCard">
+                                                    <i class="fas fa-edit"></i> 编辑角色卡
+                                                </button>
+                                                <button class="btn btn-secondary" @click="openSelectedCharacterMemory">
+                                                    <i class="fas fa-brain"></i> 查看记忆
+                                                </button>
+                                                <button class="btn btn-secondary" @click="openSelectedCharacterState">
+                                                    <i class="fas fa-heart-pulse"></i> 查看状态
+                                                </button>
+                                                <button class="btn btn-accent" @click="startSessionWithPreset(selectedCharacterCard)">
+                                                    <i class="fas fa-comments"></i> 开始对话
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div class="character-detail-actions">
-                                            <button class="btn btn-primary" @click="editSelectedCharacterCard">
-                                                <i class="fas fa-edit"></i> 编辑角色卡
-                                            </button>
-                                            <button class="btn btn-secondary" @click="openSelectedCharacterMemory">
-                                                <i class="fas fa-brain"></i> 查看记忆
-                                            </button>
-                                            <button class="btn btn-secondary" @click="openSelectedCharacterState">
-                                                <i class="fas fa-heart-pulse"></i> 查看状态
-                                            </button>
-                                            <button class="btn btn-accent" @click="startSessionWithPreset(selectedCharacterCard)">
-                                                <i class="fas fa-comments"></i> 开始对话
-                                            </button>
+
+                                        <div class="character-detail-side">
+                                            <div class="character-detail-mini-panel">
+                                                <div class="character-detail-mini-title"><i class="fas fa-chart-pie"></i> 角色统计</div>
+                                                <div class="character-stat-grid character-stat-grid-2x2">
+                                                    <div class="character-stat-card"><span>对话数</span><b>{{ getCharacterStats(selectedCharacterCard).conversationCount }}</b></div>
+                                                    <div class="character-stat-card"><span>消息数</span><b>{{ getCharacterStats(selectedCharacterCard).messageCount }}</b></div>
+                                                    <div class="character-stat-card"><span>记忆数</span><b>{{ getCharacterStats(selectedCharacterCard).memoryCount }}</b></div>
+                                                    <div class="character-stat-card"><span>Token</span><b>{{ formatTokenCount(getCharacterStats(selectedCharacterCard).tokenTotal) }}</b></div>
+                                                </div>
+                                            </div>
+
+                                            <div class="character-detail-mini-panel">
+                                                <div class="character-detail-mini-title"><i class="fas fa-heart"></i> 初始状态</div>
+                                                <div class="character-state-bars">
+                                                    <div v-for="item in getCharacterStateBars(selectedCharacterCard)" :key="item.key" class="character-state-row">
+                                                        <div class="character-state-label"><span>{{ item.icon }} {{ item.label }}</span><b>{{ item.value }}</b></div>
+                                                        <div class="character-state-track"><div class="character-state-fill" :style="{ width: item.value + '%', background: item.color }"></div></div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="character-detail-grid">
-                                    <div class="character-detail-panel character-detail-story">
+                                    <div class="character-detail-panel">
                                         <div class="character-detail-panel-title"><i class="fas fa-scroll"></i> 角色设定</div>
-                                        <div class="character-detail-field" v-if="selectedCharacterCard.basicInfo">
-                                            <label>基本信息</label>
-                                            <p>{{ selectedCharacterCard.basicInfo }}</p>
-                                        </div>
-                                        <div class="character-detail-field" v-if="selectedCharacterCard.personality">
-                                            <label>性格特点</label>
-                                            <p>{{ selectedCharacterCard.personality }}</p>
-                                        </div>
-                                        <div class="character-detail-field" v-if="selectedCharacterCard.scenario">
-                                            <label>背景设定</label>
-                                            <p>{{ selectedCharacterCard.scenario }}</p>
-                                        </div>
-                                        <div class="character-detail-field" v-if="selectedCharacterCard.firstMessage">
-                                            <label>开场白</label>
-                                            <p>{{ selectedCharacterCard.firstMessage }}</p>
+                                        <div class="character-detail-fields">
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.basicInfo">
+                                                <label>基本信息</label>
+                                                <p>{{ selectedCharacterCard.basicInfo }}</p>
+                                            </div>
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.personality">
+                                                <label>性格特点</label>
+                                                <p>{{ selectedCharacterCard.personality }}</p>
+                                            </div>
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.scenario">
+                                                <label>背景设定</label>
+                                                <p>{{ selectedCharacterCard.scenario }}</p>
+                                            </div>
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.firstMessage">
+                                                <label>开场白</label>
+                                                <p>{{ selectedCharacterCard.firstMessage }}</p>
+                                            </div>
                                         </div>
                                         <div v-if="!selectedCharacterCard.basicInfo && !selectedCharacterCard.personality && !selectedCharacterCard.scenario && !selectedCharacterCard.firstMessage" class="character-detail-muted">
-                                            暂无详细设定，点击编辑角色卡补充。
+                                            <i class="fas fa-circle-info"></i> 暂无详细设定，点击编辑角色卡补充。
                                         </div>
                                     </div>
 
                                     <div class="character-detail-panel">
-                                        <div class="character-detail-panel-title"><i class="fas fa-chart-pie"></i> 角色统计</div>
-                                        <div class="character-stat-grid">
-                                            <div class="character-stat-card"><span>对话数</span><b>{{ getCharacterStats(selectedCharacterCard).conversationCount }}</b></div>
-                                            <div class="character-stat-card"><span>消息数</span><b>{{ getCharacterStats(selectedCharacterCard).messageCount }}</b></div>
-                                            <div class="character-stat-card"><span>记忆数</span><b>{{ getCharacterStats(selectedCharacterCard).memoryCount }}</b></div>
-                                            <div class="character-stat-card"><span>Token</span><b>{{ formatTokenCount(getCharacterStats(selectedCharacterCard).tokenTotal) }}</b></div>
-                                        </div>
-                                    </div>
-
-                                    <div class="character-detail-panel">
-                                        <div class="character-detail-panel-title"><i class="fas fa-heart"></i> 初始状态</div>
-                                        <div class="character-state-bars">
-                                            <div v-for="item in getCharacterStateBars(selectedCharacterCard)" :key="item.key" class="character-state-row">
-                                                <div class="character-state-label"><span>{{ item.icon }} {{ item.label }}</span><b>{{ item.value }}</b></div>
-                                                <div class="character-state-track"><div class="character-state-fill" :style="{ width: item.value + '%', background: item.color }"></div></div>
+                                        <div class="character-detail-panel-title"><i class="fas fa-sliders"></i> 对话控制</div>
+                                        <div class="character-detail-fields">
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.responseFormat">
+                                                <label>回复格式</label>
+                                                <p>{{ selectedCharacterCard.responseFormat }}</p>
                                             </div>
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.rules && selectedCharacterCard.rules.length">
+                                                <label>
+                                                    行为规则
+                                                    <span class="character-detail-badge">{{ selectedCharacterCard.rules.length }}</span>
+                                                </label>
+                                                <ol class="character-detail-rules">
+                                                    <li v-for="(rule, idx) in selectedCharacterCard.rules" :key="idx">{{ rule }}</li>
+                                                </ol>
+                                            </div>
+                                            <div class="character-detail-field" v-if="selectedCharacterCard.exampleDialogues">
+                                                <label>示例对话</label>
+                                                <pre class="character-detail-example">{{ selectedCharacterCard.exampleDialogues }}</pre>
+                                            </div>
+                                        </div>
+                                        <div v-if="!selectedCharacterCard.responseFormat && (!selectedCharacterCard.rules || !selectedCharacterCard.rules.length) && !selectedCharacterCard.exampleDialogues" class="character-detail-muted">
+                                            <i class="fas fa-circle-info"></i> 暂无对话控制，点击编辑角色卡补充。
                                         </div>
                                     </div>
                                 </div>
