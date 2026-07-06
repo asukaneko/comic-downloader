@@ -1197,6 +1197,237 @@ def register_ai_commands(
         switch.save_switches()
 
     @register_command(
+        "/compact",
+        help_text="/compact -> 压缩当前会话上下文（早期消息总结为摘要，保留最近若干条）(admin)",
+        category="2",
+        admin_show=True,
+    )
+    async def handle_compact_context(msg, is_group=True):
+        if needs_legacy_group_admin(msg, is_group):
+            await msg.reply(text="你没有权限喔~")
+            return
+
+        info = current_qq_session_info(msg, is_group)
+        session_id = str(info.get("session_id") or "")
+        if not session_id:
+            await reply_current_channel(msg, is_group, "当前会话没有可用的 session_id，无法压缩。")
+            return
+
+        messages = load_current_qq_session_messages(info)
+        if not messages:
+            await reply_current_channel(msg, is_group, "当前会话没有消息，无需压缩。")
+            return
+
+        has_been_compressed = any(
+            isinstance(m, dict)
+            and m.get("role") == "system"
+            and str(m.get("id", "")).startswith("summary_")
+            for m in messages
+        )
+        min_messages = 5 if has_been_compressed else 10
+        if len(messages) < min_messages:
+            await reply_current_channel(
+                msg,
+                is_group,
+                f"消息数量不足（{len(messages)}/{min_messages}），无需压缩。",
+            )
+            return
+
+        system_msg = None
+        if messages and isinstance(messages[0], dict) and messages[0].get("role") == "system":
+            system_msg = messages[0]
+
+        keep_count = min(3 if has_been_compressed else 5, len(messages) - 2)
+        recent_messages = messages[-keep_count:] if messages else []
+
+        compress_start = 1 if system_msg else 0
+        compress_end = len(messages) - keep_count
+        if compress_end <= compress_start:
+            await reply_current_channel(msg, is_group, "没有足够的早期消息需要压缩。")
+            return
+
+        messages_to_compress = [
+            m for m in messages[compress_start:compress_end]
+            if isinstance(m, dict)
+            and not (m.get("role") == "system" and str(m.get("id", "")).startswith("summary_"))
+        ]
+        if not messages_to_compress:
+            await reply_current_channel(msg, is_group, "没有消息需要压缩。")
+            return
+
+        conversation_text = "\n".join(
+            f"[{m.get('role', 'user')}]: {str(m.get('content', ''))[:500]}"
+            for m in messages_to_compress
+            if m.get("content")
+        )
+
+        if has_been_compressed:
+            summary_prompt = (
+                '以下内容包含上一轮的对话摘要和后续新的对话，请将它们融合成一份新的简洁总结。'
+                '旧摘要中以"【对话总结】"开头的内容是之前对话的要点，'
+                '请吸收保留其中仍然重要的信息，与新对话内容整合，不要丢失关键上下文：\n\n'
+                f"{conversation_text}\n\n请融合以上所有信息，用80-150字总结："
+            )
+        else:
+            summary_prompt = (
+                "请简洁地总结以下对话的主要内容，保留关键信息和结论：\n\n"
+                f"{conversation_text}\n\n请用50-100字总结："
+            )
+
+        try:
+            from nbot.services.ai import ai_client
+
+            if not ai_client or not getattr(ai_client, "base_url", ""):
+                await reply_current_channel(msg, is_group, "AI 服务未配置，无法压缩。")
+                return
+
+            await reply_current_channel(
+                msg,
+                is_group,
+                f"正在压缩 {len(messages_to_compress)} 条早期消息...",
+            )
+
+            response = ai_client.chat_completion(
+                model=None,
+                messages=[{"role": "user", "content": summary_prompt}],
+                stream=False,
+            )
+
+            try:
+                from nbot.core.token_stats import (
+                    PURPOSE_UTILITY,
+                    get_token_stats_manager,
+                )
+
+                usage = getattr(response, "usage", None)
+                if usage:
+                    get_token_stats_manager().record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=getattr(ai_client, "model", "") or "",
+                        session_id=session_id,
+                        channel_type="command",
+                        source="command",
+                        purpose=PURPOSE_UTILITY,
+                    )
+            except Exception as stats_err:
+                log.debug(f"[Compact] 记录 token 用量失败: {stats_err}")
+
+            import re
+            import time as _time
+
+            summary = str(response.choices[0].message.content or "").strip()
+            summary = re.sub(r"【对话总结】\s*", "", summary).strip()
+            summary = re.sub(r"\*\*【对话总结】\*\*\s*", "", summary).strip()
+
+            new_messages = [system_msg] if system_msg else []
+            new_messages.append({
+                "id": f"summary_{int(_time.time())}",
+                "role": "system",
+                "content": f"【对话总结】{summary}",
+                "timestamp": _time.time(),
+            })
+            new_messages.extend(recent_messages)
+
+            cur_system_prompt = session_system_prompt(None, [system_msg] if system_msg else [])
+            replace_current_qq_session_messages(
+                info,
+                new_messages,
+                system_prompt=cur_system_prompt,
+            )
+
+            await reply_current_channel(
+                msg,
+                is_group,
+                f"上下文压缩完成：已将 {len(messages_to_compress)} 条早期消息总结为摘要，"
+                f"保留最近 {keep_count} 条消息。\n摘要预览：{summary[:80]}",
+            )
+        except Exception as e:
+            log.error(f"Compact context failed: {e}", exc_info=True)
+            await reply_current_channel(msg, is_group, f"压缩失败：{e}")
+
+    @register_command(
+        "/context",
+        help_text="/context -> 查看当前会话上下文使用情况",
+        category="2",
+    )
+    async def handle_context_info(msg, is_group=True):
+        info = current_qq_session_info(msg, is_group)
+        session_id = str(info.get("session_id") or "")
+        if not session_id:
+            await reply_current_channel(msg, is_group, "当前会话没有可用的 session_id。")
+            return
+
+        messages = load_current_qq_session_messages(info)
+        if not messages:
+            await reply_current_channel(msg, is_group, "当前会话没有消息记录。")
+            return
+
+        total_messages = len(messages)
+        system_messages = sum(
+            1 for m in messages if isinstance(m, dict) and m.get("role") == "system"
+        )
+        summary_messages = sum(
+            1 for m in messages
+            if isinstance(m, dict)
+            and m.get("role") == "system"
+            and str(m.get("id", "")).startswith("summary_")
+        )
+        user_count = sum(
+            1 for m in messages if isinstance(m, dict) and m.get("role") == "user"
+        )
+        assistant_count = sum(
+            1 for m in messages if isinstance(m, dict) and m.get("role") == "assistant"
+        )
+
+        total_chars = sum(len(str(m.get("content", ""))) for m in messages if isinstance(m, dict))
+        estimated_tokens = int(total_chars / 2.5)
+
+        max_context = 0
+        model_name = ""
+        try:
+            from nbot.services.ai import _load_shared_web_ai_config
+
+            config = _load_shared_web_ai_config() or {}
+            max_context = int(config.get("max_context_length", 0) or 0)
+            model_name = str(config.get("model", "") or "")
+        except Exception:
+            pass
+
+        lines = [
+            f"会话：{info.get('label', session_id[:8])}",
+            f"消息总数：{total_messages} "
+            f"(user:{user_count} assistant:{assistant_count} system:{system_messages})",
+        ]
+        if summary_messages > 0:
+            lines.append(f"已含摘要：{summary_messages} 条")
+        lines.append(f"估算 tokens：约 {estimated_tokens:,}")
+        if model_name:
+            lines.append(f"当前模型：{model_name}")
+        if max_context > 0:
+            usage_percent = (estimated_tokens / max_context) * 100
+            lines.append(f"模型上限：{max_context:,} tokens")
+            lines.append(f"使用率：{usage_percent:.1f}%")
+            bar_len = 20
+            filled = int(bar_len * min(usage_percent, 100.0) / 100.0)
+            bar = "█" * filled + "░" * (bar_len - filled)
+            lines.append(f"[{bar}]")
+        else:
+            lines.append("模型上限：未配置")
+
+        last_msg = None
+        for m in reversed(messages):
+            if isinstance(m, dict) and m.get("role") != "system" and m.get("content"):
+                last_msg = m
+                break
+        if last_msg:
+            preview = str(last_msg.get("content", ""))[:50].replace("\n", " ")
+            lines.append(f"最近消息：[{last_msg.get('role')}] {preview}...")
+
+        await reply_current_channel(msg, is_group, "\n".join(lines))
+
+    @register_command(
         "/heartbeat",
         help_text="/heartbeat -> 查看当前会话心跳\n/heartbeat on [分钟] -> 开启当前会话心跳\n/heartbeat off -> 关闭当前会话心跳\n/heartbeat run -> 立即执行一次",
         category="2",
