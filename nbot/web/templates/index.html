@@ -10075,6 +10075,10 @@
                     <i class="fas fa-exclamation-triangle"></i>
                     <span>此操作不可撤销，删除后无法恢复</span>
                 </div>
+                <label class="confirm-modal-dont-remind" v-if="confirmModalConfig.showDontRemind">
+                    <input type="checkbox" v-model="confirmDontRemind">
+                    <span>不再提醒</span>
+                </label>
                 <div class="confirm-modal-footer">
                     <button class="btn confirm-btn-cancel" @click="cancelConfirmAction">
                         {{ confirmModalConfig.cancelText || '取消' }}
@@ -13216,6 +13220,7 @@
                     publicSharePasswordRequired: false,
                     publicShareExpiresAt: null,
                     showConfirmModal: false,
+                    confirmDontRemind: false,
                     showExpandEditor: false,
                     expandEditorContent: '',
                     expandEditorMode: 'edit',  // 'edit' 或 'preview'

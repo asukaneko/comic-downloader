@@ -9101,6 +9101,7 @@ def main(params):
                 
                 // Confirm Modal Functions
                 showConfirm(config) {
+                    this.confirmDontRemind = false;
                     this.confirmModalConfig = {
                         title: config.title || '确认操作',
                         message: config.message || '确定要执行这个操作吗？',
@@ -9114,6 +9115,7 @@ def main(params):
                         iconColor: config.iconColor || 'var(--accent-primary)',
                         iconBg: config.iconBg || '',
                         danger: config.danger || false,
+                        showDontRemind: config.showDontRemind || false,
                         onConfirm: config.onConfirm,
                         onCancel: config.onCancel,
                         action: config.action,
@@ -9121,10 +9123,11 @@ def main(params):
                     };
                     this.showConfirmModal = true;
                 },
-                
+
                 confirmAction() {
+                    const dontRemind = !!this.confirmDontRemind;
                     if (this.confirmModalConfig.onConfirm) {
-                        this.confirmModalConfig.onConfirm();
+                        this.confirmModalConfig.onConfirm(dontRemind);
                     } else if (this.confirmModalConfig.action) {
                         // 兼容旧版
                         this.confirmModalConfig.action('confirm');
@@ -17518,6 +17521,36 @@ def main(params):
             this.showToast('请先开启剧情模式', 'warning');
             return;
         }
+        // 关闭时直接执行，开启时弹窗确认（提醒 token 消耗）
+        if (this.plotRealTimeSync) {
+            this._executePlotRealTimeSyncToggle();
+            return;
+        }
+        // 检查是否已勾选"不再提醒"
+        const dontRemindKey = 'plot_real_time_sync_no_remind';
+        if (localStorage.getItem(dontRemindKey) === '1') {
+            this._executePlotRealTimeSyncToggle();
+            return;
+        }
+        this.showConfirm({
+            title: '开启同步现实时间',
+            message: '开启后，角色会按现实时间定期"自我生活"，刷新活动状态。',
+            impact: '注意：心跳系统会持续消耗 Token（采用指数退避，闲置越久间隔越长）。请确认是否开启？',
+            confirmText: '开启',
+            cancelText: '取消',
+            icon: 'fa-clock',
+            iconColor: 'var(--accent-primary)',
+            showDontRemind: true,
+            onConfirm: (dontRemind) => {
+                if (dontRemind) {
+                    localStorage.setItem(dontRemindKey, '1');
+                }
+                this._executePlotRealTimeSyncToggle();
+            }
+        });
+    },
+
+    async _executePlotRealTimeSyncToggle() {
         this.plotRealTimeSync = !this.plotRealTimeSync;
         const sid = this.currentSession?.id || this.currentSession?.session_id;
         if (sid) {
