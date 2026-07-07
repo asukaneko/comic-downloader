@@ -6002,6 +6002,12 @@ def main(params):
 
                     // 切换到新会话，清除所有状态
                     this.currentSession = session;
+                    // Agent 模式自动开启进度卡片；其他模式恢复用户保存的偏好
+                    if (session.session_mode === 'agent') {
+                        this.showThinkingCard = true;
+                    } else {
+                        this.showThinkingCard = localStorage.getItem('showThinkingCard') === 'true';
+                    }
                     this.plotMode = !!session.plot_mode || localStorage.getItem('plot_mode_' + session.id) === '1';
                     this.plotRealTimeSync = !!session.plot_real_time_sync || localStorage.getItem('plot_real_time_sync_' + session.id) === '1';
                     this.plotChoiceStyle = session.plot_choice_style || localStorage.getItem('plot_choice_style_' + session.id) || '';
@@ -6196,6 +6202,16 @@ def main(params):
                     // 如果是临时会话，跳过加载消息
                     if (this.currentSession._isTemp || this.currentSession.id.startsWith('temp_')) {
                         return;
+                    }
+
+                    // 流式输出期间跳过定时刷新，避免消息闪烁（先消失再出现）
+                    if (!forceScroll && this.isLoading && this.loadingSessionId === this.currentSession.id) {
+                        const hasStreaming = this.currentMessages.some(m =>
+                            m.is_streaming ||
+                            this.streamEndPending[m.id] ||
+                            (this.streamTypeQueues[m.id] && this.streamTypeQueues[m.id].length > 0)
+                        );
+                        if (hasStreaming) return;
                     }
 
                     try {
