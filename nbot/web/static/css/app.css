@@ -20135,6 +20135,89 @@
             background: var(--bg-secondary);
         }
 
+        /* ───── Modal 基础容器（收藏夹/搜索/其他 .modal-*） 浅色适配 ───── */
+        [data-theme="light"] .modal {
+            background: linear-gradient(145deg, #ffffff 0%, #f5f7fb 100%);
+            border-color: rgba(15, 23, 42, 0.08);
+            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        }
+        [data-theme="light"] .modal-header { border-bottom-color: rgba(15, 23, 42, 0.08); }
+        [data-theme="light"] .modal-title { color: #1f2937; }
+        [data-theme="light"] .modal-close { color: #7b8797; }
+        [data-theme="light"] .modal-close:hover { color: #1f2937; }
+        [data-theme="light"] .modal-footer { border-top-color: rgba(15, 23, 42, 0.08); }
+
+        [data-theme="light"] .empty-state { color: #7b8797; }
+        [data-theme="light"] .empty-state-icon { opacity: 0.45; color: #7b8797; }
+        [data-theme="light"] .empty-state-title { color: #1f2937; }
+
+        /* ───── 收藏夹弹窗补充 浅色适配 ───── */
+        [data-theme="light"] .message-favorite-toolbar-actions .btn,
+        [data-theme="light"] .message-favorite-toolbar .btn {
+            background: var(--bg-tertiary);
+            color: #1f2937;
+        }
+        [data-theme="light"] .message-favorite-title-input:focus {
+            background: #ffffff;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.18);
+        }
+        [data-theme="light"] .favorite-message-check {
+            background: #ffffff;
+        }
+        [data-theme="light"] .message-favorite-collection-item {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, 0.1);
+        }
+        [data-theme="light"] .message-favorite-collection-item:hover {
+            background: rgba(99, 102, 241, 0.06);
+        }
+        [data-theme="light"] .message-favorite-collection-icon {
+            background: rgba(99, 102, 241, 0.12);
+        }
+        [data-theme="light"] .message-favorite-collection-main strong { color: #1f2937; }
+        [data-theme="light"] .message-favorite-collection-main em { color: #7b8797; }
+        [data-theme="light"] .message-favorite-collection-count { color: #7b8797; }
+        [data-theme="light"] .message-favorite-back { color: #526173; }
+        [data-theme="light"] .message-favorite-back:hover { color: #1f2937; }
+        [data-theme="light"] .message-favorite-detail-title { color: #1f2937; }
+        [data-theme="light"] .message-favorite-item {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, 0.1);
+        }
+        [data-theme="light"] .message-favorite-item.user {
+            background: rgba(59, 130, 246, 0.08);
+            border-color: rgba(59, 130, 246, 0.28);
+        }
+        [data-theme="light"] .message-favorite-meta { color: #7b8797; }
+        [data-theme="light"] .message-favorite-content { color: #1f2937; }
+        [data-theme="light"] .message-favorites-empty i { color: #7b8797; }
+        [data-theme="light"] .message-favorites-empty p { color: #526173; }
+
+        /* ───── 搜索对话弹窗补充 浅色适配 ───── */
+        [data-theme="light"] .message-search-box {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, 0.1);
+        }
+        [data-theme="light"] .message-search-box i { color: #7b8797; }
+        [data-theme="light"] .message-search-box input { color: #1f2937; }
+        [data-theme="light"] .message-search-box input::placeholder { color: #94a3b8; }
+        [data-theme="light"] .message-search-empty i { color: #7b8797; }
+        [data-theme="light"] .message-search-empty p { color: #526173; }
+        [data-theme="light"] .message-search-result {
+            background: #ffffff;
+            border-color: rgba(15, 23, 42, 0.1);
+        }
+        [data-theme="light"] .message-search-result:hover {
+            background: rgba(99, 102, 241, 0.06);
+        }
+        [data-theme="light"] .message-search-result-icon {
+            background: rgba(99, 102, 241, 0.12);
+        }
+        [data-theme="light"] .message-search-result-main strong { color: #1f2937; }
+        [data-theme="light"] .message-search-result-main em { color: #526173; }
+        [data-theme="light"] .message-search-result-time { color: #7b8797; }
+
         [data-theme="light"] .user-edit-textarea {
             border-color: var(--border-color);
             background: var(--bg-tertiary);
@@ -30638,15 +30721,173 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     box-shadow: 0 0 0 1px var(--accent-primary, #ec4899);
 }
 
+/* ───── Story Map Modal (浅色模式适配) ───── */
 [data-theme="light"] .plot-map-modal {
     background: linear-gradient(160deg, #ffffff, #f5f7fb);
+    border-color: rgba(15, 23, 42, 0.08);
+    box-shadow: 0 25px 60px -12px rgba(15, 23, 42, 0.18);
 }
 
-[data-theme="light"] .plot-map-detail { background: rgba(0, 0, 0, 0.02); }
-[data-theme="light"] .plot-detail-title,
-[data-theme="light"] .plot-map-title,
+[data-theme="light"] .plot-map-header {
+    border-bottom-color: rgba(15, 23, 42, 0.08);
+    background: rgba(255, 255, 255, 0.6);
+}
+
+[data-theme="light"] .plot-map-title { color: #1f2937; }
+[data-theme="light"] .plot-map-tabs { background: rgba(15, 23, 42, 0.05); }
+[data-theme="light"] .plot-map-tabs button { color: #475569; }
+[data-theme="light"] .plot-map-tabs button.active { color: #fff; }
+
+[data-theme="light"] .plot-map-detail {
+    background: rgba(241, 245, 249, 0.5);
+    border-left-color: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="light"] .plot-detail-hint { color: #64748b; }
+[data-theme="light"] .plot-detail-title { color: #1f2937; }
+[data-theme="light"] .plot-detail-summary { color: #475569; }
+
+[data-theme="light"] .plot-detail-qa-user {
+    background: rgba(99, 179, 237, 0.1);
+    border-left-color: rgba(56, 139, 197, 0.7);
+}
+[data-theme="light"] .plot-detail-qa-label { color: #2c6fa6; }
+[data-theme="light"] .plot-detail-qa-label.ai { color: #475569; }
+[data-theme="light"] .plot-detail-qa-text { color: #1f2937; }
+[data-theme="light"] .plot-detail-qa-origin { color: #b6731c; }
+[data-theme="light"] .plot-detail-qa-tag { background: rgba(99, 179, 237, 0.18); color: #2c6fa6; }
+[data-theme="light"] .plot-detail-qa-tag.edited { background: rgba(240, 168, 62, 0.2); color: #b6731c; }
+[data-theme="light"] .plot-detail-qa-tag.manual { background: rgba(236, 72, 153, 0.18); color: #be2161; }
+
+[data-theme="light"] .plot-detail-section-title { color: #64748b; }
+[data-theme="light"] .plot-detail-rel .plot-rel-chip { background: rgba(15, 23, 42, 0.05); color: #475569; }
 [data-theme="light"] .plot-rel-chip b { color: #1f2937; }
-[data-theme="light"] .plot-detail-choice.selected { color: #1f2937; }
+
+[data-theme="light"] .plot-detail-choice {
+    background: rgba(15, 23, 42, 0.04);
+    color: #1f2937;
+}
+[data-theme="light"] .plot-detail-choice.selected { color: #1f2937; background: rgba(236, 72, 153, 0.1); }
+[data-theme="light"] .plot-detail-choice i { color: rgba(15, 23, 42, 0.4); }
+
+[data-theme="light"] .plot-choice-branch-btn {
+    border-color: rgba(56, 139, 197, 0.5);
+    background: rgba(56, 139, 197, 0.1);
+    color: #2c6fa6;
+}
+[data-theme="light"] .plot-choice-branch-btn:hover:not(:disabled) {
+    background: rgba(56, 139, 197, 0.2);
+    color: #1a5685;
+}
+[data-theme="light"] .plot-choice-walked { color: #94a3b8; }
+
+[data-theme="light"] .plot-detail-action.switch {
+    border-color: rgba(236, 72, 153, 0.4);
+    background: rgba(236, 72, 153, 0.1);
+    color: #be2161;
+}
+[data-theme="light"] .plot-detail-action.switch:hover:not(:disabled) {
+    background: rgba(236, 72, 153, 0.18);
+    color: #9b1850;
+}
+[data-theme="light"] .plot-detail-action.archive {
+    border-color: rgba(217, 119, 6, 0.4);
+    background: rgba(245, 158, 11, 0.1);
+    color: #b6731c;
+}
+[data-theme="light"] .plot-detail-action.archive:hover:not(:disabled) {
+    background: rgba(245, 158, 11, 0.18);
+    color: #92590c;
+}
+[data-theme="light"] .plot-detail-here {
+    background: rgba(236, 72, 153, 0.15);
+    color: #be2161;
+}
+[data-theme="light"] .plot-detail-rollback,
+[data-theme="light"] .plot-graph-node-rollback {
+    border-color: rgba(220, 38, 38, 0.4);
+    background: rgba(220, 38, 38, 0.08);
+    color: #b91c1c;
+}
+[data-theme="light"] .plot-detail-rollback:hover,
+[data-theme="light"] .plot-graph-node-rollback:hover {
+    background: rgba(220, 38, 38, 0.16);
+    color: #991b1b;
+}
+
+[data-theme="light"] .plot-preview-empty { color: #94a3b8; }
+[data-theme="light"] .plot-preview-msg { background: rgba(15, 23, 42, 0.04); }
+[data-theme="light"] .plot-preview-msg.user { background: rgba(99, 179, 237, 0.1); }
+[data-theme="light"] .plot-preview-role { color: #64748b; }
+[data-theme="light"] .plot-preview-msg.user .plot-preview-role { color: #2c6fa6; }
+[data-theme="light"] .plot-preview-text { color: #1f2937; }
+
+/* ───── Timeline View (浅色模式适配) ───── */
+[data-theme="light"] .plot-graph-stat {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+[data-theme="light"] .plot-graph-stat span { color: #1f2937; }
+[data-theme="light"] .plot-graph-stat label { color: #64748b; }
+
+[data-theme="light"] .plot-graph-timeline::before { background: rgba(15, 23, 42, 0.12); }
+[data-theme="light"] .plot-graph-node-dot { box-shadow: 0 0 0 4px #ffffff; }
+[data-theme="light"] .plot-graph-node-card {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+[data-theme="light"] .plot-graph-node-card.active {
+    border-color: var(--accent-primary, #ec4899);
+    box-shadow: 0 0 0 1px var(--accent-primary, #ec4899);
+}
+[data-theme="light"] .plot-graph-node-title { color: #1f2937; }
+[data-theme="light"] .plot-graph-node-level {
+    background: rgba(15, 23, 42, 0.06);
+    color: #475569;
+}
+[data-theme="light"] .plot-graph-node-summary { color: #475569; }
+
+[data-theme="light"] .plot-graph-choice {
+    background: rgba(15, 23, 42, 0.04);
+    color: #1f2937;
+}
+[data-theme="light"] .plot-graph-choice i { color: rgba(15, 23, 42, 0.4); }
+[data-theme="light"] .plot-graph-choice.selected { background: rgba(236, 72, 153, 0.1); color: #1f2937; }
+[data-theme="light"] .plot-graph-choice.selected i { color: #ec4899; }
+
+[data-theme="light"] .plot-graph-node-userturn {
+    background: rgba(99, 179, 237, 0.08);
+    border-left-color: rgba(56, 139, 197, 0.6);
+    color: #1f2937;
+}
+[data-theme="light"] .plot-graph-node-userturn.edited {
+    border-left-color: rgba(217, 119, 6, 0.7);
+    background: rgba(245, 158, 11, 0.08);
+}
+[data-theme="light"] .plot-graph-node-userturn.manual {
+    border-left-color: rgba(236, 72, 153, 0.6);
+    background: rgba(236, 72, 153, 0.06);
+}
+[data-theme="light"] .plot-graph-node-userturn-tag {
+    background: rgba(15, 23, 42, 0.06);
+    color: #475569;
+}
+
+/* ───── Empty State & Plot Graph Modal (浅色模式适配) ───── */
+[data-theme="light"] .plot-graph-modal {
+    background: linear-gradient(145deg, #ffffff, #f5f7fb);
+    border-color: rgba(15, 23, 42, 0.08);
+}
+[data-theme="light"] .plot-graph-empty { color: #475569; }
+[data-theme="light"] .plot-graph-empty i { color: #94a3b8; }
+[data-theme="light"] .plot-graph-empty-title { color: #1f2937; }
+[data-theme="light"] .plot-graph-empty-text { color: #64748b; }
+
+[data-theme="light"] .plot-style-hint { color: #475569; }
+[data-theme="light"] .plot-style-option {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(15, 23, 42, 0.1);
+}
 
 
 
