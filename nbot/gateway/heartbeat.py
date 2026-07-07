@@ -6,6 +6,9 @@ from typing import Any, Callable, Optional
 
 _global_session_heartbeat_manager = None
 
+# 二进制指数退避：会话闲置越久，心跳间隔越长（最多 2^MAX_BACKOFF 倍基础间隔）
+MAX_BACKOFF = 4  # 30min 基础间隔 → 最长约 8h
+
 
 class SessionHeartbeatManager:
     def __init__(
@@ -14,10 +17,13 @@ class SessionHeartbeatManager:
         data_dir: str,
         gateway_getter: Callable[[], Any],
         executor: Callable[..., Any],
+        activity_getter: Optional[Callable[[str], Optional[datetime]]] = None,
     ):
         self.data_dir = data_dir
         self.gateway_getter = gateway_getter
         self.executor = executor
+        # 查询会话最后用户活动时间（用于指数退避判定）
+        self.activity_getter = activity_getter
         self._configs = self._load()
 
     @property
@@ -36,6 +42,8 @@ class SessionHeartbeatManager:
             "last_trace_id": "",
             "last_gateway_status": "",
             "silent": False,
+            "backoff_count": 0,
+            "last_user_activity": None,
         }
 
     def _normalize_config(self, session_id: str, config: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -58,6 +66,10 @@ class SessionHeartbeatManager:
         normalized["last_trace_id"] = str(normalized.get("last_trace_id") or "")
         normalized["last_gateway_status"] = str(normalized.get("last_gateway_status") or "")
         normalized["silent"] = bool(normalized.get("silent", False))
+        try:
+            normalized["backoff_count"] = max(0, int(normalized.get("backoff_count", 0) or 0))
+        except Exception:
+            normalized["backoff_count"] = 0
         return normalized
 
     def _load(self) -> dict[str, dict[str, Any]]:
@@ -120,7 +132,11 @@ class SessionHeartbeatManager:
             last_run = datetime.fromisoformat(str(last_run_raw))
         except Exception:
             return True
-        due_at = last_run + timedelta(minutes=int(config.get("interval_minutes", 60) or 60))
+        # 二进制指数退避：实际间隔 = 基础间隔 * 2^min(backoff_count, MAX_BACKOFF)
+        base = int(config.get("interval_minutes", 60) or 60)
+        backoff = min(int(config.get("backoff_count", 0) or 0), MAX_BACKOFF)
+        effective_interval = base * (2 ** backoff)
+        due_at = last_run + timedelta(minutes=effective_interval)
         return due_at <= now
 
     async def execute_due_sessions(self) -> list[Any]:
@@ -161,12 +177,49 @@ class SessionHeartbeatManager:
 
         if hasattr(result, "trace_id"):
             updated = self.get_config(session_id)
-            updated["last_run"] = datetime.now().isoformat()
+            now = datetime.now()
+            updated["last_run"] = now.isoformat()
             updated["next_run"] = None
             updated["last_trace_id"] = getattr(result, "trace_id", "") or ""
             updated["last_gateway_status"] = getattr(result, "status", "") or ""
+            # 二进制指数退避：根据会话活跃度调整 backoff_count
+            target_sid = str(updated.get("target_session_id") or session_id)
+            prev_user_activity = updated.get("last_user_activity")
+            current_user_activity = None
+            if self.activity_getter:
+                try:
+                    current_user_activity = self.activity_getter(target_sid)
+                except Exception:
+                    current_user_activity = None
+            # 若上次心跳后有新用户消息 → 重置退避；否则递增
+            if (
+                current_user_activity
+                and prev_user_activity
+                and current_user_activity > self._parse_dt(prev_user_activity)
+            ):
+                updated["backoff_count"] = 0
+            else:
+                updated["backoff_count"] = min(
+                    int(updated.get("backoff_count", 0) or 0) + 1, MAX_BACKOFF
+                )
+            updated["last_user_activity"] = (
+                current_user_activity.isoformat() if current_user_activity else None
+            )
             self.set_config(session_id, updated)
         return result
+
+    @staticmethod
+    def _parse_dt(value):
+        if not value:
+            return None
+        try:
+            text = str(value).strip().replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(text)
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone().replace(tzinfo=None)
+            return parsed
+        except (TypeError, ValueError):
+            return None
 
 
 def get_session_heartbeat_manager() -> "SessionHeartbeatManager | None":

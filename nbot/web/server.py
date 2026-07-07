@@ -523,6 +523,7 @@ class WebChatServer:
             data_dir=self.data_dir,
             gateway_getter=get_gateway,
             executor=self._run_session_heartbeat_execution,
+            activity_getter=self._get_session_last_activity_by_id,
         )
         set_session_heartbeat_manager(self.session_heartbeat_manager)
         self._refresh_heartbeat_summary_config()
@@ -903,6 +904,25 @@ class WebChatServer:
             if timestamp and (latest is None or timestamp > latest):
                 latest = timestamp
         return latest
+
+    def _get_session_last_activity_by_id(self, session_id: str):
+        """按 session_id 查询最后用户活动时间（供 heartbeat 指数退避使用）。
+
+        只统计 user 角色消息的时间戳——用户是否在和角色互动，
+        而不是 assistant（心跳也会产生 assistant 消息）。
+        """
+        try:
+            session = self.session_store.get_session(session_id) or {}
+            latest = None
+            for message in session.get("messages", []):
+                if message.get("role") != "user":
+                    continue
+                timestamp = self._parse_iso_datetime(message.get("timestamp"))
+                if timestamp and (latest is None or timestamp > latest):
+                    latest = timestamp
+            return latest
+        except Exception:
+            return None
 
     @staticmethod
     def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -2773,6 +2793,36 @@ class WebChatServer:
     def _get_ai_response(self, messages: list[dict]) -> str:
         return get_ai_response(self, messages)
 
+    def _get_ai_response_with_usage(self, messages: list[dict]):
+        """获取 AI 回复并返回 (text, usage)，用于需要记录 token 统计的场景。"""
+        if not self.ai_client:
+            _log.warning("AI client not initialized")
+            return "AI 服务未配置，请在 AI 配置页面设置 API Key 和 Base URL。", None
+        try:
+            response = self.ai_client.chat_completion(
+                model=self.ai_model, messages=messages, stream=False
+            )
+            if not response.choices or len(response.choices) == 0:
+                base_resp = getattr(response, "base_resp", {}) or {}
+                status_msg = base_resp.get("status_msg", "API 返回空响应")
+                _log.warning(f"[AI] API 返回空 choices: {status_msg}")
+                return f"AI 服务暂时不可用: {status_msg}", getattr(response, "usage", None)
+
+            content = response.choices[0].message.content
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+                if content.endswith("```"):
+                    content = content[:-3]
+            elif content.startswith("```"):
+                content = content[3:]
+                if content.endswith("```"):
+                    content = content[:-3]
+            return content.strip(), getattr(response, "usage", None)
+        except Exception as e:
+            _log.error(f"AI response error: {e}", exc_info=True)
+            return f"AI 服务出错: {str(e)}", None
+
     def _stream_ai_response(self, messages: list[dict], session_id: str, callback):
         return stream_ai_response(self, messages, session_id, callback)
 
@@ -3456,7 +3506,28 @@ class WebChatServer:
         if not heartbeat_messages:
             heartbeat_messages = [{"role": "user", "content": content}]
 
-        response_text = self._get_ai_response(heartbeat_messages)
+        response_text, usage = self._get_ai_response_with_usage(heartbeat_messages)
+        # 记录 token 用量到统计（purpose=heartbeat）
+        if usage:
+            try:
+                from nbot.core.token_stats import (
+                    get_token_stats_manager,
+                    PURPOSE_HEARTBEAT,
+                )
+
+                get_token_stats_manager().record_usage(
+                    getattr(usage, "prompt_tokens", 0) or 0,
+                    getattr(usage, "completion_tokens", 0) or 0,
+                    total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                    model=self.ai_model or "",
+                    session_id=target_session_id,
+                    channel_type="web",
+                    user_id=target_session_id,
+                    source="heartbeat",
+                    purpose=PURPOSE_HEARTBEAT,
+                )
+            except Exception as exc:
+                _log.debug("[Heartbeat] token stats record failed: %s", exc)
         if not response_text:
             return {"messages_sent": 0, "target_session_id": target_session_id}
 
