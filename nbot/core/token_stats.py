@@ -398,8 +398,13 @@ class TokenStatsManager:
 
             records = stats.setdefault("records", [])
             records.append(record)
-            if len(records) > 5000:
-                stats["records"] = records[-5000:]
+            # 按日期保留 365 天明细，避免长日期范围导出时早期记录被裁掉
+            cutoff_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+            records[:] = [r for r in records if (r.get("date") or "") >= cutoff_date]
+            # 数量上限兜底（防止异常累积导致文件过大）
+            if len(records) > 50000:
+                del records[: len(records) - 50000]
+            stats["records"] = records
 
             self._save()
 
