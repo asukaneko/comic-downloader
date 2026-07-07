@@ -3411,36 +3411,41 @@ class WebChatServer:
         *,
         force: bool = False,
     ):
+        # 静默心跳：不发消息给用户，只更新角色活动状态（角色"自我生活"）
+        if config.get("silent"):
+            return self._run_silent_heartbeat(session_id, config)
+
+        target_session_id = str(config.get("target_session_id") or session_id)
         content_file = config.get("content_file", "heartbeat.md")
         content = self._load_heartbeat_content(content_file)
         if not content:
             _log.warning("Heartbeat content file '%s' not found or empty", content_file)
-            return {"messages_sent": 0, "target_session_id": session_id}
+            return {"messages_sent": 0, "target_session_id": target_session_id}
 
         # QQ 会话：执行前同步最新消息（包括 AI 回复）
-        if session_id.startswith("qq_private_") or session_id.startswith("qq_group_"):
+        if target_session_id.startswith("qq_private_") or target_session_id.startswith("qq_group_"):
             try:
-                parts = session_id.split("_")
-                if session_id.startswith("qq_private_"):
+                parts = target_session_id.split("_")
+                if target_session_id.startswith("qq_private_"):
                     self.sync_qq_messages(user_id=parts[2], create_if_not_exists=True)
                 elif len(parts) >= 4:
                     self.sync_qq_messages(group_id=parts[2], group_user_id=parts[3], create_if_not_exists=True)
                 else:
                     self.sync_qq_messages(group_id=parts[2], create_if_not_exists=True)
             except Exception as e:
-                _log.warning("Heartbeat QQ message sync failed for %s: %s", session_id, e)
+                _log.warning("Heartbeat QQ message sync failed for %s: %s", target_session_id, e)
 
-        session = self.session_store.get_session(session_id)
+        session = self.session_store.get_session(target_session_id)
         if not session:
-            _log.warning("Heartbeat target session not found: %s", session_id)
-            return {"messages_sent": 0, "target_session_id": session_id}
+            _log.warning("Heartbeat target session not found: %s", target_session_id)
+            return {"messages_sent": 0, "target_session_id": target_session_id}
 
         heartbeat_adapter = _resolve_web_adapter(self.web_channel_adapter)
-        hb_user_message = _build_heartbeat_user_message(heartbeat_adapter, session_id, content)
-        self.session_store.append_message(session_id, hb_user_message)
+        hb_user_message = _build_heartbeat_user_message(heartbeat_adapter, target_session_id, content)
+        self.session_store.append_message(target_session_id, hb_user_message)
 
         heartbeat_messages = []
-        current_session = self.session_store.get_session(session_id) or session
+        current_session = self.session_store.get_session(target_session_id) or session
         for msg in current_session.get("messages", [])[-12:]:
             role = msg.get("role")
             if role in ["system", "user", "assistant"]:
@@ -3453,25 +3458,56 @@ class WebChatServer:
 
         response_text = self._get_ai_response(heartbeat_messages)
         if not response_text:
-            return {"messages_sent": 0, "target_session_id": session_id}
+            return {"messages_sent": 0, "target_session_id": target_session_id}
 
         hb_assistant_message = _build_heartbeat_assistant_message(
-            heartbeat_adapter, session_id, response_text
+            heartbeat_adapter, target_session_id, response_text
         )
-        self.session_store.append_message(session_id, hb_assistant_message)
+        self.session_store.append_message(target_session_id, hb_assistant_message)
         if self.socketio:
             self.socketio.emit(
                 "session_updated",
-                {"session_id": session_id, "action": "heartbeat_completed"},
-                room=session_id,
+                {"session_id": target_session_id, "action": "heartbeat_completed"},
+                room=target_session_id,
             )
         # 心跳执行后刷新角色活动状态，让下次对话时角色"从某个活动中被打断"
-        self._refresh_heartbeat_activity(session_id)
+        self._refresh_heartbeat_activity(target_session_id)
         return {
             "messages_sent": 1,
-            "target_session_id": session_id,
+            "target_session_id": target_session_id,
             "session_id": session_id,
             "result_summary": "sent 1 message",
+        }
+
+    def _run_silent_heartbeat(self, session_id: str, config: dict[str, Any]) -> dict:
+        """静默心跳：不发消息给用户，只更新角色活动状态。
+
+        由"同步现实时间"开启时注册，定期让角色"自我生活"：
+        - 刷新 scene.current_activity（基于当前昼夜节律）
+        - 推进角色生活状态（未来可扩展：写日记、推进剧情等）
+        """
+        target_session_id = str(config.get("target_session_id") or session_id)
+        _log.info(
+            "[Heartbeat] silent heartbeat for %s (life sim)", target_session_id
+        )
+        # 刷新角色活动状态
+        self._refresh_heartbeat_activity(target_session_id)
+        # 通知前端会话已更新（让 UI 可以显示活动状态变化）
+        if self.socketio:
+            self.socketio.emit(
+                "session_updated",
+                {
+                    "session_id": target_session_id,
+                    "action": "silent_heartbeat_completed",
+                },
+                room=target_session_id,
+            )
+        return {
+            "messages_sent": 0,
+            "target_session_id": target_session_id,
+            "session_id": session_id,
+            "silent": True,
+            "result_summary": "life sim tick",
         }
 
     def _refresh_heartbeat_activity(self, session_id: str) -> None:

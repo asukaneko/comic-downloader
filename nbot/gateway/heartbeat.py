@@ -35,6 +35,7 @@ class SessionHeartbeatManager:
             "next_run": None,
             "last_trace_id": "",
             "last_gateway_status": "",
+            "silent": False,
         }
 
     def _normalize_config(self, session_id: str, config: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -56,6 +57,7 @@ class SessionHeartbeatManager:
         )
         normalized["last_trace_id"] = str(normalized.get("last_trace_id") or "")
         normalized["last_gateway_status"] = str(normalized.get("last_gateway_status") or "")
+        normalized["silent"] = bool(normalized.get("silent", False))
         return normalized
 
     def _load(self) -> dict[str, dict[str, Any]]:

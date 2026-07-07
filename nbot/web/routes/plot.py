@@ -171,6 +171,8 @@ def register_plot_routes(app, server):
         data = request.json or {}
         session_id = data.get("session_id", "")
         enabled = bool(data.get("enabled", False))
+        # 静默心跳间隔（分钟），默认 30 分钟
+        interval_minutes = int(data.get("interval_minutes", 30) or 30)
 
         if not session_id:
             return jsonify({"error": "session_id is required"}), 400
@@ -185,16 +187,66 @@ def register_plot_routes(app, server):
         except Exception:
             _log.debug("[PlotRoutes] failed to persist plot_real_time_sync", exc_info=True)
 
+        # 联动注册/注销静默心跳（角色"自我生活"）
+        _toggle_life_sim_heartbeat(server, session_id, enabled, interval_minutes)
+
         _log.info(
-            "[PlotRoutes] plot real-time sync toggled session=%s enabled=%s",
+            "[PlotRoutes] plot real-time sync toggled session=%s enabled=%s interval=%dmin",
             session_id,
             enabled,
+            interval_minutes,
         )
 
         return jsonify({
             "session_id": session_id,
             "plot_real_time_sync": enabled,
         })
+
+    def _toggle_life_sim_heartbeat(server, session_id: str, enabled: bool, interval_minutes: int):
+        """联动"同步现实时间"开关注册/注销静默心跳。
+
+        静默心跳配置 key 为 "{session_id}__life_sim"，与普通心跳配置隔离，
+        避免和用户在"定时任务"页面手动配置的心跳冲突。
+        """
+        try:
+            from nbot.gateway.heartbeat import get_session_heartbeat_manager
+
+            manager = get_session_heartbeat_manager()
+            if not manager:
+                _log.debug("[PlotRoutes] SessionHeartbeatManager not available, skip life sim")
+                return
+
+            life_sim_key = f"{session_id}__life_sim"
+            if enabled:
+                # 注册静默心跳
+                manager.set_config(life_sim_key, {
+                    "enabled": True,
+                    "silent": True,
+                    "target_session_id": session_id,
+                    "interval_minutes": max(5, interval_minutes),  # 最小 5 分钟
+                    "content_file": "heartbeat.md",
+                })
+                _log.info(
+                    "[PlotRoutes] life sim heartbeat registered for %s (interval=%dmin)",
+                    session_id, max(5, interval_minutes),
+                )
+            else:
+                # 注销静默心跳
+                manager.set_config(life_sim_key, {
+                    "enabled": False,
+                    "silent": True,
+                    "target_session_id": session_id,
+                })
+                _log.info("[PlotRoutes] life sim heartbeat disabled for %s", session_id)
+
+            # 确保调度器在运行
+            if enabled and manager.any_enabled() and hasattr(server, "_start_heartbeat_job"):
+                # 使用最小间隔启动调度器（各会话按自己的 interval 判定是否到期）
+                server._start_heartbeat_job(1)
+            elif not manager.any_enabled() and hasattr(server, "_stop_heartbeat_job"):
+                server._stop_heartbeat_job()
+        except Exception as exc:
+            _log.warning("[PlotRoutes] life sim heartbeat toggle failed: %s", exc, exc_info=True)
 
     @app.route("/api/plot/<conversation_id>/graph")
     def get_plot_graph(conversation_id):
