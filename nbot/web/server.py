@@ -3551,19 +3551,67 @@ class WebChatServer:
         }
 
     def _run_silent_heartbeat(self, session_id: str, config: dict[str, Any]) -> dict:
-        """静默心跳：不发消息给用户，只更新角色活动状态。
+        """静默心跳：不发消息给用户，但调用 AI 生成角色生活片段。
 
         由"同步现实时间"开启时注册，定期让角色"自我生活"：
-        - 刷新 scene.current_activity（基于当前昼夜节律）
-        - 推进角色生活状态（未来可扩展：写日记、推进剧情等）
+        - 获取当前会话上下文 + 角色卡 + 昼夜节律 + 最近 timeline
+        - 调用 AI 生成一段 50-100 字的生活片段
+        - 写入跨会话 timeline（下次对话角色能"记得"）
+        - 写入 recent_digest（MemoryFS 持久化）
+        - 更新 scene.current_activity（从 AI 内容提取，而非随机选）
+        - 记录 token 统计到 PURPOSE_HEARTBEAT
         """
         target_session_id = str(config.get("target_session_id") or session_id)
         _log.info(
             "[Heartbeat] silent heartbeat for %s (life sim)", target_session_id
         )
-        # 刷新角色活动状态
-        self._refresh_heartbeat_activity(target_session_id)
-        # 通知前端会话已更新（让 UI 可以显示活动状态变化）
+
+        # 1. 解析角色 ID 和 scope
+        char_id, scope_id = self._resolve_heartbeat_character_scope(target_session_id)
+        if not char_id:
+            _log.debug("[Heartbeat] cannot resolve character for %s, skip life sim", target_session_id)
+            # 兜底：只刷新活动状态
+            self._refresh_heartbeat_activity(target_session_id)
+            return self._silent_heartbeat_finalize(session_id, target_session_id, generated=None)
+
+        # 2. 收集上下文：会话最近消息 + 角色卡 + 昼夜节律 + timeline
+        session = self.session_store.get_session(target_session_id) or {}
+        recent_messages = self._collect_heartbeat_context_messages(session)
+        profile_text = self._collect_heartbeat_character_profile(char_id)
+        circadian_text = self._collect_heartbeat_circadian_context()
+        timeline_text = self._collect_heartbeat_timeline(char_id)
+
+        # 3. 构造 prompt 调用 AI 生成生活片段
+        prompt = self._build_life_sim_prompt(
+            profile_text, circadian_text, timeline_text, recent_messages
+        )
+        generated, usage = self._get_ai_response_with_usage(prompt)
+        if usage:
+            self._record_heartbeat_token_usage(usage, target_session_id)
+
+        # 4. 持久化生活片段到 MemoryFS
+        saved = False
+        activity = None
+        if generated and not generated.startswith("AI 服务"):
+            saved = self._persist_life_sim_to_memory(
+                char_id, target_session_id, generated
+            )
+            activity = self._extract_activity_from_life_sim(generated)
+
+        # 5. 更新 current_activity（优先用 AI 提取的，否则兜底推断）
+        if activity:
+            self._update_heartbeat_activity(target_session_id, char_id, scope_id, activity)
+        else:
+            self._refresh_heartbeat_activity(target_session_id)
+
+        _log.info(
+            "[Heartbeat] life sim for %s: generated=%s saved=%s",
+            target_session_id, bool(generated), saved,
+        )
+        return self._silent_heartbeat_finalize(session_id, target_session_id, generated=generated)
+
+    def _silent_heartbeat_finalize(self, session_id: str, target_session_id: str, generated: str | None) -> dict:
+        """静默心跳收尾：通知前端 + 返回结果。"""
         if self.socketio:
             self.socketio.emit(
                 "session_updated",
@@ -3579,7 +3627,193 @@ class WebChatServer:
             "session_id": session_id,
             "silent": True,
             "result_summary": "life sim tick",
+            "generated": bool(generated),
         }
+
+    def _collect_heartbeat_context_messages(self, session: dict) -> str:
+        """收集会话最近消息作为上下文（最多 6 条，限长）。"""
+        try:
+            messages = session.get("messages") or []
+            recent = []
+            for msg in reversed(messages):
+                if len(recent) >= 6:
+                    break
+                role = msg.get("role")
+                if role not in ("user", "assistant"):
+                    continue
+                content = str(msg.get("content") or "")[:200]
+                if content.strip():
+                    recent.append(f"{role}: {content}")
+            recent.reverse()
+            return "\n".join(recent) if recent else "（暂无对话历史）"
+        except Exception:
+            return "（暂无对话历史）"
+
+    def _collect_heartbeat_character_profile(self, char_id: str) -> str:
+        """收集角色卡资料（名字、性格、设定）。"""
+        try:
+            from nbot.character.repository import ProfileRepository
+
+            repo = ProfileRepository(self.base_dir)
+            profile = repo.get(char_id)
+            if not profile:
+                return f"角色ID: {char_id}"
+            parts = [f"角色名: {profile.name}"]
+            if profile.description:
+                parts.append(f"描述: {profile.description[:200]}")
+            if profile.personality:
+                parts.append(f"性格: {profile.personality[:200]}")
+            if profile.scenario:
+                parts.append(f"设定: {profile.scenario[:200]}")
+            return "\n".join(parts)
+        except Exception as exc:
+            _log.debug("[Heartbeat] collect profile failed: %s", exc)
+            return f"角色ID: {char_id}"
+
+    def _collect_heartbeat_circadian_context(self) -> str:
+        """收集当前昼夜节律上下文。"""
+        try:
+            from nbot.review.time_context import build_circadian_state, format_circadian_prompt
+
+            state = build_circadian_state()
+            return format_circadian_prompt(state)
+        except Exception:
+            return ""
+
+    def _collect_heartbeat_timeline(self, char_id: str) -> str:
+        """收集最近跨会话时间线（让 AI 知道角色最近经历了什么）。"""
+        try:
+            from nbot.memory.fs import get_memory_fs
+
+            mfs = get_memory_fs(self.data_dir)
+            timeline_mf = mfs.read(mfs.path_timeline(char_id))
+            if timeline_mf and timeline_mf.content:
+                # 只取最近 5 条，避免 prompt 过长
+                lines = timeline_mf.content.strip().split("\n")
+                return "\n".join(lines[-5:]) if lines else "（暂无经历）"
+            return "（暂无经历）"
+        except Exception:
+            return "（暂无经历）"
+
+    def _build_life_sim_prompt(
+        self, profile: str, circadian: str, timeline: str, recent: str
+    ) -> list[dict]:
+        """构造生成角色生活片段的 prompt。"""
+        system = (
+            "你是一个角色生活模拟器。根据角色设定、当前时段、近期经历和对话上下文，"
+            "生成一段角色在这段时间里真实经历的生活片段。\n\n"
+            "要求：\n"
+            "1. 50-100 字，第一人称或第三人称均可（与角色卡风格一致）\n"
+            "2. 内容必须贴合角色性格、当前昼夜时段（如深夜不会去散步）\n"
+            "3. 可以是日常琐事、情绪流动、小插曲，但不要重大剧情转折\n"
+            "4. 不要提到'系统'、'心跳'、'模拟'等元信息\n"
+            "5. 第一行用一个短语概括角色正在做什么（如：在厨房煮咖啡）"
+        )
+        user_parts = [profile]
+        if circadian:
+            user_parts.append(f"【当前时段】\n{circadian}")
+        user_parts.append(f"【近期经历】\n{timeline}")
+        user_parts.append(f"【最近对话】\n{recent}")
+        user_parts.append("请生成角色在这段时间的生活片段：")
+        return [
+            {"role": "system", "content": system},
+            {"role": "user", "content": "\n\n".join(user_parts)},
+        ]
+
+    def _record_heartbeat_token_usage(self, usage, target_session_id: str) -> None:
+        """记录心跳 token 用量到统计。"""
+        try:
+            from nbot.core.token_stats import get_token_stats_manager, PURPOSE_HEARTBEAT
+
+            get_token_stats_manager().record_usage(
+                getattr(usage, "prompt_tokens", 0) or 0,
+                getattr(usage, "completion_tokens", 0) or 0,
+                total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                model=self.ai_model or "",
+                session_id=target_session_id,
+                channel_type="web",
+                user_id=target_session_id,
+                source="heartbeat_silent",
+                purpose=PURPOSE_HEARTBEAT,
+            )
+        except Exception as exc:
+            _log.debug("[Heartbeat] token stats record failed: %s", exc)
+
+    def _persist_life_sim_to_memory(
+        self, char_id: str, target_session_id: str, content: str
+    ) -> bool:
+        """把生活片段持久化到 MemoryFS（timeline + recent_digest）。"""
+        try:
+            from nbot.memory.fs import get_memory_fs
+
+            mfs = get_memory_fs(self.data_dir)
+            # 1. 追加到跨会话时间线（下次对话角色能"记得"）
+            mfs.write(
+                mfs.path_timeline(char_id),
+                character_id=char_id,
+                target_id=target_session_id,
+                title="角色生活片段",
+                content=content,
+                summary="心跳生成的角色自我生活经历",
+                importance=0.5,
+                append=True,
+            )
+            # 2. 写入 recent_digest（MemoryFS 持久化，便于检索）
+            mfs.write(
+                mfs.path_recent_digest(char_id, target_session_id),
+                character_id=char_id,
+                target_id=target_session_id,
+                title="近期生活片段",
+                content=content,
+                summary="心跳生成的角色自我生活经历",
+                importance=0.5,
+                append=False,
+            )
+            return True
+        except Exception as exc:
+            _log.warning("[Heartbeat] persist life sim to memory failed: %s", exc, exc_info=True)
+            return False
+
+    def _extract_activity_from_life_sim(self, content: str) -> str:
+        """从 AI 生成的生活片段提取活动标签（第一行）。
+
+        prompt 要求第一行是活动概括，如"在厨房煮咖啡"。
+        提取失败时返回空字符串，由调用方兜底。
+        """
+        try:
+            first_line = content.strip().split("\n", 1)[0].strip()
+            # 去掉可能的前缀符号（如"1. "、"· "等）
+            for prefix in ("1.", "2.", "3.", "·", "•", "- ", "* "):
+                if first_line.startswith(prefix):
+                    first_line = first_line[len(prefix):].strip()
+            # 限制长度
+            return first_line[:60] if first_line else ""
+        except Exception:
+            return ""
+
+    def _update_heartbeat_activity(
+        self, session_id: str, char_id: str, scope_id: str, activity: str
+    ) -> None:
+        """用 AI 提取的活动标签更新 CharacterState.scene。"""
+        try:
+            from datetime import datetime as _dt
+
+            from nbot.character.repository import CharacterStateRepository
+
+            repo = CharacterStateRepository()
+            state = repo.get_or_create(character_id=char_id, scope_id=scope_id)
+            state.scene = state.scene if isinstance(state.scene, dict) else {}
+            state.scene["current_activity"] = activity
+            state.scene["activity_source"] = "heartbeat_ai"
+            state.scene["activity_updated_at"] = _dt.now().astimezone().isoformat(
+                timespec="seconds"
+            )
+            repo.save(state)
+            _log.debug(
+                "[Heartbeat] activity updated (AI) for %s: %s", session_id, activity
+            )
+        except Exception as exc:
+            _log.debug("[Heartbeat] update activity (AI) failed: %s", exc)
 
     def _refresh_heartbeat_activity(self, session_id: str) -> None:
         """心跳执行后刷新角色 current_activity。
