@@ -234,16 +234,25 @@ def _emit_change_card(
 class WebProgressReporter:
     """Web 频道的进度报告实现，封装 ProgressCard 和 TodoCard。"""
 
-    def __init__(self, server, session_id: str, parent_message_id: str, session_store):
+    def __init__(
+        self,
+        server,
+        session_id: str,
+        parent_message_id: str,
+        session_store,
+        is_agent: bool = False,
+    ):
         self.server = server
         self.session_id = session_id
         self.parent_message_id = parent_message_id
         self.session_store = session_store
         self.progress_card = None
         self.todo_card = None
+        self.is_agent = is_agent
         self._init_cards()
 
     def _init_cards(self):
+        # Agent 模式强制创建进度/待办卡片;否则仍受 PROGRESS_CARD_AVAILABLE 开关控制
         if (
             self.server.PROGRESS_CARD_AVAILABLE
             and self.server.progress_card_manager
@@ -253,6 +262,7 @@ class WebProgressReporter:
                 session_id=self.session_id,
                 parent_message_id=self.parent_message_id,
                 max_iterations=50,
+                is_agent=self.is_agent,
             )
 
         if (
@@ -263,6 +273,7 @@ class WebProgressReporter:
             self.todo_card = self.server.todo_card_manager.create_card(
                 session_id=self.session_id,
                 parent_message_id=self.parent_message_id,
+                is_agent=self.is_agent,
             )
 
     def on_thinking_start(self, ctx) -> None:
@@ -1418,14 +1429,19 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
     server.stop_events[session_id] = stop_event
 
     # 进度/待办卡片
+    # Agent 模式强制开启进度卡片(即便当前渠道未声明 supports_progress_updates,
+    # 也由前端 progress card 组件独立渲染);其他渠道需要渠道能力支持。
+    _is_agent_session_for_progress = (session or {}).get("session_mode") == "agent"
     progress_reporter = None
     if (
-        channel_capabilities.supports_progress_updates
+        (channel_capabilities.supports_progress_updates or _is_agent_session_for_progress)
         and server.PROGRESS_CARD_AVAILABLE
         and server.progress_card_manager
+        and server.socketio
     ):
         progress_reporter = WebProgressReporter(
-            server, session_id, parent_message_id, session_store
+            server, session_id, parent_message_id, session_store,
+            is_agent=_is_agent_session_for_progress,
         )
 
     # 确定是否启用工具

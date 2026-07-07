@@ -19,7 +19,7 @@ class TodoCard:
     """Todo 卡片类 - 用于展示待办事项列表"""
 
     def __init__(self, session_id: str, parent_message_id: str,
-                 socketio=None, manager=None):
+                 socketio=None, manager=None, is_agent: bool = False):
         """
         初始化 Todo 卡片
 
@@ -28,12 +28,14 @@ class TodoCard:
             parent_message_id: 父消息ID（关联到用户消息）
             socketio: SocketIO 实例，用于发送实时更新
             manager: TodoCardManager 实例
+            is_agent: 是否为 Agent 模式（向前端传递的状态标记）
         """
         self.card_id = str(uuid.uuid4())
         self.session_id = session_id
         self.parent_message_id = parent_message_id
         self.socketio = socketio
         self.manager = manager
+        self.is_agent = is_agent
         self.todos: List[Dict[str, Any]] = []
         self.is_completed = False
         self.created_at = datetime.now().isoformat()
@@ -221,7 +223,8 @@ class TodoCard:
                 'completed': completed_count
             },
             'timestamp': datetime.now().isoformat(),
-            'is_complete': self.is_completed
+            'is_complete': self.is_completed,
+            'is_agent': self.is_agent,
         }
 
 
@@ -250,13 +253,15 @@ class TodoCardManager:
         """获取会话字典"""
         return self._sessions
 
-    def create_card(self, session_id: str, parent_message_id: str) -> TodoCard:
+    def create_card(self, session_id: str, parent_message_id: str,
+                    is_agent: bool = False) -> TodoCard:
         """
         创建新的 Todo 卡片
 
         Args:
             session_id: 会话ID
             parent_message_id: 父消息ID
+            is_agent: 是否为 Agent 模式（向前端传递的状态标记）
 
         Returns:
             TodoCard 实例
@@ -265,7 +270,8 @@ class TodoCardManager:
             session_id=session_id,
             parent_message_id=parent_message_id,
             socketio=self._socketio,
-            manager=self
+            manager=self,
+            is_agent=is_agent,
         )
         self._cards[card.card_id] = card
         return card

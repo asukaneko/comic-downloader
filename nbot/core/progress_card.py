@@ -1,4 +1,4 @@
-﻿"""
+"""
 进度卡片管理模块
 用于在 Web 端显示 AI 处理进度，包括工具调用、图片识别、文件处理等
 """
@@ -48,17 +48,19 @@ STEP_CONFIG = {
 class ProgressCard:
     """进度卡片类"""
     
-    def __init__(self, session_id: str, parent_message_id: str, 
-                 socketio=None, max_iterations: int = 30, manager=None):
+    def __init__(self, session_id: str, parent_message_id: str,
+                 socketio=None, max_iterations: int = 30, manager=None,
+                 is_agent: bool = False):
         """
         初始化进度卡片
-        
+
         Args:
             session_id: 会话ID
             parent_message_id: 父消息ID（关联到用户消息）
             socketio: SocketIO 实例，用于发送实时更新
             max_iterations: 最大迭代次数（用于显示进度）
             manager: ProgressCardManager 实例，用于获取 sessions
+            is_agent: 是否为 Agent 模式（标记字段，前端可用于调整展示策略）
         """
         self.card_id = str(uuid.uuid4())
         self.session_id = session_id
@@ -66,6 +68,7 @@ class ProgressCard:
         self.socketio = socketio
         self.max_iterations = max_iterations
         self.manager = manager  # 用于获取 sessions
+        self.is_agent = is_agent
         self.steps: List[Dict[str, Any]] = []
         self.current_iteration = 0
         self.is_completed = False
@@ -355,7 +358,8 @@ class ProgressCard:
             'content': '✅ 处理完成' if self.is_completed else f'🔄 AI 正在处理... ({self.current_iteration + 1}/{self.max_iterations})',
             'steps': self.steps.copy(),
             'timestamp': datetime.now().isoformat(),
-            'is_complete': self.is_completed
+            'is_complete': self.is_completed,
+            'is_agent': self.is_agent,
         }
 
 
@@ -385,15 +389,17 @@ class ProgressCardManager:
         return self._sessions
     
     def create_card(self, session_id: str, parent_message_id: str,
-                   max_iterations: int = 30) -> ProgressCard:
+                   max_iterations: int = 30,
+                   is_agent: bool = False) -> ProgressCard:
         """
         创建新的进度卡片
-        
+
         Args:
             session_id: 会话ID
             parent_message_id: 父消息ID
             max_iterations: 最大迭代次数
-            
+            is_agent: 是否为 Agent 模式（向前端传递的状态标记）
+
         Returns:
             ProgressCard 实例
         """
@@ -402,7 +408,8 @@ class ProgressCardManager:
             parent_message_id=parent_message_id,
             socketio=self._socketio,
             max_iterations=max_iterations,
-            manager=self
+            manager=self,
+            is_agent=is_agent,
         )
         self._cards[card.card_id] = card
         return card
