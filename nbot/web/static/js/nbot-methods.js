@@ -1593,9 +1593,14 @@ const NbotMethods = {
                 // 加载频道的会话列表
                 async loadChannelSessions(channelId) {
                     try {
-                        // 过滤出属于该频道的会话
+                        // /api/sessions 直接返回 JSON 数组（不是 { sessions: [...] }），
+                        // 错误的 res.data.sessions 会拿到 undefined 并清空 this.sessions，
+                        // 导致拓展频道的会话先闪一下再消失，5 秒后被定时刷新重新填充
                         const res = await api.get('/api/sessions');
-                        this.sessions = res.data.sessions || [];
+                        const serverSessions = Array.isArray(res.data) ? res.data : [];
+                        // 保留本地临时会话，避免清空用户刚创建但尚未同步到服务器的会话
+                        const localTempSessions = this.sessions.filter(s => s._isTemp);
+                        this.sessions = [...localTempSessions, ...serverSessions];
                     } catch (e) {
                         console.error('Failed to load channel sessions:', e);
                     }
