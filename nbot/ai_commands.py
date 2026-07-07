@@ -1341,7 +1341,7 @@ def register_ai_commands(
                 msg,
                 is_group,
                 f"上下文压缩完成：已将 {len(messages_to_compress)} 条早期消息总结为摘要，"
-                f"保留最近 {keep_count} 条消息。\n摘要预览：{summary[:80]}",
+                f"保留最近 {keep_count} 条消息。\n摘要预览：{summary}",
             )
         except Exception as e:
             log.error(f"Compact context failed: {e}", exc_info=True)
