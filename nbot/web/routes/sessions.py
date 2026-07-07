@@ -331,6 +331,59 @@ def _normalize_proactive_chat_config(config):
     return defaults
 
 
+def _sync_proactive_chat_to_heartbeat(server, session_id: str, proactive_chat_config):
+    """把会话详情的"主动聊天"桥接到 SessionHeartbeatManager。
+
+    proactive_chat 复用统一的心跳调度系统，配置 key 为 "{session_id}__proactive"，
+    与"同步现实时间"的 __life_sim 以及用户手动配置的心跳隔离。
+    与 life_sim 不同，proactive_chat 不静默：会真正向会话发送一条消息。
+    """
+    try:
+        from nbot.gateway.heartbeat import get_session_heartbeat_manager
+
+        manager = get_session_heartbeat_manager()
+        if not manager:
+            _log.debug("[Sessions] SessionHeartbeatManager not available, skip proactive chat")
+            return
+
+        config = proactive_chat_config if isinstance(proactive_chat_config, dict) else {}
+        enabled = bool(config.get("enabled", False))
+        interval_minutes = config.get("interval_minutes", 60) or 60
+        try:
+            interval_minutes = max(1, int(interval_minutes))
+        except (TypeError, ValueError):
+            interval_minutes = 60
+
+        proactive_key = f"{session_id}__proactive"
+        if enabled:
+            manager.set_config(proactive_key, {
+                "enabled": True,
+                "silent": False,  # 主动聊天需要真正发消息给用户
+                "target_session_id": session_id,
+                "interval_minutes": interval_minutes,
+                "content_file": "heartbeat.md",
+            })
+            _log.info(
+                "[Sessions] proactive chat heartbeat registered for %s (interval=%dmin)",
+                session_id, interval_minutes,
+            )
+        else:
+            manager.set_config(proactive_key, {
+                "enabled": False,
+                "silent": False,
+                "target_session_id": session_id,
+            })
+            _log.info("[Sessions] proactive chat heartbeat disabled for %s", session_id)
+
+        # 确保调度器在运行（各会话按自己的 interval 判定是否到期）
+        if enabled and manager.any_enabled() and hasattr(server, "_start_heartbeat_job"):
+            server._start_heartbeat_job(1)
+        elif not manager.any_enabled() and hasattr(server, "_stop_heartbeat_job"):
+            server._stop_heartbeat_job()
+    except Exception as exc:
+        _log.warning("[Sessions] proactive chat heartbeat sync failed: %s", exc, exc_info=True)
+
+
 def _normalize_tts_config(data):
     defaults = {"enabled": False, "model_id": "", "voice": ""}
     if isinstance(data, dict):
@@ -1012,6 +1065,8 @@ def register_session_routes(app, server):
             session["proactive_chat"] = _normalize_proactive_chat_config(
                 data.get("proactive_chat")
             )
+            # 桥接到 SessionHeartbeatManager：会话级 heartbeat
+            _sync_proactive_chat_to_heartbeat(server, session_id, session["proactive_chat"])
         if "disabled_prompt_keys" in data:
             session["disabled_prompt_keys"] = data.get("disabled_prompt_keys") or []
         if "plot_mode" in data:
@@ -1061,11 +1116,6 @@ def register_session_routes(app, server):
                 session["messages"].insert(0, {"role": "system", "content": new_prompt})
 
         session_store.set_session(session_id, session)
-        if session.get("proactive_chat", {}).get("enabled"):
-            try:
-                server._start_proactive_chat_loop()
-            except Exception as exc:
-                _log.warning("Failed to start proactive chat loop: %s", exc)
         return jsonify({"success": True, "session": session})
 
     # ---- 自定义提示词 CRUD ----
