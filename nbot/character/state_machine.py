@@ -9,6 +9,7 @@
 """
 
 import logging
+import random
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
@@ -129,10 +130,12 @@ class StateMachine:
             scene=dict(old_state.scene),
             last_active_at=datetime.now().astimezone().isoformat(),
             updated_at=datetime.now().astimezone().isoformat(),
+            personality_evolution=list(old_state.personality_evolution),
         )
 
         # 情绪更新
         deltas = plan.state_deltas
+        mood_changed_by_plan = False
         if deltas:
             target_mood = deltas.get("mood_toward", old_state.mood)
             intensity_delta = deltas.get("mood_intensity_delta", 0.0)
@@ -142,6 +145,7 @@ class StateMachine:
             ):
                 # 情绪惯性：弱信号不会立刻覆盖较强的当前情绪
                 new_state.mood = target_mood
+                mood_changed_by_plan = True
 
             # 情绪强度更新：惯性混合
             new_intensity = (
@@ -161,7 +165,27 @@ class StateMachine:
         )
         new_state.energy = _clamp_energy(old_state.energy + energy_delta)
 
+        # 情绪自然转移：plan 未改变 mood 时，按转移表低概率漂移
+        if not mood_changed_by_plan:
+            self._maybe_apply_mood_transition(new_state)
+
         return new_state
+
+    def _maybe_apply_mood_transition(self, state: CharacterState) -> None:
+        """根据 _MOOD_TRANSITIONS 表自然漂移情绪。
+
+        - 情绪强度较低时更易转移（0.35 概率）
+        - 情绪强度较高时较稳定（0.15 概率）
+        - 转移后强度略升 0.05，体现"新情绪被激活"
+        """
+        candidates = _MOOD_TRANSITIONS.get(state.mood)
+        if not candidates:
+            return
+        transition_prob = 0.15 if state.mood_intensity >= 0.4 else 0.35
+        if random.random() < transition_prob:
+            new_mood = random.choice(candidates)
+            state.mood = new_mood
+            state.mood_intensity = min(1.0, state.mood_intensity + 0.05)
 
     def _calculate_energy_delta(
         self,

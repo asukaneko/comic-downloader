@@ -255,6 +255,14 @@ def _save_structured_memories_to_memory_fs(
                     importance=importance or 0.8,
                     append=True,
                 )
+                # 同步追加到跨会话时间线
+                _append_to_timeline(
+                    mfs,
+                    character_id=character_id,
+                    target_id=target_id,
+                    title=_memory_title(memory, "重要事件"),
+                    content=content,
+                )
             elif category == "recent_digest":
                 if not target_id:
                     continue
@@ -273,6 +281,44 @@ def _save_structured_memories_to_memory_fs(
     except Exception as exc:
         _log.warning("[AutoMemory] 结构化记忆写入 MemoryFS 失败: %s", exc, exc_info=True)
         return 0
+
+
+def _append_to_timeline(
+    mfs,
+    *,
+    character_id: str,
+    target_id: str,
+    title: str,
+    content: str,
+) -> None:
+    """将一条重要事件以带时间戳的格式追加到跨会话时间线。
+
+    格式：[YYYY-MM-DD HH:MM] {title}: {content首行摘要}
+    时间线文件由 _truncate_entries 自动保留最近 _MAX_TIMELINE_STORE 条。
+    """
+    if not character_id or not content:
+        return
+    try:
+        from datetime import datetime
+
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+        # 取 content 第一行或前 120 字作为摘要，避免 timeline 单条过长
+        first_line = content.split("\n", 1)[0].strip()
+        snippet = first_line[:120] if len(first_line) > 120 else first_line
+        entry = f"[{timestamp}] {title}: {snippet}"
+
+        mfs.write(
+            mfs.path_timeline(character_id),
+            character_id=character_id,
+            target_id=target_id,
+            title="跨会话人生经历时间线",
+            content=entry,
+            summary="角色与用户共同经历的重要事件时间线",
+            importance=0.8,
+            append=True,
+        )
+    except Exception as exc:
+        _log.debug("[AutoMemory] timeline append failed: %s", exc)
 
 
 def load_character_memories(character_name: str = "", target_id: str = "") -> str:

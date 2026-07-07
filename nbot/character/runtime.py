@@ -93,6 +93,7 @@ class CharacterRuntime:
         # 读取或创建角色运行时状态
         state = self._get_or_create_state(identity, profile)
         real_time_context = self._build_real_time_context(state, chat_request)
+        circadian_state = self._build_circadian_state(chat_request)
 
         # 读取或创建关系状态
         relationship = self._get_or_create_relationship(identity, profile)
@@ -151,6 +152,7 @@ class CharacterRuntime:
             identity=identity,
             chat_request=chat_request,
             real_time_context=real_time_context,
+            circadian_state=circadian_state,
         )
 
         self._emit_hook("character.before_turn.finished", identity, {
@@ -549,7 +551,7 @@ class CharacterRuntime:
 
     def _build_prompt(self, profile, state, relationship, memories, plan,
                       world_book_entries=None, identity=None, chat_request=None,
-                      real_time_context=None) -> str:
+                      real_time_context=None, circadian_state=None) -> str:
         """编译提示词"""
         from nbot.character.prompt_builder import build_character_injections
         from nbot.character.prompt_stack import PromptStack
@@ -577,6 +579,7 @@ class CharacterRuntime:
             identity=identity,
             chat_request=chat_request,
             real_time_context=real_time_context,
+            circadian_state=circadian_state,
         )
 
         # 合成最终提示词
@@ -589,9 +592,11 @@ class CharacterRuntime:
         identity=None,
         chat_request=None,
         real_time_context=None,
+        circadian_state=None,
     ) -> None:
         """Inject runtime-only prompt extras into an external PromptStack."""
         self._inject_real_time_context(stack, real_time_context)
+        self._inject_circadian_state(stack, circadian_state)
         if identity and chat_request:
             # MemoryFS 三层必读注入（用户关系摘要 + 剧情摘要 + 日记）
             self._inject_memory_fs(stack, identity, chat_request)
@@ -629,6 +634,38 @@ class CharacterRuntime:
             )
         except Exception as exc:
             _log.debug("[CharacterRuntime] real time prompt injection failed: %s", exc)
+
+    def _build_circadian_state(self, chat_request) -> dict:
+        """构建昼夜节律状态并写入 chat_request.metadata 供下游使用。"""
+        try:
+            from nbot.review.time_context import build_circadian_state
+
+            context = build_circadian_state()
+            metadata = getattr(chat_request, "metadata", None)
+            if not isinstance(metadata, dict):
+                metadata = {}
+                chat_request.metadata = metadata
+            metadata["circadian_state"] = context
+            return context
+        except Exception as exc:
+            _log.warning("[CharacterRuntime] circadian state build failed: %s", exc, exc_info=True)
+            return {}
+
+    def _inject_circadian_state(self, stack, circadian_state) -> None:
+        if not circadian_state:
+            return
+        try:
+            from nbot.character.prompt_stack import PromptStack
+            from nbot.review.time_context import format_circadian_prompt
+
+            stack.add(
+                key="character.circadian",
+                content=format_circadian_prompt(circadian_state),
+                priority=PromptStack.PRIORITY_CHARACTER_STATE + 2,
+                scope="turn",
+            )
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] circadian prompt injection failed: %s", exc)
 
     def _match_world_books(self, identity, chat_request, state=None, recent_messages: list = None) -> list:
         """匹配世界书关键词（多源上下文召回）"""

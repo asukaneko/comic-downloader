@@ -197,6 +197,10 @@ class CharacterState:
     last_active_at: str = ""
     updated_at: str = ""
 
+    # 性格演化：经历塑造人格偏移，不修改 profile.personality 本身
+    # 结构示例: [{"trait": "openness", "delta": -5, "reason": "长期被忽视后更内向", "turn": 42}]
+    personality_evolution: List[Dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "character_id": self.character_id,
@@ -207,6 +211,7 @@ class CharacterState:
             "scene": self.scene,
             "last_active_at": self.last_active_at,
             "updated_at": self.updated_at,
+            "personality_evolution": self.personality_evolution,
         }
 
     @classmethod
@@ -220,6 +225,7 @@ class CharacterState:
             scene=data.get("scene", {}),
             last_active_at=data.get("last_active_at", ""),
             updated_at=data.get("updated_at", ""),
+            personality_evolution=data.get("personality_evolution", []),
         )
 
 

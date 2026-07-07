@@ -240,13 +240,21 @@ def _call_state_model(
         '    "world_consistency": number 0-1 (how consistent with the established setting),\n'
         '    "risk": number 0-1 (risk of unsafe / contradictory / setting-breaking content; 0 = safe)\n'
         "  },\n"
+        '  "personality_evolution": [\n'
+        '    {"trait": "openness|warmland|confidence|trustfulness|independence|playfulness", '
+        '"delta": integer between -10 and 10, "reason": "brief reason"}\n'
+        "  ],\n"
         '  "reason": "brief reason"\n'
         "}\n"
         "Use 0 for relationship fields that should not change. The relationship range is 0-100. "
         "For quality_scores, judge the character's own replies in the conversation; "
         "use 1.0 for excellent, around 0.5 for acceptable, lower for breaks of character or setting. "
         "Energy should recover when the user helps the character rest, eat, relax, feel safe, "
-        "or receive affection/care; ordinary friendly comfort may be positive even without a major event."
+        "or receive affection/care; ordinary friendly comfort may be positive even without a major event.\n"
+        "personality_evolution should be EMPTY for ordinary chat. Only add an entry when a significant "
+        "experience (prolonged conflict, major betrayal, deep intimacy, repeated rejection, life-changing "
+        "event) would plausibly shift the character's personality. Use 1-2 entries at most. "
+        "Each delta should be small (-10 to 10); personality shifts slowly."
     )
 
     user_prompt = (
@@ -296,6 +304,7 @@ def _apply_ai_adjustment(
         scene=dict(state.scene),
         last_active_at=state.last_active_at,
         updated_at=datetime.now().isoformat(),
+        personality_evolution=list(state.personality_evolution),
     )
     new_relationship = RelationshipState(
         character_id=relationship.character_id,
@@ -337,6 +346,31 @@ def _apply_ai_adjustment(
             delta = _clamp_int(raw_delta, 0, -max_delta, max_delta)
             old_value = getattr(new_relationship, field_name)
             setattr(new_relationship, field_name, _clamp_int(old_value + delta, old_value, 0, 100))
+
+    # 性格演化：累加 LLM 评估的 personality_evolution 条目
+    evo_entries = adjustment.get("personality_evolution") or []
+    if isinstance(evo_entries, list):
+        from datetime import datetime as _dt
+        turn_marker = _dt.now().astimezone().strftime("%Y-%m-%d")
+        for entry in evo_entries:
+            if not isinstance(entry, dict):
+                continue
+            trait = str(entry.get("trait") or "").strip()
+            if not trait:
+                continue
+            delta_val = _clamp_int(entry.get("delta"), 0, -10, 10)
+            if delta_val == 0:
+                continue
+            reason = str(entry.get("reason") or "").strip()[:200]
+            new_state.personality_evolution.append({
+                "trait": trait,
+                "delta": delta_val,
+                "reason": reason,
+                "turn": turn_marker,
+            })
+        # 限制最多保留 20 条，超出则保留最近 20 条
+        if len(new_state.personality_evolution) > 20:
+            new_state.personality_evolution = new_state.personality_evolution[-20:]
 
     return new_state, new_relationship
 

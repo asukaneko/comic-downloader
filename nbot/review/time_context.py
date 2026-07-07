@@ -126,3 +126,125 @@ def format_real_time_prompt_context(context: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(line for line in lines if line)
+
+
+# ---------------------------------------------------------------------------
+# 昼夜节律 / 作息状态
+# ---------------------------------------------------------------------------
+
+def _circadian_phase(hour: int) -> str:
+    """根据 0-23 小时返回作息阶段标签。"""
+    if 0 <= hour < 6:
+        return "sleeping"
+    if 6 <= hour < 9:
+        return "morning"
+    if 9 <= hour < 12:
+        return "forenoon"
+    if 12 <= hour < 14:
+        return "noon"
+    if 14 <= hour < 18:
+        return "afternoon"
+    if 18 <= hour < 22:
+        return "evening"
+    return "night"
+
+
+def _circadian_label(phase: str) -> str:
+    return {
+        "sleeping": "深夜睡眠",
+        "morning": "清晨起床",
+        "forenoon": "上午时段",
+        "noon": "午间休息",
+        "afternoon": "下午时段",
+        "evening": "傍晚晚间",
+        "night": "深夜准备休息",
+    }.get(phase, "日常")
+
+
+def _circadian_roleplay_hint(phase: str, hour: int) -> str:
+    """为每个作息阶段生成角色扮演提示。"""
+    if phase == "sleeping":
+        return (
+            f"现在是凌晨{hour}点，角色应当处于睡眠状态。若被消息吵醒，反应可以带迷糊、"
+            "困倦、不情愿，甚至略带起床气；不要主动展开长对话，节奏应放慢。"
+        )
+    if phase == "morning":
+        return (
+            f"现在是清晨{hour}点，角色可能刚起床不久，可以体现晨间状态"
+            "（刚醒、洗漱、吃早餐、规划今天的事），语气可以略带慵懒或清新。"
+        )
+    if phase == "forenoon":
+        return (
+            f"现在是上午{hour}点，角色通常处于工作/学习/日常事务中，"
+            "回复节奏可以略紧凑，体现被打断或抽空回应的感觉。"
+        )
+    if phase == "noon":
+        return (
+            f"现在是午间{hour}点，角色可能在吃饭或午休，"
+            "可以体现餐后困倦、午睡被打扰或边吃边聊的状态。"
+        )
+    if phase == "afternoon":
+        return (
+            f"现在是下午{hour}点，角色处于下午时段，可以是继续工作、"
+            "小憩、喝茶、散步等，状态相对松弛。"
+        )
+    if phase == "evening":
+        return (
+            f"现在是晚间{hour}点，角色已结束主要日程，处于放松时段，"
+            "可以体现晚餐、洗澡、看电视/看书、准备休息等生活气息。"
+        )
+    return (
+        f"现在是深夜{hour}点，角色应当正在准备睡觉或已经入睡，"
+        "语气可以带倦意，互动节奏放缓，可体现'该睡了'的边界感。"
+    )
+
+
+def _circadian_energy_modifier(phase: str) -> int:
+    """不同时段对角色精力的临时修正（仅本轮表现，不持久化）。"""
+    return {
+        "sleeping": -25,
+        "morning": -8,
+        "forenoon": 0,
+        "noon": -5,
+        "afternoon": 0,
+        "evening": -3,
+        "night": -15,
+    }.get(phase, 0)
+
+
+def build_circadian_state(now: datetime | None = None) -> dict[str, Any]:
+    """根据当前本地时间构建角色昼夜节律状态。
+
+    返回字段：
+    - phase: 作息阶段 (sleeping/morning/forenoon/noon/afternoon/evening/night)
+    - hour: 当前小时 (0-23)
+    - label: 中文标签
+    - roleplay_hint: 角色扮演提示
+    - energy_modifier: 本轮精力临时修正值
+    """
+    current = now or datetime.now().astimezone()
+    hour = current.hour
+    phase = _circadian_phase(hour)
+    return {
+        "phase": phase,
+        "hour": hour,
+        "label": _circadian_label(phase),
+        "roleplay_hint": _circadian_roleplay_hint(phase, hour),
+        "energy_modifier": _circadian_energy_modifier(phase),
+        "current_time": current.isoformat(timespec="seconds"),
+    }
+
+
+def format_circadian_prompt(context: dict[str, Any]) -> str:
+    if not context:
+        return ""
+    lines = [
+        f"作息阶段: {context.get('label', '')}（{context.get('hour', '')}点）",
+        f"扮演提示: {context.get('roleplay_hint', '')}",
+    ]
+    modifier = context.get("energy_modifier", 0)
+    if modifier:
+        direction = "下降" if modifier < 0 else "上升"
+        lines.append(f"本轮精力修正: {abs(modifier)}（{direction}）")
+    lines.append("把当前时段当作角色真实生活的背景；不要刻意强调时间，但要让反应自然带有此时段的状态。")
+    return "\n".join(line for line in lines if line)

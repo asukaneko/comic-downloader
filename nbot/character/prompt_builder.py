@@ -6,7 +6,7 @@ into PromptStack injections for the current turn.
 """
 
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from nbot.character.models import (
     CharacterMemory,
@@ -51,6 +51,26 @@ def build_character_injections(
         priority=PromptStack.PRIORITY_BUBBLE_SPLIT,
     )
 
+    # 内心独白格式约定：让角色显式输出内心活动，前端可解析为折叠/灰字
+    stack.add(
+        "output.inner_monologue",
+        (
+            "Inner monologue format: when the character has a hidden thought or feeling that "
+            "differs from the visible surface, you MAY output it inline using the format "
+            "（内心：...）. Place it at the end of a bubble, after the visible content.\n"
+            "Rules:\n"
+            "- Use it sparingly: only when the hidden emotion creates meaningful contrast or tension. "
+            "Do not add inner monologue to every reply.\n"
+            "- Keep it short (1-2 sentences). It represents a fleeting thought, not a paragraph.\n"
+            "- The inner monologue should reveal what the character is actually thinking but not saying. "
+            "It may contradict the visible surface, show vulnerability, or hint at ulterior motives.\n"
+            "- Do not use inner monologue to explain rules or break character.\n"
+            "- Example: '嗯，随便吧。（内心：其实我很在意，但我不想表现出来）'\n"
+            "The front-end will render （内心：...） as dimmed/folded text, separate from the main reply."
+        ),
+        priority=PromptStack.PRIORITY_BUBBLE_SPLIT + 1,
+    )
+
     if state:
         state_text = _format_state(state)
         if state_text:
@@ -59,6 +79,16 @@ def build_character_injections(
                 state_text[:MAX_STATE_CHARS],
                 priority=PromptStack.PRIORITY_CHARACTER_STATE,
             )
+
+        # 性格演化：经历塑造的人格偏移，叠加在 profile.personality 之后
+        if state.personality_evolution:
+            evo_text = _format_personality_evolution(state.personality_evolution)
+            if evo_text:
+                stack.add(
+                    "character.personality_evolution",
+                    evo_text[:600],
+                    priority=PromptStack.PRIORITY_CHARACTER_PROFILE + 1,
+                )
 
     if relationship:
         rel_text = _format_relationship(relationship)
@@ -97,6 +127,40 @@ def _format_state(state: CharacterState) -> str:
     if state.scene:
         for key, value in state.scene.items():
             lines.append(f"{key}: {value}")
+    return "\n".join(lines)
+
+
+def _format_personality_evolution(evolution: List[Dict[str, Any]]) -> str:
+    """格式化性格演化条目为 prompt 注入文本。
+
+    这些是角色经历事件后产生的人格偏移，叠加在原始性格设定之上。
+    """
+    if not evolution:
+        return ""
+    lines = ["Personality evolution (shifts shaped by experience, layered on top of the base personality):"]
+    # 取最近 5 条，避免 prompt 膨胀
+    for entry in evolution[-5:]:
+        trait = entry.get("trait", "")
+        delta = entry.get("delta", 0)
+        reason = entry.get("reason", "")
+        if not trait:
+            continue
+        direction = "more" if delta > 0 else "less"
+        magnitude = abs(int(delta)) if delta else 0
+        if magnitude >= 8:
+            degree = "significantly"
+        elif magnitude >= 4:
+            degree = "moderately"
+        else:
+            degree = "slightly"
+        line = f"- {trait}: {degree} {direction} (delta {delta:+d})"
+        if reason:
+            line += f" — {reason}"
+        lines.append(line)
+    lines.append(
+        "Let these shifts subtly color the character's tone and behavior this turn; "
+        "do not explicitly mention 'personality evolution' to the user."
+    )
     return "\n".join(lines)
 
 
@@ -141,7 +205,12 @@ def _format_reaction_plan(plan: ReactionPlan) -> str:
             f"Visible emotion: {plan.visible_emotion}. The emotional surface must be obvious in the reply."
         )
     if plan.hidden_emotion:
-        lines.append(f"Hidden drive: {plan.hidden_emotion}.")
+        lines.append(
+            f"Hidden drive: {plan.hidden_emotion}. "
+            "When this hidden drive creates meaningful contrast with the visible emotion, "
+            "consider expressing it as an inline inner monologue using the （内心：...） format. "
+            "Do not force it every turn; only when the contrast adds depth."
+        )
     if plan.tone:
         lines.append(f"Tone: {plan.tone}.")
 

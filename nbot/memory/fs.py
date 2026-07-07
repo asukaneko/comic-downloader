@@ -26,6 +26,8 @@ _FS_INDEX_FILE = "memory_fs.json"
 _MAX_MEMORY_FILE_CHARS = 4000
 _MAX_DIARY_ENTRIES = 30
 _MAX_PLOT_ENTRIES = 50
+_MAX_TIMELINE_ENTRIES = 15  # 跨会话时间线注入 prompt 的最近条目数
+_MAX_TIMELINE_STORE = 80    # 时间线文件最多持久化的条目数
 
 _MEMORY_CATEGORY_META = {
     "user_persona": {"label": "用户人格", "injects_to_prompt": True, "order": 10},
@@ -69,6 +71,7 @@ def _truncate_entries(content: str, path: str) -> str:
     根据路径类型选择不同的保留策略：
     - diary: 保留最近 _MAX_DIARY_ENTRIES 条
     - plot:  保留最近 _MAX_PLOT_ENTRIES 条
+    - timeline: 保留最近 _MAX_TIMELINE_STORE 条
     - 其他:  按条目从旧到新丢弃，直到总长度不超限
     """
     entries = content.split("\n\n")
@@ -76,6 +79,8 @@ def _truncate_entries(content: str, path: str) -> str:
         max_entries = _MAX_DIARY_ENTRIES
     elif "plot" in path:
         max_entries = _MAX_PLOT_ENTRIES
+    elif "timeline" in path:
+        max_entries = _MAX_TIMELINE_STORE
     else:
         max_entries = len(entries)  # 不限条目数，只限总字符
 
@@ -86,6 +91,19 @@ def _truncate_entries(content: str, path: str) -> str:
     while entries and len("\n\n".join(entries)) > _MAX_MEMORY_FILE_CHARS:
         entries.pop(0)
 
+    return "\n\n".join(entries)
+
+
+def _tail_entries(content: str, max_entries: int) -> str:
+    """返回 content 中最近的 max_entries 条记录，按条目分隔。
+
+    用于 prompt 注入时取最近 N 条，避免把全部历史塞入上下文。
+    """
+    if not content:
+        return ""
+    entries = [e for e in content.split("\n\n") if e.strip()]
+    if len(entries) > max_entries:
+        entries = entries[-max_entries:]
     return "\n\n".join(entries)
 
 
@@ -131,6 +149,7 @@ class MemoryFS:
         characters/{char_id}/diary/weekly.md       本周摘要
         characters/{char_id}/plot/{conv_id}.md    剧情摘要
         characters/{char_id}/world/events.md       世界事件记录
+        characters/{char_id}/timeline.md           跨会话人生经历时间线（按时间顺序累积）
     """
 
     def __init__(self, data_dir: str = _DEFAULT_DATA_DIR):
@@ -280,6 +299,9 @@ class MemoryFS:
     def path_world_events(self, char_id: str) -> str:
         return f"characters/{char_id}/world/events.md"
 
+    def path_timeline(self, char_id: str) -> str:
+        return f"characters/{char_id}/timeline.md"
+
     def path_general(self, char_id: str) -> str:
         return f"characters/{char_id}/general.md"
 
@@ -310,8 +332,9 @@ class MemoryFS:
     ) -> str:
         """按结构化读取策略构建 prompt 注入文本（必读层）。
 
-        必读：用户人格 + 角色关系理解 + 重要事件/剧情摘要 + 压缩近期摘要。
+        必读：用户人格 + 角色关系理解 + 跨会话时间线 + 重要事件/剧情摘要 + 压缩近期摘要。
         旧版 raw daily 不再注入，避免把逐轮流水账塞进上下文。
+        timeline 为跨会话人生经历汇总，注入最近 N 条，替代按 conversation 切片的事件注入。
         """
         parts: list[str] = []
 
@@ -322,6 +345,12 @@ class MemoryFS:
         character_persona = self.read(self.path_character_persona(char_id, user_id))
         if character_persona:
             parts.append(character_persona.to_prompt_text())
+
+        timeline_mf = self.read(self.path_timeline(char_id))
+        if timeline_mf and timeline_mf.content:
+            timeline_text = _tail_entries(timeline_mf.content, _MAX_TIMELINE_ENTRIES)
+            if timeline_text:
+                parts.append(f"## character.timeline\n{timeline_text}")
 
         if conversation_id:
             event_mf = self.read(self.path_important_events(char_id, conversation_id))
