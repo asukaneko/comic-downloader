@@ -10849,7 +10849,9 @@
                                     </label>
                                 </div>
                                 <div class="public-share-toggles">
-                                    <label><input type="checkbox" v-model="publicShareOptions.include_character"> 显示角色信息和设定</label>
+                                    <label :class="{ 'is-disabled': viewingSession?.session_mode === 'agent' }" :title="viewingSession?.session_mode === 'agent' ? 'Agent 会话不包含角色信息' : ''">
+                                        <input type="checkbox" v-model="publicShareOptions.include_character" :disabled="viewingSession?.session_mode === 'agent'"> 显示角色信息和设定
+                                    </label>
                                     <label><input type="checkbox" v-model="publicShareOptions.include_user_messages"> 显示用户消息</label>
                                 </div>
                                 <button class="btn btn-primary btn-small" @click="makeSessionPublic(viewingSession.id)" :disabled="isLoadingPublic">

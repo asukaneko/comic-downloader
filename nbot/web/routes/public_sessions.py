@@ -123,7 +123,9 @@ def _build_public_messages(session, options):
 
 
 def _build_public_session_data(session, options):
-    include_character = options.get("include_character", True)
+    # Agent 模式会话不携带任何角色卡内容（sender/scenario 等），始终保持纯净对话
+    is_agent_session = (session or {}).get("session_mode") == "agent"
+    include_character = options.get("include_character", True) and not is_agent_session
     return {
         "name": session.get("name", "未命名会话"),
         "sender_name": session.get("sender_name", "") if include_character else "",
@@ -168,6 +170,9 @@ def register_public_session_routes(app, server):
         payload = request.get_json(silent=True) or {}
         public_id = _generate_public_id(session_id)
         options = _normalize_public_options(payload)
+        # Agent 模式强制不包含角色内容，无视前端传入的 include_character
+        if (session or {}).get("session_mode") == "agent":
+            options["include_character"] = False
         password = str(payload.get("password") or "").strip()
 
         _public_sessions[public_id] = {

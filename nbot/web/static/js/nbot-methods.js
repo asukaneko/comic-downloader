@@ -8198,10 +8198,12 @@ def main(params):
                     this.sessionIsPublic = false;
                     this.publicSharePasswordRequired = false;
                     this.publicShareExpiresAt = null;
+                    // Agent 会话不携带角色卡内容，强制关闭 include_character
+                    const _isAgentSession = session.session_mode === 'agent';
                     this.publicShareOptions = {
                         expires_days: 30,
                         password: '',
-                        include_character: true,
+                        include_character: !_isAgentSession,
                         include_user_messages: true,
                         message_start: '',
                         message_end: ''
