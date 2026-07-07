@@ -94,6 +94,7 @@ class CharacterRuntime:
         state = self._get_or_create_state(identity, profile)
         real_time_context = self._build_real_time_context(state, chat_request)
         circadian_state = self._build_circadian_state(chat_request)
+        self._ensure_current_activity(state)
 
         # 读取或创建关系状态
         relationship = self._get_or_create_relationship(identity, profile)
@@ -666,6 +667,31 @@ class CharacterRuntime:
             )
         except Exception as exc:
             _log.debug("[CharacterRuntime] circadian prompt injection failed: %s", exc)
+
+    def _ensure_current_activity(self, state) -> None:
+        """确保角色运行时状态有 current_activity，缺失时基于昼夜节律规则推断。
+
+        这是保底机制：心跳未维护 scene.current_activity 时由规则填充。
+        心跳维护的值优先级更高（由 _run_session_heartbeat_execution 写入）。
+        同一小时内活动稳定，避免每轮对话活动都变。
+        """
+        try:
+            if not state:
+                return
+            scene = state.scene if isinstance(state.scene, dict) else {}
+            existing = str(scene.get("current_activity") or "").strip()
+            if existing:
+                # 已有心跳维护的活动，保留
+                return
+            from nbot.review.time_context import infer_current_activity
+
+            activity = infer_current_activity()
+            state.scene = scene
+            state.scene["current_activity"] = activity
+            state.scene["activity_source"] = "inferred"  # 标记来源，心跳写入时为 "heartbeat"
+            # 注意：这里不 save，因为 before_turn 后续 _apply_state 会持久化
+        except Exception as exc:
+            _log.debug("[CharacterRuntime] ensure current_activity failed: %s", exc)
 
     def _match_world_books(self, identity, chat_request, state=None, recent_messages: list = None) -> list:
         """匹配世界书关键词（多源上下文召回）"""

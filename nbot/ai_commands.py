@@ -278,7 +278,6 @@ def register_ai_commands(
     running,
     write_running,
     normalize_timestamp,
-    heartbeat_core,
     normalize_file_path,
     load_address,
 ):
@@ -1078,59 +1077,6 @@ def register_ai_commands(
             return "今天群里还没有记录到消息喔~"
         return summarize_group_text(_history_items_to_text(filtered))
 
-    async def auto_summary_task():
-        log.info("每日自动总结定时任务已启动")
-        while True:
-            try:
-                now = datetime.now()
-                if now.hour == 23 and now.minute == 55:
-                    for group_id, switches in switch.group_switches.items():
-                        if switches.get("summary_auto", False):
-                            try:
-                                summary = await get_group_today_summary_text(int(group_id))
-                                if summary and "还没有记录到消息" not in summary:
-                                    await bot.api.post_group_msg(
-                                        group_id=int(group_id),
-                                        text=f"【每日自动总结】\n{summary}",
-                                    )
-                            except Exception as e:
-                                log.error(f"自动总结群 {group_id} 失败: {e}")
-                    await asyncio.sleep(65)
-                else:
-                    await asyncio.sleep(30)
-            except Exception as e:
-                log.error(f"每日自动总结任务发生异常: {e}")
-                await asyncio.sleep(60)
-
-    async def auto_active_chat_task():
-        log.info("主动聊天定时任务已启动")
-        while True:
-            try:
-                now = datetime.now()
-                if 8 <= now.hour < 24:
-                    current_time = time.time()
-                    for user_id, info in list(running.items()):
-                        if not info.get("active", False):
-                            continue
-                        interval = float(info.get("interval", 1.0))
-                        last_time = normalize_timestamp(info.get("last_time", 0))
-                        if last_time == 0:
-                            running[user_id]["last_time"] = current_time
-                            write_running()
-                            continue
-                        if current_time - last_time >= 60 * 60 * interval:
-                            try:
-                                next_interval = await heartbeat_core.process_user(int(user_id), interval)
-                                if next_interval is not None:
-                                    running[user_id]["interval"] = next_interval
-                                running[user_id]["last_time"] = current_time
-                                write_running()
-                            except Exception as e:
-                                log.error(f"主动聊天用户 {user_id} 发送失败: {e}")
-                await asyncio.sleep(60)
-            except Exception as e:
-                log.error(f"主动聊天定时任务发生异常: {e}")
-                await asyncio.sleep(60)
 
     @register_command(
         "/summary_recent",
@@ -1572,57 +1518,6 @@ def register_ai_commands(
             "旧的 /主动聊天 已停用。请改用 /heartbeat 管理当前会话的心跳。",
         )
         return
-        if is_group:
-            await msg.reply(text="只能私聊设置喔~")
-            return
-
-        try:
-            raw = (getattr(msg, "raw_message", "") or "")[len("/主动聊天"):].strip()
-            parts = raw.split() if raw else []
-            user_id = str(msg.user_id)
-            current = running.get(user_id, {})
-            interval = float(current.get("interval", 1.0))
-            active = bool(current.get("active", False))
-
-            if not parts:
-                active = not active
-            elif len(parts) == 1:
-                if parts[0] in ("0", "1"):
-                    active = bool(int(parts[0]))
-                else:
-                    interval = float(parts[0])
-                    active = True
-            elif len(parts) >= 2:
-                interval = float(parts[0])
-                if parts[1] in ("0", "1"):
-                    active = bool(int(parts[1]))
-
-            running.setdefault(user_id, {})
-            running[user_id]["interval"] = interval
-            running[user_id]["active"] = active
-            running[user_id]["state"] = False
-            switch.set_switch_state("active_chat", active, user_id=user_id)
-
-            if active:
-                try:
-                    _api = getattr(_bot_instance, "api", None)
-                    if _api and hasattr(_api, "get_recent_contact"):
-                        recent = await _api.get_recent_contact(100)
-                        for contact in recent.get("data", []):
-                            latest = contact.get("lastestMsg", {})
-                            if str(latest.get("user_id")) == user_id:
-                                running[user_id]["last_time"] = normalize_timestamp(latest.get("time", 0))
-                                break
-                    running[user_id].setdefault("last_time", time.time())
-                except Exception as e:
-                    log.error(f"获取最近联系人失败: {e}")
-                    running[user_id]["last_time"] = time.time()
-
-            write_running()
-            reply = f"设置成功喔，{'AI现在会自行决定什么时候找你聊天喔~' if active else '已关闭主动聊天喔~'}"
-            await reply_current_channel(msg, is_group, reply)
-        except ValueError:
-            await reply_current_channel(msg, is_group, "格式错误喔，请输入 /主动聊天 [1/0]")
 
     @register_command(
         "/show_chat",

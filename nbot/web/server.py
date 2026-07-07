@@ -3465,12 +3465,80 @@ class WebChatServer:
                 {"session_id": session_id, "action": "heartbeat_completed"},
                 room=session_id,
             )
+        # 心跳执行后刷新角色活动状态，让下次对话时角色"从某个活动中被打断"
+        self._refresh_heartbeat_activity(session_id)
         return {
             "messages_sent": 1,
             "target_session_id": session_id,
             "session_id": session_id,
             "result_summary": "sent 1 message",
         }
+
+    def _refresh_heartbeat_activity(self, session_id: str) -> None:
+        """心跳执行后刷新角色 current_activity。
+
+        统一活动状态维护入口：心跳触发时基于当前时间推断角色活动，
+        写入 CharacterState.scene，下次对话 before_turn 会读取这个值。
+        如果推断失败，before_turn 的 _ensure_current_activity 保底机制会兜底。
+        """
+        try:
+            from nbot.review.time_context import infer_current_activity
+
+            activity = infer_current_activity()
+            # 推断 session_id 对应的 character_id 和 scope_id
+            char_id, scope_id = self._resolve_heartbeat_character_scope(session_id)
+            if not char_id or not scope_id:
+                return
+            from nbot.character.repository import CharacterStateRepository
+
+            repo = CharacterStateRepository()
+            state = repo.get_or_create(character_id=char_id, scope_id=scope_id)
+            state.scene = state.scene if isinstance(state.scene, dict) else {}
+            state.scene["current_activity"] = activity
+            state.scene["activity_source"] = "heartbeat"
+            from datetime import datetime as _dt
+
+            state.scene["activity_updated_at"] = _dt.now().astimezone().isoformat(
+                timespec="seconds"
+            )
+            repo.save(state)
+            _log.debug(
+                "[Heartbeat] activity refreshed for %s: %s", session_id, activity
+            )
+        except Exception as exc:
+            _log.debug("[Heartbeat] refresh activity failed: %s", exc)
+
+    def _resolve_heartbeat_character_scope(self, session_id: str):
+        """根据 session_id 推断 (character_id, scope_id)。
+
+        QQ 私聊：qq_private_{user_id} → scope_id = session_id
+        QQ 群聊：qq_group_{group_id}_{user_id} → scope_id = session_id
+        Web：web_{id} → scope_id = session_id
+        character_id 从 session 元数据或默认角色获取。
+        """
+        try:
+            session = self.session_store.get_session(session_id) or {}
+            # 优先从 session 元数据读取 character_id
+            char_id = str(
+                session.get("character_id")
+                or session.get("character_name")
+                or ""
+            ).strip()
+            if not char_id:
+                # 尝试从 ProfileRepository 取默认角色
+                try:
+                    from nbot.character.repository import ProfileRepository
+
+                    profiles = ProfileRepository().list_all()
+                    if profiles:
+                        char_id = profiles[0].id or profiles[0].name or ""
+                except Exception:
+                    pass
+            if not char_id:
+                return "", ""
+            return char_id, session_id
+        except Exception:
+            return "", ""
 
     def _init_heartbeat_scheduler(self):
         """初始化 Heartbeat 调度器"""

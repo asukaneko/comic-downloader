@@ -4674,7 +4674,6 @@ register_ai_commands(
     running=running,
     write_running=write_running,
     normalize_timestamp=normalize_timestamp,
-    heartbeat_core=heartbeat_core,
     normalize_file_path=normalize_file_path,
     load_address=load_address,
 )

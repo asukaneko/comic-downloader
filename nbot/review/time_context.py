@@ -248,3 +248,39 @@ def format_circadian_prompt(context: dict[str, Any]) -> str:
         lines.append(f"本轮精力修正: {abs(modifier)}（{direction}）")
     lines.append("把当前时段当作角色真实生活的背景；不要刻意强调时间，但要让反应自然带有此时段的状态。")
     return "\n".join(line for line in lines if line)
+
+
+# ---------------------------------------------------------------------------
+# 当前活动推断（保底机制，不依赖心跳）
+# ---------------------------------------------------------------------------
+
+import random as _random
+
+# 每个昼夜阶段的候选活动池，用于在没有心跳维护时规则推断角色"正在做什么"
+_ACTIVITY_POOL: dict[str, list[str]] = {
+    "sleeping": ["正在睡觉", "在床上熟睡", "做梦中"],
+    "morning": ["刚起床正在洗漱", "在吃早餐", "在做早晨例行事务", "在窗边伸展"],
+    "forenoon": ["在看书", "在工作/整理事务", "在练习某项技能", "在专注做自己的事"],
+    "noon": ["在吃午饭", "在午休", "在厨房忙活", "刚吃完饭有点困"],
+    "afternoon": ["在看书", "在散步", "在工作", "在喝下午茶", "在做自己的爱好"],
+    "evening": ["在准备晚餐", "在洗澡", "在看电视/放松", "在看书", "在整理一天的事"],
+    "night": ["准备睡觉", "在洗漱", "在床上看书", "有点困了"],
+}
+
+
+def infer_current_activity(now=None) -> str:
+    """基于当前时间规则推断角色"正在做什么"。
+
+    这是保底机制：当心跳未维护 scene.current_activity 时，before_turn 调用此函数
+    生成一个合理的活动状态，让角色"从某个活动中被打断"。
+    使用日期+小时作为种子，确保同一小时内结果稳定，避免每轮对话活动都变。
+    """
+    if now is None:
+        now = datetime.now()
+    hour = now.hour
+    phase = _circadian_phase(hour)
+    pool = _ACTIVITY_POOL.get(phase, ["在做自己的事"])
+    # 用日期+小时作为种子，确保同一小时内活动稳定
+    seed = now.year * 10000 + now.month * 100 + now.day + hour
+    rng = _random.Random(seed)
+    return rng.choice(pool)

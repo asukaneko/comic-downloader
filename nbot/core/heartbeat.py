@@ -34,6 +34,21 @@ class HeartbeatCore:
         pass
 
     async def process_user(self, user_id, interval):
+        """[DEPRECATED] 旧版主动聊天决策，已被 SessionHeartbeatManager 统一心跳取代。
+
+        保留方法签名以避免破坏外部引用，但实际不再被调度。
+        统一心跳入口：SessionHeartbeatManager + _run_session_heartbeat_execution。
+        活动状态维护：_refresh_heartbeat_activity（心跳执行后）+
+                      _ensure_current_activity（before_turn 保底）。
+        """
+        _log.warning(
+            "[Heartbeat] HeartbeatCore.process_user is deprecated; "
+            "use SessionHeartbeatManager instead."
+        )
+        return None
+
+    async def _process_user_legacy(self, user_id, interval):
+        """旧版实现，保留供回滚参考，不再被调用。"""
         from ncatbot.services.ai import ai_client
         from nbot.services.chat_service import load_canonical_qq_messages, load_prompt
 
