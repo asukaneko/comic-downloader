@@ -3946,18 +3946,12 @@ class WebChatServer:
         """执行 Heartbeat 任务
 
         Args:
-            force: 是否强制执行，跳过 enabled 检查
+            force: 是否强制执行，跳过到期判定（手动触发时用）
         """
         if hasattr(self, "session_heartbeat_manager"):
             self._refresh_heartbeat_summary_config()
-            target_session_id = str(self.heartbeat_config.get("target_session_id") or "").strip()
-            if target_session_id:
-                return await self.session_heartbeat_manager.execute_session(
-                    target_session_id,
-                    force=force,
-                    trigger_source="manual" if force else "scheduler",
-                )
             if force:
+                # 手动触发：执行第一个 enabled config（跳过 _is_due 判定）
                 enabled = self.session_heartbeat_manager.list_enabled_configs()
                 if not enabled:
                     return None
@@ -3966,6 +3960,7 @@ class WebChatServer:
                     force=True,
                     trigger_source="manual",
                 )
+            # 定时 tick：逐个检查 _is_due，只执行到期的会话
             return await self.session_heartbeat_manager.execute_due_sessions()
         if not force and not self.heartbeat_config.get("enabled"):
             _log.info("Heartbeat is disabled, skipping execution")
