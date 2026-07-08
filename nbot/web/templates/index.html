@@ -1400,7 +1400,7 @@
                                                     <i class="fas fa-globe"></i> {{ ch }}
                                                 </div>
                                                 <div v-for="st in channelStatesData.states[ch]" :key="st.scope_id" class="runtime-stat" style="flex-wrap:wrap;gap:4px;">
-                                                    <code style="font-size:11px;opacity:0.7;">{{ st.scope_id }}</code>
+                                                    <session-link v-if="st.scope_id" :value="st.scope_id" :inline="true" :show-icon="false" class="runtime-scope-link" />
                                                     <span>{{ $t('chat.mood') }}: {{ $translateMood(st.mood) || '-' }}</span>
                                                     <span>{{ $t('personality.mood_intensity') }}: {{ Math.round((st.mood_intensity || 0) * 100) }}%</span>
                                                     <span>{{ $t('personality.energy') }}: {{ st.energy ?? '-' }}</span>
@@ -2758,7 +2758,12 @@
                                                         <div><i class="fas fa-clock"></i> {{ item.trigger_label || getTaskCenterTriggerLabel(item) }}</div>
                                                         <div><i class="fas fa-history"></i> 上次执行：{{ item.last_run ? formatFullTime(item.last_run) : '从未执行' }}</div>
                                                         <div><i class="fas fa-forward"></i> 下次执行：{{ item.next_run ? formatFullTime(item.next_run) : '待触发 / 未调度' }}</div>
-                                                        <div v-if="item.target_session_id"><i class="fas fa-comments"></i> 目标会话：{{ getSessionDisplayName(item.target_session_id) }}</div>
+                                                        <div v-if="item.target_session_id" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                                            <i class="fas fa-comments"></i>
+                                                            <span>目标会话：</span>
+                                                            <span v-if="getSessionDisplayName(item.target_session_id) !== item.target_session_id">{{ getSessionDisplayName(item.target_session_id) }}</span>
+                                                            <session-link :value="item.target_session_id" :inline="true" :show-icon="false" />
+                                                        </div>
                                                         <div v-if="item.last_trace_id" style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                                                             <i class="fas fa-route"></i>
                                                             <code style="font-size: 11px;">{{ shortenId(item.last_trace_id, 18) }}</code>
@@ -6922,7 +6927,13 @@
                                                         </div>
                                                         <div class="gateway-trace-group-meta">
                                                             <span>{{ formatGatewayTime(group.first.created_at) }}</span>
-                                                            <span v-if="getSessionName(group.first)">{{ getSessionName(group.first) }}</span>
+                                                            <session-link v-if="getSessionName(group.first)"
+                                                                          :value="group.first.conversation_id"
+                                                                          :show-icon="false"
+                                                                          :stop-propagation="false"
+                                                                          class="gw-session-link">
+                                                                {{ getSessionName(group.first) }}
+                                                            </session-link>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -7008,8 +7019,21 @@
                                                 </td>
                                                 <td style="font-size: 12px;">
                                                     <div class="gw-session-cell">
-                                                        <span v-if="getSessionName(log)" class="gw-session-name" :title="log.conversation_id">{{ getSessionName(log) }}</span>
-                                                        <span v-else class="gw-session-id" :title="log.conversation_id">{{ shortenId(log.conversation_id, 8) }}</span>
+                                                        <session-link v-if="getSessionName(log)"
+                                                                      :value="log.conversation_id"
+                                                                      :show-icon="false"
+                                                                      :stop-propagation="false"
+                                                                      class="gw-session-link">
+                                                            {{ getSessionName(log) }}
+                                                        </session-link>
+                                                        <session-link v-else
+                                                                      :value="log.conversation_id"
+                                                                      :inline="true"
+                                                                      :show-icon="false"
+                                                                      :stop-propagation="false"
+                                                                      class="gw-session-link">
+                                                            {{ shortenId(log.conversation_id, 8) }}
+                                                        </session-link>
                                                         <div v-if="log.user_id && log.user_id !== log.conversation_id" style="color: var(--text-muted); font-size: 10px; margin-top: 1px;">
                                                             {{ log.user_id }}
                                                         </div>
@@ -7104,7 +7128,7 @@
                                                         </div>
                                                         <div v-if="parseJson(evt.metadata_json).target_session_id" class="trace-meta-item">
                                                             <span class="trace-meta-label">目标会话</span>
-                                                            <span class="trace-meta-value">{{ parseJson(evt.metadata_json).target_session_id }}</span>
+                                                            <session-link :value="parseJson(evt.metadata_json).target_session_id" :inline="true" :show-icon="false" />
                                                         </div>
                                                         <div v-if="parseJson(evt.metadata_json).workflow_id" class="trace-meta-item">
                                                             <span class="trace-meta-label">工作流 ID</span>
@@ -7228,7 +7252,7 @@
                                                     </div>
                                                     <div v-if="evt.conversation_id" class="trace-meta-item">
                                                         <span class="trace-meta-label">会话 ID</span>
-                                                        <span class="trace-meta-value">{{ evt.conversation_id }}</span>
+                                                        <session-link :value="evt.conversation_id" :inline="true" :show-icon="false" />
                                                     </div>
                                                     <div v-if="evt.user_id" class="trace-meta-item">
                                                         <span class="trace-meta-label">用户 ID</span>
@@ -14806,6 +14830,81 @@
             }
         });
         
+        // 全局组件：会话 ID 跳转链接
+        // 用法：
+        //   <session-link :value="someId" />                                  // 标准带图标
+        //   <session-link :value="someId" :inline="true" :show-icon="false" /> // 行内纯文字
+        //   <session-link :value="someId" :prefix="'→ '" :show-icon="false" /> // 自定义前缀
+        // 自动判定会话是否存在，存在则可点击跳转，不存在则置灰 + toast 提示。
+        nbotVueApp.component('session-link', {
+            props: {
+                value: { type: String, default: '' },
+                inline: { type: Boolean, default: false },
+                prefix: { type: String, default: '' },
+                showIcon: { type: Boolean, default: true },
+                stopPropagation: { type: Boolean, default: true },
+            },
+            computed: {
+                _app() {
+                    return window.__nbotVueApp || null;
+                },
+                hasSession() {
+                    if (!this.value) return false;
+                    const app = this._app;
+                    if (!app || !Array.isArray(app.sessions)) return false;
+                    return app.sessions.some(s => s && s.id === this.value);
+                },
+                titleText() {
+                    return this.hasSession
+                        ? '点击跳转到该会话'
+                        : '该会话不存在或已被删除';
+                },
+                linkClass() {
+                    return [
+                        'memfs-session-link',
+                        this.inline ? 'memfs-session-link-inline' : '',
+                        { 'memfs-session-link-disabled': !this.hasSession },
+                    ];
+                },
+            },
+            methods: {
+                async handleClick(e) {
+                    e.preventDefault();
+                    if (this.stopPropagation) {
+                        e.stopPropagation();
+                    }
+                    if (!this.hasSession) {
+                        const app = this._app;
+                        if (app && typeof app.showToast === 'function') {
+                            app.showToast('该会话不存在或已被删除', 'warning');
+                        }
+                        return;
+                    }
+                    const app = this._app;
+                    const session = app && Array.isArray(app.sessions)
+                        ? app.sessions.find(s => s && s.id === this.value)
+                        : null;
+                    if (!session) return;
+                    try {
+                        await app.openSession(session);
+                    } catch (err) {
+                        console.error('[session-link] failed to open session', this.value, err);
+                        if (typeof app.showToast === 'function') {
+                            app.showToast('打开会话失败', 'error');
+                        }
+                    }
+                },
+            },
+            template: `
+                <a href="#"
+                   :class="linkClass"
+                   :title="titleText"
+                   @click="handleClick">
+                    <template v-if="prefix">{{ prefix }}</template>{{ value }}<i v-if="showIcon && !inline" class="fas fa-external-link-alt memfs-session-link-icon"></i>
+                </a>
+            `,
+        });
+
         const nbotVueAppMounted = nbotVueApp.mount('#app');
         window.__nbotVueApp = nbotVueAppMounted;
         window.__nbotAppReady = true;

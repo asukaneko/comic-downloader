@@ -5642,6 +5642,24 @@
         .memfs-session-link-inline {
             font-family: 'SF Mono', 'Fira Code', monospace;
         }
+        /* Gateway 日志/追踪表格中的会话名链接 —— 与原 .gw-session-name 视觉风格一致 */
+        a.memfs-session-link.gw-session-link {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+        a.memfs-session-link.gw-session-link:hover {
+            color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.08);
+        }
+        a.memfs-session-link.gw-session-link-disabled {
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+        /* 角色运行时状态/会话状态里的 scope_id 链接 —— 取代原来的 <code> */
+        a.memfs-session-link.runtime-scope-link {
+            font-size: 11px;
+            opacity: 0.85;
+        }
 
         .memfs-file-actions {
             display: flex;
