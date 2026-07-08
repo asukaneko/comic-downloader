@@ -15948,6 +15948,31 @@ def main(params):
                     return content;
                 },
 
+                // 将内心独白（内心：...）包装为可折叠的灰字块。
+                // 必须在 applyParenthesisItalic 之前调用，避免被其斜体规则二次处理。
+                applyInnerMonologue(text) {
+                    if (!text) return text;
+                    // 匹配（内心：内容），允许多行
+                    // 内容里不能含右全角括号），避免贪婪跨越多段
+                    return text.replace(
+                        /（内心：([^）]+)）/g,
+                        (_match, content) => {
+                            const safeContent = String(content)
+                                .replace(/&/g, '&amp;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;')
+                                .replace(/"/g, '&quot;');
+                            return (
+                                '<span class="inner-monologue" data-folded="true">'
+                                + '<span class="inner-monologue-toggle" role="button" tabindex="0" '
+                                + 'title="点击展开/收起内心独白">▸ 内心</span>'
+                                + '<span class="inner-monologue-content">内心：' + safeContent + '</span>'
+                                + '</span>'
+                            );
+                        }
+                    );
+                },
+
                 // 将括号内容标记为斜体：（）() 及包括的内容
                 applyParenthesisItalic(text) {
                     if (!text) return text;
@@ -15965,6 +15990,7 @@ def main(params):
                         return '';
                     }
                     let content = this.parseMessageContent(msg?.content || '', msg);
+                    content = this.applyInnerMonologue(content);
                     content = this.applyParenthesisItalic(content);
                     if (msg?.is_streaming) {
                         return this.renderStreamingHtml(content);
@@ -15998,7 +16024,9 @@ def main(params):
                     const lastIndex = rawParts.length - 1;
                     return rawParts
                         .map((part, index) => {
-                            const italicPart = this.applyParenthesisItalic(part);
+                            // 先包装内心独白（保留在所在气泡内），再做括号斜体
+                            const monologuePart = this.applyInnerMonologue(part);
+                            const italicPart = this.applyParenthesisItalic(monologuePart);
                             return {
                                 text: part,
                                 html: msg.is_streaming && index === lastIndex
@@ -16094,10 +16122,25 @@ def main(params):
                 renderStreamingHtml(content) {
                     const normalized = String(content || '').replace(/\r\n/g, '\n');
                     if (!normalized) return '';
-                    return normalized
+                    // 保护 inner-monologue 等行内 HTML 块不被 escapeHtml
+                    const protectedBlocks = [];
+                    const placeholder = (i) => `__NBOT_PROTECTED_${i}__`;
+                    let guarded = normalized.replace(
+                        /<span class="inner-monologue"[\s\S]*?<\/span>/g,
+                        (m) => {
+                            const idx = protectedBlocks.push(m) - 1;
+                            return placeholder(idx);
+                        }
+                    );
+                    guarded = guarded
                         .split(/\n{2,}/)
                         .map(part => `<p>${this.escapeHtml(part).replace(/\n/g, '<br>')}</p>`)
                         .join('');
+                    // 还原被保护的块
+                    guarded = guarded.replace(/__NBOT_PROTECTED_(\d+)__/g, (_m, i) => {
+                        return protectedBlocks[Number(i)] || '';
+                    });
+                    return guarded;
                 },
 
                 // 判断是否为 Markdown 文件

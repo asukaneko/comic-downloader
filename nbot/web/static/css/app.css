@@ -31778,3 +31778,78 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
     gap: 6px;
 }
 .plot-style-current i { color: var(--accent-primary); }
+
+/* ----------------------------------------------------------------------
+   内心独白：把（内心：...）渲染为可折叠的灰字块
+   HTML 结构（由 nbot-methods.js::applyInnerMonologue 生成）：
+     <span class="inner-monologue" data-folded="true">
+       <span class="inner-monologue-toggle" role="button" tabindex="0">▸ 内心</span>
+       <span class="inner-monologue-content">内心：xxx</span>
+     </span>
+   ---------------------------------------------------------------------- */
+
+.message-content .inner-monologue,
+.message-body .inner-monologue {
+    display: inline;
+    white-space: normal;
+    margin-left: 2px;
+}
+
+.message-content .inner-monologue-toggle,
+.message-body .inner-monologue-toggle {
+    display: inline;
+    cursor: pointer;
+    color: var(--primary-color, #6366f1);
+    user-select: none;
+    font-size: 0.85em;
+    font-weight: 500;
+    padding: 0 2px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+    outline: none;
+}
+
+.message-content .inner-monologue-toggle:hover,
+.message-body .inner-monologue-toggle:hover {
+    background: rgba(99, 102, 241, 0.08);
+    text-decoration: underline;
+}
+
+.message-content .inner-monologue-toggle:focus-visible,
+.message-body .inner-monologue-toggle:focus-visible {
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+/* 折叠态：只显示 toggle，content 隐藏 */
+.message-content .inner-monologue[data-folded="true"] .inner-monologue-content,
+.message-body .inner-monologue[data-folded="true"] .inner-monologue-content {
+    display: none;
+}
+
+/* 展开态：显示 content，灰字、斜体、左边竖线、降低视觉权重 */
+.message-content .inner-monologue[data-folded="false"] .inner-monologue-content,
+.message-body .inner-monologue[data-folded="false"] .inner-monologue-content {
+    display: inline;
+    color: var(--text-secondary);
+    font-style: italic;
+    font-size: 0.92em;
+    border-left: 2px solid var(--primary-color, #6366f1);
+    padding: 0 0 0 6px;
+    margin-left: 4px;
+    opacity: 0.85;
+    transition: opacity 0.2s;
+}
+
+.message-content .inner-monologue[data-folded="false"] .inner-monologue-content:hover,
+.message-body .inner-monologue[data-folded="false"] .inner-monologue-content:hover {
+    opacity: 1;
+}
+
+/* 移动端：折叠态 toggle 区域稍大，便于触摸 */
+@media (max-width: 768px) {
+    .message-content .inner-monologue-toggle,
+    .message-body .inner-monologue-toggle {
+        padding: 2px 6px;
+        font-size: 0.9em;
+    }
+}

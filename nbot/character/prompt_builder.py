@@ -51,7 +51,7 @@ def build_character_injections(
         priority=PromptStack.PRIORITY_BUBBLE_SPLIT,
     )
 
-    # 内心独白格式约定：让角色显式输出内心活动，前端可解析为折叠/灰字
+    # 内心独白格式约定：让角色显式输出内心活动，前端可解析为可折叠/灰字块
     stack.add(
         "output.inner_monologue",
         (
@@ -66,7 +66,10 @@ def build_character_injections(
             "It may contradict the visible surface, show vulnerability, or hint at ulterior motives.\n"
             "- Do not use inner monologue to explain rules or break character.\n"
             "- Example: '嗯，随便吧。（内心：其实我很在意，但我不想表现出来）'\n"
-            "The front-end will render （内心：...） as dimmed/folded text, separate from the main reply."
+            "The front-end will render （内心：...） as a dimmed, italicized, foldable section "
+            "(with a left border) separate from the main reply. Users can click to expand or collapse it. "
+            "If the front-end does not support rendering, it will fall back to plain italic text. "
+            "Always assume the dimmed/foldable rendering is in effect."
         ),
         priority=PromptStack.PRIORITY_BUBBLE_SPLIT + 1,
     )

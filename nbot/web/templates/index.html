@@ -14541,6 +14541,31 @@
                 // 初始化主题
                 this.initTheme();
 
+                // 内心独白全局点击委托：点击 .inner-monologue-toggle 切换折叠
+                this._innerMonologueClickHandler = (event) => {
+                    const target = event.target;
+                    if (!target || !target.classList) return;
+                    if (!target.classList.contains('inner-monologue-toggle')) return;
+                    const wrapper = target.closest('.inner-monologue');
+                    if (!wrapper) return;
+                    const folded = wrapper.getAttribute('data-folded') !== 'false';
+                    wrapper.setAttribute('data-folded', folded ? 'false' : 'true');
+                    const toggle = wrapper.querySelector('.inner-monologue-toggle');
+                    if (toggle) {
+                        toggle.textContent = folded ? '▾ 内心' : '▸ 内心';
+                    }
+                };
+                this._innerMonologueKeyHandler = (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    const target = event.target;
+                    if (!target || !target.classList) return;
+                    if (!target.classList.contains('inner-monologue-toggle')) return;
+                    event.preventDefault();
+                    target.click();
+                };
+                document.addEventListener('click', this._innerMonologueClickHandler);
+                document.addEventListener('keydown', this._innerMonologueKeyHandler);
+
                 // Settings dirty tracking watcher
                 this.$watch('settings', () => {
                     if (!this.settingsSnapshot) return;
@@ -14652,6 +14677,14 @@
             },
 
             beforeUnmount() {
+                if (this._innerMonologueClickHandler) {
+                    document.removeEventListener('click', this._innerMonologueClickHandler);
+                    this._innerMonologueClickHandler = null;
+                }
+                if (this._innerMonologueKeyHandler) {
+                    document.removeEventListener('keydown', this._innerMonologueKeyHandler);
+                    this._innerMonologueKeyHandler = null;
+                }
                 window.removeEventListener('resize', this.handleResize);
                 if (this._modalOverlayClickCaptureHandler) {
                     document.removeEventListener('click', this._modalOverlayClickCaptureHandler, true);
