@@ -160,6 +160,50 @@ def register_review_routes(app, server):
             _log.error("[ReviewRoutes] read_memory_fs failed: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
+    @app.route("/api/review/memory-fs/delete", methods=["DELETE", "POST"])
+    def delete_memory_fs():
+        """删除指定逻辑路径的 MemoryFS 文件。
+
+        参数（query 或 body json 均支持）：
+            path         — 必填，逻辑路径
+            character_id — 可选，限定角色前缀，避免越权删除
+        """
+        payload = request.get_json(silent=True) or {}
+        path = (
+            request.args.get("path")
+            or payload.get("path")
+            or ""
+        )
+        character_id = (
+            request.args.get("character_id")
+            or payload.get("character_id")
+            or ""
+        )
+        if not path:
+            return jsonify({"error": "path is required"}), 400
+        # 安全校验：必须落在 characters/<char_id>/ 之下
+        if character_id:
+            prefix = f"characters/{character_id}/"
+            if not (path == prefix.rstrip("/") or path.startswith(prefix)):
+                return jsonify({
+                    "error": f"path '{path}' does not belong to character '{character_id}'",
+                }), 403
+        try:
+            from nbot.memory.fs import get_memory_fs
+            mfs = get_memory_fs()
+            existed = mfs.read(path) is not None
+            if not existed:
+                return jsonify({"error": "not found", "path": path}), 404
+            mfs.delete(path)
+            _log.info(
+                "[ReviewRoutes] memory-fs deleted: path=%s char=%s",
+                path, character_id or "*",
+            )
+            return jsonify({"ok": True, "path": path})
+        except Exception as exc:
+            _log.error("[ReviewRoutes] delete_memory_fs failed: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
     # ------------------------------------------------------------------
     # Hook 事件流（按新标准事件名筛选）
     # ------------------------------------------------------------------

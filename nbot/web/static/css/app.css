@@ -5630,6 +5630,13 @@
             color: var(--text-primary);
         }
 
+        /* MemoryFS 删除按钮：悬停时变红，提示危险操作 */
+        .memfs-file-actions .btn-icon.memfs-action-danger:hover {
+            background: rgba(239, 68, 68, 0.12);
+            color: #ef4444;
+            border-color: rgba(239, 68, 68, 0.4);
+        }
+
         /* 响应式 */
         @media (max-width: 1200px) {
             .memfs-char-cards {

@@ -5191,6 +5191,12 @@
                                             <button class="btn-icon" @click="editMemory(mf._legacyRef)" title="编辑"><i class="fas fa-edit"></i></button>
                                             <button class="btn-icon" @click="deleteMemory(mf._legacyId)" title="删除"><i class="fas fa-trash"></i></button>
                                         </div>
+                                        <!-- MemoryFS 逻辑文件的操作按钮 -->
+                                        <div v-else class="memfs-file-actions" @click.stop>
+                                            <button class="btn-icon memfs-action-danger" @click="deleteMemoryFSFile(mf)" title="删除该记忆文件">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

@@ -12018,6 +12018,43 @@ def main(params):
                     });
                 },
 
+                async deleteMemoryFSFile(mf) {
+                    // 删除一条 MemoryFS 逻辑文件（含 timeline.md、character_persona 等）
+                    if (!mf || !mf.path) return;
+                    const path = mf.path;
+                    const charId = this.memfsSelectedChar || (mf.path.split('/')[1] || '');
+                    const title = this.memoryFSFileTitle ? this.memoryFSFileTitle(mf) : path;
+                    this.showConfirm({
+                        title: '删除记忆文件',
+                        message: `确定要删除「${title}」吗？`,
+                        highlight: path,
+                        impact: '该逻辑文件将从 MemoryFS 索引中移除，对应的提示词注入也会立即失效。旧版系统（memories.json / character/profiles.json）不受影响。',
+                        confirmText: '删除',
+                        danger: true,
+                        onConfirm: async () => {
+                            this.isLoading = true;
+                            try {
+                                await api.post('/api/review/memory-fs/delete', {
+                                    path,
+                                    character_id: charId,
+                                });
+                                this.showToast('记忆文件已删除', 'success');
+                                // 收起已展开的项，避免引用不存在的路径
+                                if (this.memfsExpandedPath === path) {
+                                    this.memfsExpandedPath = '';
+                                }
+                                await this.loadMemoryFS();
+                            } catch (e) {
+                                console.error('删除 MemoryFS 文件失败:', e);
+                                const err = e.response?.data?.error || e.message;
+                                this.showToast('删除失败: ' + err, 'error');
+                            } finally {
+                                this.isLoading = false;
+                            }
+                        }
+                    });
+                },
+
                 toggleMemoryExpand(id) {
                     this.expandedMemory = this.expandedMemory === id ? null : id;
                 },
