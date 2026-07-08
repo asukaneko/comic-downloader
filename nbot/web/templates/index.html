@@ -2427,7 +2427,7 @@
                                                     <button class="session-icon-toggle" :class="{ active: session.favorite }" @click.stop="toggleSessionFavorite(session)" :title="session.favorite ? '取消收藏' : '收藏'">
                                                         <i class="fas fa-star"></i>
                                                     </button>
-                                                    <span class="session-name-text">{{ session.name }}</span>
+                                                    <a href="#" class="session-name-text session-name-link" @click.stop.prevent="openSession(session)" :title="'打开会话：' + session.name">{{ session.name }}</a>
                                                     <span v-if="session.is_archive" class="badge badge-info">归档</span>
                                                     <span v-else class="badge" :class="session.archived ? 'badge-warning' : 'badge-success'">
                                                         {{ session.archived ? '已归档' : '未归档' }}
@@ -2443,11 +2443,11 @@
                                                 </div>
                                             </td>
                                             <td>
-                                                <span v-if="session.sender_name" class="session-character-tag">
+                                                <a v-if="session.sender_name" href="#" class="session-character-tag session-character-tag-link" :title="'打开角色卡：' + session.sender_name" @click.stop.prevent="openCharacterCardByName(session.sender_name)">
                                                     <img v-if="getCharacterPortraitByName(session.sender_name).portrait" :src="getCharacterPortraitByName(session.sender_name).portrait" class="session-character-avatar">
                                                     <i v-else :class="getCharacterPortraitByName(session.sender_name).avatar || 'fas fa-user-circle'" class="session-character-icon"></i>
                                                     {{ session.sender_name }}
-                                                </span>
+                                                </a>
                                                 <span v-else style="color: var(--text-muted);">-</span>
                                             </td>
                                             <td>
@@ -2520,7 +2520,7 @@
                                                 <div class="session-card-head">
                                                     <div class="session-card-title-block">
                                                         <div class="session-card-title-line">
-                                                            <span class="session-name-text">{{ session.name }}</span>
+                                                            <a href="#" class="session-name-text session-name-link" @click.stop.prevent="openSession(session)" :title="'打开会话：' + session.name">{{ session.name }}</a>
                                                         </div>
                                                         <div class="session-card-subline">
                                                             <span class="session-card-type" :class="'type-' + (session.type || 'unknown')">
@@ -2546,11 +2546,11 @@
                                                 </div>
 
                                                 <div class="session-card-character">
-                                                    <span v-if="session.sender_name" class="session-character-tag">
+                                                    <a v-if="session.sender_name" href="#" class="session-character-tag session-character-tag-link" :title="'打开角色卡：' + session.sender_name" @click.stop.prevent="openCharacterCardByName(session.sender_name)">
                                                         <img v-if="getCharacterPortraitByName(session.sender_name).portrait" :src="getCharacterPortraitByName(session.sender_name).portrait" class="session-character-avatar">
                                                         <i v-else :class="getCharacterPortraitByName(session.sender_name).avatar || 'fas fa-user-circle'" class="session-character-icon"></i>
                                                         {{ session.sender_name }}
-                                                    </span>
+                                                    </a>
                                                     <span v-else class="session-card-muted">
                                                         <i class="fas fa-user-slash"></i> 未绑定角色
                                                     </span>
@@ -6777,7 +6777,10 @@
                                                 :title="'第 ' + (index + 1) + ' 名'"
                                             >{{ index + 1 }}</div>
                                             <div class="ranking-info">
-                                                <div class="ranking-name" :title="item.name">{{ truncateId(item.name) }}</div>
+                                                <div class="ranking-name" :title="item.name">
+                                                    <session-link v-if="tokenRankingTab === 'sessions' && item.name" :value="item.name" :inline="true" :show-icon="false"></session-link>
+                                                    <span v-else>{{ truncateId(item.name) }}</span>
+                                                </div>
                                                 <div class="ranking-bar">
                                                     <div class="ranking-progress" :style="{ width: item.percentage + '%' }"></div>
                                                 </div>
@@ -6829,7 +6832,10 @@
                                             <td><span class="purpose-badge" :class="'purpose-' + (record.purpose || 'chat')">{{ getPurposeLabel(record.purpose) }}</span></td>
                                             <td>{{ record.source || record.channel_type || 'api' }}</td>
                                             <td>{{ record.model || 'unknown' }}</td>
-                                            <td :title="record.session_id">{{ truncateId(record.session_id || '-') }}</td>
+                                            <td>
+                                                <session-link v-if="record.session_id" :value="record.session_id" :inline="true" :show-icon="false"></session-link>
+                                                <span v-else>-</span>
+                                            </td>
                                             <td>{{ formatNumber(record.input) }}</td>
                                             <td>{{ formatNumber(record.output) }}</td>
                                             <td>{{ formatNumber(record.total || (record.input + record.output)) }}</td>

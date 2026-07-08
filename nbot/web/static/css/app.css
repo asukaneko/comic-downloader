@@ -4907,6 +4907,19 @@
             white-space: nowrap;
         }
 
+        a.session-character-tag.session-character-tag-link {
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+        }
+
+        a.session-character-tag.session-character-tag-link:hover {
+            background: rgba(59, 130, 246, 0.22);
+            border-color: rgba(59, 130, 246, 0.5);
+            color: #93c5fd;
+            transform: translateY(-1px);
+        }
+
         .session-character-avatar {
             width: 20px;
             height: 20px;
@@ -11452,6 +11465,17 @@
             white-space: nowrap;
             color: var(--text-primary);
             font-weight: 600;
+        }
+
+        a.session-name-text.session-name-link {
+            cursor: pointer;
+            text-decoration: none;
+            transition: color 0.15s ease;
+        }
+
+        a.session-name-text.session-name-link:hover {
+            color: var(--accent-primary, #6366f1);
+            text-decoration: underline;
         }
 
         .session-icon-toggle {

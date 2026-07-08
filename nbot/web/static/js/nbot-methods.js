@@ -11925,6 +11925,27 @@ def main(params):
                     });
                 },
 
+                // 从会话管理界面的角色标签跳转到角色卡详情界面（characters 页）
+                async openCharacterCardByName(characterName) {
+                    if (!characterName) return;
+                    if (!Array.isArray(this.customPersonalityPresets) || this.customPersonalityPresets.length === 0) {
+                        if (typeof this.loadCustomPersonalityPresets === 'function') {
+                            await this.loadCustomPersonalityPresets();
+                        }
+                    }
+                    const preset = (this.customPersonalityPresets || []).find(
+                        p => p && (p.name === characterName || p.sender_name === characterName)
+                    );
+                    if (!preset) {
+                        if (typeof this.showToast === 'function') {
+                            this.showToast(`未找到角色卡: ${characterName}`, 'warning');
+                        }
+                        return;
+                    }
+                    this.selectedCharacterCard = preset;
+                    this.navigateTo('characters');
+                },
+
                 getCharacterStats(preset) {
                     const name = preset?.name || preset?.sender_name || '';
                     const relatedSessions = (this.sessions || []).filter(s => s.sender_name === name);
