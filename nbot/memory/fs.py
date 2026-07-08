@@ -27,6 +27,8 @@ _FS_INDEX_FILE = "memory_fs.json"
 _MAX_MEMORY_FILE_CHARS = 4000
 _MAX_DIARY_ENTRIES = 30
 _MAX_PLOT_ENTRIES = 50
+_MAX_LIFE_SIM_ENTRIES = 10   # life_sim 单文件最多持久化的条目数（按会话隔离）
+_MAX_LIFE_SIM_INJECT = 5     # 提示词注入时倒序取最新 N 条
 _MAX_TIMELINE_ENTRIES = 15  # 跨会话时间线注入 prompt 的最近条目数
 _MAX_TIMELINE_STORE = 80    # 时间线文件最多持久化的条目数
 
@@ -42,6 +44,7 @@ _MEMORY_CATEGORY_META = {
     "character_persona": {"label": "角色人格", "injects_to_prompt": True, "order": 20},
     "important_event": {"label": "重要事件", "injects_to_prompt": True, "order": 30},
     "timeline": {"label": "跨会话时间线", "injects_to_prompt": True, "order": 35},
+    "life_sim": {"label": "角色生活片段", "injects_to_prompt": True, "order": 38},
     "recent_digest": {"label": "近期摘要", "injects_to_prompt": True, "order": 40},
     "legacy": {"label": "旧版/其他", "injects_to_prompt": False, "order": 90},
 }
@@ -70,7 +73,9 @@ _MEMORY_CATEGORY_ALIASES = {
     "diary": "recent_digest",
     "timeline_event": "timeline",
     "timeline_event_other": "timeline",
-    "life_event": "timeline",
+    "life_event": "life_sim",
+    "life_sim_event": "life_sim",
+    "heartbeat_life": "life_sim",
 }
 
 # 全局单例
@@ -91,6 +96,8 @@ def _truncate_entries(content: str, path: str) -> str:
         max_entries = _MAX_DIARY_ENTRIES
     elif "plot" in path:
         max_entries = _MAX_PLOT_ENTRIES
+    elif "life_sim" in path:
+        max_entries = _MAX_LIFE_SIM_ENTRIES
     elif "timeline" in path:
         max_entries = _MAX_TIMELINE_STORE
     else:
@@ -232,6 +239,54 @@ def format_timeline_for_prompt(
     return "\n".join(lines)
 
 
+def format_life_sim_for_prompt(
+    life_sim_content: str,
+    *,
+    max_entries: int = _MAX_LIFE_SIM_INJECT,
+) -> str:
+    """格式化 life_sim 内容注入 prompt：倒序取最新 N 条 + header 说明。
+
+    life_sim 是按会话隔离的角色生活片段文件
+    （路径规范：characters/{char_id}/life_sim/{conversation_id}.md），
+    由静默心跳（silent heartbeat）持续 append 生成。
+    这些条目代表"用户不在场时"角色的独自生活片段（思考、行动、情绪、状态）。
+
+    注入策略：
+    1. 解析条目（按 ``\\n\\n`` 分隔，每条 ``[timestamp] content``）
+    2. 倒序取最新 max_entries 条（默认 _MAX_LIFE_SIM_INJECT=5）
+    3. 顶部加说明文字，强调这些是"用户不在场时"的生活片段，
+       避免与当前对话事件混淆
+
+    与 timeline 的区别：
+    - timeline 是"其他会话发生过什么"（跨会话）
+    - life_sim 是"本会话之外，角色在做什么"（独处时的生活）
+    """
+    if not life_sim_content:
+        return ""
+
+    entries = [e.strip() for e in life_sim_content.split("\n\n") if e.strip()]
+    if not entries:
+        return ""
+
+    # 倒序取最新 N 条
+    if len(entries) > max_entries:
+        entries = entries[-max_entries:]
+
+    # 再正序输出（时间正序便于阅读）
+    lines = [
+        "以下是该角色在**当前会话/对话之外**的近期生活片段（由静默心跳持续生成）。",
+        "这些片段描述的是**用户不在场时**，角色独自进行的生活活动"
+        "（思考、行动、情绪、状态等）。",
+        f"最多展示最新 {max_entries} 条；更早的片段已自动归档丢弃。",
+        "当前会话的具体对话事件由下方 events/plot 段承载，不在此处重复。",
+        "如果当前对话话题与某段生活片段自然相关，角色可以回忆/承认；",
+        "否则不要把这些活动当作'刚发生的事'叙述，也不要编造新细节。",
+        "",
+    ]
+    lines.extend(f"- {e}" for e in entries)
+    return "\n".join(lines)
+
+
 def normalize_memory_category(value) -> str:
     category = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     if category in _MEMORY_CATEGORY_META and category != "legacy":
@@ -251,6 +306,10 @@ def describe_memory_path(path: str) -> dict:
     elif path.endswith("/timeline.md"):
         # 跨会话时间线：仅顶层 characters/{char_id}/timeline.md
         category = "timeline"
+    elif "/life_sim/" in path:
+        # 角色生活片段：characters/{char_id}/life_sim/{conversation_id}.md
+        # （注意：必须先于 /events/ /plot/ 判断，避免 /life_sim/ 被当成 events）
+        category = "life_sim"
     elif "/events/" in path or "/plot/" in path:
         category = "important_event"
 
@@ -316,10 +375,11 @@ class MemoryFS:
 
         if existing and append:
             new_content = existing.content + "\n\n" + content if existing.content else content
-            # 截断：防止无限膨胀（diary/plot 按条目数，其他按字符数）
+            # 截断：防止无限膨胀（diary/plot/life_sim 按条目数，其他按字符数）
             needs_truncation = (
                 ("diary" in path and new_content.count("\n\n") >= _MAX_DIARY_ENTRIES)
                 or ("plot" in path and new_content.count("\n\n") >= _MAX_PLOT_ENTRIES)
+                or ("life_sim" in path and new_content.count("\n\n") >= _MAX_LIFE_SIM_ENTRIES)
                 or len(new_content) > _MAX_MEMORY_FILE_CHARS
             )
             if needs_truncation:
@@ -500,11 +560,11 @@ class MemoryFS:
             if plot_mf:
                 parts.append(plot_mf.to_prompt_text())
             # 静默心跳生成的"本会话生活片段"——按 conversation_id 严格隔离
+            # 注入时调用 format_life_sim_for_prompt，限制最新 _MAX_LIFE_SIM_INJECT 条
+            # 并加 header 说明，避免与 events/plot 重复/混淆
             life_sim_mf = self.read(self.path_life_sim(char_id, conversation_id))
             if life_sim_mf and life_sim_mf.content:
-                life_sim_text = _tail_entries(
-                    life_sim_mf.content, _MAX_TIMELINE_ENTRIES
-                )
+                life_sim_text = format_life_sim_for_prompt(life_sim_mf.content)
                 if life_sim_text:
                     parts.append(f"## character.life_sim\n{life_sim_text}")
 
