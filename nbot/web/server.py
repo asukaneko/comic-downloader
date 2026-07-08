@@ -3578,12 +3578,12 @@ class WebChatServer:
         session = self.session_store.get_session(target_session_id) or {}
         recent_messages = self._collect_heartbeat_context_messages(session)
         profile_text = self._collect_heartbeat_character_profile(char_id)
-        circadian_text = self._collect_heartbeat_circadian_context()
+        circadian_text, circadian_phase = self._collect_heartbeat_circadian_context()
         timeline_text = self._collect_heartbeat_timeline(char_id, target_session_id)
 
         # 3. 构造 prompt 调用 AI 生成生活片段
         prompt = self._build_life_sim_prompt(
-            profile_text, circadian_text, timeline_text, recent_messages
+            profile_text, circadian_text, timeline_text, recent_messages, phase=circadian_phase
         )
         generated, usage = self._get_ai_response_with_usage(prompt)
         if usage:
@@ -3670,15 +3670,21 @@ class WebChatServer:
             _log.debug("[Heartbeat] collect profile failed: %s", exc)
             return f"角色ID: {char_id}"
 
-    def _collect_heartbeat_circadian_context(self) -> str:
-        """收集当前昼夜节律上下文。"""
+    def _collect_heartbeat_circadian_context(self) -> tuple[str, str]:
+        """收集当前昼夜节律上下文。
+
+        返回 (prompt_text, phase)：
+        - prompt_text: 注入到 user message 的可读文本
+        - phase: 阶段标识（sleeping/morning/...），用于 system prompt
+          判定是否需要夜间睡眠保护
+        """
         try:
             from nbot.review.time_context import build_circadian_state, format_circadian_prompt
 
             state = build_circadian_state()
-            return format_circadian_prompt(state)
+            return format_circadian_prompt(state), str(state.get("phase") or "")
         except Exception:
-            return ""
+            return "", ""
 
     def _collect_heartbeat_timeline(self, char_id: str, conversation_id: str = "") -> str:
         """收集最近时间线（让 AI 知道角色最近经历了什么）。
@@ -3708,25 +3714,52 @@ class WebChatServer:
             return "（暂无经历）"
 
     def _build_life_sim_prompt(
-        self, profile: str, circadian: str, timeline: str, recent: str
+        self, profile: str, circadian: str, timeline: str, recent: str, phase: str = ""
     ) -> list[dict]:
-        """构造生成角色生活片段的 prompt。"""
+        """构造生成角色生活片段的 prompt。
+
+        关键约束（避免 AI 把生活片段写成"和用户对话"）：
+        - 用户当前不在场，这是角色独处时的真实生活经历
+        - 不要写任何对话、互动、用户出现
+        - sleeping 阶段：写"在睡觉/做梦/被吵醒前的休息"类内容
+        - 第一行用短语概括活动（用于更新 current_activity）
+        """
+        # 基础系统提示：明确"独处"语境
         system = (
-            "你是一个角色生活模拟器。根据角色设定、当前时段、近期经历和对话上下文，"
-            "生成一段角色在这段时间里真实经历的生活片段。\n\n"
-            "要求：\n"
-            "1. 50-100 字，第一人称或第三人称均可（与角色卡风格一致）\n"
-            "2. 内容必须贴合角色性格、当前昼夜时段（如深夜不会去散步）\n"
-            "3. 可以是日常琐事、情绪流动、小插曲，但不要重大剧情转折\n"
-            "4. 不要提到'系统'、'心跳'、'模拟'等元信息\n"
-            "5. 第一行用一个短语概括角色正在做什么（如：在厨房煮咖啡）"
+            "你是一个角色生活模拟器。根据角色设定、当前时段、近期经历，"
+            "生成一段角色独处时真实经历的生活片段。\n\n"
+            "【关键约束】\n"
+            "1. 用户当前不在场——这是角色一个人独处时发生的事，"
+            "不要写任何与用户对话、互动、回应用户的内容\n"
+            "2. 不要出现'用户'、'TA'、'我们'、'和你聊天'、'你刚才说'等"
+            "暗示有对话的措辞\n"
+            "3. 50-100 字，第一人称或第三人称均可（与角色卡风格一致）\n"
+            "4. 内容必须贴合角色性格、当前昼夜时段（如深夜不会去散步）\n"
+            "5. 可以是日常琐事、情绪流动、小插曲，但不要重大剧情转折\n"
+            "6. 不要提到'系统'、'心跳'、'模拟'等元信息\n"
+            "7. 第一行用一个短语概括角色正在做什么（如：在厨房煮咖啡）"
         )
+
+        # sleeping 阶段：追加休息保护
+        if phase == "sleeping":
+            system += (
+                "\n\n【夜间睡眠保护】\n"
+                "现在是深夜/凌晨时段，角色正在睡觉休息中。"
+                "请生成角色在睡眠中或睡前的状态（如：正在熟睡、做了个梦、"
+                "在浅睡中翻身、被窗外的声响短暂吵醒又睡过去等）。"
+                "不要写角色深夜外出、看书、运动、喝咖啡等任何清醒活动。"
+            )
+
         user_parts = [profile]
         if circadian:
             user_parts.append(f"【当前时段】\n{circadian}")
         user_parts.append(f"【近期经历】\n{timeline}")
-        user_parts.append(f"【最近对话】\n{recent}")
-        user_parts.append("请生成角色在这段时间的生活片段：")
+        user_parts.append(
+            "【参考信息】用户最近的对话历史（仅用于了解用户身份，"
+            "不要让角色在生活片段中与用户互动）：\n"
+            f"{recent}"
+        )
+        user_parts.append("请生成角色独处时的一段生活片段：")
         return [
             {"role": "system", "content": system},
             {"role": "user", "content": "\n\n".join(user_parts)},
