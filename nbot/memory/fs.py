@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 
 from nbot.memory.models import MemoryFile
 
@@ -28,6 +29,13 @@ _MAX_DIARY_ENTRIES = 30
 _MAX_PLOT_ENTRIES = 50
 _MAX_TIMELINE_ENTRIES = 15  # 跨会话时间线注入 prompt 的最近条目数
 _MAX_TIMELINE_STORE = 80    # 时间线文件最多持久化的条目数
+
+# 跨会话 timeline 提示词注入策略
+_TIMELINE_PER_CONVERSATION = 2  # 每个其他会话最多取最新 N 条
+_TIMELINE_MAX_TOTAL = 10        # 全局最多注入 N 条
+_TIMELINE_ENTRY_RE = re.compile(
+    r"^\[(?P<ts>[^\]]+)\](?:\s*\[(?P<conv>[^\]]+)\])?\s*(?P<body>.*)$"
+)
 
 _MEMORY_CATEGORY_META = {
     "user_persona": {"label": "用户人格", "injects_to_prompt": True, "order": 10},
@@ -105,6 +113,119 @@ def _tail_entries(content: str, max_entries: int) -> str:
     if len(entries) > max_entries:
         entries = entries[-max_entries:]
     return "\n\n".join(entries)
+
+
+def _parse_timeline_entries(content: str) -> list[dict]:
+    """解析 timeline.md 内容为结构化条目。
+
+    支持两种格式：
+    - 新格式：`[YYYY-MM-DD HH:MM] [conv:web_abc123] 标题: 内容`
+    - 旧格式：`[YYYY-MM-DD HH:MM] 标题: 内容`（无 conv 标识，归入 __legacy__ 桶）
+
+    `conv:` 前缀在存储层用于人眼可读；解析层会去掉前缀，
+    让 `e["conv"]` 直接是会话标识本身，便于代码层比较。
+
+    无法解析的整段会作为 raw 条目保留，避免历史数据丢失。
+    """
+    if not content:
+        return []
+    out: list[dict] = []
+    for raw_entry in content.split("\n\n"):
+        text = raw_entry.strip()
+        if not text:
+            continue
+        m = _TIMELINE_ENTRY_RE.match(text)
+        if m:
+            raw_conv = (m.group("conv") or "").strip()
+            # 去掉 conv: 前缀，保留可读性同时让 API 层拿到纯标识
+            conv = raw_conv[5:] if raw_conv.startswith("conv:") else raw_conv
+            out.append(
+                {
+                    "ts": (m.group("ts") or "").strip(),
+                    "conv": conv,
+                    "body": (m.group("body") or "").strip(),
+                    "raw": text,
+                }
+            )
+        else:
+            out.append({"ts": "", "conv": "", "body": text, "raw": text})
+    return out
+
+
+def format_timeline_for_prompt(
+    timeline_content: str,
+    current_conversation_id: str = "",
+    *,
+    per_conversation: int = _TIMELINE_PER_CONVERSATION,
+    max_total: int = _TIMELINE_MAX_TOTAL,
+) -> str:
+    """按会话分桶，生成 timeline 注入文本。
+
+    策略：
+    1. 解析所有条目，按 conv_id 分桶（无 conv 标识的归入 __legacy__）
+    2. 排除当前会话（避免与 events/{conv_id} 重复）
+    3. 每桶按时间倒序取最新 per_conversation 条
+    4. 合并所有桶按时间倒序取最新 max_total 条
+    5. 按时间正序输出 + 顶部说明（告诉角色这些是"其他会话"）
+
+    显式说明：这些条目来自**其他会话/场景**的经历摘要，
+    角色在当前对话中可作为背景参考，但不要当作"刚发生"叙述，
+    也不要编造新细节。
+    """
+    if not timeline_content:
+        return ""
+
+    entries = _parse_timeline_entries(timeline_content)
+    if not entries:
+        return ""
+
+    # 排除当前会话
+    if current_conversation_id:
+        entries = [e for e in entries if e["conv"] != current_conversation_id]
+
+    # 按 conv_id 分桶
+    buckets: dict[str, list[dict]] = {}
+    for e in entries:
+        key = e["conv"] or "__legacy__"
+        buckets.setdefault(key, []).append(e)
+
+    # 每桶按时间倒序取最新 per_conversation 条
+    selected: list[dict] = []
+    for bucket in buckets.values():
+        bucket_sorted = sorted(
+            bucket,
+            key=lambda x: x["ts"] or "",
+            reverse=True,
+        )
+        selected.extend(bucket_sorted[:per_conversation])
+
+    # 全局按时间倒序取 max_total
+    selected.sort(key=lambda x: x["ts"] or "", reverse=True)
+    selected = selected[:max_total]
+
+    if not selected:
+        return ""
+
+    # 按时间正序输出（叙事顺序，便于阅读）
+    selected.sort(key=lambda x: x["ts"] or "")
+
+    lines = [
+        "以下条目来自角色与该用户的**其他会话/场景**（非当前对话）的近期生活经历摘要。",
+        f"格式：`[时间] [会话标识] 事件摘要`。每个其他会话最多展示最新 {per_conversation} 条，"
+        f"全局最多 {max_total} 条。",
+        "这些经历发生在当前对话之外；当前会话的具体事件由下方 events/plot 段承载，不在此处重复。",
+        "如果用户话题明确引用了某段过去经历，角色可以自然回忆/承认；",
+        "否则不要把这些事件当作'刚发生的事'叙述，也不要编造新细节。",
+        "",
+    ]
+    for e in selected:
+        ts = e["ts"] or "—"
+        if e["conv"]:
+            conv_label = f"[{e['conv']}]"
+        else:
+            conv_label = "[legacy]"
+        lines.append(f"- [{ts}] {conv_label} {e['body']}")
+    return "\n".join(lines)
 
 
 def normalize_memory_category(value) -> str:
@@ -355,7 +476,12 @@ class MemoryFS:
 
         timeline_mf = self.read(self.path_timeline(char_id))
         if timeline_mf and timeline_mf.content:
-            timeline_text = _tail_entries(timeline_mf.content, _MAX_TIMELINE_ENTRIES)
+            # 按会话分桶：每桶最新 2 条，全局最多 10 条，
+            # 排除当前会话（避免与 events/{conv_id} 重复）。
+            timeline_text = format_timeline_for_prompt(
+                timeline_mf.content,
+                current_conversation_id=conversation_id,
+            )
             if timeline_text:
                 parts.append(f"## character.timeline\n{timeline_text}")
 

@@ -255,11 +255,12 @@ def _save_structured_memories_to_memory_fs(
                     importance=importance or 0.8,
                     append=True,
                 )
-                # 同步追加到跨会话时间线
+                # 同步追加到跨会话时间线（带 conv_id 便于按会话分桶注入）
                 _append_to_timeline(
                     mfs,
                     character_id=character_id,
                     target_id=target_id,
+                    session_id=session_id,
                     title=_memory_title(memory, "重要事件"),
                     content=content,
                 )
@@ -290,11 +291,14 @@ def _append_to_timeline(
     target_id: str,
     title: str,
     content: str,
+    session_id: str = "",
 ) -> None:
     """将一条重要事件以带时间戳的格式追加到跨会话时间线。
 
-    格式：[YYYY-MM-DD HH:MM] {title}: {content首行摘要}
-    时间线文件由 _truncate_entries 自动保留最近 _MAX_TIMELINE_STORE 条。
+    格式：`[YYYY-MM-DD HH:MM] [conv:<session_id>] {title}: {content首行摘要}`
+    - `conv:` 标识用于读取时按会话分桶注入（每会话最新 2 条 + 全局最多 10 条）
+    - 无 session_id 时省略 `[conv:...]`，旧数据会归入 __legacy__ 桶
+    - 时间线文件由 _truncate_entries 自动保留最近 _MAX_TIMELINE_STORE 条
     """
     if not character_id or not content:
         return
@@ -305,7 +309,10 @@ def _append_to_timeline(
         # 取 content 第一行或前 120 字作为摘要，避免 timeline 单条过长
         first_line = content.split("\n", 1)[0].strip()
         snippet = first_line[:120] if len(first_line) > 120 else first_line
-        entry = f"[{timestamp}] {title}: {snippet}"
+        prefix = f"[{timestamp}]"
+        if session_id:
+            prefix = f"{prefix} [conv:{session_id}]"
+        entry = f"{prefix} {title}: {snippet}"
 
         mfs.write(
             mfs.path_timeline(character_id),
