@@ -19,3 +19,8 @@ ignore = [
 quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
+
+[tool.pytest.ini_options]
+# 限制 pytest 仅在 tests/ 目录下发现测试,避免误把 tools/、nekobot-rust_ts/tools/
+# 等目录下的手动脚本(如 test_feishu_webhook.py、test_commands.py)当作测试收集。
+testpaths = ["tests"]
