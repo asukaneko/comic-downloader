@@ -16227,7 +16227,11 @@ def main(params):
                     template.innerHTML = html || '';
 
                     const blockedTags = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form']);
+                    // 放行所有 data-* 属性（data-* 不会被浏览器当作 JS 执行，安全）
+                    // 特殊属性如 data-folded（内心独白折叠态）需要保留，
+                    // 否则 sanitize 阶段会被剥离，导致 CSS 选择器失配。
                     const allowedAttrs = new Set(['class', 'id', 'href', 'src', 'alt', 'title', 'target', 'rel', 'colspan', 'rowspan', 'align', 'style', 'scope', 'width']);
+                    const isDataAttr = (name) => name.startsWith('data-') || name.startsWith('aria-');
                     const safeUrl = (value) => {
                         if (!value) return true;
                         const trimmed = String(value).trim().toLowerCase();
@@ -16242,7 +16246,7 @@ def main(params):
 
                         [...node.attributes].forEach((attr) => {
                             const name = attr.name.toLowerCase();
-                            if (name.startsWith('on') || !allowedAttrs.has(name) || !safeUrl(attr.value)) {
+                            if (name.startsWith('on') || (!allowedAttrs.has(name) && !isDataAttr(name)) || !safeUrl(attr.value)) {
                                 node.removeAttribute(attr.name);
                             }
                         });
