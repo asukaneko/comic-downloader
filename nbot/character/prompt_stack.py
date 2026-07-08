@@ -77,9 +77,23 @@ def strip_dynamic_prompt_sections(prompt: str) -> str:
         return ""
 
     cleaned = prompt
+    # 兼容两种 section 标题风格：
+    # - ## {key}：PromptStack.render() 默认输出
+    # - [{key}]：MemoryFS.build_prompt_context() 注入的 timeline / life_sim
+    # 两种风格都需要在 strip 时被正确移除，避免 base_prompt 中残留过时 section
+    section_break = r"(?=\n{2,}(?:## |\[)|\Z)"
     for key in _DYNAMIC_SECTION_KEYS:
+        escaped_key = re.escape(key)
+        # ## {key} 风格
         cleaned = re.sub(
-            rf"(?:\n{{2,}}|\A)## {re.escape(key)}\n.*?(?=\n{{2,}}## |\Z)",
+            rf"(?:\n{{2,}}|\A)## {escaped_key}\n.*?{section_break}",
+            "\n\n",
+            cleaned,
+            flags=re.DOTALL,
+        )
+        # [{key}] 风格
+        cleaned = re.sub(
+            rf"(?:\n{{2,}}|\A)\[{escaped_key}\]\n.*?{section_break}",
             "\n\n",
             cleaned,
             flags=re.DOTALL,

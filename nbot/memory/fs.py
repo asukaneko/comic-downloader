@@ -550,7 +550,8 @@ class MemoryFS:
                 current_conversation_id=conversation_id,
             )
             if timeline_text:
-                parts.append(f"## character.timeline\n{timeline_text}")
+                # 与 MemoryFile.to_prompt_text() 的 [{title or path}] 风格保持一致
+                parts.append(f"[character.timeline]\n{timeline_text}")
 
         if conversation_id:
             event_mf = self.read(self.path_important_events(char_id, conversation_id))
@@ -566,7 +567,8 @@ class MemoryFS:
             if life_sim_mf and life_sim_mf.content:
                 life_sim_text = format_life_sim_for_prompt(life_sim_mf.content)
                 if life_sim_text:
-                    parts.append(f"## character.life_sim\n{life_sim_text}")
+                    # 与 MemoryFile.to_prompt_text() 的 [{title or path}] 风格保持一致
+                    parts.append(f"[character.life_sim]\n{life_sim_text}")
 
         digest_mf = self.read(self.path_recent_digest(char_id, user_id))
         if digest_mf:
