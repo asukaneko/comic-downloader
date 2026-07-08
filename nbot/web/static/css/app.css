@@ -5440,6 +5440,7 @@
         .memfs-group-user_persona .memfs-group-dot    { background: #60a5fa; }
         .memfs-group-character_persona .memfs-group-dot { background: #c084fc; }
         .memfs-group-important_event .memfs-group-dot  { background: #fbbf24; }
+        .memfs-group-timeline .memfs-group-dot          { background: #38bdf8; }
         .memfs-group-recent_digest .memfs-group-dot    { background: #34d399; }
         .memfs-group-legacy .memfs-group-dot           { background: #94a3b8; }
 
@@ -31504,6 +31505,7 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 .rv-memfs-group-user_persona    { --memfs-accent: #60a5fa; }
 .rv-memfs-group-character_persona { --memfs-accent: #c084fc; }
 .rv-memfs-group-important_event { --memfs-accent: #fbbf24; }
+.rv-memfs-group-timeline        { --memfs-accent: #38bdf8; }
 .rv-memfs-group-recent_digest   { --memfs-accent: #34d399; }
 .rv-memfs-group-legacy          { --memfs-accent: #94a3b8; }
 .rv-memfs-group-head {

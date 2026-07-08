@@ -18621,11 +18621,12 @@ def main(params):
     },
 
     groupedMemoryFSFiles() {
-        const order = ['user_persona', 'character_persona', 'important_event', 'recent_digest', 'legacy'];
+        const order = ['user_persona', 'character_persona', 'important_event', 'timeline', 'recent_digest', 'legacy'];
         const fallbackLabels = {
             user_persona: '用户人格',
             character_persona: '角色人格',
             important_event: '重要事件',
+            timeline: '跨会话时间线',
             recent_digest: '近期摘要',
             legacy: '旧版/其他',
         };
@@ -18812,6 +18813,14 @@ def main(params):
                 content: '',
                 importance: 0.4,
                 append: false,
+            },
+            memory_timeline: {
+                type: 'memory_write',
+                category: 'timeline',
+                title: '跨会话时间线条目',
+                summary: '',
+                content: '',
+                importance: 0.8,
             },
             memory_write: { type: 'memory_write', title: '', content: '', mem_type: 'short' },
             custom: { type: '' }

@@ -41,6 +41,7 @@ _MEMORY_CATEGORY_META = {
     "user_persona": {"label": "用户人格", "injects_to_prompt": True, "order": 10},
     "character_persona": {"label": "角色人格", "injects_to_prompt": True, "order": 20},
     "important_event": {"label": "重要事件", "injects_to_prompt": True, "order": 30},
+    "timeline": {"label": "跨会话时间线", "injects_to_prompt": True, "order": 35},
     "recent_digest": {"label": "近期摘要", "injects_to_prompt": True, "order": 40},
     "legacy": {"label": "旧版/其他", "injects_to_prompt": False, "order": 90},
 }
@@ -67,6 +68,9 @@ _MEMORY_CATEGORY_ALIASES = {
     "recent_summary": "recent_digest",
     "dialogue_digest": "recent_digest",
     "diary": "recent_digest",
+    "timeline_event": "timeline",
+    "timeline_event_other": "timeline",
+    "life_event": "timeline",
 }
 
 # 全局单例
@@ -244,6 +248,9 @@ def describe_memory_path(path: str) -> dict:
         category = "character_persona"
     elif path.endswith("/recent_digest.md"):
         category = "recent_digest"
+    elif path.endswith("/timeline.md"):
+        # 跨会话时间线：仅顶层 characters/{char_id}/timeline.md
+        category = "timeline"
     elif "/events/" in path or "/plot/" in path:
         category = "important_event"
 

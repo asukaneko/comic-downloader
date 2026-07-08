@@ -180,7 +180,8 @@ class ActionExecutor:
             ).strip()
             if not character_id:
                 return ActionResult(False, "memory_write", "Missing character_id")
-            if category != "important_event" and not target_id:
+            # important_event 和 timeline 都是角色级，不需要 target_id
+            if category not in ("important_event", "timeline") and not target_id:
                 return ActionResult(False, "memory_write", "Missing target_id")
 
             title = str(action.get("title") or "").strip()
@@ -203,6 +204,11 @@ class ActionExecutor:
                 path = mfs.path_recent_digest(character_id, target_id)
                 fallback_title = "近期对话压缩摘要"
                 default_append = False
+            elif category == "timeline":
+                # 跨会话时间线：角色级（不需 target_id），追加
+                path = mfs.path_timeline(character_id)
+                fallback_title = "跨会话时间线条目"
+                default_append = True
             else:
                 path = mfs.path_important_events(character_id, conversation_id)
                 fallback_title = "重要事件"
