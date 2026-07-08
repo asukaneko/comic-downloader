@@ -89,6 +89,21 @@ from nbot.web.socket_events import register_socket_events
 _log = logging.getLogger(__name__)
 
 
+class _HeartbeatJobLogFilter(logging.Filter):
+    """抑制 heartbeat 定时任务的 per-tick 日志（1 分钟一次轮询，纯噪音）。
+
+    apscheduler.executors.default 会在每次 tick 时输出
+    `Running job "WebChatServer._start_heartbeat_job.<locals>.run_heartbeat_sync ..."`
+    和对应的 `executed successfully`，但心跳是「高频轮询 + 内部 backoff」设计，
+    这些日志对调试没有帮助，反而会刷屏。匹配到 heartbeat 任务名时直接丢弃。
+    """
+
+    _NEEDLE = "run_heartbeat_sync"
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        return self._NEEDLE not in record.getMessage()
+
+
 def _resolve_web_adapter(adapter):
     if adapter:
         return adapter
@@ -3939,6 +3954,14 @@ class WebChatServer:
         if not self.scheduler:
             _log.warning("Scheduler not available for heartbeat")
             return
+
+        # 抑制 heartbeat 任务的 apscheduler 轮询日志（1 分钟一次，纯噪音）。
+        # 只安装一次，避免重复注册 filter。
+        apscheduler_executor_logger = logging.getLogger("apscheduler.executors.default")
+        if not any(
+            isinstance(f, _HeartbeatJobLogFilter) for f in apscheduler_executor_logger.filters
+        ):
+            apscheduler_executor_logger.addFilter(_HeartbeatJobLogFilter())
 
         # 移除旧的 job
         if self.heartbeat_job:
