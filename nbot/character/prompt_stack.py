@@ -30,6 +30,7 @@ _DYNAMIC_SECTION_KEYS = (
     "real_time.continuity",
     "character.circadian",
     "character.timeline",
+    "character.life_sim",
     "plot.real_time_sync",
     "knowledge.rag",
     "world_book",

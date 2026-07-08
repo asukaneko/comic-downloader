@@ -299,6 +299,13 @@ class MemoryFS:
     def path_world_events(self, char_id: str) -> str:
         return f"characters/{char_id}/world/events.md"
 
+    def path_life_sim(self, char_id: str, conversation_id: str) -> str:
+        """静默心跳生成的角色生活片段。按 conversation_id 隔离，
+        不会跨会话串数据，也不会污染跨会话 timeline。
+        """
+        safe_conversation_id = conversation_id or "general"
+        return f"characters/{char_id}/life_sim/{safe_conversation_id}.md"
+
     def path_timeline(self, char_id: str) -> str:
         return f"characters/{char_id}/timeline.md"
 
@@ -359,6 +366,14 @@ class MemoryFS:
             plot_mf = self.read_plot(char_id, conversation_id)
             if plot_mf:
                 parts.append(plot_mf.to_prompt_text())
+            # 静默心跳生成的"本会话生活片段"——按 conversation_id 严格隔离
+            life_sim_mf = self.read(self.path_life_sim(char_id, conversation_id))
+            if life_sim_mf and life_sim_mf.content:
+                life_sim_text = _tail_entries(
+                    life_sim_mf.content, _MAX_TIMELINE_ENTRIES
+                )
+                if life_sim_text:
+                    parts.append(f"## character.life_sim\n{life_sim_text}")
 
         digest_mf = self.read(self.path_recent_digest(char_id, user_id))
         if digest_mf:

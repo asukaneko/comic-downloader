@@ -3579,7 +3579,7 @@ class WebChatServer:
         recent_messages = self._collect_heartbeat_context_messages(session)
         profile_text = self._collect_heartbeat_character_profile(char_id)
         circadian_text = self._collect_heartbeat_circadian_context()
-        timeline_text = self._collect_heartbeat_timeline(char_id)
+        timeline_text = self._collect_heartbeat_timeline(char_id, target_session_id)
 
         # 3. 构造 prompt 调用 AI 生成生活片段
         prompt = self._build_life_sim_prompt(
@@ -3680,15 +3680,27 @@ class WebChatServer:
         except Exception:
             return ""
 
-    def _collect_heartbeat_timeline(self, char_id: str) -> str:
-        """收集最近跨会话时间线（让 AI 知道角色最近经历了什么）。"""
+    def _collect_heartbeat_timeline(self, char_id: str, conversation_id: str = "") -> str:
+        """收集最近时间线（让 AI 知道角色最近经历了什么）。
+
+        优先级：
+        1. 本会话之前的生活片段（life_sim）—— 同会话连续性
+        2. 跨会话 timeline —— 兜底，避免完全无历史
+        """
         try:
             from nbot.memory.fs import get_memory_fs
 
             mfs = get_memory_fs(self.data_dir)
+            # 优先读本会话的 life_sim（与新片段同源）
+            if conversation_id:
+                life_sim_mf = mfs.read(mfs.path_life_sim(char_id, conversation_id))
+                if life_sim_mf and life_sim_mf.content:
+                    lines = life_sim_mf.content.strip().split("\n")
+                    if lines:
+                        return "\n".join(lines[-5:])
+            # 兜底：跨会话 timeline
             timeline_mf = mfs.read(mfs.path_timeline(char_id))
             if timeline_mf and timeline_mf.content:
-                # 只取最近 5 条，避免 prompt 过长
                 lines = timeline_mf.content.strip().split("\n")
                 return "\n".join(lines[-5:]) if lines else "（暂无经历）"
             return "（暂无经历）"
@@ -3742,32 +3754,31 @@ class WebChatServer:
     def _persist_life_sim_to_memory(
         self, char_id: str, target_session_id: str, content: str
     ) -> bool:
-        """把生活片段持久化到 MemoryFS（timeline + recent_digest）。"""
+        """把生活片段持久化到 MemoryFS（仅写入本会话独立的 life_sim 路径）。
+
+        关键约束：
+        - 不写 timeline（保持 timeline 纯粹，让 auto_memory 的 important_event 不被污染）
+        - 不写 recent_digest（recent_digest 是用户级画像摘要，不应混入会话级生活片段）
+        - 写入 path_life_sim(char_id, conversation_id)，按 conversation_id 严格隔离
+        """
         try:
+            from datetime import datetime as _dt
+
             from nbot.memory.fs import get_memory_fs
 
             mfs = get_memory_fs(self.data_dir)
-            # 1. 追加到跨会话时间线（下次对话角色能"记得"）
+            # 追加到本会话独立的生活片段文件（按 conversation_id 隔离）
+            timestamp = _dt.now().astimezone().strftime("%Y-%m-%d %H:%M")
+            entry = f"[{timestamp}] {content.strip()}"
             mfs.write(
-                mfs.path_timeline(char_id),
+                mfs.path_life_sim(char_id, target_session_id),
                 character_id=char_id,
                 target_id=target_session_id,
                 title="角色生活片段",
-                content=content,
+                content=entry,
                 summary="心跳生成的角色自我生活经历",
                 importance=0.5,
                 append=True,
-            )
-            # 2. 写入 recent_digest（MemoryFS 持久化，便于检索）
-            mfs.write(
-                mfs.path_recent_digest(char_id, target_session_id),
-                character_id=char_id,
-                target_id=target_session_id,
-                title="近期生活片段",
-                content=content,
-                summary="心跳生成的角色自我生活经历",
-                importance=0.5,
-                append=False,
             )
             return True
         except Exception as exc:
