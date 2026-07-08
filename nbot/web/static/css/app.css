@@ -5602,6 +5602,47 @@
             border: 1px solid var(--border-color);
         }
 
+        /* 记忆文件卡片里的会话 ID 跳转链接 */
+        .memfs-session-link {
+            color: var(--accent-primary);
+            text-decoration: none;
+            cursor: pointer;
+            border-bottom: 1px dashed transparent;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+            padding: 1px 2px;
+            border-radius: 3px;
+        }
+        .memfs-session-link:hover {
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+            background: rgba(99, 102, 241, 0.08);
+        }
+        .memfs-session-link:focus-visible {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 1px;
+        }
+        .memfs-session-link-disabled {
+            color: var(--text-muted);
+            cursor: not-allowed;
+            border-bottom-color: transparent;
+        }
+        .memfs-session-link-disabled:hover {
+            background: transparent;
+            border-bottom-color: transparent;
+            color: var(--text-muted);
+        }
+        .memfs-session-link-icon {
+            font-size: 0.7em;
+            margin-left: 3px;
+            opacity: 0.6;
+        }
+        .memfs-session-link:hover .memfs-session-link-icon {
+            opacity: 1;
+        }
+        .memfs-session-link-inline {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+
         .memfs-file-actions {
             display: flex;
             gap: 4px;

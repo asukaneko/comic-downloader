@@ -4283,7 +4283,18 @@
                                         <div class="rv-memfs-header">
                                             <div class="rv-memfs-main">
                                                 <span class="rv-memfs-title">{{ memoryFSFileTitle(mf) }}</span>
-                                                <span v-if="memoryFSFileSubtitle(mf)" class="rv-memfs-subtitle">{{ memoryFSFileSubtitle(mf) }}</span>
+                                                <div v-if="mf.character_id || mf.target_id" class="rv-memfs-subtitle">
+                                                    <span v-if="mf.character_id">{{ mf.character_id }}</span>
+                                                    <template v-if="mf.character_id && mf.target_id"> · </template>
+                                                    <a v-if="mf.target_id"
+                                                       href="#"
+                                                       class="memfs-session-link"
+                                                       :class="{ 'memfs-session-link-disabled': !hasMemoryFileSession(mf.target_id) }"
+                                                       :title="hasMemoryFileSession(mf.target_id) ? '点击跳转到该会话' : '该会话不存在或已被删除'"
+                                                       @click.stop.prevent="openMemoryFileSession(mf)">
+                                                        {{ mf.target_id }}<i class="fas fa-external-link-alt memfs-session-link-icon"></i>
+                                                    </a>
+                                                </div>
                                             </div>
                                             <span class="rv-memfs-imp" :title="'importance: ' + mf.importance">{{ (mf.importance * 100).toFixed(0) }}%</span>
                                         </div>
@@ -5168,7 +5179,18 @@
                                         <div class="memfs-file-header">
                                             <div class="memfs-file-main">
                                                 <div class="memfs-file-title">{{ memoryFSFileTitle(mf) }}</div>
-                                                <div v-if="memoryFSFileSubtitle(mf)" class="memfs-file-subtitle">{{ memoryFSFileSubtitle(mf) }}</div>
+                                                <div v-if="mf.character_id || mf.target_id" class="memfs-file-subtitle">
+                                                    <span v-if="mf.character_id">{{ mf.character_id }}</span>
+                                                    <template v-if="mf.character_id && mf.target_id"> · </template>
+                                                    <a v-if="mf.target_id"
+                                                       href="#"
+                                                       class="memfs-session-link"
+                                                       :class="{ 'memfs-session-link-disabled': !hasMemoryFileSession(mf.target_id) }"
+                                                       :title="hasMemoryFileSession(mf.target_id) ? '点击跳转到该会话' : '该会话不存在或已被删除'"
+                                                       @click.stop.prevent="openMemoryFileSession(mf)">
+                                                        {{ mf.target_id }}<i class="fas fa-external-link-alt memfs-session-link-icon"></i>
+                                                    </a>
+                                                </div>
                                             </div>
                                             <div class="memfs-file-badges">
                                                 <span v-if="mf._legacyType" class="memfs-legacy-type-badge">{{ mf._legacyType === 'short' ? '短期' : '长期' }}</span>
@@ -5183,7 +5205,14 @@
                                         <div class="memfs-file-meta">
                                             <span v-if="mf.version > 1">v{{ mf.version }}</span>
                                             <span>{{ mf.updated_at ? mf.updated_at.slice(0,10) : '' }}</span>
-                                            <span v-if="mf.target_id">→ {{ mf.target_id }}</span>
+                                            <a v-if="mf.target_id"
+                                               href="#"
+                                               class="memfs-session-link memfs-session-link-inline"
+                                               :class="{ 'memfs-session-link-disabled': !hasMemoryFileSession(mf.target_id) }"
+                                               :title="hasMemoryFileSession(mf.target_id) ? '点击跳转到该会话' : '该会话不存在或已被删除'"
+                                               @click.stop.prevent="openMemoryFileSession(mf)">
+                                                → {{ mf.target_id }}
+                                            </a>
                                             <span v-if="mf._isLegacy" class="memfs-legacy-badge">旧版系统</span>
                                         </div>
                                         <!-- 旧版记忆的操作按钮 -->

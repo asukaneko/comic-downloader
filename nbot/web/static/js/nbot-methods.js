@@ -18705,6 +18705,44 @@ def main(params):
         return parts.join(' · ');
     },
 
+    /**
+     * 检查 target_id 是否对应一个当前存在的会话。
+     * 用于在记忆管理页点击 target_id 时判断是否可跳转。
+     */
+    hasMemoryFileSession(targetId) {
+        if (!targetId) return false;
+        if (!Array.isArray(this.sessions) || !this.sessions.length) return false;
+        return this.sessions.some(s => s && s.id === targetId);
+    },
+
+    /**
+     * 在记忆管理页点击会话 ID 时的跳转处理：
+     *  - 找到对应会话后调用 openSession() 走标准「切换会话」流程
+     *    （自动选择 chatTab / 加载消息 / 滚动到末尾 等）
+     *  - 找不到时给个 toast 提示，避免静默失败
+     */
+    async openMemoryFileSession(mf) {
+        const targetId = mf && mf.target_id;
+        if (!targetId) return;
+        const session = Array.isArray(this.sessions)
+            ? this.sessions.find(s => s && s.id === targetId)
+            : null;
+        if (!session) {
+            if (typeof this.showToast === 'function') {
+                this.showToast('该会话不存在或已被删除', 'warning');
+            }
+            return;
+        }
+        try {
+            await this.openSession(session);
+        } catch (e) {
+            console.error('[MemoryFS] failed to open session', targetId, e);
+            if (typeof this.showToast === 'function') {
+                this.showToast('打开会话失败', 'error');
+            }
+        }
+    },
+
     async toggleHook(hookId) {
         try {
             await api.post('/api/hooks/' + hookId + '/toggle');
