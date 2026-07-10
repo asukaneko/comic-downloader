@@ -12,13 +12,15 @@
 
 面向 Web 的多渠道 AI 角色扮演系统，包含Web、QQ、CLI、Telegram、Feishu等频道。
 
+NekoBot Android 客户端：[Nekobot-Android](https://github.com/asukaneko/Nekobot-Android)
+
 </div>
 
 ## Overview
 
 NekoBot 是一个面向角色扮演与长期互动场景的 AI 系统。项目采用统一 AI 内核与频道适配层分离的架构，提供完整的 Web 管理后台、角色运行时、记忆系统、工具调用与工作区能力。
 
-它的核心目标不是单纯提供“聊天接口”，而是提供一套可持续运行、可配置、可观测、可扩展的角色型智能体基础设施。
+它的核心目标不是单纯提供“聊天接口”，而是提供一套可持续运行、可配置、可观测、可扩展的角色型智能体基础设施。  
 
 ## Core Capabilities
 
