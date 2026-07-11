@@ -21826,6 +21826,11 @@
                 font-size: 12px;
             }
 
+            /* 移动端隐藏用户头像，让用户气泡占满宽度 */
+            .message.user .message-avatar {
+                display: none;
+            }
+
             .message-content,
             .message.user .message-content,
             .message.assistant .message-content {
@@ -21835,6 +21840,16 @@
                 border-radius: 10px;
                 font-size: 13px;
                 overflow: hidden;
+            }
+
+            /* 用户气泡：头像已隐藏，允许延伸到最右边 */
+            .message.user .message-content {
+                max-width: 100%;
+            }
+
+            /* AI 气泡：保留左侧头像(36px + gap 7px)，允许延伸到最右边 */
+            .message.assistant .message-content {
+                max-width: calc(100% - 43px);
             }
 
             .message-content .markdown-body,
