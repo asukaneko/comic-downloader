@@ -586,7 +586,7 @@ def append_jm_card(filepath: str, album_id: int, title: str, seq: int, client=No
         cover_url = fetch_cover_url(str(album_id), client=client)
     else:
         cover_url = f"https://cdn-msp3.jmapinodeudzn.net/media/photos/{album_id}/00001.webp"
-    album_url = f"https://jmcm.la/album/{album_id}"
+    album_url = f"https://18comic.vip/album/{album_id}"
     with open(filepath, "a", encoding="utf-8") as f:
         f.write(
             f'    <article class="card">'
