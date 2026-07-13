@@ -222,6 +222,7 @@ def register_plot_routes(app, server):
                 manager.set_config(life_sim_key, {
                     "enabled": True,
                     "silent": True,
+                    "life_sim": True,
                     "target_session_id": session_id,
                     "interval_minutes": max(5, interval_minutes),  # 最小 5 分钟
                     "content_file": "heartbeat.md",
@@ -235,6 +236,7 @@ def register_plot_routes(app, server):
                 manager.set_config(life_sim_key, {
                     "enabled": False,
                     "silent": True,
+                    "life_sim": True,
                     "target_session_id": session_id,
                 })
                 _log.info("[PlotRoutes] life sim heartbeat disabled for %s", session_id)

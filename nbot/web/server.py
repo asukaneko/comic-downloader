@@ -932,6 +932,8 @@ class WebChatServer:
             for message in session.get("messages", []):
                 if message.get("role") != "user":
                     continue
+                if message.get("is_heartbeat") or message.get("silent_trigger"):
+                    continue
                 timestamp = self._parse_iso_datetime(message.get("timestamp"))
                 if timestamp and (latest is None or timestamp > latest):
                     latest = timestamp

@@ -122,22 +122,43 @@ class SessionHeartbeatManager:
     def any_enabled(self) -> bool:
         return any(item.get("enabled") for item in self._configs.values())
 
+    @staticmethod
+    def _is_life_sim_config(config: dict[str, Any]) -> bool:
+        session_id = str(config.get("session_id") or "")
+        return bool(config.get("life_sim")) or session_id.endswith("__life_sim")
+
+    @staticmethod
+    def _is_proactive_config(config: dict[str, Any]) -> bool:
+        session_id = str(config.get("session_id") or "")
+        return bool(config.get("proactive_chat")) or session_id.endswith("__proactive")
+
     def _is_due(self, config: dict[str, Any], now: datetime) -> bool:
         if not config.get("enabled"):
             return False
-        last_run_raw = config.get("last_run")
-        if not last_run_raw:
+
+        baseline = self._parse_dt(config.get("last_run"))
+        if self._is_proactive_config(config) and self.activity_getter:
+            target_sid = str(config.get("target_session_id") or config.get("session_id") or "")
+            try:
+                last_user_activity = self.activity_getter(target_sid)
+            except Exception:
+                last_user_activity = None
+            last_user_activity = self._parse_dt(last_user_activity)
+            if last_user_activity and (baseline is None or last_user_activity > baseline):
+                baseline = last_user_activity
+
+        if baseline is None:
             return True
-        try:
-            last_run = datetime.fromisoformat(str(last_run_raw))
-        except Exception:
-            return True
-        # 二进制指数退避：实际间隔 = 基础间隔 * 2^min(backoff_count, MAX_BACKOFF)
+
         base = int(config.get("interval_minutes", 60) or 60)
-        backoff = min(int(config.get("backoff_count", 0) or 0), MAX_BACKOFF)
+        # 只有“同步现实时间”的 life simulation 使用指数退避。
+        backoff = 0
+        if self._is_life_sim_config(config):
+            backoff = min(int(config.get("backoff_count", 0) or 0), MAX_BACKOFF)
         effective_interval = base * (2 ** backoff)
-        due_at = last_run + timedelta(minutes=effective_interval)
-        return due_at <= now
+        due_at = baseline + timedelta(minutes=effective_interval)
+        normalized_now = self._parse_dt(now) or now
+        return due_at <= normalized_now
 
     async def execute_due_sessions(self) -> list[Any]:
         now = datetime.now()
@@ -182,7 +203,6 @@ class SessionHeartbeatManager:
             updated["next_run"] = None
             updated["last_trace_id"] = getattr(result, "trace_id", "") or ""
             updated["last_gateway_status"] = getattr(result, "status", "") or ""
-            # 二进制指数退避：根据会话活跃度调整 backoff_count
             target_sid = str(updated.get("target_session_id") or session_id)
             prev_user_activity = updated.get("last_user_activity")
             current_user_activity = None
@@ -191,17 +211,24 @@ class SessionHeartbeatManager:
                     current_user_activity = self.activity_getter(target_sid)
                 except Exception:
                     current_user_activity = None
-            # 若上次心跳后有新用户消息 → 重置退避；否则递增
-            if (
-                current_user_activity
-                and prev_user_activity
-                and current_user_activity > self._parse_dt(prev_user_activity)
-            ):
+            current_user_activity = self._parse_dt(current_user_activity)
+            if not self._is_life_sim_config(updated):
                 updated["backoff_count"] = 0
             else:
-                updated["backoff_count"] = min(
-                    int(updated.get("backoff_count", 0) or 0) + 1, MAX_BACKOFF
-                )
+                # life simulation 在用户重新活跃时重置退避，否则递增。
+                if (
+                    current_user_activity
+                    and (
+                        not prev_user_activity
+                        or current_user_activity > self._parse_dt(prev_user_activity)
+                    )
+                ):
+                    updated["backoff_count"] = 0
+                else:
+                    updated["backoff_count"] = min(
+                        int(updated.get("backoff_count", 0) or 0) + 1,
+                        MAX_BACKOFF,
+                    )
             updated["last_user_activity"] = (
                 current_user_activity.isoformat() if current_user_activity else None
             )
