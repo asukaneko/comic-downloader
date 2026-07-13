@@ -1309,6 +1309,19 @@ class AIPipeline:
             response_text = result.final_content or ""
             recent_history = self._extract_plot_recent_history(ctx)
             metadata = getattr(ctx.chat_request, "metadata", {}) or {}
+            is_silent_proactive = bool(
+                metadata.get("is_proactive_chat") and metadata.get("silent_trigger")
+            )
+            if is_silent_proactive and recent_history:
+                trigger_content = getattr(ctx.chat_request, "content", "") or ""
+                last_message = recent_history[-1]
+                if (
+                    last_message.get("role") == "user"
+                    and last_message.get("content") == trigger_content
+                ):
+                    # 剧情选项可以根据主动回复生成，但不应把内部触发词
+                    # 当作故事中的用户发言。
+                    recent_history = recent_history[:-1]
             plot_choice_style = str(metadata.get("plot_choice_style") or "")
             choices = await generator.generate(
                 response_text,
@@ -1340,8 +1353,19 @@ class AIPipeline:
 
             # 构造本轮消息快照（用于会话内分支物化）
             user_content = getattr(ctx.chat_request, "content", "") or ""
-            user_snapshot = {"role": "user", "content": user_content}
+            user_snapshot = (
+                {}
+                if is_silent_proactive
+                else {"role": "user", "content": user_content}
+            )
             assistant_snapshot = {"role": "assistant", "content": response_text}
+            if is_silent_proactive:
+                assistant_snapshot.update(
+                    {
+                        "source": "proactive_chat",
+                        "is_proactive_chat": True,
+                    }
+                )
             # 记录助手消息真实 id：分支切换/回溯后仍能把后到的 TTS 音频
             # 回填到本节点快照（TTS 是异步的，建节点时往往还没有 audio_url）。
             am_obj = getattr(result, "assistant_message", None)
