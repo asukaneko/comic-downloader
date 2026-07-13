@@ -1704,14 +1704,20 @@ class AIPipeline:
         result: PipelineResult,
     ) -> None:
         """角色运行时 after_turn：更新情绪、关系、写入事件、抽取记忆"""
-        runtime = callbacks.get_character_runtime(ctx)
-        identity = callbacks.get_character_context(ctx)
-
         request_metadata = getattr(ctx.chat_request, "metadata", None)
         if not isinstance(request_metadata, dict):
             request_metadata = {}
             ctx.chat_request.metadata = request_metadata
         request_metadata.update(ctx.metadata)
+
+        # 静默的内部触发不是用户交互，不应因为内部指令改变
+        # 角色对用户的情绪、好感和关系状态。
+        if ctx.metadata.get("skip_character_after_turn"):
+            _log.debug("[CharacterRuntime] after_turn skipped: internal silent trigger")
+            return
+
+        runtime = callbacks.get_character_runtime(ctx)
+        identity = callbacks.get_character_context(ctx)
 
         if not runtime:
             _log.debug("[CharacterRuntime] after_turn skipped: runtime is None")

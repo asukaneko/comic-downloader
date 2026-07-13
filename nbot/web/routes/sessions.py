@@ -336,7 +336,7 @@ def _sync_proactive_chat_to_heartbeat(server, session_id: str, proactive_chat_co
 
     proactive_chat 复用统一的心跳调度系统，配置 key 为 "{session_id}__proactive"，
     与"同步现实时间"的 __life_sim 以及用户手动配置的心跳隔离。
-    与 life_sim 不同，proactive_chat 不静默：会真正向会话发送一条消息。
+    与 life_sim 不同，proactive_chat 会向会话发送 AI 回复，但触发指令本身不写入会话。
     """
     try:
         from nbot.gateway.heartbeat import get_session_heartbeat_manager
@@ -358,10 +358,13 @@ def _sync_proactive_chat_to_heartbeat(server, session_id: str, proactive_chat_co
         if enabled:
             manager.set_config(proactive_key, {
                 "enabled": True,
-                "silent": False,  # 主动聊天需要真正发消息给用户
+                # silent 专用于 life_sim（完全不发消息）。主动聊天由
+                # proactive_chat 分支执行：静默注入内部指令，只保存 AI 回复。
+                "silent": False,
+                "proactive_chat": True,
                 "target_session_id": session_id,
                 "interval_minutes": interval_minutes,
-                "content_file": "heartbeat.md",
+                "internal_prompt": str(config.get("prompt") or "").strip(),
             })
             _log.info(
                 "[Sessions] proactive chat heartbeat registered for %s (interval=%dmin)",
@@ -371,6 +374,7 @@ def _sync_proactive_chat_to_heartbeat(server, session_id: str, proactive_chat_co
             manager.set_config(proactive_key, {
                 "enabled": False,
                 "silent": False,
+                "proactive_chat": True,
                 "target_session_id": session_id,
             })
             _log.info("[Sessions] proactive chat heartbeat disabled for %s", session_id)

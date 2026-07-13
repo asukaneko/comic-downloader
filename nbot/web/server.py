@@ -3476,6 +3476,13 @@ class WebChatServer:
         *,
         force: bool = False,
     ):
+        # 主动聊天使用心跳调度，但触发指令只存在于本次 AI 请求中。
+        # 它不是用户消息，因此不应写入或显示在会话历史中。
+        # `__proactive` 是旧版已持久化的主动聊天 key；后缀判定用于
+        # 无需用户重新开关功能即可迁移到新的静默触发语义。
+        if config.get("proactive_chat") or session_id.endswith("__proactive"):
+            return self._run_proactive_chat_heartbeat(session_id, config)
+
         # 静默心跳：不发消息给用户，只更新角色活动状态（角色"自我生活"）
         if config.get("silent"):
             return self._run_silent_heartbeat(session_id, config)
@@ -3563,6 +3570,57 @@ class WebChatServer:
             "target_session_id": target_session_id,
             "session_id": session_id,
             "result_summary": "sent 1 message",
+        }
+
+    def _run_proactive_chat_heartbeat(
+        self, session_id: str, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """静默触发一次主动聊天，只将 AI 回复写入目标会话。"""
+        target_session_id = str(config.get("target_session_id") or session_id)
+        session = self.session_store.get_session(target_session_id)
+        if not session:
+            _log.warning("Proactive chat target session not found: %s", target_session_id)
+            return {"messages_sent": 0, "target_session_id": target_session_id}
+
+        prompt = str(config.get("internal_prompt") or "").strip()
+        if not prompt:
+            prompt_config = self._get_session_proactive_chat_config(session)
+            prompt = str(prompt_config.get("prompt") or "").strip()
+        if not prompt:
+            _log.warning("Proactive chat prompt is empty for %s", target_session_id)
+            return {"messages_sent": 0, "target_session_id": target_session_id}
+
+        triggered_at = datetime.now().astimezone().isoformat()
+        session["proactive_chat_pending_since"] = triggered_at
+        session["proactive_chat_last_run"] = triggered_at
+        self.session_store.set_session(target_session_id, session)
+
+        try:
+            self._trigger_ai_response(
+                target_session_id,
+                prompt,
+                "system",
+                metadata={
+                    "is_proactive_chat": True,
+                    "is_heartbeat": True,
+                    "skip_auto_memory": True,
+                    "skip_character_after_turn": True,
+                    "silent_trigger": True,
+                    "source": "proactive_chat",
+                    "proactive_chat_triggered_at": triggered_at,
+                },
+                channel_id="proactive",
+            )
+        except Exception:
+            session.pop("proactive_chat_pending_since", None)
+            self.session_store.set_session(target_session_id, session)
+            raise
+
+        return {
+            "messages_sent": 1,
+            "target_session_id": target_session_id,
+            "session_id": session_id,
+            "result_summary": "scheduled proactive chat reply",
         }
 
     def _run_silent_heartbeat(self, session_id: str, config: dict[str, Any]) -> dict:
