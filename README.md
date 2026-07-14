@@ -9,6 +9,7 @@
 ![Web](https://img.shields.io/badge/Web-Dashboard-ec4899?style=flat)
 ![QQ](https://img.shields.io/badge/QQ-NapCat%20%2B%20ncatbot-58a6ff?style=flat)
 ![MCP](https://img.shields.io/badge/MCP-AI%20Agent%20Interface-8b5cf6?style=flat)
+![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat&logo=docker&logoColor=white)
 
 面向 Web 的多渠道 AI 角色扮演系统，包含Web、QQ、CLI、Telegram、Feishu等频道。
 
@@ -169,6 +170,33 @@ MODEL=your_model_name
 
 但你仍然可以通过web界面来配置你的模型
 
+### Docker 快速部署
+
+官方镜像发布在 GitHub Container Registry (ghcr.io)，支持 `linux/amd64` 与 `linux/arm64`：
+
+```bash
+# 准备配置
+mkdir -p nekobot/data && cd nekobot
+cp .env.example .env   # 编辑 .env，至少填 WEB_PASSWORD
+
+# 拉取并运行
+docker run -d --name nekobot --restart unless-stopped \
+  -p 5000:5000 \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/.env:/app/.env:ro" \
+  --env-file .env \
+  ghcr.io/asukaneko/nekobot:latest
+```
+
+启动后访问 `http://<服务器IP>:5000`。
+
+> **提示**
+> - 必须挂载 `data/` 卷以持久化会话 / 角色卡 / Web 配置
+> - NapCatQQ 需独立部署，通过 `WS_URI` 连接（详见 Docker Compose 示例）
+> - 生产环境建议使用精确版本号（如 `:3.1.2`）而非 `latest`，便于回滚
+
+完整部署说明（Compose、升级、与 NapCatQQ 协同、HTTPS 等）见 [Docker 部署指南](docs/docs/guide/docker-deploy.md)。
+
 ## Running
 
 ```bash
@@ -224,6 +252,7 @@ CI 主要执行：
 更详细的使用与开发文档位于 `docs/`：
 
 - 快速开始：[docs/docs/guide/quick-start.md](docs/docs/guide/quick-start.md)
+- Docker 部署：[docs/docs/guide/docker-deploy.md](docs/docs/guide/docker-deploy.md)
 - 命令说明：[docs/docs/guide/commands.md](docs/docs/guide/commands.md)
 - 频道接入：[docs/docs/guide/channels.md](docs/docs/guide/channels.md)
 - 语音合成 (TTS)：[docs/docs/guide/nbot/services/tts.md](docs/docs/guide/nbot/services/tts.md)
