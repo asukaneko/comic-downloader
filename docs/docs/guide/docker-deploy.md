@@ -205,7 +205,7 @@ docker run -d -p 5000:5000 -v "$(pwd)/data:/app/data" --env-file .env nekobot:lo
 
 - 检查端口映射：`docker port nekobot`
 - 查看日志：`docker logs nekobot`
-- 健康检查：`docker inspect --format='{{.State.Health.Status}}' nekobot`
+- 健康检查：`docker ps -a --filter name=nekobot`
 
 ### `.env` 修改后不生效
 
