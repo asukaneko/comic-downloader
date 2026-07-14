@@ -2,14 +2,12 @@ name: Docker Publish (ghcr.io)
 
 # 将 NekoBot 主项目构建为 Docker 镜像并发布到 GitHub Container Registry (ghcr.io)
 # 触发:
-#   - push tag v*.*.*  : 发布正式版本 (latest + 语义化版本号)
-#   - push master      : 发布 nightly (latest 标签也指向最新 master)
-#   - workflow_dispatch: 手动触发
+#   - release published : 发布 GitHub Release 时构建 (latest + 语义化版本号)
+#   - workflow_dispatch : 手动触发 (仅打 sha 标签, 用于测试)
 
 on:
-  push:
-    branches: [master]
-    tags: ["v*.*.*"]
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -53,19 +51,16 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           # 标签策略:
-          #   - type=ref           分支名/标签名
-          #   - type=semver        语义化版本 (v1.2.3 -> 1.2.3, 1.2, 1)
-          #   - type=raw           自定义 (这里用于 master 分支打 nightly)
-          #   - type=sha           短 SHA
-          #   - type=raw latest    仅 master 分支与语义化 tag 时为 latest
+          #   - type=ref          标签名 (release 触发时为 v3.1.2)
+          #   - type=semver       语义化版本 (v3.1.2 -> 3.1.2, 3.1, 3)
+          #   - type=raw latest   仅 release 发布时打 latest
+          #   - type=sha          短 SHA (手动触发时也有可引用标签)
           tags: |
-            type=ref,event=branch
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=nightly,enable={{is_default_branch}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
             type=sha,format=short
           labels: |
             org.opencontainers.image.title=NekoBot
