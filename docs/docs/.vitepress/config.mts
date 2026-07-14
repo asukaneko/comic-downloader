@@ -99,6 +99,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { text: '快速开始', link: '/guide/quick-start.md' },
+            { text: 'Docker 部署', link: '/guide/docker-deploy.md' },
             { text: '所有命令', link: '/guide/commands.md' },
             { text: '更新日志', link: '/guide/changelog.md' },
           ]
