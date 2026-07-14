@@ -1,0 +1,88 @@
+name: Docker Publish (ghcr.io)
+
+# 将 NekoBot 主项目构建为 Docker 镜像并发布到 GitHub Container Registry (ghcr.io)
+# 触发:
+#   - push tag v*.*.*  : 发布正式版本 (latest + 语义化版本号)
+#   - push master      : 发布 nightly (latest 标签也指向最新 master)
+#   - workflow_dispatch: 手动触发
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  # 镜像名强制小写 (ghcr.io 要求), 使用仓库名作为镜像名
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build & Push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (for multi-arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # 标签策略:
+          #   - type=ref           分支名/标签名
+          #   - type=semver        语义化版本 (v1.2.3 -> 1.2.3, 1.2, 1)
+          #   - type=raw           自定义 (这里用于 master 分支打 nightly)
+          #   - type=sha           短 SHA
+          #   - type=raw latest    仅 master 分支与语义化 tag 时为 latest
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=nightly,enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.title=NekoBot
+            org.opencontainers.image.description=Multi-channel AI roleplay QQ bot
+            org.opencontainers.image.licenses=MIT
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # build-args 可在此扩展, 例如模型配置等
+          # build-args: |
+          #   BUILDKIT_INLINE_CACHE=1

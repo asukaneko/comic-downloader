@@ -1,0 +1,87 @@
+# 版本控制 / 元数据
+.git
+.github
+.gitignore
+.gitattributes
+
+# 运行时数据 (镜像内不应包含, 部署时挂载 volume)
+data
+data/**
+
+# 环境与密钥
+.env
+.env.*
+!.env.example
+config.ini
+config.copy.ini
+*.pem
+*.key
+
+# Python 缓存
+__pycache__
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# 虚拟环境
+.venv
+venv
+env
+c_env
+
+# 日志与临时文件
+logs
+*.log
+all-guides-for-ai.pdf
+test_tmp
+test_agent
+tests
+todo
+cli_plan
+uploads
+files
+saved_message
+cache
+find.json
+1.txt
+admin.txt
+switches.json
+
+# 文档站点 (有独立 docs/Dockerfile)
+docs
+文档
+
+# IDE / 编辑器
+.idea
+.vscode
+.claude
+ lightly
+.pre-commit-config.yaml
+
+# 平台/角色卡临时目录
+role_card_platform
+fonts
+
+# 本地脚本与备份
+scripts/*.py
+run.bat
+index备份.html
+edgedriver_win64
+wenku8_cookie.txt
+resources/prompts/personality.json
+resources/prompts/user/
+
+# Docker 自身文件 (避免循环)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Node / 前端构建产物
+node_modules
+dist
+dist-ssr
