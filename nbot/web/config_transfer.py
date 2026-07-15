@@ -41,6 +41,7 @@ CONFIG_KEYS = (
     "custom_personality_presets",
     "world_books",
     "mcp_servers",
+    "memory_fs",
 )
 SAVE_TYPES = (
     "settings",
@@ -155,6 +156,32 @@ def _write_mcp_servers(server, mcp_servers) -> None:
         json.dump(mcp_servers if isinstance(mcp_servers, list) else [], f, ensure_ascii=False, indent=2)
 
 
+def _read_memory_fs(server) -> Dict[str, Any]:
+    """读取 data/web/memory_fs.json 全量索引（MemoryFS 单文件 JSON 持久化）。"""
+    path = os.path.join(server.data_dir, "memory_fs.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
+
+def _write_memory_fs(server, memory_fs) -> None:
+    """把 memory_fs 索引写回 data/web/memory_fs.json，并重置全局单例强制下次重新加载。"""
+    path = os.path.join(server.data_dir, "memory_fs.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(memory_fs if isinstance(memory_fs, dict) else {}, f, ensure_ascii=False, indent=2)
+    try:
+        import nbot.memory.fs as _mfs_mod
+        _mfs_mod._memory_fs = None
+    except Exception:
+        pass
+
+
 def build_plain_bundle(server) -> Dict[str, Any]:
     ai_models = getattr(server, "ai_models", []) or []
     return {
@@ -188,6 +215,7 @@ def build_plain_bundle(server) -> Dict[str, Any]:
             ),
             "world_books": _read_world_books(server),
             "mcp_servers": _read_mcp_servers(server),
+            "memory_fs": _read_memory_fs(server),
         },
     }
 
@@ -334,6 +362,14 @@ def apply_bundle(server, bundle: Dict[str, Any], *, overwrite: bool = True) -> D
             imported.append("mcp_servers")
         else:
             skipped.append("mcp_servers")
+
+    if "memory_fs" in configs:
+        memory_fs = configs.get("memory_fs")
+        if overwrite or not _read_memory_fs(server):
+            _write_memory_fs(server, _clean_json(memory_fs if isinstance(memory_fs, dict) else {}))
+            imported.append("memory_fs")
+        else:
+            skipped.append("memory_fs")
 
     _save_imported_configs(server, touched)
 
