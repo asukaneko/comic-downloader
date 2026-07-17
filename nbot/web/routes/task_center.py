@@ -98,35 +98,33 @@ def register_task_center_routes(app, server):
     def toggle_task_center_item(task_id):
         if task_id == "heartbeat":
             manager = getattr(server, "session_heartbeat_manager", None)
-            target_session_id = str(server.heartbeat_config.get("target_session_id") or "").strip()
             if manager:
-                # 优先切换指定目标，否则查找已有的配置
-                sid = target_session_id
-                if not sid:
-                    enabled = manager.list_enabled_configs()
-                    sid = enabled[0]["session_id"] if enabled else ""
-                if not sid:
-                    # 没有任何配置，从现有会话中取第一个 web 会话
-                    for session_id, s in getattr(server, "sessions", {}).items():
-                        if s.get("type") == "web":
-                            sid = session_id
-                            break
-                if sid:
-                    current = manager.get_config(sid)
-                    new_enabled = not bool(current.get("enabled", False))
-                    manager.set_config(sid, {"enabled": new_enabled})
-                    server._refresh_heartbeat_summary_config()
-                    if manager.any_enabled():
-                        server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
-                    else:
-                        server._stop_heartbeat_job()
+                # 按 session_id 索引（而非 target_session_id），避免 life_sim 等
+                # 后缀 config 查不到对应记录而误新建一个 enabled config。
+                enabled_configs = manager.list_enabled_configs()
+                if enabled_configs:
+                    # 当前存在已启用的心跳：一次性全部关闭，符合 UI 总开关直觉
+                    for cfg in enabled_configs:
+                        manager.set_config(cfg["session_id"], {"enabled": False})
                 else:
-                    # 无可用会话，回退到旧路径
-                    server.heartbeat_config["enabled"] = not server.heartbeat_config.get("enabled", False)
-                    if server.heartbeat_config["enabled"]:
-                        server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
-                    else:
-                        server._stop_heartbeat_job()
+                    # 没有任何已启用的心跳：按 target_session_id 启用，否则回退到首个 web 会话
+                    target_session_id = str(
+                        server.heartbeat_config.get("target_session_id") or ""
+                    ).strip()
+                    sid = target_session_id
+                    if not sid:
+                        for session_id, s in getattr(server, "sessions", {}).items():
+                            if s.get("type") == "web":
+                                sid = session_id
+                                break
+                    if sid:
+                        manager.set_config(sid, {"enabled": True})
+
+                server._refresh_heartbeat_summary_config()
+                if manager.any_enabled():
+                    server._start_heartbeat_job(server.heartbeat_config.get("interval_minutes", 60))
+                else:
+                    server._stop_heartbeat_job()
             else:
                 server.heartbeat_config["enabled"] = not server.heartbeat_config.get("enabled", False)
                 if server.heartbeat_config["enabled"]:
