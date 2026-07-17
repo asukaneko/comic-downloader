@@ -9,7 +9,7 @@ import os
 import threading
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 # ====================================================================
@@ -572,13 +572,30 @@ class TokenStatsManager:
     # 排行榜
     # ------------------------------------------------------------------
 
-    def get_rankings(self, limit: int = 10) -> Dict[str, List[Dict]]:
-        """返回会话 / 模型 / 用户 / 用途排行榜。"""
+    def get_rankings(
+        self,
+        limit: int = 10,
+        *,
+        is_session_active: Optional[Callable[[str], bool]] = None,
+    ) -> Dict[str, List[Dict]]:
+        """返回会话 / 模型 / 用户 / 用途排行榜。
+
+        Args:
+            is_session_active: 可选回调，用于判断会话是否仍然存在。
+                传入后会话排行榜将排除已删除（回调返回 False）的会话。
+        """
         with self._lock:
             sessions = dict(self._stats.get("sessions", {}))
             models = dict(self._stats.get("models", {}))
             users = dict(self._stats.get("users", {}))
             records = list(self._stats.get("records", []))
+
+        # 过滤已删除的会话
+        if is_session_active is not None:
+            sessions = {
+                sid: sdata for sid, sdata in sessions.items()
+                if is_session_active(sid)
+            }
 
         def _build(items: Dict, name_key: str = None) -> List[Dict]:
             result = []

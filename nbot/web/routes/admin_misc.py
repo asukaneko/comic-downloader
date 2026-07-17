@@ -171,7 +171,25 @@ def register_admin_misc_routes(app, server):
         try:
             from nbot.core.token_stats import get_token_stats_manager
 
-            return jsonify(get_token_stats_manager().get_rankings())
+            manager = get_token_stats_manager()
+            # 构造会话存在性判断：已删除的会话不纳入排行榜
+            sessions_meta = manager.data.get("sessions", {}) or {}
+            web_session_ids = set(server.sessions.keys())
+
+            def _is_session_active(session_id: str) -> bool:
+                # Web 会话必须在 server.sessions 中存在
+                if session_id in web_session_ids:
+                    return True
+                # 非 web 渠道（QQ/CLI/Feishu 等）无显式删除逻辑，默认保留
+                sdata = sessions_meta.get(session_id) or {}
+                if isinstance(sdata, dict):
+                    ctype = sdata.get("type")
+                    if ctype and ctype != "web":
+                        return True
+                # web 渠道但已不在 server.sessions 中：视为已删除
+                return False
+
+            return jsonify(manager.get_rankings(is_session_active=_is_session_active))
         except RuntimeError:
             return jsonify({"sessions": [], "models": [], "users": []})
 
