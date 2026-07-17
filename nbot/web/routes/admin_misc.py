@@ -170,23 +170,30 @@ def register_admin_misc_routes(app, server):
     def get_token_rankings():
         try:
             from nbot.core.token_stats import get_token_stats_manager
+            from nbot.web.sessions_db import load_sessions as load_sessions_from_db
 
             manager = get_token_stats_manager()
             # 构造会话存在性判断：已删除的会话不纳入排行榜
             sessions_meta = manager.data.get("sessions", {}) or {}
-            web_session_ids = set(server.sessions.keys())
+            # 合并内存与 DB 中的所有 web 可见会话 ID
+            known_session_ids = set(server.sessions.keys())
+            try:
+                db_sessions = load_sessions_from_db(server.data_dir) or {}
+                known_session_ids.update(db_sessions.keys())
+            except Exception:
+                pass
 
             def _is_session_active(session_id: str) -> bool:
-                # Web 会话必须在 server.sessions 中存在
-                if session_id in web_session_ids:
+                # 会话在内存或 DB 中存在：保留
+                if session_id in known_session_ids:
                     return True
-                # 非 web 渠道（QQ/CLI/Feishu 等）无显式删除逻辑，默认保留
+                # 不在内存/DB 中，但属于非 web 渠道（QQ/CLI/Feishu 等），无显式删除逻辑，保留
                 sdata = sessions_meta.get(session_id) or {}
                 if isinstance(sdata, dict):
-                    ctype = sdata.get("type")
-                    if ctype and ctype != "web":
+                    ctype = (sdata.get("type") or "").strip().lower()
+                    if ctype and ctype not in ("web", "api"):
                         return True
-                # web 渠道但已不在 server.sessions 中：视为已删除
+                # web 渠道但已不在内存/DB 中：视为已删除
                 return False
 
             return jsonify(manager.get_rankings(is_session_active=_is_session_active))
