@@ -1927,6 +1927,52 @@ def register_session_routes(app, server):
         session_store.set_session(session_id, session)
         return jsonify({"success": True, "collections": collections, "favorites": collections})
 
+    @app.route(
+        "/api/sessions/<session_id>/message-favorites/<collection_id>",
+        methods=["DELETE"],
+    )
+    def delete_message_favorite(session_id, collection_id):
+        """删除指定收藏夹。
+
+        与 PUT /message-favorites 解耦：PUT 端点要求 message_ids 非空，
+        无法用于纯删除场景。此端点直接按 collection_id 移除收藏夹。
+        """
+        session = _get_web_session(session_id)
+        if not session:
+            return jsonify({"error": "Session not found"}), 404
+
+        collection_id = str(collection_id or "").strip()
+        if not collection_id:
+            return jsonify({"error": "collection_id is required"}), 400
+
+        collections = _normalize_message_favorite_collections(
+            session.get("message_favorites", [])
+        )
+        target_idx = next(
+            (
+                i
+                for i, item in enumerate(collections)
+                if str(item.get("id")) == collection_id
+            ),
+            -1,
+        )
+        if target_idx < 0:
+            return jsonify({"error": "Favorite collection not found"}), 404
+
+        removed = collections.pop(target_idx)
+        session["message_favorites"] = collections
+        session_store.set_session(session_id, session)
+        return jsonify(
+            {
+                "success": True,
+                "deleted": True,
+                "collection_id": collection_id,
+                "title": removed.get("title", ""),
+                "collections": collections,
+                "favorites": collections,
+            }
+        )
+
     @app.route("/api/sessions/<session_id>/messages", methods=["POST"])
     def add_message(session_id):
         session = _get_web_session(session_id)
