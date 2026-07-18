@@ -665,11 +665,14 @@ class WebCallbacks(PipelineCallbacks):
     # ---- 工具确认 ----
 
     def on_confirmation_required(self, ctx: PipelineContext, request_id: str, command: str) -> None:
+        from nbot.services.tools import get_exec_main_command
+
         self.server.socketio.emit(
             "exec_confirm_request",
             {
                 "request_id": request_id,
                 "command": command,
+                "main_command": get_exec_main_command(command),
                 "message": f"命令 `{command}` 需要您的确认",
                 "session_id": self.session_id,
             },

@@ -15678,6 +15678,7 @@ def main(params):
                             this.execConfirmData = {
                                 requestId: data.request_id || '',
                                 command: data.command || '',
+                                mainCommand: data.main_command || '',
                                 message: data.message || '',
                                 sessionId: data.session_id || ''
                             };
@@ -15769,6 +15770,15 @@ def main(params):
 
                 confirmExecCommand() {
                     console.log('[DEBUG] User confirmed exec command:', this.execConfirmData.requestId);
+                    this.submitExecCommandPermission('once');
+                },
+
+                alwaysAllowExecCommand() {
+                    console.log('[DEBUG] User always allowed exec command:', this.execConfirmData.mainCommand);
+                    this.submitExecCommandPermission('always');
+                },
+
+                submitExecCommandPermission(permission) {
                     if (!(socket && socket.connected)) {
                         this.showToast('Socket未连接，无法确认命令执行', 'error');
                         return;
@@ -15776,6 +15786,7 @@ def main(params):
                     socket.emit('confirm_exec', {
                         request_id: this.execConfirmData.requestId,
                         approved: true,
+                        permission: permission,
                         session_id: this.execConfirmData.sessionId
                     });
                     this.showExecConfirmModal = false;
@@ -15783,7 +15794,10 @@ def main(params):
                     this.loadingSessionId = this.execConfirmData.sessionId;
                     localStorage.setItem('nbot_loading_session_id', this.execConfirmData.sessionId);
                     localStorage.setItem('nbot_loading_start_time', Date.now().toString());
-                    this.showToast('命令已确认，正在执行...', 'info');
+                    const message = permission === 'always'
+                        ? `本会话将始终允许 ${this.execConfirmData.mainCommand || '该命令'}`
+                        : '命令已确认，正在执行...';
+                    this.showToast(message, 'info');
                 },
 
                 rejectExecCommand() {
@@ -15795,6 +15809,7 @@ def main(params):
                     socket.emit('confirm_exec', {
                         request_id: this.execConfirmData.requestId,
                         approved: false,
+                        permission: 'reject',
                         session_id: this.execConfirmData.sessionId
                     });
                     this.showExecConfirmModal = false;

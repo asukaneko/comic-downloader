@@ -3,6 +3,9 @@
 """
 import json
 import logging
+import re
+import shlex
+import subprocess
 import urllib.request
 import urllib.parse
 import os
@@ -52,22 +55,255 @@ WEB_DATA_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'web'
 
 # Exec 工具配置
 EXEC_WHITELIST = {
-    'ls', 'cat', 'echo', 'pwd', 'whoami', 'date', 'cal', 'df', 'du',
-    'head', 'tail', 'wc', 'grep', 'find', 'ps', 'top', 'htop',
-    'ping', 'journalctl', 'uname', 'hostname',
-    'netstat', 'ss', 'lsof', 'ifconfig', 'ip', 'route',
+    'ls', 'cat', 'echo', 'pwd', 'whoami', 'cal', 'df', 'du',
+    'head', 'tail', 'wc', 'grep', 'ps', 'uname',
+    'netstat', 'ss', 'lsof',
     'which', 'whereis', 'type', 'file', 'stat', 'md5sum', 'sha256sum',
 }
 
+EXEC_BLOCKED_COMMANDS = {
+    'bcdedit',
+    'cfdisk',
+    'clear-disk',
+    'diskpart',
+    'fdisk',
+    'format',
+    'format.com',
+    'format-volume',
+    'halt',
+    'initialize-disk',
+    'mkfs',
+    'parted',
+    'poweroff',
+    'reboot',
+    'remove-partition',
+    'restart-computer',
+    'sfdisk',
+    'shutdown',
+    'stop-computer',
+}
+
 EXEC_BLACKLIST_PATTERNS = [
-    r'rm\s+-rf\s+/',
-    r'mkfs',
-    r'dd\s+if=',
-    r'>\s*/dev/',
+    # Linux/macOS：系统根目录递归删除、磁盘覆写和权限破坏
+    r'\brm\b[^\r\n]*(?:-[^\s]*r[^\s]*f|-[^\s]*f[^\s]*r|-r\s+-f|-f\s+-r|'
+    r'--recursive[^\r\n]*--force|--force[^\r\n]*--recursive)'
+    r'[^\r\n]*\s/(?:\*|\s|$|["\'])',
+    r'\b(?:chmod|chown)\b[^\r\n]*(?:-R|--recursive)[^\r\n]*\s/(?:\s|$|["\'])',
+    r'\bdd\b[^\r\n]*\bof\s*=\s*/dev/',
+    r'>\s*/dev/(?:sd|nvme|mmcblk)',
+    # Windows：系统目录/盘符根目录递归删除，以及注册表和磁盘破坏
+    r'\b(?:remove-item|del|erase|rd|rmdir)\b[^\r\n]*(?:-recurse|/s)[^\r\n]*'
+    r'(?:[a-z]:\\(?:windows|program files|users)?(?:\\|\s|$)|'
+    r'\$env:(?:systemroot|windir)|%systemroot%)',
+    r'\breg(?:\.exe)?\s+delete\b',
+    r'\b(?:clear-disk|initialize-disk|remove-partition|format-volume)\b',
+    # 显式 shell 包装下的关机/格式化等命令
+    r'^\s*(?:(?:sudo|doas)\s+)?(?:sh|bash|zsh|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh)'
+    r'[^\r\n]*\b(?:shutdown|reboot|poweroff|halt|mkfs|diskpart|bcdedit|format-volume)\b',
+    # 常见 fork bomb / 无限 fork
     r':\(\)\s*\{',
-    r'fork\s*\(',
-    r'while\s*\(true\)',
+    r'\bfork\s*\(',
+    r'\bwhile\s*\(\s*true\s*\)',
 ]
+
+EXEC_PERMISSION_MODE_ASK = 'ask'
+EXEC_PERMISSION_MODE_YOLO = 'yolo'
+EXEC_PERMISSION_MODE_KEY = 'exec_permission_mode'
+EXEC_ALLOWED_COMMANDS_KEY = 'exec_allowed_commands'
+
+
+def _parse_exec_command(command: str):
+    try:
+        cmd_parts = shlex.split(command)
+    except Exception:
+        cmd_parts = command.split()
+    return cmd_parts
+
+
+def _normalize_exec_main_command(raw_command: str) -> str:
+    value = str(raw_command or '').strip().strip('"\'')
+    value = value.replace('\\', '/').rsplit('/', 1)[-1].lower()
+    if value.endswith('.exe'):
+        value = value[:-4]
+    return value
+
+
+def get_exec_main_command(command: str) -> str:
+    """返回用于会话授权匹配的规范化主命令名。"""
+    cmd_parts = _parse_exec_command(command)
+    return _normalize_exec_main_command(cmd_parts[0]) if cmd_parts else ''
+
+
+def _get_exec_block_reason(command: str, main_command: str) -> str:
+    if main_command in EXEC_BLOCKED_COMMANDS or main_command.startswith('mkfs.'):
+        return f'危险系统命令已禁止执行: {main_command}'
+    for pattern in EXEC_BLACKLIST_PATTERNS:
+        if re.search(pattern, command, re.IGNORECASE):
+            return '命令包含危险操作模式，已阻止执行'
+    return ''
+
+
+def _is_bare_whitelisted_command(cmd_parts, main_command: str) -> bool:
+    if not cmd_parts:
+        return False
+    executable = str(cmd_parts[0]).strip().strip('"\'')
+    if '/' in executable or '\\' in executable:
+        return False
+    return main_command in EXEC_WHITELIST
+
+
+def _execute_command_now(
+    command: str,
+    timeout: int,
+    authorization: str,
+) -> Dict[str, Any]:
+    """执行已经通过白名单或用户授权的命令，并再次执行硬黑名单检查。"""
+    cmd_parts = _parse_exec_command(command)
+    if not cmd_parts:
+        return {"success": False, "error": "命令不能为空", "command": command}
+
+    main_command = _normalize_exec_main_command(cmd_parts[0])
+    blocked_reason = _get_exec_block_reason(command, main_command)
+    if blocked_reason:
+        return {
+            "success": False,
+            "error": blocked_reason,
+            "command": command,
+            "main_command": main_command,
+            "blocked_reason": "dangerous_pattern",
+        }
+
+    try:
+        result = subprocess.run(
+            cmd_parts,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=os.getcwd(),
+        )
+        output = result.stdout
+        max_output_length = 10000
+        if len(output) > max_output_length:
+            output = (
+                output[:max_output_length]
+                + f"\n\n... (输出已截断，共 {len(result.stdout)} 字符)"
+            )
+        return {
+            "success": result.returncode == 0,
+            "command": command,
+            "main_command": main_command,
+            "returncode": result.returncode,
+            "stdout": output,
+            "stderr": result.stderr[:5000] if result.stderr else "",
+            "executed": True,
+            "authorization": authorization,
+            "is_whitelisted": authorization == "whitelist",
+        }
+    except subprocess.TimeoutExpired:
+        _log.error(f"Command timeout: {command}")
+        return {
+            "success": False,
+            "error": f"命令执行超时（{timeout}秒）",
+            "command": command,
+            "main_command": main_command,
+        }
+    except Exception as e:
+        _log.error(f"Exec command error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "command": command,
+            "main_command": main_command,
+        }
+
+
+def _get_server_session(server, session_id: str) -> Optional[Dict]:
+    sessions = getattr(server, 'sessions', None)
+    if not isinstance(sessions, dict):
+        return None
+    session = sessions.get(session_id)
+    return session if isinstance(session, dict) else None
+
+
+def _save_server_sessions(server) -> None:
+    save_data = getattr(server, '_save_data', None)
+    if callable(save_data):
+        save_data('sessions')
+
+
+def get_session_exec_permission(server, session_id: str) -> Dict[str, Any]:
+    """读取会话级命令权限。"""
+    session = _get_server_session(server, session_id) or {}
+    mode = str(session.get(EXEC_PERMISSION_MODE_KEY) or EXEC_PERMISSION_MODE_ASK)
+    if mode not in {EXEC_PERMISSION_MODE_ASK, EXEC_PERMISSION_MODE_YOLO}:
+        mode = EXEC_PERMISSION_MODE_ASK
+    allowed = session.get(EXEC_ALLOWED_COMMANDS_KEY) or []
+    if not isinstance(allowed, list):
+        allowed = []
+    return {
+        "mode": mode,
+        "allowed_commands": sorted(
+            {
+                _normalize_exec_main_command(item)
+                for item in allowed
+                if _normalize_exec_main_command(item)
+            }
+        ),
+    }
+
+
+def set_session_exec_yolo(server, session_id: str, enabled: bool) -> Dict[str, Any]:
+    """开启或关闭指定会话的 YOLO 命令执行模式。"""
+    session = _get_server_session(server, session_id)
+    if session is None:
+        return {"success": False, "error": "Session not found"}
+    session[EXEC_PERMISSION_MODE_KEY] = (
+        EXEC_PERMISSION_MODE_YOLO if enabled else EXEC_PERMISSION_MODE_ASK
+    )
+    _save_server_sessions(server)
+    return {"success": True, **get_session_exec_permission(server, session_id)}
+
+
+def grant_session_exec_command(
+    server,
+    session_id: str,
+    main_command: str,
+) -> Dict[str, Any]:
+    """在指定会话内始终允许一个主命令名。"""
+    session = _get_server_session(server, session_id)
+    normalized = _normalize_exec_main_command(main_command)
+    if session is None:
+        return {"success": False, "error": "Session not found"}
+    if not normalized:
+        return {"success": False, "error": "主命令名不能为空"}
+    allowed = session.get(EXEC_ALLOWED_COMMANDS_KEY) or []
+    if not isinstance(allowed, list):
+        allowed = []
+    session[EXEC_ALLOWED_COMMANDS_KEY] = sorted(
+        {
+            _normalize_exec_main_command(item)
+            for item in [*allowed, normalized]
+            if _normalize_exec_main_command(item)
+        }
+    )
+    _save_server_sessions(server)
+    return {"success": True, **get_session_exec_permission(server, session_id)}
+
+
+def _get_context_exec_authorization(context: Optional[Dict], main_command: str) -> str:
+    if not context:
+        return ''
+    server = context.get('server')
+    session_id = str(context.get('session_id') or '')
+    if not server or not session_id:
+        return ''
+    permission = get_session_exec_permission(server, session_id)
+    if permission["mode"] == EXEC_PERMISSION_MODE_YOLO:
+        return "yolo"
+    if _normalize_exec_main_command(main_command) in permission["allowed_commands"]:
+        return "session_allow"
+    return ''
 
 # 待执行命令存储（用于确认机制）
 # request_id -> {command, timeout, session_id, timestamp}
@@ -114,6 +350,7 @@ def store_pending_execution(
     parent_message_id: str = "",
     progress_card_id: str = "",
     todo_card_id: str = "",
+    main_command: str = "",
 ) -> str:
     """存储待确认的命令，返回 request_id"""
     _cleanup_expired_pending_executions()
@@ -123,6 +360,9 @@ def store_pending_execution(
         'timeout': timeout,
         'session_id': session_id,
         'session_type': session_type,
+        'main_command': _normalize_exec_main_command(
+            main_command or get_exec_main_command(command)
+        ),
         'timestamp': time.time(),
     }
     if parent_message_id:
@@ -177,74 +417,37 @@ def get_pending_info(request_id: str) -> Optional[Dict]:
         return None
     return info
 
-def execute_pending_command(request_id: str) -> Dict[str, Any]:
+def execute_pending_command(
+    request_id: str,
+    authorization: str = "once",
+) -> Dict[str, Any]:
     """执行待确认的命令，返回执行结果"""
-    import subprocess
-    import shlex
-
     pending = _pending_executions.pop(request_id, None)
     if not pending:
         return {"success": False, "error": "未找到待执行的命令，可能已过期或已处理", "request_id": request_id}
 
     # 清理 session 映射
     session_id = pending.get('session_id', '')
-    if _session_pending.get(session_id) == request_id:
-        del _session_pending[session_id]
+    session_type = pending.get('session_type', '')
+    key = _pending_key(session_id, session_type)
+    if _session_pending.get(key) == request_id:
+        del _session_pending[key]
 
     command = pending['command']
     timeout = pending.get('timeout', 30)
 
     _log.info(f"[PendingExec] 用户确认，执行命令: {command}")
 
-    try:
-        try:
-            cmd_parts = shlex.split(command)
-        except Exception:
-            cmd_parts = command.split()
-
-        result = subprocess.run(
-            cmd_parts,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=os.getcwd()
-        )
-
-        output = result.stdout
-        max_output_length = 10000
-        if len(output) > max_output_length:
-            output = output[:max_output_length] + f"\n\n... (输出已截断，共 {len(result.stdout)} 字符)"
-
-        return {
-            "success": result.returncode == 0,
-            "command": command,
-            "returncode": result.returncode,
-            "stdout": output,
-            "stderr": result.stderr[:5000] if result.stderr else "",
-            "executed": True,
-        }
-    except subprocess.TimeoutExpired:
-        _log.error(f"[PendingExec] 命令超时: {command}")
-        return {
-            "success": False,
-            "error": f"命令执行超时（{timeout}秒）",
-            "command": command,
-        }
-    except Exception as e:
-        _log.error(f"[PendingExec] 执行出错: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "command": command,
-        }
+    return _execute_command_now(command, timeout, authorization=authorization)
 
 def reject_pending_command(request_id: str) -> Dict[str, Any]:
     """拒绝待确认的命令，清理存储"""
     pending = _pending_executions.pop(request_id, None)
     session_id = pending.get('session_id', '') if pending else ''
-    if session_id and _session_pending.get(session_id) == request_id:
-        del _session_pending[session_id]
+    session_type = pending.get('session_type', '') if pending else ''
+    key = _pending_key(session_id, session_type)
+    if session_id and _session_pending.get(key) == request_id:
+        del _session_pending[key]
 
     if pending:
         _log.info(f"[PendingExec] 用户拒绝命令: request_id={request_id[:8]}, cmd={pending.get('command', '')[:80]}")
@@ -910,95 +1113,41 @@ class ToolExecutor:
         Returns:
             命令执行结果，如果在白名单外则返回确认请求
         """
-        import subprocess
-        import re
-        import shlex
-
-        try:
-            # 安全检查：检测危险模式
-            for pattern in EXEC_BLACKLIST_PATTERNS:
-                if re.search(pattern, command, re.IGNORECASE):
-                    return {
-                        "success": False,
-                        "error": "命令包含危险操作模式，已阻止执行",
-                        "command": command,
-                        "blocked_reason": "dangerous_pattern"
-                    }
-
-            # 解析命令获取主命令名
-            try:
-                cmd_parts = shlex.split(command)
-                main_cmd = cmd_parts[0] if cmd_parts else ""
-            except:
-                main_cmd = command.split()[0] if command else ""
-                cmd_parts = command.split() if command else []
-
-            if not cmd_parts:
-                return {
-                    "success": False,
-                    "error": "命令不能为空",
-                    "command": command,
-                }
-
-            # 检查是否在白名单中
-            is_whitelisted = main_cmd in EXEC_WHITELIST
-
-            # 不在白名单：返回确认请求（由 execute_tool 负责存储待执行状态）
-            if not is_whitelisted:
-                return {
-                    "success": True,
-                    "pending": True,
-                    "command": command,
-                    "require_confirmation": True,
-                    "main_command": main_cmd,
-                    "is_whitelisted": False,
-                    "message": f"AI 请求执行命令: `{command}`\n\n该命令不在白名单中，需用户确认后执行。"
-                }
-
-            # 白名单命令：直接执行
-            _log.info(f"Executing command (whitelisted): {command}")
-
-            result = subprocess.run(
-                cmd_parts,
-                shell=False,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                cwd=os.getcwd()
-            )
-
-            # 构建返回结果
-            output = result.stdout
-            error_output = result.stderr
-
-            # 限制输出长度
-            max_output_length = 10000
-            if len(output) > max_output_length:
-                output = output[:max_output_length] + f"\n\n... (输出已截断，共 {len(result.stdout)} 字符)"
-
+        cmd_parts = _parse_exec_command(command)
+        if not cmd_parts:
             return {
-                "success": result.returncode == 0,
+                "success": False,
+                "error": "命令不能为空",
                 "command": command,
-                "returncode": result.returncode,
-                "stdout": output,
-                "stderr": error_output[:5000] if error_output else "",
-                "is_whitelisted": True
             }
 
-        except subprocess.TimeoutExpired:
-            _log.error(f"Command timeout: {command}")
+        main_cmd = _normalize_exec_main_command(cmd_parts[0])
+        blocked_reason = _get_exec_block_reason(command, main_cmd)
+        if blocked_reason:
             return {
                 "success": False,
-                "error": f"命令执行超时（{timeout}秒）",
-                "command": command
+                "error": blocked_reason,
+                "command": command,
+                "main_command": main_cmd,
+                "blocked_reason": "dangerous_pattern",
             }
-        except Exception as e:
-            _log.error(f"Exec command error: {e}")
+
+        if not _is_bare_whitelisted_command(cmd_parts, main_cmd):
             return {
-                "success": False,
-                "error": str(e),
-                "command": command
+                "success": True,
+                "pending": True,
+                "command": command,
+                "require_confirmation": True,
+                "main_command": main_cmd,
+                "is_whitelisted": False,
+                "message": (
+                    f"AI 请求执行命令: `{command}`\n\n"
+                    f"主命令 `{main_cmd}` 不在安全白名单中，需用户确认后执行。"
+                ),
             }
+
+        _log.info(f"Executing command (whitelisted): {command}")
+        return _execute_command_now(command, timeout, authorization="whitelist")
 
     @staticmethod
     def download_file(url: str, filename: str = None, workspace_id: str = None) -> Dict[str, Any]:
@@ -1932,8 +2081,18 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any], context: Dict = None
                 "error": str(e)
             }
 
-    # 如果 exec_command 返回需要确认，存储待执行命令并注入 request_id
+    # exec_command 未进入白名单时，优先应用会话级权限；否则存储待确认命令。
     if result and result.get('require_confirmation') and context and context.get('session_id'):
+        authorization = _get_context_exec_authorization(
+            context,
+            result.get('main_command', ''),
+        )
+        if authorization:
+            return _execute_command_now(
+                result.get('command', ''),
+                arguments.get('timeout', 30),
+                authorization=authorization,
+            )
         request_id = store_pending_execution(
             context['session_id'],
             result.get('command', ''),
@@ -1942,6 +2101,7 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any], context: Dict = None
             parent_message_id=str(context.get('parent_message_id', '') or ''),
             progress_card_id=str(context.get('progress_card_id', '') or ''),
             todo_card_id=str(context.get('todo_card_id', '') or ''),
+            main_command=str(result.get('main_command', '') or ''),
         )
         result['request_id'] = request_id
     return result

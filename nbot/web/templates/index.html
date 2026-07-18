@@ -11771,7 +11771,7 @@
         </div>
 
         <!-- exec_command 确认弹窗 -->
-        <div v-if="showExecConfirmModal" class="modal-overlay" @click.self="showExecConfirmModal = false">
+        <div v-if="showExecConfirmModal" class="modal-overlay" @click.self="rejectExecCommand">
             <div class="modal" style="max-width: 520px;">
                 <div class="modal-header">
                     <span class="modal-title">
@@ -11795,6 +11795,10 @@
                 <div class="modal-footer" style="display: flex; gap: 12px; justify-content: flex-end;">
                     <button class="btn btn-secondary" @click="rejectExecCommand" style="min-width: 80px;">
                         <i class="fa fa-times" style="margin-right: 4px;"></i> 拒绝
+                    </button>
+                    <button class="btn btn-secondary" @click="alwaysAllowExecCommand" style="min-width: 120px;">
+                        <i class="fa fa-unlock" style="margin-right: 4px;"></i>
+                        本会话始终允许 {{ execConfirmData.mainCommand || '该命令' }}
                     </button>
                     <button class="btn btn-primary" @click="confirmExecCommand" style="min-width: 80px; background: var(--success); border-color: var(--success);">
                         <i class="fa fa-check" style="margin-right: 4px;"></i> 确认执行
@@ -13019,6 +13023,7 @@
                     execConfirmData: {
                         requestId: '',
                         command: '',
+                        mainCommand: '',
                         message: '',
                         sessionId: ''
                     },

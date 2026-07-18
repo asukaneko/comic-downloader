@@ -16,6 +16,19 @@ from nbot.web.sessions_db import get_session as get_session_from_db
 _log = logging.getLogger(__name__)
 
 
+def _parse_yolo_action(content: str):
+    parts = str(content or "").strip().lower().split()
+    if not parts or parts[0] != "/yolo":
+        return None
+    if len(parts) == 1 or parts[1] in {"on", "enable", "开启"}:
+        return "on"
+    if parts[1] in {"off", "disable", "关闭"}:
+        return "off"
+    if parts[1] in {"status", "状态"}:
+        return "status"
+    return "invalid"
+
+
 def register_socket_events(server):
     session_store = WebSessionStore(
         server.sessions, save_callback=lambda: server._save_data("sessions")
@@ -205,8 +218,9 @@ def register_socket_events(server):
                 )
                 return
 
+            yolo_action = _parse_yolo_action(content)
             matched_handler = None
-            if content and content.startswith("/"):
+            if content and content.startswith("/") and yolo_action is None:
                 try:
                     from nbot.commands import match_command
                     matched_handler, matched_cmd = match_command(content)
@@ -313,6 +327,58 @@ def register_socket_events(server):
 
                 server.socketio.emit("new_message", message, room=session_id)
 
+            if yolo_action is not None:
+                from nbot.services.tools import (
+                    get_session_exec_permission,
+                    set_session_exec_yolo,
+                )
+
+                if yolo_action == "on":
+                    permission_state = set_session_exec_yolo(server, session_id, True)
+                    response_content = (
+                        "YOLO 模式已开启：本会话内，除硬黑名单外的命令将无需授权直接执行。"
+                    )
+                elif yolo_action == "off":
+                    permission_state = set_session_exec_yolo(server, session_id, False)
+                    response_content = "YOLO 模式已关闭：未在白名单中的命令将恢复授权确认。"
+                elif yolo_action == "status":
+                    permission_state = get_session_exec_permission(server, session_id)
+                    mode_label = (
+                        "已开启"
+                        if permission_state.get("mode") == "yolo"
+                        else "未开启"
+                    )
+                    allowed_commands = permission_state.get("allowed_commands") or []
+                    allowed_label = "、".join(allowed_commands) if allowed_commands else "无"
+                    response_content = (
+                        f"YOLO 模式：{mode_label}\n"
+                        f"本会话始终允许的主命令：{allowed_label}"
+                    )
+                else:
+                    permission_state = get_session_exec_permission(server, session_id)
+                    response_content = "用法：`/yolo`、`/yolo off` 或 `/yolo status`。"
+
+                response_message = adapter.build_message(
+                    role="assistant",
+                    content=response_content,
+                    sender="System",
+                    conversation_id=session_id,
+                    metadata={
+                        "source": "system",
+                        "exec_permission_mode": permission_state.get("mode", "ask"),
+                    },
+                )
+                session_store.append_message(session_id, response_message)
+                server.socketio.emit(
+                    "ai_response",
+                    {
+                        "session_id": session_id,
+                        "message": response_message,
+                    },
+                    room=session_id,
+                )
+                return
+
             if matched_handler:
                 web_user_id = str(int(hashlib.md5(session_id.encode()).hexdigest(), 16))[
                     :10
@@ -371,8 +437,15 @@ def register_socket_events(server):
         """处理用户对 exec_command 的确认/拒绝"""
         try:
             request_id = data.get("request_id", "")
-            approved = data.get("approved", False)
+            approved = bool(data.get("approved", False))
             session_id = data.get("session_id", "")
+            requested_permission = str(data.get("permission") or "").lower()
+            if not approved:
+                permission = "reject"
+            elif requested_permission == "always":
+                permission = "always"
+            else:
+                permission = "once"
 
             if not request_id:
                 _log.warning("[confirm_exec] 缺少 request_id")
@@ -387,15 +460,44 @@ def register_socket_events(server):
             )
 
             pending_info = get_pending_info(request_id) or {}
-            effective_session_id = session_id or pending_info.get("session_id", "")
+            pending_session_id = pending_info.get("session_id", "")
+            if session_id and pending_session_id and session_id != pending_session_id:
+                _log.warning(
+                    "[confirm_exec] session mismatch request=%s payload=%s pending=%s",
+                    request_id[:8],
+                    session_id,
+                    pending_session_id,
+                )
+                server.socketio.emit(
+                    "error",
+                    {
+                        "message": "命令授权会话不匹配，已拒绝处理",
+                        "session_id": session_id,
+                    },
+                    room=request.sid,
+                )
+                return
+            effective_session_id = pending_session_id or session_id
             command_for_step = pending_info.get("command", "")
+            main_command = pending_info.get("main_command", "")
             parent_message_id = pending_info.get("parent_message_id", "")
             progress_card_id = pending_info.get("progress_card_id", "")
             todo_card_id = pending_info.get("todo_card_id", "")
             exec_step_result = None
 
             if approved:
-                exec_result = execute_pending_command(request_id)
+                if permission == "always" and effective_session_id and main_command:
+                    from nbot.services.tools import grant_session_exec_command
+
+                    grant_session_exec_command(
+                        server,
+                        effective_session_id,
+                        main_command,
+                    )
+                exec_result = execute_pending_command(
+                    request_id,
+                    authorization=permission,
+                )
                 exec_step_result = exec_result
                 if exec_result.get("executed"):
                     cmd = exec_result.get("command", "")
@@ -434,6 +536,8 @@ def register_socket_events(server):
                 {
                     "session_id": effective_session_id,
                     "approved": bool(approved),
+                    "permission": permission,
+                    "main_command": main_command,
                 },
                 room=request.sid,
             )
