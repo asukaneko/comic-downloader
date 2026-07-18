@@ -241,20 +241,23 @@ class WebProgressReporter:
         parent_message_id: str,
         session_store,
         is_agent: bool = False,
+        progress_card=None,
+        todo_card=None,
     ):
         self.server = server
         self.session_id = session_id
         self.parent_message_id = parent_message_id
         self.session_store = session_store
-        self.progress_card = None
-        self.todo_card = None
+        self.progress_card = progress_card
+        self.todo_card = todo_card
         self.is_agent = is_agent
         self._init_cards()
 
     def _init_cards(self):
         # Agent 模式强制创建进度/待办卡片;否则仍受 PROGRESS_CARD_AVAILABLE 开关控制
         if (
-            self.server.PROGRESS_CARD_AVAILABLE
+            self.progress_card is None
+            and self.server.PROGRESS_CARD_AVAILABLE
             and self.server.progress_card_manager
             and self.server.socketio
         ):
@@ -266,7 +269,8 @@ class WebProgressReporter:
             )
 
         if (
-            self.server.TODO_CARD_AVAILABLE
+            self.todo_card is None
+            and self.server.TODO_CARD_AVAILABLE
             and self.server.todo_card_manager
             and self.server.socketio
         ):
@@ -715,6 +719,15 @@ class WebCallbacks(PipelineCallbacks):
             "session_type": "web",
             "server": self.server,
         }
+        if self.parent_message_id:
+            context["parent_message_id"] = self.parent_message_id
+        if self._progress:
+            progress_card = getattr(self._progress, "progress_card", None)
+            todo_card = getattr(self._progress, "todo_card", None)
+            if progress_card:
+                context["progress_card_id"] = progress_card.card_id
+            if todo_card:
+                context["todo_card_id"] = todo_card.card_id
         if target_id:
             context["target_id"] = str(target_id)
             context["user_id"] = str(target_id)
@@ -1439,9 +1452,24 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
         and server.progress_card_manager
         and server.socketio
     ):
+        request_metadata = dict(chat_request.metadata or {})
+        progress_card = None
+        todo_card = None
+        progress_card_id = str(request_metadata.get("resume_progress_card_id") or "")
+        todo_card_id = str(request_metadata.get("resume_todo_card_id") or "")
+        if progress_card_id:
+            progress_card = server.progress_card_manager.get_card(progress_card_id)
+            if progress_card and progress_card.session_id != session_id:
+                progress_card = None
+        if todo_card_id and server.TODO_CARD_AVAILABLE and server.todo_card_manager:
+            todo_card = server.todo_card_manager.get_card(todo_card_id)
+            if todo_card and todo_card.session_id != session_id:
+                todo_card = None
         progress_reporter = WebProgressReporter(
             server, session_id, parent_message_id, session_store,
             is_agent=_is_agent_session_for_progress,
+            progress_card=progress_card,
+            todo_card=todo_card,
         )
 
     # 确定是否启用工具

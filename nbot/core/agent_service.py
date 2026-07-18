@@ -320,6 +320,8 @@ class AgentHarness:
                     tool_calls, response, thinking_content
                 )
                 self._iteration += 1
+                if self._finished:
+                    return self._build_result()
                 continue
 
             # 无工具调用：检查停止条件

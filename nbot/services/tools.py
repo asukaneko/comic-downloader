@@ -111,6 +111,9 @@ def store_pending_execution(
     command: str,
     timeout: int = 30,
     session_type: str = "",
+    parent_message_id: str = "",
+    progress_card_id: str = "",
+    todo_card_id: str = "",
 ) -> str:
     """存储待确认的命令，返回 request_id"""
     _cleanup_expired_pending_executions()
@@ -122,6 +125,12 @@ def store_pending_execution(
         'session_type': session_type,
         'timestamp': time.time(),
     }
+    if parent_message_id:
+        _pending_executions[request_id]['parent_message_id'] = parent_message_id
+    if progress_card_id:
+        _pending_executions[request_id]['progress_card_id'] = progress_card_id
+    if todo_card_id:
+        _pending_executions[request_id]['todo_card_id'] = todo_card_id
     key = _pending_key(session_id, session_type)
     # 覆盖前清理旧 pending 的 _pending_executions 残留
     old_request_id = _session_pending.get(key)
@@ -1930,6 +1939,9 @@ def execute_tool(tool_name: str, arguments: Dict[str, Any], context: Dict = None
             result.get('command', ''),
             arguments.get('timeout', 30),
             session_type=str(context.get('session_type', '')),
+            parent_message_id=str(context.get('parent_message_id', '') or ''),
+            progress_card_id=str(context.get('progress_card_id', '') or ''),
+            todo_card_id=str(context.get('todo_card_id', '') or ''),
         )
         result['request_id'] = request_id
     return result

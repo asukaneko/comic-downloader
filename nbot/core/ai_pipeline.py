@@ -794,6 +794,17 @@ class AIPipeline:
         self._phase_ai_response(ctx, callbacks, tools, max_tool_iterations, progress)
         self._emit_hook("model.after_call", ctx)
 
+        # 命令授权是工具循环的暂停点，不是一次 assistant 回复。
+        # 等待用户处理期间不落库、不推送空消息，也不触发回复后处理。
+        if ctx.metadata.get("waiting_confirmation"):
+            ctx.final_content = ""
+            return PipelineResult(
+                final_content="",
+                tool_trace=ctx.tool_trace,
+                usage=ctx.usage,
+                metadata=ctx.metadata,
+            )
+
         # Phase 5: 结果组装（内部包含角色运行时 after_turn 和自动记忆）
         self._emit_hook("reply.before_send", ctx)
         result = self._phase_assemble_result(ctx, callbacks)
@@ -1958,6 +1969,8 @@ class AIPipeline:
         # 尝试工具循环
         if tools:
             self._run_tool_loop(ctx, callbacks, tools, max_tool_iterations, progress)
+            if ctx.metadata.get("waiting_confirmation"):
+                return
             progress.on_done(ctx)
             return
 
@@ -2032,16 +2045,18 @@ class AIPipeline:
             if result.get("require_confirmation"):
                 request_id = result.get("request_id", "")
                 command = result.get("command", "")
+                confirmation_message = result.get("message") or (
+                    f"⚠️ 命令需要确认: {command}\n"
+                    f"[请求ID: {request_id}]\n"
+                    f"请回复「确认」执行，或「取消」放弃。"
+                )
+                ctx.metadata["waiting_confirmation"] = True
+                ctx.metadata["pending_exec_request_id"] = request_id
+                ctx.metadata["pending_exec_command"] = command
+                ctx.metadata["confirmation_message"] = confirmation_message
                 callbacks.on_confirmation_required(ctx, request_id, command)
                 progress.on_waiting_confirmation(ctx, command, request_id)
-                raise ToolLoopExit(
-                    result.get(
-                        "message",
-                        f"⚠️ 命令需要确认: {command}\n"
-                        f"[请求ID: {request_id}]\n"
-                        f"请回复「确认」执行，或「取消」放弃。",
-                    )
-                )
+                raise ToolLoopExit(confirmation_message)
 
             return result
 

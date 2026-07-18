@@ -389,6 +389,9 @@ def register_socket_events(server):
             pending_info = get_pending_info(request_id) or {}
             effective_session_id = session_id or pending_info.get("session_id", "")
             command_for_step = pending_info.get("command", "")
+            parent_message_id = pending_info.get("parent_message_id", "")
+            progress_card_id = pending_info.get("progress_card_id", "")
+            todo_card_id = pending_info.get("todo_card_id", "")
             exec_step_result = None
 
             if approved:
@@ -440,22 +443,39 @@ def register_socket_events(server):
                 and getattr(server, "progress_card_manager", None)
             ):
                 if command_for_step and exec_step_result is not None:
-                    server.progress_card_manager.complete_exec_command_step(
-                        effective_session_id,
-                        command_for_step,
-                        exec_step_result,
+                    progress_card = (
+                        server.progress_card_manager.get_card(progress_card_id)
+                        if progress_card_id
+                        else None
                     )
-                server.progress_card_manager.complete_all(effective_session_id)
+                    if progress_card and progress_card.session_id == effective_session_id:
+                        progress_card.complete_exec_command_step(
+                            command_for_step,
+                            exec_step_result,
+                        )
+                    else:
+                        server.progress_card_manager.complete_exec_command_step(
+                            effective_session_id,
+                            command_for_step,
+                            exec_step_result,
+                        )
             if effective_session_id:
                 followup_prompt = (
                     "The pending exec_command is resolved. Use the execution result already in context "
                     "to continue answering the user. If additional commands are needed, you may call "
                     "exec_command again — each non-whitelisted command will require its own confirmation."
                 )
+                followup_metadata = {"exec_confirmation_followup": True}
+                if progress_card_id:
+                    followup_metadata["resume_progress_card_id"] = progress_card_id
+                if todo_card_id:
+                    followup_metadata["resume_todo_card_id"] = todo_card_id
                 server._trigger_ai_response(
                     effective_session_id,
                     followup_prompt,
                     "system",
+                    parent_message_id=parent_message_id or None,
+                    metadata=followup_metadata,
                     channel_id="web",
                 )
             _log.info(
