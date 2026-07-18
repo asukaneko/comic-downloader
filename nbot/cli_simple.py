@@ -392,7 +392,7 @@ class SimpleCLI:
         ]
 
     def _call_ai_with_tools(self, messages: List[Dict]) -> Dict[str, Any]:
-        """调用AI，支持工具调用和多轮思考"""
+        """调用AI，支持工具调用和多轮思考（基于 AgentHarness 实现）"""
         model = self._get_current_model()
         if not model:
             return {"content": "错误：没有可用的AI模型。请先配置模型。", "thinking": "", "tool_calls": []}
@@ -401,7 +401,6 @@ class SimpleCLI:
             api_key = model.get("api_key", "")
             base_url = model.get("base_url", "")
             model_name = model.get("model", "")
-            provider_type = model.get("provider_type", "openai_compatible")
             supports_tools = model.get("supports_tools", True)
 
             if not api_key or not base_url:
@@ -426,23 +425,23 @@ class SimpleCLI:
             # 获取工具定义
             tools = self._get_tool_definitions() if supports_tools else []
 
-            # 准备消息
-            tool_messages = self._expand_messages_for_ai(messages)
-            initial_message_count = len(tool_messages)
-            all_thinking = []
-            all_tool_calls = []
+            # 准备初始消息
+            initial_messages = self._expand_messages_for_ai(messages)
+            initial_message_count = len(initial_messages)
 
-            # 多轮工具调用循环
-            for iteration in range(self.max_tool_iterations):
+            # 按迭代收集 thinking 和 tool_calls（保留原 CLI 行为）
+            all_thinking: List[str] = []
+            all_tool_calls: List[Dict] = []
+
+            # ====== model_call 回调：调用 AI 模型 ======
+            def _model_call(msgs, stop_event=None):
                 payload = {
                     "model": model_name,
-                    "messages": tool_messages,
+                    "messages": msgs,
                     "temperature": model.get("temperature", 0.7),
                     "max_tokens": model.get("max_tokens", 2000),
-                    "stream": False
+                    "stream": False,
                 }
-
-                # 添加工具支持
                 if tools and supports_tools:
                     payload["tools"] = tools
                     payload["tool_choice"] = "auto"
@@ -451,83 +450,98 @@ class SimpleCLI:
                 response.raise_for_status()
                 data = response.json()
 
-                # 解析响应
                 choice = data.get("choices", [{}])[0]
                 message = choice.get("message", {})
-
-                # 提取思考内容（如果支持）
                 thinking = message.get("reasoning_content", "") or message.get("thinking", "")
-                if thinking:
-                    all_thinking.append(f"第{iteration + 1}轮: {thinking}")
 
-                # 检查是否有工具调用
-                if message.get("tool_calls") and supports_tools:
-                    tool_calls = message["tool_calls"]
-                    all_tool_calls.extend(tool_calls)
+                # 转换为 AgentHarness 期望的统一响应格式
+                normalized: Dict[str, Any] = {
+                    "content": message.get("content", "") or data.get("reply", ""),
+                    "thinking_content": thinking,
+                    "finish_reason": choice.get("finish_reason", ""),
+                    "usage": data.get("usage", {}) or {},
+                    "_model_id": str(model.get("id", "")),
+                    "_model_name": str(model.get("name", "")),
+                }
 
-                    # 添加AI回复到消息历史
-                    tool_messages.append({
-                        "role": "assistant",
-                        "content": message.get("content", ""),
-                        "tool_calls": [
-                            {
-                                "id": tc.get("id"),
-                                "type": "function",
-                                "function": {
-                                    "name": tc.get("function", {}).get("name"),
-                                    "arguments": tc.get("function", {}).get("arguments")
-                                }
-                            } for tc in tool_calls
-                        ]
-                    })
-
-                    # 执行工具调用
-                    for tool_call in tool_calls:
-                        tool_name = tool_call.get("function", {}).get("name")
+                # 转换 tool_calls 为统一格式
+                raw_tool_calls = message.get("tool_calls") or []
+                if raw_tool_calls and supports_tools:
+                    normalized_tool_calls = []
+                    for tc in raw_tool_calls:
+                        fn = tc.get("function", {})
                         try:
-                            arguments = json.loads(tool_call.get("function", {}).get("arguments", "{}"))
-                        except:
+                            arguments = (
+                                json.loads(fn.get("arguments", "{}"))
+                                if isinstance(fn.get("arguments"), str)
+                                else (fn.get("arguments") or {})
+                            )
+                        except Exception:
                             arguments = {}
-
-                        # 显示工具调用
-                        self._render_tool_call(tool_name, arguments)
-
-                        # 执行工具
-                        result = self._execute_tool(tool_name, arguments)
-
-                        # 显示工具结果
-                        self._render_tool_result(result)
-
-                        # 添加工具结果到消息历史
-                        tool_messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call.get("id"),
-                            "content": json.dumps(result, ensure_ascii=False)
+                        normalized_tool_calls.append({
+                            "id": tc.get("id"),
+                            "name": fn.get("name"),
+                            "arguments": arguments,
                         })
+                    normalized["tool_calls"] = normalized_tool_calls
 
-                else:
-                    # 没有工具调用，得到最终回复
-                    final_content = message.get("content", "")
+                return normalized
 
-                    # 处理不同格式的响应
-                    if not final_content and "base_resp" in data:
-                        final_content = data.get("reply", "")
+            # ====== tool_executor 回调：执行工具 ======
+            def _tool_executor(tool_call, thinking_content, iteration, msgs):
+                tool_name = tool_call.get("name", "")
+                arguments = tool_call.get("arguments", {}) or {}
 
-                    return {
-                        "content": final_content,
-                        "thinking": "\n\n".join(all_thinking),
-                        "tool_calls": all_tool_calls,
-                        "tool_call_history": self._extract_turn_tool_history(tool_messages, initial_message_count),
-                        "iterations": iteration + 1
-                    }
+                # CLI 渲染工具调用
+                self._render_tool_call(tool_name, arguments)
 
-            # 超过最大迭代次数
+                result = self._execute_tool(tool_name, arguments)
+
+                # CLI 渲染工具结果
+                self._render_tool_result(result)
+                return result
+
+            # ====== hooks：收集 thinking 与 tool_calls，保持 CLI 原行为 ======
+            from nbot.core.agent_service import ToolLoopHooks
+
+            def _on_iteration_start(iteration, msgs):
+                pass
+
+            def _on_tool_start(tool_call, thinking_content, iteration, msgs):
+                # 收集本轮 thinking
+                if thinking_content:
+                    all_thinking.append(f"第{iteration + 1}轮: {thinking_content}")
+                all_tool_calls.append(tool_call)
+
+            cli_hooks = ToolLoopHooks(
+                on_iteration_start=_on_iteration_start,
+                on_tool_start=_on_tool_start,
+            )
+
+            # ====== 构造并运行 AgentHarness ======
+            from nbot.core.agent_service import AgentHarness
+
+            harness = AgentHarness(
+                initial_messages=initial_messages,
+                model_call=_model_call,
+                tool_executor=_tool_executor,
+                max_iterations=self.max_tool_iterations,
+                max_consecutive_errors=3,
+                hooks=cli_hooks,
+            )
+            loop_result = harness.run()
+
+            # 从 harness 状态提取 tool_call_history
+            tool_call_history = self._extract_turn_tool_history(
+                harness.tool_messages, initial_message_count
+            )
+
             return {
-                "content": "工具调用次数过多，已停止。请简化您的请求。",
+                "content": loop_result.final_content or "",
                 "thinking": "\n\n".join(all_thinking),
                 "tool_calls": all_tool_calls,
-                "tool_call_history": self._extract_turn_tool_history(tool_messages, initial_message_count),
-                "iterations": self.max_tool_iterations
+                "tool_call_history": tool_call_history,
+                "iterations": loop_result.iterations,
             }
 
         except requests.exceptions.RequestException as e:

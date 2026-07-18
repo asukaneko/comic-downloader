@@ -80,6 +80,495 @@ class ToolLoopSession:
     max_consecutive_errors: int = 3
     stop_event: Any = None
     hooks: Optional["ToolLoopHooks"] = None
+    # 新增：单工具执行超时（秒）。None 表示不限制
+    tool_timeout: Optional[float] = None
+    # 新增：是否并发执行同一轮的多个 tool_calls
+    parallel_tool_execution: bool = True
+
+
+@dataclass
+class HarnessState:
+    """AgentHarness 运行时状态快照（可序列化、可观测）。"""
+
+    iteration: int = 0
+    consecutive_errors: int = 0
+    stopped: bool = False
+    paused: bool = False
+    finished: bool = False
+    final_content: str = ""
+    usage: Dict[str, int] = field(default_factory=dict)
+    model_id: str = ""
+    model_name: str = ""
+    failover_events: List[Dict[str, Any]] = field(default_factory=list)
+    tool_call_count: int = 0
+
+
+@dataclass
+class ToolCallTrace:
+    """单次工具调用轨迹。"""
+
+    iteration: int
+    tool_name: str
+    arguments: Dict[str, Any]
+    result: Dict[str, Any]
+    success: bool
+    error: Optional[str] = None
+
+
+@dataclass
+class _ToolLoopExitMarker:
+    """内部辅助类：并发执行时包装 ToolLoopExit 异常。"""
+    exc: ToolLoopExit
+
+
+class AgentHarness:
+    """Agent 执行框架：状态化、可观测、可复用。
+
+    将 run_tool_call_loop 的函数式实现包装为有状态对象，提供：
+    - 运行时状态导出 (get_state)
+    - 工具调用轨迹 (trace)
+    - 暂停/恢复语义 (pause/resume)
+    - 完整生命周期管理
+
+    向后兼容：旧的 run_tool_call_loop / run_tool_loop_session 函数仍保留，
+    内部委托给本类。新代码应直接使用 AgentHarness。
+    """
+
+    def __init__(
+        self,
+        initial_messages: List[Dict[str, Any]],
+        model_call: Callable[..., Dict[str, Any]],
+        tool_executor: Callable[
+            [Dict[str, Any], str, int, List[Dict[str, Any]]], Dict[str, Any]
+        ],
+        *,
+        tool_call_history: Optional[List[Dict[str, Any]]] = None,
+        max_iterations: int = 50,
+        max_consecutive_errors: int = 3,
+        stop_event: Any = None,
+        hooks: Optional[ToolLoopHooks] = None,
+        # 单工具执行超时（秒）。None 表示不限制
+        tool_timeout: Optional[float] = None,
+        # 同一轮多个 tool_calls 是否并发执行
+        parallel_tool_execution: bool = True,
+    ):
+        self._initial_messages = copy.deepcopy(initial_messages)
+        self._model_call = model_call
+        self._tool_executor = tool_executor
+        self._tool_call_history = (
+            copy.deepcopy(tool_call_history) if tool_call_history else None
+        )
+        self._max_iterations = max_iterations
+        self._max_consecutive_errors = max_consecutive_errors
+        self._stop_event = stop_event
+        self._hooks = hooks
+        self._tool_timeout = tool_timeout
+        self._parallel_tool_execution = parallel_tool_execution
+
+        # 运行时状态（可观测）
+        self._tool_messages: List[Dict[str, Any]] = []
+        self._final_content: str = ""
+        self._consecutive_errors: int = 0
+        self._usage_total: Dict[str, int] = {}
+        self._current_model_id: str = ""
+        self._current_model_name: str = ""
+        self._all_failover_events: List[Dict[str, Any]] = []
+        self._trace: List[ToolCallTrace] = []
+
+        # 生命周期标志
+        self._iteration: int = 0
+        self._stopped: bool = False
+        self._paused: bool = False
+        self._finished: bool = False
+        self._prepared: bool = False
+
+    # ------------------------------------------------------------------
+    # 状态导出
+    # ------------------------------------------------------------------
+    @property
+    def state(self) -> HarnessState:
+        """当前运行时状态快照。"""
+        return HarnessState(
+            iteration=self._iteration,
+            consecutive_errors=self._consecutive_errors,
+            stopped=self._stopped,
+            paused=self._paused,
+            finished=self._finished,
+            final_content=self._final_content,
+            usage=dict(self._usage_total),
+            model_id=self._current_model_id,
+            model_name=self._current_model_name,
+            failover_events=list(self._all_failover_events),
+            tool_call_count=len(self._trace),
+        )
+
+    @property
+    def trace(self) -> List[ToolCallTrace]:
+        """工具调用轨迹列表（按时间顺序）。"""
+        return list(self._trace)
+
+    @property
+    def tool_messages(self) -> List[Dict[str, Any]]:
+        """当前消息历史（含工具调用）。"""
+        return list(self._tool_messages)
+
+    @property
+    def final_content(self) -> str:
+        return self._final_content
+
+    def get_state(self) -> HarnessState:
+        """显式获取状态快照（与 state 属性等价）。"""
+        return self.state
+
+    # ------------------------------------------------------------------
+    # 生命周期控制
+    # ------------------------------------------------------------------
+    def pause(self) -> None:
+        """标记暂停。下一次迭代前检查 _paused 会跳出循环。
+
+        注意：本实现为协作式暂停，不会中断正在执行的 model_call / tool_executor。
+        """
+        self._paused = True
+
+    def resume(self) -> ToolLoopResult:
+        """恢复执行（重新进入循环）。"""
+        if not self._paused:
+            raise RuntimeError("Harness is not paused")
+        if self._finished:
+            raise RuntimeError("Harness already finished")
+        self._paused = False
+        return self._run_loop()
+
+    def run(self) -> ToolLoopResult:
+        """启动或继续执行。返回最终结果。"""
+        if self._finished:
+            # 已完成则直接返回最终状态
+            return self._build_result()
+        if self._paused:
+            raise RuntimeError("Harness is paused; call resume() instead")
+        if not self._prepared:
+            # 首次运行：合并 tool_call_history
+            self._tool_messages = apply_tool_call_history(
+                self._initial_messages, self._tool_call_history
+            )
+            self._prepared = True
+        return self._run_loop()
+
+    # ------------------------------------------------------------------
+    # 内部实现
+    # ------------------------------------------------------------------
+    def _build_result(self, **kwargs) -> ToolLoopResult:
+        kwargs.setdefault("final_content", self._final_content)
+        kwargs.setdefault("tool_messages", self._tool_messages)
+        kwargs.setdefault("iterations", self._iteration)
+        kwargs.setdefault("consecutive_errors", self._consecutive_errors)
+        kwargs.setdefault("usage", dict(self._usage_total))
+        kwargs.setdefault("model_id", self._current_model_id)
+        kwargs.setdefault("model_name", self._current_model_name)
+        kwargs.setdefault("failover_events", list(self._all_failover_events))
+        return ToolLoopResult(**kwargs)
+
+    def _run_loop(self) -> ToolLoopResult:
+        """主循环实现（从 run_tool_call_loop 迁移，保持行为等价）。"""
+        while self._iteration < self._max_iterations:
+            # 暂停检查
+            if self._paused:
+                return self._build_result(stopped=False)
+
+            # 停止事件检查
+            if self._stop_event and self._stop_event.is_set():
+                self._stopped = True
+                return self._build_result(stopped=True)
+
+            if self._hooks and self._hooks.on_iteration_start:
+                self._hooks.on_iteration_start(self._iteration, self._tool_messages)
+
+            try:
+                response = self._model_call(
+                    self._tool_messages, stop_event=self._stop_event
+                )
+            except StopIteration:
+                self._stopped = True
+                return self._build_result(stopped=True)
+            except ToolLoopExit as exc:
+                self._final_content = exc.final_content
+                self._iteration += 1
+                self._finished = True
+                return self._build_result()
+            except Exception as exc:
+                raise ToolLoopModelError(exc, self._iteration) from exc
+
+            # 提取模型追踪信息
+            resp_model_id = response.pop("_model_id", None)
+            resp_model_name = response.pop("_model_name", None)
+            resp_failover = response.pop("_failover_events", None)
+            if resp_model_id:
+                self._current_model_id = resp_model_id
+            if resp_model_name:
+                self._current_model_name = resp_model_name
+            if resp_failover:
+                self._all_failover_events.extend(resp_failover)
+
+            _merge_usage(self._usage_total, response.get("usage"))
+            tool_calls = response.get("tool_calls") or []
+            thinking_content = response.get("thinking_content") or response.get(
+                "content", ""
+            )
+
+            if tool_calls:
+                self._handle_tool_calls(
+                    tool_calls, response, thinking_content
+                )
+                self._iteration += 1
+                continue
+
+            # 无工具调用：检查停止条件
+            self._final_content = response.get("content", "")
+            finish_reason = response.get("finish_reason", "")
+            self._consecutive_errors = (
+                0 if self._final_content else self._consecutive_errors + 1
+            )
+
+            if finish_reason == "content_filter":
+                _log.warning("[AgentHarness] 内容被安全策略过滤 (content_filter)")
+                if not self._final_content:
+                    self._final_content = (
+                        "抱歉，我的回答触发了内容安全过滤，请换个话题试试。"
+                    )
+                self._iteration += 1
+                self._finished = True
+                return self._build_result()
+
+            if should_stop_tool_loop(
+                self._final_content,
+                finish_reason,
+                self._iteration,
+                self._max_iterations,
+                self._consecutive_errors,
+                self._max_consecutive_errors,
+            ):
+                if self._final_content.rstrip().endswith("break"):
+                    self._final_content = self._final_content.rstrip()[:-5].rstrip()
+                self._iteration += 1
+                self._finished = True
+                return self._build_result()
+
+            self._tool_messages.append(
+                {"role": "assistant", "content": self._final_content}
+            )
+            _log.info(
+                "[AgentHarness] continue thinking, finish_reason=%s, iteration=%s",
+                finish_reason,
+                self._iteration,
+            )
+            self._iteration += 1
+
+        # 达到最大迭代次数
+        if not self._final_content:
+            for message in reversed(self._tool_messages):
+                if message.get("role") == "assistant":
+                    self._final_content = message.get("content", "")
+                    break
+
+        self._finished = True
+        return self._build_result()
+
+    def _handle_tool_calls(
+        self,
+        tool_calls: List[Dict[str, Any]],
+        response: Dict[str, Any],
+        thinking_content: str,
+    ) -> None:
+        """处理本轮工具调用。
+
+        - 支持 parallel_tool_execution=True 时用 ThreadPoolExecutor 并发执行同一轮多个 tool_calls
+        - 支持 tool_timeout 设置单工具执行超时（None 不限制）
+        - 超时或异常时返回 error result，不中断整个循环
+        """
+        # 构造 assistant 消息（含 tool_calls 索引）并追加到历史
+        tool_call_entries = []
+        for tool_call in tool_calls:
+            entry = {
+                "id": tool_call.get("id"),
+                "type": "function",
+                "function": {
+                    "name": tool_call.get("name"),
+                    "arguments": json.dumps(
+                        tool_call.get("arguments", {}), ensure_ascii=False
+                    ),
+                },
+            }
+            sig = tool_call.get("_thought_signature")
+            if sig:
+                entry["_thought_signature"] = sig
+            tool_call_entries.append(entry)
+        assistant_message = {
+            "role": "assistant",
+            "content": response.get("content", ""),
+            "tool_calls": tool_call_entries,
+        }
+        self._tool_messages.append(assistant_message)
+
+        # 触发 on_tool_start hook（即使并发执行，hook 也按顺序同步触发以保留可观测性）
+        for tool_call in tool_calls:
+            if self._hooks and self._hooks.on_tool_start:
+                self._hooks.on_tool_start(
+                    tool_call, thinking_content, self._iteration, self._tool_messages
+                )
+
+        # 单工具场景：直接同步执行，避免线程池开销
+        if len(tool_calls) == 1 or not self._parallel_tool_execution:
+            for tool_call in tool_calls:
+                self._execute_single_tool(tool_call, thinking_content)
+            return
+
+        # 多工具并发执行
+        self._execute_tools_parallel(tool_calls, thinking_content)
+
+    def _execute_single_tool(
+        self, tool_call: Dict[str, Any], thinking_content: str
+    ) -> None:
+        """同步执行单个工具调用（带超时）。"""
+        try:
+            if self._tool_timeout is not None:
+                # 用 ThreadPoolExecutor 实现同步超时
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(
+                        self._tool_executor,
+                        tool_call,
+                        thinking_content,
+                        self._iteration,
+                        self._tool_messages,
+                    )
+                    try:
+                        tool_result = future.result(timeout=self._tool_timeout)
+                    except concurrent.futures.TimeoutError:
+                        _log.warning(
+                            "[AgentHarness] 工具 %s 执行超时 (%ss)",
+                            tool_call.get("name", ""),
+                            self._tool_timeout,
+                        )
+                        tool_result = {
+                            "success": False,
+                            "error": f"工具执行超时（{self._tool_timeout}s）",
+                            "timeout": True,
+                        }
+            else:
+                tool_result = self._tool_executor(
+                    tool_call,
+                    thinking_content,
+                    self._iteration,
+                    self._tool_messages,
+                )
+        except ToolLoopExit as exc:
+            self._final_content = exc.final_content
+            self._finished = True
+            return
+        except Exception as exc:
+            _log.error(
+                "[AgentHarness] 工具 %s 执行异常: %s",
+                tool_call.get("name", ""),
+                exc,
+            )
+            tool_result = {"success": False, "error": f"工具执行异常: {exc}"}
+
+        self._record_tool_result(tool_call, tool_result, thinking_content)
+
+    def _execute_tools_parallel(
+        self, tool_calls: List[Dict[str, Any]], thinking_content: str
+    ) -> None:
+        """并发执行多个工具调用（带超时）。"""
+        import concurrent.futures
+
+        # 为每个工具创建独立副本，避免并发写入共享状态
+        def _run_one(tc):
+            try:
+                return tc, self._tool_executor(
+                    tc,
+                    thinking_content,
+                    self._iteration,
+                    list(self._tool_messages),
+                )
+            except ToolLoopExit as exc:
+                return tc, _ToolLoopExitMarker(exc)
+            except Exception as exc:
+                _log.error(
+                    "[AgentHarness] 工具 %s 执行异常: %s",
+                    tc.get("name", ""),
+                    exc,
+                )
+                return tc, {"success": False, "error": f"工具执行异常: {exc}"}
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(len(tool_calls), 8)
+        ) as executor:
+            futures = [
+                executor.submit(_run_one, tc) for tc in tool_calls
+            ]
+            results = []
+            for fut in futures:
+                try:
+                    if self._tool_timeout is not None:
+                        results.append(fut.result(timeout=self._tool_timeout))
+                    else:
+                        results.append(fut.result())
+                except concurrent.futures.TimeoutError:
+                    _log.warning(
+                        "[AgentHarness] 并发工具执行超时 (%ss)",
+                        self._tool_timeout,
+                    )
+                    results.append(({}, {"success": False, "error": "工具执行超时", "timeout": True}))
+
+        # 按原始顺序记录结果（保持消息历史一致性）
+        for tc, tool_result in results:
+            if isinstance(tool_result, _ToolLoopExitMarker):
+                self._final_content = tool_result.exc.final_content
+                self._finished = True
+                return
+            self._record_tool_result(tc, tool_result, thinking_content)
+
+    def _record_tool_result(
+        self,
+        tool_call: Dict[str, Any],
+        tool_result: Dict[str, Any],
+        thinking_content: str,
+    ) -> None:
+        """记录工具结果到消息历史和 trace。"""
+        tool_history_message = None
+        if self._hooks and self._hooks.on_tool_result:
+            tool_history_message = self._hooks.on_tool_result(
+                tool_call,
+                tool_result,
+                thinking_content,
+                self._iteration,
+                self._tool_messages,
+            )
+
+        if tool_history_message is None:
+            tool_history_message = {
+                "role": "tool",
+                "tool_call_id": tool_call.get("id", ""),
+                "name": tool_call.get("name", ""),
+                "content": json.dumps(tool_result, ensure_ascii=False),
+            }
+
+        if tool_history_message:
+            self._tool_messages.append(tool_history_message)
+
+        # 记录工具调用轨迹（可观测性）
+        self._trace.append(
+            ToolCallTrace(
+                iteration=self._iteration,
+                tool_name=tool_call.get("name", ""),
+                arguments=copy.deepcopy(tool_call.get("arguments", {})),
+                result=copy.deepcopy(tool_result),
+                success=bool(tool_result.get("success", True))
+                if isinstance(tool_result, dict)
+                else True,
+                error=str(tool_result.get("error")) if isinstance(tool_result, dict) else None,
+            )
+        )
 
 
 @dataclass
@@ -414,209 +903,45 @@ def run_tool_call_loop(
     max_consecutive_errors: int = 3,
     stop_event=None,
     hooks: Optional[ToolLoopHooks] = None,
+    tool_timeout: Optional[float] = None,
+    parallel_tool_execution: bool = True,
 ) -> ToolLoopResult:
-    tool_messages = copy.deepcopy(initial_messages)
-    final_content = ""
-    consecutive_errors = 0
-    usage_total: Dict[str, int] = {}
-    current_model_id = ""
-    current_model_name = ""
-    all_failover_events: List[Dict[str, Any]] = []
-
-    def _result(**kwargs) -> ToolLoopResult:
-        kwargs.setdefault("usage", dict(usage_total))
-        kwargs.setdefault("model_id", current_model_id)
-        kwargs.setdefault("model_name", current_model_name)
-        kwargs.setdefault("failover_events", list(all_failover_events))
-        return ToolLoopResult(**kwargs)
-
-    for iteration in range(max_iterations):
-        if stop_event and stop_event.is_set():
-            return _result(
-                tool_messages=tool_messages,
-                stopped=True,
-                iterations=iteration,
-                consecutive_errors=consecutive_errors,
-            )
-
-        if hooks and hooks.on_iteration_start:
-            hooks.on_iteration_start(iteration, tool_messages)
-
-        try:
-            response = model_call(tool_messages, stop_event=stop_event)
-        except StopIteration:
-            return _result(
-                tool_messages=tool_messages,
-                stopped=True,
-                iterations=iteration,
-                consecutive_errors=consecutive_errors,
-            )
-        except ToolLoopExit as exc:
-            return _result(
-                final_content=exc.final_content,
-                tool_messages=tool_messages,
-                iterations=iteration + 1,
-                consecutive_errors=consecutive_errors,
-            )
-        except Exception as exc:
-            raise ToolLoopModelError(exc, iteration) from exc
-
-        # 提取模型追踪信息
-        resp_model_id = response.pop("_model_id", None)
-        resp_model_name = response.pop("_model_name", None)
-        resp_failover = response.pop("_failover_events", None)
-        if resp_model_id:
-            current_model_id = resp_model_id
-        if resp_model_name:
-            current_model_name = resp_model_name
-        if resp_failover:
-            all_failover_events.extend(resp_failover)
-
-        _merge_usage(usage_total, response.get("usage"))
-        tool_calls = response.get("tool_calls") or []
-        thinking_content = response.get("thinking_content") or response.get("content", "")
-
-        if tool_calls:
-            tool_call_entries = []
-            for tool_call in tool_calls:
-                entry = {
-                    "id": tool_call.get("id"),
-                    "type": "function",
-                    "function": {
-                        "name": tool_call.get("name"),
-                        "arguments": json.dumps(
-                            tool_call.get("arguments", {}), ensure_ascii=False
-                        ),
-                    },
-                }
-                # 保留 thoughtSignature（Gemini API 要求后续请求原样回传）
-                sig = tool_call.get("_thought_signature")
-                if sig:
-                    entry["_thought_signature"] = sig
-                tool_call_entries.append(entry)
-            assistant_message = {
-                "role": "assistant",
-                "content": response.get("content", ""),
-                "tool_calls": tool_call_entries,
-            }
-            tool_messages.append(assistant_message)
-
-            for tool_call in tool_calls:
-                if hooks and hooks.on_tool_start:
-                    hooks.on_tool_start(tool_call, thinking_content, iteration, tool_messages)
-
-                try:
-                    tool_result = tool_executor(
-                        tool_call, thinking_content, iteration, tool_messages
-                    )
-                except ToolLoopExit as exc:
-                    return _result(
-                        final_content=exc.final_content,
-                        tool_messages=tool_messages,
-                        iterations=iteration + 1,
-                        consecutive_errors=consecutive_errors,
-                    )
-
-                tool_history_message = None
-                if hooks and hooks.on_tool_result:
-                    tool_history_message = hooks.on_tool_result(
-                        tool_call,
-                        tool_result,
-                        thinking_content,
-                        iteration,
-                        tool_messages,
-                    )
-
-                if tool_history_message is None:
-                    tool_history_message = {
-                        "role": "tool",
-                        "tool_call_id": tool_call.get("id", ""),
-                        "name": tool_call.get("name", ""),
-                        "content": json.dumps(tool_result, ensure_ascii=False),
-                    }
-
-                if tool_history_message:
-                    tool_messages.append(tool_history_message)
-
-            continue
-
-        final_content = response.get("content", "")
-        finish_reason = response.get("finish_reason", "")
-        consecutive_errors = 0 if final_content else consecutive_errors + 1
-
-        # 处理 content_filter：内容被安全策略过滤
-        if finish_reason == "content_filter":
-            _log.warning("[AgentLoop] 内容被安全策略过滤 (content_filter)")
-            if final_content:
-                return _result(
-                    final_content=final_content,
-                    tool_messages=tool_messages,
-                    iterations=iteration + 1,
-                    consecutive_errors=consecutive_errors,
-                )
-            else:
-                return _result(
-                    final_content="抱歉，我的回答触发了内容安全过滤，请换个话题试试。",
-                    tool_messages=tool_messages,
-                    iterations=iteration + 1,
-                    consecutive_errors=consecutive_errors,
-                )
-
-        if should_stop_tool_loop(
-            final_content,
-            finish_reason,
-            iteration,
-            max_iterations,
-            consecutive_errors,
-            max_consecutive_errors,
-        ):
-            if final_content.rstrip().endswith("break"):
-                final_content = final_content.rstrip()[:-5].rstrip()
-            return _result(
-                final_content=final_content,
-                tool_messages=tool_messages,
-                iterations=iteration + 1,
-                consecutive_errors=consecutive_errors,
-            )
-
-        tool_messages.append({"role": "assistant", "content": final_content})
-        _log.info(
-            "[AgentLoop] continue thinking, finish_reason=%s, iteration=%s",
-            finish_reason,
-            iteration,
-        )
-
-    if not final_content:
-        for message in reversed(tool_messages):
-            if message.get("role") == "assistant":
-                final_content = message.get("content", "")
-                break
-
-    return _result(
-        final_content=final_content,
-        tool_messages=tool_messages,
-        iterations=max_iterations,
-        consecutive_errors=consecutive_errors,
+    """[已废弃] 函数式入口，内部委托给 AgentHarness。保留以保持向后兼容。"""
+    harness = AgentHarness(
+        initial_messages=initial_messages,
+        model_call=model_call,
+        tool_executor=tool_executor,
+        max_iterations=max_iterations,
+        max_consecutive_errors=max_consecutive_errors,
+        stop_event=stop_event,
+        hooks=hooks,
+        tool_timeout=tool_timeout,
+        parallel_tool_execution=parallel_tool_execution,
     )
+    # 旧 API 不合并 tool_call_history（旧函数签名不含该参数），等价于直接 run
+    harness._tool_messages = copy.deepcopy(initial_messages)
+    harness._prepared = True
+    return harness.run()
 
 
 def run_tool_loop_session(session: ToolLoopSession) -> ToolExecutionResult:
-    prepared_messages = apply_tool_call_history(
-        session.initial_messages,
-        session.tool_call_history,
-    )
-    loop_result = run_tool_call_loop(
-        prepared_messages,
-        session.model_call,
-        session.tool_executor,
+    """[已废弃] 函数式入口，内部委托给 AgentHarness。保留以保持向后兼容。"""
+    harness = AgentHarness(
+        initial_messages=session.initial_messages,
+        model_call=session.model_call,
+        tool_executor=session.tool_executor,
+        tool_call_history=session.tool_call_history,
         max_iterations=session.max_iterations,
         max_consecutive_errors=session.max_consecutive_errors,
         stop_event=session.stop_event,
         hooks=session.hooks,
+        tool_timeout=session.tool_timeout,
+        parallel_tool_execution=session.parallel_tool_execution,
     )
+    loop_result = harness.run()
     return ToolExecutionResult(
         loop_result=loop_result,
-        prepared_messages=prepared_messages,
+        prepared_messages=harness.tool_messages,
     )
 
 
@@ -632,7 +957,10 @@ def execute_tool_loop_session(
     max_consecutive_errors: int = 3,
     stop_event=None,
     hooks: Optional[ToolLoopHooks] = None,
+    tool_timeout: Optional[float] = None,
+    parallel_tool_execution: bool = True,
 ) -> ToolExecutionResult:
+    """[已废弃] 便捷入口，内部委托给 AgentHarness。保留以保持向后兼容。"""
     return run_tool_loop_session(
         ToolLoopSession(
             initial_messages=initial_messages,
@@ -643,6 +971,8 @@ def execute_tool_loop_session(
             max_consecutive_errors=max_consecutive_errors,
             stop_event=stop_event,
             hooks=hooks,
+            tool_timeout=tool_timeout,
+            parallel_tool_execution=parallel_tool_execution,
         )
     )
 

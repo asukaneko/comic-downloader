@@ -53,6 +53,7 @@ class HookManager:
         self._turn_hook_ids_executed: set = set()
         self._trigger_state: Dict[str, Set[str]] = {}
         self._event_notifier = None  # callback for frontend notifications
+        self._workflow_trigger = None  # callback for triggering web workflows
         self._load_hooks()
         self._load_logs()
         self._load_trigger_state()
@@ -123,6 +124,16 @@ class HookManager:
         callback receives a dict: {hook_id, hook_name, event_type, conversation_id, status}
         """
         self._event_notifier = callback
+
+    def set_workflow_trigger(self, callback) -> None:
+        """Set a callback for triggering web workflows from hook actions.
+
+        callback receives (workflow_name: str, context: dict) and should return
+        a dict with at least {"status": str}. Set by WebServer during init so
+        that the "workflow" action type can route to the real workflow executor
+        in nbot/web/server.py instead of the removed core/workflow.py engine.
+        """
+        self._workflow_trigger = callback
 
     @staticmethod
     def _extract_display_message(hook: ConversationHook) -> str:
@@ -254,6 +265,9 @@ class HookManager:
         self, hook: ConversationHook, event: RuntimeEvent, ctx: Dict[str, Any]
     ) -> HookExecutionLog:
         start = time.time()
+        # 注入 workflow trigger callback，供 _action_workflow 使用
+        if "workflow_trigger" not in ctx and self._workflow_trigger is not None:
+            ctx["workflow_trigger"] = self._workflow_trigger
         try:
             timeout = hook.timeout_ms / 1000.0
             results = await asyncio.wait_for(

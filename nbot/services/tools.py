@@ -1807,7 +1807,20 @@ def get_all_tool_definitions(include_workspace: bool = True) -> List[Dict]:
 
 def execute_tool(tool_name: str, arguments: Dict[str, Any], context: Dict = None) -> Dict[str, Any]:
     """
-    执行指定的工具（优先使用注册表，然后是 Web 配置）
+    执行指定的工具（统一入口，优先使用注册表，然后是 Web 配置）。
+
+    统一性说明：
+        本函数是工具执行的唯一入口。所有通过 @register_tool 装饰器
+        (nbot/services/tool_registry.py) 注册的工具——包括 skills_tools.py
+        中的 skill_list/skill_view/skill_read 等——都会通过此函数被调用。
+
+    执行优先级：
+        1. workspace_* 工具（基于 session_id 隔离的工作区）
+        2. tool_registry 装饰器注册的工具（如 skills_tools、todo_tools）
+        3. save_to_memory / read_memory 记忆工具
+        4. mcp__ 前缀的 MCP 远程工具
+        5. Web 配置中的动态工具（DynamicExecutor 执行）
+        6. 内置 ToolExecutor 类的方法（search_news/get_weather 等）
 
     Args:
         tool_name: 工具名称

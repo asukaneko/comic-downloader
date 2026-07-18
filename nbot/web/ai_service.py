@@ -1547,6 +1547,27 @@ def trigger_ai_response_for_request(server, chat_request: ChatRequest, adapter=N
                         if cid:
                             _sio.emit("hook_notification", info, room=cid)
                     hook_runtime.set_event_notifier(_hook_notifier)
+
+                # 注入 workflow trigger 回调，使 hook 的 workflow action 能路由到
+                # web server 的真实工作流执行器（_execute_workflow），替代已删除的
+                # core/workflow.py WorkflowEngine
+                if hook_runtime and not hook_runtime._workflow_trigger:
+                    def _workflow_trigger(workflow_name, context, _server=server):
+                        # 查找 workflow_id（按 name 匹配）
+                        wf_id = None
+                        for wf in getattr(_server, "workflows", []) or []:
+                            if wf.get("id") == workflow_name or wf.get("name") == workflow_name:
+                                wf_id = wf.get("id")
+                                break
+                        if not wf_id:
+                            return {"status": "error", "error": f"workflow '{workflow_name}' not found"}
+                        trigger_data = {
+                            "source": "hook",
+                            "content": (context or {}).get("event", {}).get("event_type", ""),
+                        }
+                        _server._execute_workflow(wf_id, trigger_data)
+                        return {"status": "triggered", "workflow_id": wf_id}
+                    hook_runtime.set_workflow_trigger(_workflow_trigger)
             except Exception:
                 pass
 

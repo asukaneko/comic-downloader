@@ -253,24 +253,40 @@ class ActionExecutor:
 
     @staticmethod
     async def _action_workflow(action, event, ctx):
-        """Trigger a workflow execution.
+        """Trigger a workflow execution via the registered WebServer callback.
 
         action structure:
         {
             "type": "workflow",
             "workflow": "wf_goodnight_event"
         }
+
+        注：workflow 执行实际由 nbot/web/server.py 的 _execute_workflow 完成。
+        本 action 通过 HookManager.set_workflow_trigger() 注册的回调来触发，
+        因此只有在 web server 启动并注入回调后才会真正执行；否则返回失败。
         """
         # 兼容: 文档用 workflow_id，代码用 workflow
         workflow_name = action.get("workflow") or action.get("workflow_id", "")
         if not workflow_name:
             return ActionResult(False, "workflow", "No workflow name")
+
+        trigger = ctx.get("workflow_trigger")
+        if trigger is None:
+            return ActionResult(
+                False, "workflow",
+                "Workflow trigger not registered (web server 未注入回调)",
+            )
+
+        context = {"event": event.to_dict(), **ctx}
         try:
-            from nbot.core.workflow import get_workflow_engine
-            engine = get_workflow_engine()
-            context = {"event": event.to_dict(), **ctx}
-            instance = await engine.execute_workflow(workflow_name, context)
-            status = getattr(instance, "status", "unknown")
+            result = trigger(workflow_name, context)
+            if hasattr(result, "__await__"):
+                result = await result
+            status = "unknown"
+            if isinstance(result, dict):
+                status = result.get("status", "unknown")
+            elif hasattr(result, "status"):
+                status = result.status
             return ActionResult(
                 status != "error", "workflow",
                 "ran " + workflow_name + " status=" + str(status),

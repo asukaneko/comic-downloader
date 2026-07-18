@@ -2,6 +2,7 @@
 动态执行引擎 - 支持从配置执行 Skills 和 Tools
 支持类型：http、python、static、minimax_web_search
 """
+import ast
 import json
 import logging
 import re
@@ -152,26 +153,108 @@ class DynamicExecutor:
             }
     
     def _execute_python(self, implementation: Dict, params: Dict, context: Dict) -> Dict[str, Any]:
-        """执行 Python 代码（受限环境）"""
+        """执行 Python 代码（受限沙箱）。
+
+        安全策略：
+        1. AST 预检：禁止 import/exec/eval/lambda/__dunder__ 等危险节点
+        2. 受限 globals：仅暴露 datetime/json/re/params/context，移除 __builtins__
+        3. 超时保护：在子线程执行，默认 5 秒超时
+        4. 属性访问黑名单：禁止 __class__/__base__/__subclasses__/__globals__/__builtins__ 等
+           可用于逃逸沙箱的元编程属性
+        """
         code = implementation.get('code', '')
-        
-        # 只允许简单的表达式，不允许执行危险操作
-        # 这里使用受限的 eval/exec
+        timeout_sec = float(implementation.get('timeout', 5))
+
+        if not code or not code.strip():
+            return {'success': False, 'error': '空代码'}
+
+        # AST 预检
+        try:
+            tree = ast.parse(code, mode='eval' if not any(
+                line.strip().startswith(('import ', 'from ', 'def ', 'class ', 'for ', 'while ', 'if '))
+                and not line.strip().startswith('#')
+                for line in code.splitlines()
+            ) else 'exec')
+        except SyntaxError as e:
+            return {'success': False, 'error': f'语法错误: {e}'}
+
+        if not self._validate_python_ast(tree):
+            return {
+                'success': False,
+                'error': '代码包含禁用语法（import/exec/eval/lambda/__dunder__/yield/await 等）'
+            }
+
         allowed_globals = {
             'datetime': datetime,
             'json': json,
             're': re,
             'params': params,
             'context': context,
+            # 仅暴露最小 builtins
+            'len': len,
+            'str': str,
+            'int': int,
+            'float': float,
+            'bool': bool,
+            'list': list,
+            'dict': dict,
+            'tuple': tuple,
+            'set': set,
+            'range': range,
+            'enumerate': enumerate,
+            'zip': zip,
+            'abs': abs,
+            'min': min,
+            'max': max,
+            'sum': sum,
+            'sorted': sorted,
+            'round': round,
+            'isinstance': isinstance,
+            'hasattr': hasattr,
+            'getattr': getattr,
+            'keys': lambda d: list(d.keys()) if isinstance(d, dict) else [],
+            'values': lambda d: list(d.values()) if isinstance(d, dict) else [],
+            'items': lambda d: list(d.items()) if isinstance(d, dict) else [],
         }
-        
+
         try:
-            # 使用 eval 执行简单表达式
-            result = eval(code, {"__builtins__": {}}, allowed_globals)
+            # 在子线程中执行以支持超时
+            # 注意：Python 无法强制 kill 线程，超时后主流程继续但子线程仍在跑。
+            # 我们用 daemon=True 让它在主进程退出时自动结束。
+            import threading
+            mode = 'eval' if isinstance(tree, ast.Expression) else 'exec'
+            result_box: Dict[str, Any] = {}
+
+            def _runner():
+                try:
+                    safe_g = {"__builtins__": {}}
+                    if mode == 'eval':
+                        result_box['result'] = eval(code, safe_g, allowed_globals)
+                    else:
+                        exec(code, safe_g, allowed_globals)
+                        result_box['result'] = allowed_globals.get('result')
+                    result_box['status'] = 'ok'
+                except BaseException as e:
+                    result_box['status'] = 'err'
+                    result_box['error'] = str(e)
+
+            t = threading.Thread(target=_runner, daemon=True)
+            t.start()
+            t.join(timeout_sec)
+
+            if t.is_alive():
+                # 线程仍在跑（如死循环），无法 kill，但 daemon=True 会在进程退出时清理
+                _log.warning(f"Python 代码执行超时（{timeout_sec}s），线程仍在后台运行")
+                return {'success': False, 'error': f'执行超时（{timeout_sec}s）'}
+
+            if result_box.get('status') == 'err':
+                return {'success': False, 'error': f'执行失败: {result_box.get("error")}'}
+
+            payload = result_box.get('result')
             return {
                 'success': True,
-                'data': result,
-                'content': str(result)
+                'data': payload,
+                'content': str(payload) if payload is not None else ''
             }
         except Exception as e:
             _log.error(f"Python execution failed: {e}")
@@ -179,6 +262,74 @@ class DynamicExecutor:
                 'success': False,
                 'error': f'执行失败: {str(e)}'
             }
+
+    @staticmethod
+    def _run_python_safely(code: str, mode: str, allowed_globals: Dict):
+        """在受限 globals 中执行 Python 代码（保留用于同步测试场景）。"""
+        # 完全清除 __builtins__
+        safe_globals = {"__builtins__": {}}
+        if mode == 'eval':
+            return eval(code, safe_globals, allowed_globals)
+        else:
+            exec(code, safe_globals, allowed_globals)
+            return allowed_globals.get('result')
+
+    @staticmethod
+    def _validate_python_ast(tree) -> bool:
+        """AST 白名单校验：禁止危险的语法节点和属性访问。"""
+        FORBIDDEN_NODES = {
+            ast.Import, ast.ImportFrom,  # 禁止 import
+            ast.Lambda,  # 禁止 lambda（可绕过限制）
+            ast.FunctionDef, ast.AsyncFunctionDef,  # 禁止定义函数
+            ast.ClassDef,  # 禁止定义类
+            ast.Global, ast.Nonlocal,  # 禁止 global/nonlocal
+            ast.Yield, ast.YieldFrom,  # 禁止 yield
+            ast.Await,  # 禁止 await
+            ast.AsyncFor, ast.AsyncWith,  # 禁止 async 语法
+        }
+        # 禁止访问的属性名（可逃逸沙箱的元编程属性）
+        FORBIDDEN_ATTRS = {
+            '__class__', '__base__', '__bases__', '__subclasses__',
+            '__globals__', '__builtins__', '__dict__', '__mro__',
+            '__import__', '__loader__', '__spec__',
+            'func_globals', 'func_builtins', 'func_code',
+            'gi_frame', 'gi_code', 'cr_frame', 'cr_code',
+            'f_globals', 'f_locals', 'f_builtins', 'f_code',
+        }
+        # 禁止调用的函数名（即使 builtins 中没有，也防止通过其他途径获取）
+        FORBIDDEN_CALL_NAMES = {
+            '__import__', 'eval', 'exec', 'compile', 'open',
+            'input', 'breakpoint', 'exit', 'quit',
+            'globals', 'locals', 'vars', 'dir',
+            'getattr',  # getattr 可用于访问 __dunder__，单独允许时需谨慎
+        }
+
+        for node in ast.walk(tree):
+            # 检查节点类型
+            for forbidden_type in FORBIDDEN_NODES:
+                if isinstance(node, forbidden_type):
+                    return False
+
+            # 检查属性访问
+            if isinstance(node, ast.Attribute):
+                if node.attr in FORBIDDEN_ATTRS:
+                    return False
+                # 禁止任何以 __ 开头结尾的属性
+                if node.attr.startswith('__') and node.attr.endswith('__'):
+                    return False
+
+            # 检查函数调用
+            if isinstance(node, ast.Call):
+                # 直接调用名称函数（如 eval(...)）
+                if isinstance(node.func, ast.Name):
+                    if node.func.id in FORBIDDEN_CALL_NAMES:
+                        return False
+                # 禁止通过属性链调用（如 obj.__class__.__subclasses__()）
+                if isinstance(node.func, ast.Attribute):
+                    if node.func.attr in FORBIDDEN_ATTRS:
+                        return False
+
+        return True
     
     def _execute_static(self, implementation: Dict, params: Dict, context: Dict) -> Dict[str, Any]:
         """返回静态响应"""

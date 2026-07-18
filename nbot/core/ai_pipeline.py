@@ -212,6 +212,79 @@ class PipelineContext:
             self._prompt_stack = PromptStack()
         return self._prompt_stack
 
+    @property
+    def mode_policy(self) -> "ModePolicy":
+        """从 metadata 派生的模式策略（每次调用都重新派生，确保 metadata 变化能反映）。"""
+        return ModePolicy.from_metadata(self.metadata)
+
+
+class ModePolicy:
+    """会话模式策略：集中 agent / character / group 模式的差异化决策。
+
+    背景：
+        原先通过 `ctx.metadata.get("session_mode") == "agent"` 在 ai_pipeline.py
+        多处做散落 if/else 短路。这导致每加一个 character-only 功能就要在多处
+        加判断，易遗漏且难维护。本类将所有 mode 相关决策集中到一处。
+
+    使用方式：
+        policy = ctx.mode_policy
+        if policy.inject_character_memories:  # 替代 if ctx.metadata.get("session_mode") != "agent"
+            ...
+
+    兼容性：
+        - 向后兼容 ctx.metadata["session_mode"] 字符串判断
+        - 所有原 == "agent" / != "agent" 的判断等价迁移到本类的属性
+        - 行为完全等价，无功能变更
+    """
+
+    __slots__ = ("session_mode",)
+
+    def __init__(self, session_mode: str = "character"):
+        self.session_mode = session_mode or "character"
+
+    @classmethod
+    def from_metadata(cls, metadata: Dict[str, Any]) -> "ModePolicy":
+        """从 ctx.metadata 派生策略。"""
+        return cls(session_mode=str(metadata.get("session_mode", "character")))
+
+    @property
+    def is_agent(self) -> bool:
+        """是否为 agent 模式（无角色运行时、无角色记忆、无角色生图）。"""
+        return self.session_mode == "agent"
+
+    # ---- 上下文准备阶段（_phase_prepare_context） ----
+    @property
+    def inject_character_memories_legacy(self) -> bool:
+        """是否注入跨会话角色记忆（character.memories_legacy）。"""
+        return not self.is_agent
+
+    @property
+    def inject_memory_fs(self) -> bool:
+        """是否注入 MemoryFS 结构化记忆。"""
+        return not self.is_agent
+
+    @property
+    def inject_image_capability(self) -> bool:
+        """是否注入角色生图能力说明。"""
+        return not self.is_agent
+
+    # ---- 角色运行时 hooks ----
+    @property
+    def inject_real_time_prompt_fallback(self) -> bool:
+        """是否注入实时连续性 prompt（real_time.continuity）。"""
+        return not self.is_agent
+
+    # ---- 结果后处理阶段（_post_process_result） ----
+    @property
+    def run_auto_memory(self) -> bool:
+        """是否执行 auto_memory 6 轮累积。"""
+        return not self.is_agent
+
+    @property
+    def try_send_image(self) -> bool:
+        """是否尝试解析 [send_image: ...] 标签触发角色生图。"""
+        return not self.is_agent
+
 
 @dataclass
 class PipelineResult:
@@ -931,7 +1004,7 @@ class AIPipeline:
             )
 
         # 跨会话角色记忆注入 → PromptStack（agent 模式跳过）
-        if ctx.metadata.get("session_mode") != "agent":
+        if ctx.mode_policy.inject_character_memories_legacy:
             try:
                 from nbot.core.auto_memory import (
                     build_memory_context,
@@ -953,7 +1026,7 @@ class AIPipeline:
                 pass
 
         # MemoryFS 结构化记忆直接注入（独立于角色运行时，agent 模式跳过）
-        if ctx.metadata.get("session_mode") != "agent":
+        if ctx.mode_policy.inject_memory_fs:
             self._inject_memory_fs_direct(ctx, callbacks)
 
         # 角色运行时 before_turn hook
@@ -985,7 +1058,7 @@ class AIPipeline:
                 )
 
         # 角色生图能力说明（仅在非 agent 模式、且功能开启时注入）
-        if ctx.metadata.get("session_mode") != "agent":
+        if ctx.mode_policy.inject_image_capability:
             try:
                 from nbot.services.image_service import (
                     build_image_capability_injection,
@@ -1488,7 +1561,7 @@ class AIPipeline:
         messages_raw: list[dict[str, Any]],
     ) -> None:
         """Inject real-time continuity if CharacterRuntime did not add it."""
-        if ctx.metadata.get("session_mode") == "agent":
+        if not ctx.mode_policy.inject_real_time_prompt_fallback:
             return
         if ctx.prompt_stack.get("real_time.continuity"):
             return
@@ -2300,7 +2373,7 @@ class AIPipeline:
     ) -> None:
         """角色运行时 after_turn → 自动记忆 → on_response_complete → 表情包 → 角色生图。"""
         self._phase_character_runtime_after_turn(ctx, callbacks, result)
-        if ctx.metadata.get("session_mode") != "agent":
+        if ctx.mode_policy.run_auto_memory:
             self._phase_auto_memory(ctx, callbacks, result)
         callbacks.on_response_complete(ctx, result)
 
@@ -2393,7 +2466,7 @@ class AIPipeline:
         )
 
         # agent 模式不触发（避免误生图）
-        if ctx.metadata.get("session_mode") == "agent":
+        if not ctx.mode_policy.try_send_image:
             return
 
         # 出错时不生图

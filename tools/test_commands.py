@@ -195,38 +195,44 @@ class NekoBotShell(cmd.Cmd):
             print(f"知识库错误: {e}")
 
     def do_workflow(self, arg):
-        """workflow [list|run] - 工作流功能测试"""
-        try:
-            from nbot.core.workflow import get_workflow_engine
-            engine = get_workflow_engine()
+        """workflow [list|run <id>] - 工作流功能测试（通过 Web API）
 
-            if not arg.strip():
-                wfs = engine.list_workflows()
+        注：工作流执行实际由 nbot/web/server.py 实现，本命令通过 HTTP 调用
+        web server 的 /api/workflows 接口完成测试。
+        """
+        try:
+            import requests
+            # 从环境或默认值读取 web server 地址
+            web_host = os.getenv("WEB_HOST", "127.0.0.1")
+            web_port = os.getenv("WEB_PORT", "5000")
+            base_url = f"http://{web_host}:{web_port}"
+
+            if not arg.strip() or arg.strip() == "list":
+                resp = requests.get(f"{base_url}/api/workflows", timeout=5)
+                resp.raise_for_status()
+                wfs = resp.json().get("workflows", [])
                 print("=== 工作流列表 ===")
                 for wf in wfs:
-                    print(f"- {wf['name']}: {wf['description']} (启用: {wf['enabled']})")
+                    print(f"- [{wf.get('id')}] {wf.get('name')}: {wf.get('description', '')} (启用: {wf.get('enabled', True)})")
                 return
 
             parts = arg.strip().split()
-            cmd = parts[0]
-
-            if cmd == "list":
-                wfs = engine.list_workflows()
-                for wf in wfs:
-                    print(f"- {wf['name']}: {wf['description']}")
-            elif cmd == "run":
+            cmd_name = parts[0]
+            if cmd_name == "run":
                 if len(parts) < 2:
-                    print("用法: workflow run <工作流名>")
+                    print("用法: workflow run <工作流ID>")
                     return
-                wf_name = parts[1]
-                result = asyncio.run(engine.execute_workflow(wf_name, {"test": "data"}))
-                print("=== 工作流执行结果 ===")
-                print(f"状态: {result.status}")
-                print("日志:")
-                for log in result.logs:
-                    print(f"  {log}")
+                wf_id = parts[1]
+                resp = requests.post(f"{base_url}/api/workflows/{wf_id}/execute", timeout=30)
+                resp.raise_for_status()
+                data = resp.json()
+                print("=== 工作流触发结果 ===")
+                print(f"状态: {data.get('status', 'unknown')}")
+                print(f"详情: {data.get('detail', '')}")
             else:
-                print("用法: workflow [list|run <名称>]")
+                print("用法: workflow [list|run <ID>]")
+        except requests.exceptions.ConnectionError:
+            print("工作流错误: 无法连接 Web server，请先启动 (python bot.py --only-web)")
         except Exception as e:
             print(f"工作流错误: {e}")
 
