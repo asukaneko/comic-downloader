@@ -1,5 +1,65 @@
 # 更新日志
 
+## [3.1.3] - 2026-07-18
+
+### 🌟 Agent 框架重构
+
+- **AgentHarness 状态化执行框架** (`nbot/core/agent_service.py`)
+  - 新增 `AgentHarness` 类，将原有 `run_tool_call_loop` 函数式实现封装为有状态、可观测、可复用的执行框架
+  - 新增 `HarnessState` / `ToolCallTrace` 数据类，支持运行时状态导出、工具调用轨迹追踪
+  - 新增 `tool_timeout`（单工具超时）与 `parallel_tool_execution`（并发执行多工具）支持
+  - 旧 `run_tool_call_loop` / `run_tool_loop_session` 函数保留向后兼容，内部委托给 `AgentHarness`
+- **ModePolicy 模式策略** (`nbot/core/ai_pipeline.py`)
+  - 新增 `ModePolicy` 类，集中管理 agent / character / group 三种会话模式的差异化决策
+  - 散落的 `ctx.metadata.get("session_mode") != "agent"` 判断统一迁移为 `ctx.mode_policy.inject_*` 属性
+  - 降低后续新增角色功能时的遗漏风险
+- **工作流架构重构**：Hooks → WebServer 单向执行链路
+  - `nbot/hooks/actions.py`：`_action_workflow` 改为通过 `ctx["workflow_trigger"]` 回调路由到 WebServer 真实执行器，废弃直接调用 `core/workflow.py` DAG 引擎
+  - `nbot/hooks/manager.py`：新增 `set_workflow_trigger` 方法与 `_workflow_trigger` 属性，在执行 hook 时注入回调到上下文
+  - `nbot/web/ai_service.py`：WebServer 初始化时向 HookManager 注入 workflow trigger 回调
+  - 测试命令 `do_workflow` 同步从直接调用 core 引擎改为通过 HTTP API 调用 WebServer
+- **ReAct Agent 重写** (`nbot/services/react.py`)
+  - 从基于文本提示词解析（`思考:` / `行动:` / `输入:` / `观察结果:`）迁移到 function-calling，复用 `AgentHarness`
+  - 新增 `_skill_to_tool_schema` 将 SkillRegistry 技能转换为 OpenAI tool schema
+  - `ThoughtStep` / `ReActResult` 公开 API 保持不变，无可用工具时自动降级为单轮直接回答
+- **CLI 重构** (`nbot/cli_simple.py`)
+  - `_call_ai_with_tools` 重构为 `AgentHarness` + `ToolLoopHooks` 回调形式
+  - 清理未使用的 `provider_type` 字段
+- **Python 沙箱安全加固** (`nbot/services/dynamic_executor.py`)
+  - 新增 AST 白名单校验 `_validate_python_ast`，禁止 `import` / `lambda` / 函数定义 / 类定义 / `__class__` / `__subclasses__` 等危险属性访问
+  - 新增线程超时保护（默认 5s），`daemon=True` 避免僵尸线程
+  - 限制 `allowed_globals` 仅暴露最小 builtins
+
+### ⚙️ 核心功能
+
+- **Token 排行榜支持排除已删除会话**：在 `TokenStatsManager.get_rankings()` 中新增可选的 `is_session_active` 回调参数，`/api/rankings` 管理后台传入该回调后自动过滤已被删除的 Web 会话
+- **心跳总开关逻辑重构** (`nbot/web/routes/task_center.py`)
+  - 按 `session_id` 索引查找心跳配置，修复 `life_sim` 等带后缀 config 查不到记录时误新建 `enabled` 配置的问题
+  - 当前存在已启用心跳时一次性全部关闭（符合 UI 总开关直觉）；无任何启用项时按 `target_session_id` 启用
+- **MemoryFS 配置持久化与传输支持** (`nbot/web/config_transfer.py`)
+  - `CONFIG_KEYS` 新增 `memory_fs` 配置项，支持 `data/web/memory_fs.json` 全量索引的导入导出
+  - `build_plain_bundle()` 导出、`apply_bundle()` 导入并覆盖写入，导入后自动重置全局单例
+
+### 🐳 Docker 部署
+
+- **CI 改为 Release 触发构建** (`.github/workflows/docker-publish.yml`)
+  - 移除 `push: branches/tags` 触发器，避免每次 master 提交都构建镜像
+  - 新增 `release: published` 触发器，仅在 GitHub Release 发布时构建并推送 `ghcr.io`
+  - `latest` 标签仅在 release 事件下推送，保留 `workflow_dispatch` 手动触发（按 SHA 打 tag）
+
+### 🐛 Bug 修复
+
+- **Token 排行榜会话活跃性判断**：导入 `load_sessions_from_db` 合并数据库会话，将 `web_session_ids` 扩展为 `known_session_ids`（内存 + DB），同时排除 `web` / `api` 渠道，并对渠道类型做 `.strip().lower()` 规范化
+- **VitePress Vue 插值误解析** (`docs/docs/guide/docker-deploy.md`)：将 `docker inspect --format` 的 `{{...}}` 写法替换为 `docker ps --filter`，避免 VitePress 将其当作 Vue 表达式解析
+
+### 📖 文档
+
+- **workflow.md 重写** (`docs/docs/guide/nbot/core/workflow.md`)：明确 `core/workflow.py` 为占位实现，真实工作流执行走 `WebServer._execute_workflow`，并补全 Hooks → WebServer 单向执行链路
+- README 新增 Docker 快速部署小节与徽章，链接到 Docker 部署指南
+- `nbot/services/tools.md` 补充 `execute_tool` 统一入口与执行优先级说明
+
+---
+
 ## [3.1.2] - 2026-07-14
 
 ### 🪝 心跳系统
