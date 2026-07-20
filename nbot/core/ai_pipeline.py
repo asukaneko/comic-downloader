@@ -1407,12 +1407,14 @@ class AIPipeline:
                     # 当作故事中的用户发言。
                     recent_history = recent_history[:-1]
             plot_choice_style = str(metadata.get("plot_choice_style") or "")
+            plot_outline = str(metadata.get("plot_outline") or "")
             choices = await generator.generate(
                 response_text,
                 _plot_turn_context_dict(turn_context),
                 recent_history=recent_history,
                 session_id=conversation_id or "",
                 style=plot_choice_style,
+                outline=plot_outline,
             )
             if not choices:
                 return

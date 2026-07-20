@@ -31886,6 +31886,38 @@ body.has-bg-image .message.user .message-content.multi-bubble-content .message-b
 }
 .plot-style-current i { color: var(--accent-primary); }
 
+/* ===== 剧情大纲编辑弹窗 ===== */
+.plot-outline-textarea {
+    width: 100%;
+    min-height: 200px;
+    max-height: 50vh;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.55;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-input, var(--bg-elevated, transparent));
+    color: var(--text-primary);
+}
+.plot-outline-textarea:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+.plot-outline-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+.plot-outline-counter {
+    margin-left: auto;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
 /* ----------------------------------------------------------------------
    内心独白：把（内心：...）渲染为可折叠的灰字块
    HTML 结构（由 nbot-methods.js::applyInnerMonologue 生成）：

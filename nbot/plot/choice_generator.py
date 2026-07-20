@@ -96,18 +96,29 @@ _STYLE_PRESETS: Dict[str, str] = {
 }
 
 
-def _build_system_prompt(style: str = "") -> str:
-    """在基础 system prompt 后追加本次的风格要求（若有）。"""
+def _build_system_prompt(style: str = "", outline: str = "") -> str:
+    """在基础 system prompt 后追加本次的剧情大纲与风格要求（若有）。"""
+    extras = []
+    outline_text = (outline or "").strip()
+    if outline_text:
+        extras.append(
+            "【剧情大纲已启用】\n"
+            "本次会话存在一份用户提供的剧情大纲。生成的 3 个选择必须契合该大纲的整体走向与既定目标，"
+            "但每个选择仍必须引入一个新的推进元素（新动作/新话题/新场景/时间推移/新人物/突发事件），"
+            "禁止直接复述大纲原文，也不要把三个选择都写成大纲的同一种实现路径。"
+            "上文'必须推进剧情'的铁律与文本写法要求仍然全部适用。"
+        )
     style_text = (style or "").strip()
-    if not style_text:
+    if style_text:
+        extras.append(
+            "【本次剧情风格要求】\n"
+            + style_text
+            + "\n注意：风格只影响三个选择的语气与取向，"
+            "上文'必须推进剧情'的铁律与文本写法要求仍然全部适用。"
+        )
+    if not extras:
         return _SYSTEM_PROMPT
-    return (
-        _SYSTEM_PROMPT
-        + "\n\n【本次剧情风格要求】\n"
-        + style_text
-        + "\n注意：风格只影响三个选择的语气与取向，"
-        "上文'必须推进剧情'的铁律与文本写法要求仍然全部适用。"
-    )
+    return _SYSTEM_PROMPT + "\n\n" + "\n\n".join(extras)
 
 
 def _format_recent_history(recent_history: Optional[List[Dict[str, Any]]]) -> str:
@@ -132,9 +143,17 @@ def _build_user_prompt(
     turn_context: Dict[str, Any],
     session_context: Optional[Dict[str, Any]],
     recent_history: Optional[List[Dict[str, Any]]] = None,
+    outline: str = "",
 ) -> str:
     """构建发给 AI 的用户消息。"""
     parts = [f"当前对话内容：\n{response_text[:800]}"]
+
+    outline_text = (outline or "").strip()
+    if outline_text:
+        parts.append(
+            "剧情大纲（生成选项时需契合此整体走向，但每个选择仍必须引入新的推进，"
+            "不要直接复述大纲原文）：\n" + outline_text[:2000]
+        )
 
     history_text = _format_recent_history(recent_history)
     if history_text:
@@ -254,6 +273,7 @@ class PlotChoiceGenerator:
         recent_history: Optional[List[Dict[str, Any]]] = None,
         session_id: str = "",
         style: str = "",
+        outline: str = "",
     ) -> List[Dict[str, Any]]:
         """Generate 3 plot choices based on the AI response.
 
@@ -274,13 +294,13 @@ class PlotChoiceGenerator:
             return list(_DEFAULT_CHOICES)
 
         user_prompt = _build_user_prompt(
-            response_text, turn_context, session_context, recent_history
+            response_text, turn_context, session_context, recent_history, outline
         )
 
         try:
             response = ai_client.chat_completion(
                 messages=[
-                    {"role": "system", "content": _build_system_prompt(style)},
+                    {"role": "system", "content": _build_system_prompt(style, outline)},
                     {"role": "user", "content": user_prompt},
                 ],
                 stream=False,

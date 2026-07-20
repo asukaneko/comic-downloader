@@ -780,6 +780,7 @@ def register_session_routes(app, server):
                     "plot_mode": bool(session.get("plot_mode")),
                     "plot_real_time_sync": bool(session.get("plot_real_time_sync")),
                     "plot_choice_style": str(session.get("plot_choice_style") or ""),
+                    "plot_outline": str(session.get("plot_outline") or ""),
                 }
             )
 
@@ -929,6 +930,7 @@ def register_session_routes(app, server):
             "plot_mode": bool(data.get("plot_mode")),
             "plot_real_time_sync": bool(data.get("plot_real_time_sync")),
             "plot_choice_style": str(data.get("plot_choice_style") or ""),
+            "plot_outline": str(data.get("plot_outline") or ""),
         }
 
         # 群聊模式：附加群聊关联字段
@@ -1079,6 +1081,8 @@ def register_session_routes(app, server):
             session["plot_real_time_sync"] = bool(data.get("plot_real_time_sync"))
         if "plot_choice_style" in data:
             session["plot_choice_style"] = str(data.get("plot_choice_style") or "")
+        if "plot_outline" in data:
+            session["plot_outline"] = str(data.get("plot_outline") or "")
         if "auto_state_interval" in data:
             # 会话级 auto_state 触发轮次；null 表示使用全局默认，0 表示禁用，正整数表示每 N 轮触发
             raw_val = data.get("auto_state_interval")

@@ -65,6 +65,7 @@ def _ensure_plot_choices(server, session_id: str) -> bool:
     from nbot.plot.models import PlotNode, PlotChoice as PlotChoiceModel
 
     plot_choice_style = str(session.get("plot_choice_style") or "")
+    plot_outline = str(session.get("plot_outline") or "")
 
     generator = PlotChoiceGenerator()
     try:
@@ -77,6 +78,7 @@ def _ensure_plot_choices(server, session_id: str) -> bool:
                     recent_history=recent_history,
                     session_id=session_id or "",
                     style=plot_choice_style,
+                    outline=plot_outline,
                 )
             )
         finally:
@@ -342,6 +344,7 @@ def register_plot_routes(app, server):
         from nbot.plot.models import PlotChoice as PlotChoiceModel
 
         plot_choice_style = str(session.get("plot_choice_style") or "")
+        plot_outline = str(session.get("plot_outline") or "")
 
         generator = PlotChoiceGenerator()
         try:
@@ -354,6 +357,7 @@ def register_plot_routes(app, server):
                         recent_history=recent_history,
                         session_id=conversation_id or "",
                         style=plot_choice_style,
+                        outline=plot_outline,
                     )
                 )
             finally:

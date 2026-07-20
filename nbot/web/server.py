@@ -3091,6 +3091,10 @@ class WebChatServer:
                     metadata.setdefault(
                         "plot_choice_style", session_data.get("plot_choice_style")
                     )
+                if session_data.get("plot_outline"):
+                    metadata.setdefault(
+                        "plot_outline", session_data.get("plot_outline")
+                    )
         except Exception:
             pass
         metadata["_gateway_trace_id"] = trace_id

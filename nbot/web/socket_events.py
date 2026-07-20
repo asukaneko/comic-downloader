@@ -274,6 +274,11 @@ def register_socket_events(server):
                     plot_choice_style = session_data.get("plot_choice_style")
                 if plot_choice_style:
                     req_metadata["plot_choice_style"] = str(plot_choice_style)
+                plot_outline = data.get("plot_outline")
+                if plot_outline is None:
+                    plot_outline = session_data.get("plot_outline")
+                if plot_outline:
+                    req_metadata["plot_outline"] = str(plot_outline)
 
             chat_request = adapter.build_chat_request(
                 conversation_id=session_id,

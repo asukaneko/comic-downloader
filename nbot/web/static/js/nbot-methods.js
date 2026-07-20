@@ -6014,6 +6014,7 @@ def main(params):
                     if (this.plotChoiceStyle) {
                         localStorage.setItem('plot_choice_style_set_' + session.id, '1');
                     }
+                    this.plotOutline = session.plot_outline || localStorage.getItem('plot_outline_' + session.id) || '';
                     this.plotChoices = [];
                     if (this.plotMode) {
                         this.loadPlotChoices();
@@ -17629,6 +17630,79 @@ def main(params):
                 }
             } catch (e) {
                 console.debug('confirmPlotStyle regenerate:', e.message);
+            } finally {
+                this.plotChoicesLoading = false;
+            }
+        }
+    },
+
+    // 打开剧情大纲编辑弹窗
+    openPlotOutlineModal() {
+        this.plotOutlineDraft = (this.plotOutline || '');
+        this.showPlotOutlineModal = true;
+    },
+
+    cancelPlotOutline() {
+        this.showPlotOutlineModal = false;
+        this.plotOutlineDraft = '';
+    },
+
+    // 从 .txt 文件导入剧情大纲（追加到现有内容）
+    importPlotOutlineFile(ev) {
+        const file = ev && ev.target && ev.target.files && ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = String(e.target && e.target.result ? e.target.result : '').trim();
+            if (!text) {
+                this.showToast('文件内容为空', 'warning');
+                ev.target.value = '';
+                return;
+            }
+            if (this.plotOutlineDraft && this.plotOutlineDraft.trim()) {
+                this.plotOutlineDraft = this.plotOutlineDraft.trimEnd() + '\n\n' + text;
+            } else {
+                this.plotOutlineDraft = text;
+            }
+            this.showToast('已导入 ' + text.length + ' 字', 'success');
+            ev.target.value = '';
+        };
+        reader.onerror = () => {
+            this.showToast('导入失败：无法读取文件内容', 'error');
+            ev.target.value = '';
+        };
+        reader.readAsText(file, 'UTF-8');
+    },
+
+    // 保存剧情大纲到会话；若已开启剧情模式，立即重新生成选项让大纲生效
+    async confirmPlotOutline() {
+        const outline = (this.plotOutlineDraft || '').trim();
+        this.plotOutline = outline;
+        const sid = this.currentSession?.id || this.currentSession?.session_id;
+        if (sid) {
+            if (this.currentSession) this.currentSession.plot_outline = outline;
+            const sessionInList = this.sessions?.find?.(s => s.id === sid);
+            if (sessionInList) sessionInList.plot_outline = outline;
+            localStorage.setItem('plot_outline_' + sid, outline);
+            try {
+                await api.put('/api/sessions/' + sid, { plot_outline: outline });
+            } catch (e) {
+                console.debug('confirmPlotOutline persist:', e.message);
+            }
+        }
+        this.showPlotOutlineModal = false;
+        this.plotOutlineDraft = '';
+        this.showToast(outline ? '剧情大纲已保存' : '剧情大纲已清空', 'success');
+        // 若已在剧情模式，重新生成让新大纲立即生效
+        if (this.plotMode && sid) {
+            this.plotChoicesLoading = true;
+            try {
+                const res = await api.post('/api/plot/' + sid + '/regenerate-choices', {});
+                if (res.data && res.data.choices) {
+                    this.plotChoices = this.normalizePlotChoices(res.data.choices);
+                }
+            } catch (e) {
+                console.debug('confirmPlotOutline regenerate:', e.message);
             } finally {
                 this.plotChoicesLoading = false;
             }

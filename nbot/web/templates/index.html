@@ -2293,9 +2293,15 @@
                                         <button class="btn btn-ghost btn-xs" @click="openPlotStyleModal(false)" title="编辑剧情选项的语气与风格">
                                             <i class="fas fa-pen"></i> 编辑回复风格
                                         </button>
+                                        <button class="btn btn-ghost btn-xs" @click="openPlotOutlineModal()" title="导入或粘贴剧情发展大纲，AI 生成选项时围绕此走向推进">
+                                            <i class="fas fa-scroll"></i> 编辑剧情大纲
+                                        </button>
                                     </div>
                                     <div v-if="plotStyleLabel" class="plot-style-current">
                                         <i class="fas fa-masks-theater"></i> 当前风格：{{ plotStyleLabel }}
+                                    </div>
+                                    <div v-if="plotOutlineLabel" class="plot-style-current">
+                                        <i class="fas fa-scroll"></i> 剧情大纲：{{ plotOutlineLabel }}
                                     </div>
                                     <!-- Inline Path Bar (主线路径条) -->
                                     <div v-if="plotMainPath.length" class="plot-path">
@@ -9451,6 +9457,41 @@
             </div>
         </div>
 
+        <!-- 剧情大纲编辑模态框：导入 .txt / 粘贴文本 -->
+        <div v-if="showPlotOutlineModal" class="modal-overlay" @click.self="cancelPlotOutline()">
+            <div class="modal" style="max-width: 640px; max-height: 86vh;">
+                <div class="modal-header">
+                    <span class="modal-title"><i class="fas fa-scroll"></i> 剧情大纲</span>
+                    <button class="modal-close" @click="cancelPlotOutline()">&times;</button>
+                </div>
+                <div class="modal-body" style="overflow-y: auto;">
+                    <p class="plot-style-hint">导入或粘贴剧情发展大纲，AI 生成分支选项时会围绕此走向推进；每个选项仍会引入新的推进，不会直接复述大纲原文。</p>
+                    <textarea v-model="plotOutlineDraft"
+                              class="form-input plot-outline-textarea"
+                              rows="10"
+                              placeholder="在此粘贴或输入剧情大纲，或点击下方按钮导入 .txt 文件…"></textarea>
+                    <div class="plot-outline-actions">
+                        <label class="btn btn-secondary btn-sm">
+                            <i class="fas fa-file-import"></i> 导入 .txt 文件
+                            <input type="file" accept=".txt,text/plain,text/*"
+                                   style="display: none;"
+                                   @change="importPlotOutlineFile($event)">
+                        </label>
+                        <button v-if="plotOutlineDraft" class="btn btn-ghost btn-sm" @click="plotOutlineDraft = ''">
+                            <i class="fas fa-eraser"></i> 清空
+                        </button>
+                        <span class="plot-outline-counter">{{ (plotOutlineDraft || '').length }} 字</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @click="cancelPlotOutline()">取消</button>
+                    <button class="btn btn-primary" @click="confirmPlotOutline()">
+                        <i class="fas fa-check"></i> 保存大纲
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- 归档提取模态框 (v-show: DOM常驻，切换无延迟) -->
         <div v-show="showRestoreArchiveModal" class="modal-overlay" @click.self="showRestoreArchiveModal = false">
             <div class="modal restore-archive-modal">
@@ -12449,6 +12490,10 @@
                     plotChoicesLoading: false,
                     // 剧情选项风格（会话级）
                     plotChoiceStyle: '',
+                    // 剧情大纲（会话级，AI 生成分支选项时围绕此走向推进）
+                    plotOutline: '',
+                    plotOutlineDraft: '',
+                    showPlotOutlineModal: false,
                     showPlotStyleModal: false,
                     plotStyleModalConfig: { presetKey: 'default', customText: '', isFirstEnable: false },
                     plotStylePresets: [
@@ -13653,6 +13698,12 @@
                     if (!text) return '';
                     const preset = (this.plotStylePresets || []).find(p => p.text && p.text === text);
                     return preset ? preset.label : '自定义';
+                },
+                // 当前剧情大纲的可读标签（供状态面板显示；空不显示）
+                plotOutlineLabel() {
+                    const text = (this.plotOutline || '').trim();
+                    if (!text) return '';
+                    return text.length + ' 字';
                 },
                 // 移动端剧情选项视图：≤640px、有可见选项、且未切到输入框模式
                 isMobilePlotChoiceView() {
