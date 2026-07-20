@@ -150,9 +150,10 @@ def _build_user_prompt(
 
     outline_text = (outline or "").strip()
     if outline_text:
+        # 上限 8000 字符（约 8k token），覆盖大多数 5k-7k 字大纲，对上下文窗口压力可控
         parts.append(
             "剧情大纲（生成选项时需契合此整体走向，但每个选择仍必须引入新的推进，"
-            "不要直接复述大纲原文）：\n" + outline_text[:2000]
+            "不要直接复述大纲原文）：\n" + outline_text[:8000]
         )
 
     history_text = _format_recent_history(recent_history)
