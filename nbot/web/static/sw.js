@@ -1,10 +1,12 @@
 // NekoBot Service Worker
-const CACHE_NAME = 'nekobot-v20260602-composer3';
+const CACHE_NAME = 'nekobot-v20260725-oauth-icons';
 const STATIC_ASSETS = [
     '/',
     '/static/css/app.css',
+    '/static/js/i18n.js',
     '/static/js/nbot-shared.js',
     '/static/js/nbot-methods.js',
+    '/static/svg/opencode.svg',
     '/static/vendor/socket.io.min.js',
     '/static/vendor/vue.global.prod.js',
     '/static/vendor/vue-router.global.prod.js',

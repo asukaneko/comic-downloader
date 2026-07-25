@@ -79,10 +79,12 @@ from nbot.web.routes import (
     register_webdav_backup_routes,
     register_workflow_routes,
     register_workspace_misc_routes,
+    register_oauth_routes,
     register_workspace_private_routes,
     register_workspace_shared_routes,
     register_world_book_routes,
 )
+from nbot.core.oauth import init_oauth_manager
 from nbot.web.secure_store import read_secure_json, write_secure_json
 from nbot.web.socket_events import register_socket_events
 
@@ -480,6 +482,9 @@ class WebChatServer:
             os.path.dirname(__file__), "..", "..", "data", "web"
         )
         os.makedirs(self.data_dir, exist_ok=True)
+
+        # OAuth 管理器（在 data_dir 之后初始化）
+        self.oauth_manager = init_oauth_manager(self.data_dir)
 
         # Token 统计管理器（统一持久化，必须最先初始化）
         from nbot.core.token_stats import init_token_stats_manager
@@ -2963,6 +2968,7 @@ class WebChatServer:
         register_webdav_backup_routes(self.app, self)
         register_update_routes(self.app, self)
         register_login_token_routes(self.app, self)
+        register_oauth_routes(self.app, self)
 
         # 初始化 Gateway 并注入 AgentService
         self._init_gateway()

@@ -83,6 +83,10 @@ class OpenAIResponsesProtocol(ModelProtocol):
             "model": model,
             "input": input_items,
         }
+        base_url = str(kwargs.get("base_url") or "")
+        is_codex_backend = "chatgpt.com/backend-api/codex" in base_url
+        if is_codex_backend:
+            payload["store"] = False
 
         if tools:
             payload["tools"] = self._convert_tools(tools)
@@ -91,7 +95,7 @@ class OpenAIResponsesProtocol(ModelProtocol):
                 if mapped is not None:
                     payload["tool_choice"] = mapped
 
-        if max_tokens:
+        if max_tokens and not is_codex_backend:
             payload["max_output_tokens"] = max_tokens
 
         if stream:

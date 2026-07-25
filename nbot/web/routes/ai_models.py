@@ -168,6 +168,8 @@ def register_ai_model_routes(app, server):
             "prompt_template": data.get("prompt_template", ""),
             "created_at": now,
             "updated_at": now,
+            # OAuth 账号关联（绑定后 api_key 在运行时由 OAuthManager 注入）
+            "oauth_account_id": data.get("oauth_account_id", ""),
         }
         server.ai_models.append(model)
         server._save_data("ai_models")
@@ -293,6 +295,10 @@ def register_ai_model_routes(app, server):
             # 图片生成特有配置
             model["size"] = data.get("size", model.get("size", "1024x1024"))
             model["prompt_template"] = data.get("prompt_template", model.get("prompt_template", ""))
+            # OAuth 账号关联（绑定后 api_key 在运行时由 OAuthManager 注入）
+            model["oauth_account_id"] = data.get(
+                "oauth_account_id", model.get("oauth_account_id", "")
+            )
             model["updated_at"] = datetime.now().isoformat()
             server._save_data("ai_models")
             return jsonify({"success": True, "model": model})
@@ -706,6 +712,7 @@ def register_ai_model_routes(app, server):
             append_base_url_path = model.get("append_base_url_path", True)
             model_name = model.get("model", "")
             purpose = model.get("purpose", "chat")
+            oauth_account_id = model.get("oauth_account_id", "")
 
             if not api_key:
                 return jsonify({"success": False, "message": "API Key is required"})
@@ -720,6 +727,15 @@ def register_ai_model_routes(app, server):
                 import requests
 
                 start_time = time.time()
+                oauth_extra_headers = {}
+                oauth_remove_headers = set()
+                if oauth_account_id:
+                    from nbot.core.oauth import get_oauth_manager
+
+                    credential = get_oauth_manager().resolve_credential(oauth_account_id)
+                    api_key = credential.access_token
+                    oauth_extra_headers = dict(credential.extra_headers)
+                    oauth_remove_headers = set(credential.remove_headers)
                 # TTS 模型使用适配器测试
                 if purpose == "tts":
                     from nbot.services.tts_adapters import get_adapter
@@ -827,11 +843,17 @@ def register_ai_model_routes(app, server):
                         append_base_url_path=append_base_url_path,
                         api_key=api_key,
                     )
-                    headers = protocol.build_headers(api_key)
+                    requires_stream = (
+                        "chatgpt.com/backend-api/codex" in base_url
+                    )
+                    headers = protocol.build_headers(api_key, stream=requires_stream)
+                    headers.update(oauth_extra_headers)
+                    for header_name in oauth_remove_headers:
+                        headers.pop(header_name, None)
                     payload = protocol.build_payload(
                         model_name,
                         [{"role": "user", "content": "Hello"}],
-                        stream=False,
+                        stream=requires_stream,
                         max_tokens=10,
                         base_url=base_url,
                         provider_type=provider_type,

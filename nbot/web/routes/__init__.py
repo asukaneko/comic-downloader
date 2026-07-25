@@ -42,6 +42,7 @@ from nbot.web.routes.world_book import register_world_book_routes
 from nbot.web.routes.workspace_private import register_workspace_private_routes
 from nbot.web.routes.workspace_shared import register_workspace_shared_routes
 from nbot.web.routes.workspace_misc import register_workspace_misc_routes
+from nbot.web.routes.oauth import register_oauth_routes
 
 __all__ = [
     "register_admin_misc_routes",
@@ -88,4 +89,5 @@ __all__ = [
     "register_workspace_private_routes",
     "register_workspace_shared_routes",
     "register_workspace_misc_routes",
+    "register_oauth_routes",
 ]

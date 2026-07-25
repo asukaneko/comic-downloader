@@ -4,6 +4,7 @@ import os
 import base64
 import json
 import io
+import logging
 from typing import Any, Dict, Optional
 from PIL import Image
 import imageio.v2 as imageio
@@ -30,6 +31,30 @@ provider_type = config_parser.get('ApiKey', 'provider_type', fallback="openai_co
 supports_tools = config_parser.getboolean('ApiKey', 'supports_tools', fallback=True)
 supports_reasoning = config_parser.getboolean('ApiKey', 'supports_reasoning', fallback=True)
 supports_stream = config_parser.getboolean('ApiKey', 'supports_stream', fallback=True)
+
+_log = logging.getLogger(__name__)
+
+
+def _resolve_oauth_runtime(account_id: str):
+    """解析 OAuth 账号的运行时凭据。
+
+    返回 (access_token, extra_headers, remove_headers)。
+    - access_token: 最新有效的 OAuth access_token（必要时自动刷新）
+    - extra_headers: 需要追加/覆盖到 HTTP 请求头的字段
+    - remove_headers: 需要从 HTTP 请求头移除的字段
+
+    OAuthManager 未初始化或账号已删除时返回 (None, {}, set())。
+    """
+    if not account_id:
+        return None, {}, set()
+    try:
+        from nbot.core.oauth import get_oauth_manager
+        manager = get_oauth_manager()
+        cred = manager.resolve_credential(account_id)
+        return cred.access_token, dict(cred.extra_headers), set(cred.remove_headers)
+    except Exception as e:
+        _log.error(f"OAuth runtime credential resolve failed: {e}")
+        return None, {}, set()
 
 
 def resolve_runtime_api_key(configured_api_key: str = "", provider: str = "") -> str:
@@ -173,6 +198,8 @@ def apply_model_config(config: dict) -> None:
         client.supports_tools = supports_tools
         client.supports_reasoning = supports_reasoning
         client.supports_stream = supports_stream
+        # OAuth 账号绑定（chat_completion 时解析 fresh access_token）
+        client.oauth_account_id = config.get("oauth_account_id", "")
 
 
 user_messages = {}
@@ -223,6 +250,8 @@ class AIClient:
         self.supports_tools = bool(supports_tools)
         self.supports_reasoning = bool(supports_reasoning)
         self.supports_stream = bool(supports_stream)
+        # OAuth 账号绑定（运行时由 _resolve_oauth_runtime 解析 fresh access_token）
+        self.oauth_account_id: str = ""
 
     @staticmethod
     def clean_response(content: str) -> str:
@@ -297,6 +326,21 @@ class AIClient:
             api_key=self.api_key,
         )
         headers = protocol.build_headers(self.api_key, stream=stream)
+
+        # OAuth 运行时凭据注入：access_token + extra_headers + remove_headers
+        if getattr(self, "oauth_account_id", ""):
+            _oauth_token, _oauth_extra, _oauth_remove = _resolve_oauth_runtime(self.oauth_account_id)
+            if _oauth_token:
+                # 用 fresh access_token 重建 headers（确保 Authorization 用最新 token）
+                headers = protocol.build_headers(_oauth_token, stream=stream)
+                if _oauth_extra:
+                    headers.update(_oauth_extra)
+                if _oauth_remove:
+                    for _h in _oauth_remove:
+                        headers.pop(_h, None)
+                # 同步更新 self.api_key 以供 payload 等下游使用
+                self.api_key = _oauth_token
+
         payload = protocol.build_payload(
             model_name,
             messages,
@@ -359,13 +403,29 @@ class AIClient:
 
             cfg_pt = cfg.get("provider_type", "openai_compatible")
             cfg_protocol = get_protocol(cfg_pt)
+            # OAuth 运行时凭据注入（failover 队列中的 OAuth 绑定模型）
+            cfg_api_key = cfg.get("api_key", "")
+            cfg_extra_headers = {}
+            cfg_remove_headers = set()
+            cfg_oauth_id = cfg.get("oauth_account_id", "")
+            if cfg_oauth_id:
+                _otoken, _oextra, _oremove = _resolve_oauth_runtime(cfg_oauth_id)
+                if _otoken:
+                    cfg_api_key = _otoken
+                    cfg_extra_headers = _oextra
+                    cfg_remove_headers = _oremove
             cfg_url = cfg_protocol.resolve_url(
                 cfg.get("base_url", ""),
                 model=mname or "",
                 append_base_url_path=cfg.get("append_base_url_path", True),
-                api_key=cfg.get("api_key", ""),
+                api_key=cfg_api_key,
             )
-            cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=False)
+            cfg_headers = cfg_protocol.build_headers(cfg_api_key, stream=False)
+            if cfg_extra_headers:
+                cfg_headers.update(cfg_extra_headers)
+            if cfg_remove_headers:
+                for _h in cfg_remove_headers:
+                    cfg_headers.pop(_h, None)
             cfg_payload = cfg_protocol.build_payload(
                 mname,
                 messages,

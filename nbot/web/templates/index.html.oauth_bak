@@ -22,16 +22,16 @@
     <link rel="stylesheet" href="/static/vendor/styles/highlight-github-dark.min.css">
     <script src="/static/vendor/highlight.min.js"></script>
     <link rel="stylesheet" href="/static/vendor/styles/font-awesome.min.css">
-    <script src="/static/js/i18n.js?v=20260725-oauth"></script>
+    <script src="/static/js/i18n.js?v=20260525"></script>
     <script src="/static/js/push.js"></script>
     <script>
         window.__nbotCoreDepsReady = Promise.resolve();
         window.__nbotOptionalDepsReady = Promise.resolve();
         // 静态资源版本号（修改后递增以强制浏览器刷新缓存）
-        window.__nbotAssetVersion = '20260725-oauth-icons';
+        window.__nbotAssetVersion = '20260618-ws-auth';
     </script>
     <link rel="stylesheet" href="/static/css/boot.css?v=20260542">
-    <link rel="stylesheet" href="/static/css/app.css?v=20260725-oauth-icons">
+    <link rel="stylesheet" href="/static/css/app.css?v=20260620-review-events">
     <link rel="stylesheet" href="/static/css/tts-playground.css?v=20260608">
     <script>
         // PWA install prompt - must be captured before Vue mounts
@@ -5362,140 +5362,6 @@
                         </div>
                     </div>
 
-                    <!-- OAuth 账号管理 -->
-                    <div v-if="currentPage === 'oauth-accounts'" class="fade-in oauth-shell">
-                        <!-- 顶部标题栏 -->
-                        <div class="oauth-hero">
-                            <div class="oauth-hero-content">
-                                <div class="oauth-hero-icon">
-                                    <i class="fas fa-shield-halved"></i>
-                                </div>
-                                <div>
-                                    <h2 class="oauth-hero-title">{{ $t('oauth_accounts.title') }}</h2>
-                                    <p class="oauth-hero-subtitle">{{ $t('oauth_accounts.subtitle') }}</p>
-                                </div>
-                            </div>
-                            <div class="oauth-hero-actions">
-                                <div class="oauth-hero-stats">
-                                    <div class="oauth-stat">
-                                        <div class="oauth-stat-value">{{ oauthAccounts.length }}</div>
-                                        <div class="oauth-stat-label">{{ $t('oauth_accounts.stat_accounts') }}</div>
-                                    </div>
-                                    <div class="oauth-stat">
-                                        <div class="oauth-stat-value">{{ oauthProviders.length }}</div>
-                                        <div class="oauth-stat-label">{{ $t('oauth_accounts.stat_providers') }}</div>
-                                    </div>
-                                </div>
-                                <button class="btn btn-secondary" @click="loadOauthProviders(); loadOauthAccounts()">
-                                    <i class="fas fa-sync-alt"></i> {{ $t('oauth_accounts.refresh') }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="oauth-content-grid">
-                        <!-- Provider 列表 -->
-                        <div class="oauth-pane oauth-provider-pane">
-                            <div class="oauth-pane-header">
-                                <div class="oauth-pane-title">
-                                    <i class="fas fa-plug"></i>
-                                    <span>{{ $t('oauth_accounts.add_section') }}</span>
-                                </div>
-                                <span class="oauth-pane-badge">{{ oauthProviders.length }}</span>
-                            </div>
-                            <div class="oauth-pane-subtitle">{{ $t('oauth_accounts.add_section_desc') }}</div>
-                            <div class="oauth-pane-body">
-                                <div class="oauth-provider-grid">
-                                    <div v-for="provider in oauthProviders" :key="provider.id" class="oauth-provider-card">
-                                        <div class="oauth-provider-brand">
-                                            <div class="oauth-logo">
-                                                <img :src="getOauthProviderLogo(provider.id)" :alt="provider.title"
-                                                     @error="handleOauthLogoError($event, provider.id)">
-                                            </div>
-                                            <div class="oauth-provider-meta">
-                                                <div class="oauth-provider-title">{{ provider.title }}</div>
-                                                <div class="oauth-provider-subtitle">{{ provider.subtitle }}</div>
-                                            </div>
-                                        </div>
-                                        <div class="oauth-provider-footer">
-                                            <span class="oauth-mode-tag">
-                                                <i :class="getOauthLoginIcon(provider.login_mode)"></i>
-                                                {{ getOauthLoginModeLabel(provider.login_mode) }}
-                                            </span>
-                                            <span v-if="oauthAccountCountByProvider[provider.id]" class="oauth-provider-linked">
-                                                <i class="fas fa-circle-check"></i>
-                                                {{ $t('oauth_accounts.linked_count', { count: oauthAccountCountByProvider[provider.id] }) }}
-                                            </span>
-                                        </div>
-                                        <button class="btn btn-primary oauth-login-btn" @click="startOauthLogin(provider)">
-                                            <i :class="getOauthLoginIcon(provider.login_mode)"></i>
-                                            {{ getOauthLoginButtonText(provider.login_mode) }}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div v-if="oauthProviders.length === 0" class="oauth-empty-state">
-                                    <div class="oauth-empty-icon"><i class="fas fa-plug-circle-xmark"></i></div>
-                                    <div class="oauth-empty-title">{{ $t('oauth_accounts.no_providers') }}</div>
-                                    <div class="oauth-empty-desc">{{ $t('oauth_accounts.no_providers_desc') }}</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 已登录账号 -->
-                        <div class="oauth-pane oauth-account-pane">
-                            <div class="oauth-pane-header">
-                                <div class="oauth-pane-title">
-                                    <i class="fas fa-user-shield"></i>
-                                    <span>{{ $t('oauth_accounts.connected_section') }}</span>
-                                </div>
-                                <span class="oauth-pane-badge">{{ oauthAccounts.length }}</span>
-                            </div>
-                            <div class="oauth-pane-subtitle">{{ $t('oauth_accounts.connected_section_desc') }}</div>
-                            <div class="oauth-pane-body">
-                                <div v-if="oauthAccounts.length > 0" class="oauth-account-list">
-                                    <div v-for="account in oauthAccounts" :key="account.id"
-                                         class="oauth-account-card" :class="getOauthAccountToneClass(account.status)">
-                                        <div class="oauth-account-brand">
-                                            <div class="oauth-logo">
-                                                <img :src="getOauthProviderLogo(account.provider)" :alt="account.provider"
-                                                     @error="handleOauthLogoError($event, account.provider)">
-                                            </div>
-                                            <div class="oauth-account-info">
-                                                <div class="oauth-account-title">{{ account.label }}</div>
-                                                <div class="oauth-account-meta">
-                                                    <span class="oauth-meta-chip"><i class="fas fa-tag"></i>{{ account.provider }}</span>
-                                                    <span v-if="account.metadata?.email" class="oauth-meta-chip">
-                                                        <i class="fas fa-envelope"></i>{{ account.metadata.email }}
-                                                    </span>
-                                                    <span class="oauth-meta-chip">
-                                                        <i class="fas fa-cube"></i>{{ $t('oauth_accounts.models_count', { count: account.metadata?.models?.length || 0 }) }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="oauth-account-actions">
-                                            <span class="oauth-status-pill" :class="'status-' + account.status">
-                                                <span class="oauth-status-dot"></span>
-                                                {{ getOauthStatusText(account.status) }}
-                                            </span>
-                                            <button class="btn btn-secondary btn-sm" @click="openOauthModelPicker(account)">
-                                                <i class="fas fa-sliders"></i> {{ $t('oauth_accounts.edit_models') }}
-                                            </button>
-                                            <button class="btn btn-danger btn-sm" @click="deleteOauthAccount(account)">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div v-else class="oauth-empty-state">
-                                    <div class="oauth-empty-icon"><i class="fas fa-key"></i></div>
-                                    <div class="oauth-empty-title">{{ $t('oauth_accounts.empty') }}</div>
-                                    <div class="oauth-empty-desc">{{ $t('oauth_accounts.empty_desc') }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        </div>
-                    </div>
-
                     <!-- AI Config -->
                     <div v-if="currentPage === 'ai-config'" class="fade-in ai-config-shell">
                         <!-- 顶部标题栏 -->
@@ -6618,276 +6484,7 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- OAuth 设备码模态框 (DEVICE_CODE: Codex/MiniMax/xAI) -->
-                    <div v-if="showOauthDeviceModal" class="modal-overlay apikey-modal-overlay"
-                             style="z-index: 1300;" @click.self="closeOauthDeviceModal">
-                            <div class="apikey-glass-card" style="width: 520px;">
-                                <div class="apikey-topbar">
-                                    <div class="apikey-topbar-left">
-                                        <i class="fas fa-mobile-screen-button" style="color: var(--accent-primary);"></i>
-                                        <span class="apikey-title">{{ oauthPendingProvider?.title }} · {{ $t('oauth_accounts.device.title') }}</span>
-                                    </div>
-                                    <button class="apikey-close-btn" @click="closeOauthDeviceModal">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                                <div class="apikey-body">
-                                    <div class="oauth-modal-body">
-                                        <p class="oauth-tip">
-                                            <i class="fas fa-circle-info"></i>
-                                            <span>{{ $t('oauth_accounts.device.tip') }}</span>
-                                        </p>
-
-                                        <div class="oauth-field" v-if="oauthLoginSession?.user_code">
-                                            <span class="oauth-field-label">
-                                                <i class="fas fa-hashtag"></i>{{ $t('oauth_accounts.device.code') }}
-                                            </span>
-                                            <div class="oauth-code-display">
-                                                <code>{{ oauthLoginSession.user_code }}</code>
-                                                <button class="btn btn-secondary btn-sm" @click="copyOauthUserCode">
-                                                    <i class="fas fa-copy"></i> {{ $t('common.copy') }}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div class="oauth-field" v-if="oauthLoginSession?.verification_url">
-                                            <span class="oauth-field-label">
-                                                <i class="fas fa-link"></i>{{ $t('oauth_accounts.device.url') }}
-                                            </span>
-                                            <div class="oauth-url-display">
-                                                <a :href="oauthLoginSession.verification_url" target="_blank"
-                                                   rel="noopener noreferrer" class="oauth-url-link">
-                                                    {{ oauthLoginSession.verification_url }}
-                                                </a>
-                                                <button class="btn btn-primary btn-sm" @click="openOauthVerificationUrl">
-                                                    <i class="fas fa-arrow-up-right-from-square"></i> {{ $t('oauth_accounts.device.open') }}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div class="oauth-status-banner" :class="'status-' + oauthDeviceStatus">
-                                            <i :class="oauthDeviceStatus === 'pending' ? 'fas fa-spinner fa-spin' : (oauthDeviceStatus === 'connected' ? 'fas fa-circle-check' : 'fas fa-circle-exclamation')"></i>
-                                            <span>{{ oauthDeviceMessage || getOauthDeviceStatusText(oauthDeviceStatus) }}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- OAuth Anthropic PKCE 模态框 -->
-                        <div v-if="showOauthAnthropicModal" class="modal-overlay apikey-modal-overlay"
-                             style="z-index: 1300;" @click.self="closeOauthAnthropicModal">
-                            <div class="apikey-glass-card" style="width: 520px;">
-                                <div class="apikey-topbar">
-                                    <div class="apikey-topbar-left">
-                                        <i class="fas fa-key" style="color: var(--accent-primary);"></i>
-                                        <span class="apikey-title">{{ $t('oauth_accounts.anthropic.title') }}</span>
-                                    </div>
-                                    <button class="apikey-close-btn" @click="closeOauthAnthropicModal">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                                <div class="apikey-body">
-                                    <div class="oauth-modal-body">
-                                        <p class="oauth-tip">
-                                            <i class="fas fa-circle-info"></i>
-                                            <span>{{ $t('oauth_accounts.anthropic.tip') }}</span>
-                                        </p>
-
-                                        <a v-if="oauthLoginSession?.verification_url" class="oauth-launch-link"
-                                           :href="oauthLoginSession.verification_url" target="_blank" rel="noopener noreferrer">
-                                            <i class="fas fa-arrow-up-right-from-square"></i>
-                                            {{ $t('oauth_accounts.anthropic.open') }}
-                                        </a>
-
-                                        <div class="oauth-field">
-                                            <span class="oauth-field-label">
-                                                <i class="fas fa-paste"></i>{{ $t('oauth_accounts.anthropic.code') }}
-                                            </span>
-                                            <textarea v-model="oauthAnthropicCode" class="form-input oauth-mono-input"
-                                                      :placeholder="$t('oauth_accounts.anthropic.placeholder')" rows="4"></textarea>
-                                            <p class="oauth-hint">{{ $t('oauth_accounts.anthropic.format') }}</p>
-                                        </div>
-
-                                        <div class="oauth-modal-actions">
-                                            <button class="btn btn-secondary" @click="closeOauthAnthropicModal">{{ $t('common.cancel') }}</button>
-                                            <button class="btn btn-primary" @click="submitOauthAnthropicCode"
-                                                    :disabled="!oauthAnthropicCode.trim() || isLoading">
-                                                <i :class="isLoading ? 'fas fa-spinner fa-spin' : 'fas fa-check'"></i>
-                                                {{ $t('oauth_accounts.anthropic.submit') }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- OAuth Qwen JSON 导入模态框 -->
-                        <div v-if="showOauthQwenModal" class="modal-overlay apikey-modal-overlay"
-                             style="z-index: 1300;" @click.self="closeOauthQwenModal">
-                            <div class="apikey-glass-card" style="width: 560px;">
-                                <div class="apikey-topbar">
-                                    <div class="apikey-topbar-left">
-                                        <i class="fas fa-file-import" style="color: var(--accent-primary);"></i>
-                                        <span class="apikey-title">{{ $t('oauth_accounts.qwen.title') }}</span>
-                                    </div>
-                                    <button class="apikey-close-btn" @click="closeOauthQwenModal">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                                <div class="apikey-body">
-                                    <div class="oauth-modal-body">
-                                        <p class="oauth-tip">
-                                            <i class="fas fa-terminal"></i>
-                                            <span>{{ $t('oauth_accounts.qwen.tip_prefix') }} <code>qwen</code>
-                                                {{ $t('oauth_accounts.qwen.tip_middle') }} <code>~/.qwen/oauth_creds.json</code>
-                                                {{ $t('oauth_accounts.qwen.tip_suffix') }}</span>
-                                        </p>
-
-                                        <div class="oauth-field">
-                                            <span class="oauth-field-label">
-                                                <i class="fas fa-file-code"></i>{{ $t('oauth_accounts.qwen.json') }}
-                                            </span>
-                                            <textarea v-model="oauthQwenRawJson" class="form-input oauth-mono-input"
-                                                      placeholder='{"access_token": "...", "refresh_token": "...", "expiry_date": 1234567890000}'
-                                                      rows="9"></textarea>
-                                        </div>
-
-                                        <div class="oauth-modal-actions">
-                                            <button class="btn btn-secondary" @click="closeOauthQwenModal">{{ $t('common.cancel') }}</button>
-                                            <button class="btn btn-primary" @click="importOauthQwenCredentials"
-                                                    :disabled="!oauthQwenRawJson.trim() || isLoading">
-                                                <i :class="isLoading ? 'fas fa-spinner fa-spin' : 'fas fa-file-import'"></i>
-                                                {{ $t('oauth_accounts.qwen.import') }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- OAuth API Key 模态框 (OpenCode Zen / OpenCode Go) -->
-                        <div v-if="showOauthApiKeyModal" class="modal-overlay apikey-modal-overlay"
-                             style="z-index: 1300;" @click.self="closeOauthApiKeyModal">
-                            <div class="apikey-glass-card" style="width: 480px;">
-                                <div class="apikey-topbar">
-                                    <div class="apikey-topbar-left">
-                                        <i class="fas fa-key" style="color: var(--accent-primary);"></i>
-                                        <span class="apikey-title">{{ oauthPendingProvider?.title }} · {{ $t('oauth_accounts.apikey.title') }}</span>
-                                    </div>
-                                    <button class="apikey-close-btn" @click="closeOauthApiKeyModal">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                                <div class="apikey-body">
-                                    <div class="oauth-modal-body">
-                                        <p class="oauth-tip">
-                                            <i class="fas fa-circle-info"></i>
-                                            <span>
-                                                {{ $t('oauth_accounts.apikey.tip') }}
-                                                <template v-if="oauthPendingProvider?.id === 'opencode-zen'">
-                                                    <br>{{ $t('oauth_accounts.apikey.obtain_at') }}
-                                                    <a href="https://opencode.ai/zen" target="_blank" rel="noopener noreferrer">opencode.ai/zen</a>
-                                                </template>
-                                            </span>
-                                        </p>
-
-                                        <div class="oauth-field">
-                                            <span class="oauth-field-label">
-                                                <i class="fas fa-lock"></i>{{ $t('oauth_accounts.apikey.input') }}
-                                            </span>
-                                            <input v-model="oauthApiKeyInput" type="password" class="form-input"
-                                                   :placeholder="$t('oauth_accounts.apikey.placeholder')"
-                                                   @keyup.enter="importOauthApiKey">
-                                        </div>
-
-                                        <div class="oauth-modal-actions">
-                                            <button class="btn btn-secondary" @click="closeOauthApiKeyModal">{{ $t('common.cancel') }}</button>
-                                            <button class="btn btn-primary" @click="importOauthApiKey"
-                                                    :disabled="!oauthApiKeyInput.trim() || isLoading">
-                                                <i :class="isLoading ? 'fas fa-spinner fa-spin' : 'fas fa-right-to-bracket'"></i>
-                                                {{ $t('oauth_accounts.apikey.login') }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- OAuth 模型选择模态框 -->
-                        <div v-if="showOauthModelPickerModal" class="modal-overlay apikey-modal-overlay"
-                             style="z-index: 1300;" @click.self="closeOauthModelPicker">
-                            <div class="apikey-glass-card" style="width: 580px;">
-                                <div class="apikey-topbar">
-                                    <div class="apikey-topbar-left">
-                                        <i class="fas fa-cubes" style="color: var(--accent-primary);"></i>
-                                        <span class="apikey-title">{{ $t('oauth_accounts.models.title') }} · {{ oauthModelPickerAccount?.label }}</span>
-                                    </div>
-                                    <button class="apikey-close-btn" @click="closeOauthModelPicker">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                                <div class="apikey-body">
-                                    <div class="oauth-modal-body">
-                                        <div class="oauth-model-toolbar">
-                                            <div class="oauth-model-search">
-                                                <i class="fas fa-search"></i>
-                                                <input v-model="oauthModelSearch" type="text" class="form-input"
-                                                       :placeholder="$t('oauth_accounts.models.search')">
-                                            </div>
-                                            <button class="btn btn-secondary btn-sm" @click="refreshOauthAccountModels"
-                                                    :disabled="oauthModelPickerLoading">
-                                                <i :class="oauthModelPickerLoading ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"></i>
-                                                {{ $t('oauth_accounts.models.refresh') }}
-                                            </button>
-                                        </div>
-
-                                        <div class="oauth-model-summary" v-if="oauthModelPickerAvailable.length > 0">
-                                            <span class="oauth-model-selected-count">
-                                                <i class="fas fa-circle-check"></i>
-                                                {{ $t('oauth_accounts.models.count', { count: oauthModelPickerSelected.length }) }}
-                                            </span>
-                                            <span>
-                                                <button class="btn btn-secondary btn-sm" @click="selectAllOauthModels">
-                                                    {{ $t('oauth_accounts.models.select_all') }}
-                                                </button>
-                                                <button class="btn btn-secondary btn-sm" style="margin-left: 6px;"
-                                                        @click="clearOauthModelSelection">
-                                                    {{ $t('oauth_accounts.models.clear') }}
-                                                </button>
-                                            </span>
-                                        </div>
-
-                                        <div class="oauth-model-list" v-if="filteredOauthModels.length > 0">
-                                            <label v-for="model in filteredOauthModels" :key="model"
-                                                   class="oauth-model-item"
-                                                   :class="{ 'is-selected': oauthModelPickerSelected.includes(model) }">
-                                                <input type="checkbox" :value="model" v-model="oauthModelPickerSelected">
-                                                <span class="oauth-model-name">{{ model }}</span>
-                                            </label>
-                                        </div>
-                                        <div v-else class="oauth-model-empty">
-                                            <i class="fas fa-cube"></i>
-                                            <span>{{ oauthModelPickerAvailable.length > 0 ? $t('oauth_accounts.models.no_match') : $t('oauth_accounts.models.empty') }}</span>
-                                        </div>
-
-                                        <div class="oauth-modal-actions">
-                                            <button class="btn btn-secondary" @click="closeOauthModelPicker">{{ $t('common.cancel') }}</button>
-                                            <button class="btn btn-primary" @click="saveOauthAccountModels"
-                                                    :disabled="oauthModelPickerLoading">
-                                                <i :class="oauthModelPickerLoading ? 'fas fa-spinner fa-spin' : 'fas fa-check'"></i>
-                                                {{ $t('oauth_accounts.models.save') }} ({{ oauthModelPickerSelected.length }})
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-
-                    <div v-if="currentPage === 'ai-config'" class="ai-config-modal-layer">
                         <!-- 用途配置弹窗 -->
                         <div v-if="showPurposeConfigModal && editingPurpose" class="modal-overlay" style="z-index: 1100;" @click.self="closePurposeConfigModal">
                             <div class="modal" style="max-width: 700px; max-height: 90vh;">
@@ -12613,7 +12210,7 @@
     </div>
 
     <script src="/static/js/nbot-shared.js?v=20260618-ws-auth"></script>
-    <script src="/static/js/nbot-methods.js?v=20260725-oauth-icons"></script>
+    <script src="/static/js/nbot-methods.js?v=20260620-plot-auth"></script>
     <script>
         (async function () {
         await (window.__nbotCoreDepsReady || Promise.resolve());
@@ -12691,7 +12288,6 @@
                         ],
                         system: [
                             { id: 'ai-config', labelKey: 'nav.ai_config', icon: 'fas fa-robot' },
-                            { id: 'oauth-accounts', labelKey: 'nav.oauth_accounts', icon: 'fas fa-shield-alt' },
                             { id: 'tokens', labelKey: 'nav.tokens', icon: 'fas fa-coins' },
                             { id: 'logs', labelKey: 'nav.logs', icon: 'fas fa-file-alt' },
                             { id: 'settings', labelKey: 'nav.settings', icon: 'fas fa-cog' },
@@ -13318,27 +12914,6 @@
                     },
                     isSavingApiKey: false,
                     viewingApiKeyIds: [],
-                    // OAuth 相关
-                    oauthProviders: [],
-                    oauthAccounts: [],
-                    oauthLoginSession: null,
-                    oauthPollingTimer: null,
-                    showOauthDeviceModal: false,
-                    showOauthAnthropicModal: false,
-                    showOauthQwenModal: false,
-                    showOauthApiKeyModal: false,
-                    showOauthModelPickerModal: false,
-                    oauthPendingProvider: null,
-                    oauthAnthropicCode: '',
-                    oauthQwenRawJson: '',
-                    oauthApiKeyInput: '',
-                    oauthModelPickerAccount: null,
-                    oauthModelPickerAvailable: [],
-                    oauthModelPickerSelected: [],
-                    oauthModelPickerLoading: false,
-                    oauthModelSearch: '',
-                    oauthDeviceStatus: 'pending',
-                    oauthDeviceMessage: '',
                     currentPreset: '',
                     aiStatus: { text: '未配置', class: 'badge-warning' },
                     aiPresets: [
@@ -14114,20 +13689,6 @@
             },
             
             computed: {
-                // OAuth：各 provider 已登录账号数量，用于 provider 卡片上的已关联标记
-                oauthAccountCountByProvider() {
-                    return (this.oauthAccounts || []).reduce((acc, account) => {
-                        acc[account.provider] = (acc[account.provider] || 0) + 1;
-                        return acc;
-                    }, {});
-                },
-                // OAuth：按搜索词过滤后的可用模型列表
-                filteredOauthModels() {
-                    const keyword = (this.oauthModelSearch || '').trim().toLowerCase();
-                    const models = this.oauthModelPickerAvailable || [];
-                    if (!keyword) return models;
-                    return models.filter(model => String(model).toLowerCase().includes(keyword));
-                },
                 hasVisiblePlotChoices() {
                     return !!(this.plotMode && this.plotChoices && this.plotChoices.length > 0);
                 },
