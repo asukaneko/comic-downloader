@@ -1,5 +1,49 @@
 # 更新日志
 
+## [3.1.4] - 2026-07-25
+
+### 🌟 OAuth 多服务商账号管理
+
+- **新增 OAuth 核心子系统** (`nbot/core/oauth/`)：从 Android 端 `LocalOAuthManager` 1:1 移植，统一管理多家 AI 服务商的订阅式登录
+  - 支持 7 个服务商：Codex / Qwen / MiniMax / xAI / Anthropic / OpenCode Zen / OpenCode Go
+  - 支持 4 种登录模式：设备码授权、PKCE 浏览器授权、Qwen 凭证导入、API Key 录入
+  - 令牌自动刷新（提前 2 分钟 skew）、运行时凭据解析注入 HTTP 请求头
+  - 数据存储使用 `secure_store` 的 Fernet 信封加密，`OAuthTokenState` 以 JSON 字符串存入 `encrypted_credentials` 字段
+- **Web UI 新增 OAuth 账号管理页面**：含设备码登录、Anthropic PKCE 授权码提交、Qwen 凭证导入、API Key 录入等模态框，支持账号模型选择与同步、账号删除，新增中英文国际化文案
+- **后端新增 OAuth Flask 路由** (`/api/oauth/*`)：覆盖服务商列表、登录、轮询、提交授权码、导入凭证、API Key 登录、账号与模型管理
+- **AI 服务层注入 OAuth 运行时凭据** (`nbot/services/ai.py`)：请求时动态注入 `access_token` 及自定义请求头，故障转移支持 OAuth 账号绑定的模型
+- **模型配置支持 OAuth 账号关联**：`ai_models.json` 新增 `oauth_account_id` 字段，创建/编辑/测试模型时支持 OAuth 凭据注入
+- **Codex 协议适配调整**：请求 payload 添加 `store=False`，Codex 后端禁用 `max_output_tokens` 字段
+
+### 🎭 剧情系统
+
+- **新增剧情大纲功能**：支持用户导入/编辑剧情大纲以引导 AI 生成选项
+  - 后端 AI 流水线在调用剧情选项生成器时传入 `plot_outline` 元数据
+  - `PlotChoiceGenerator` 的 system / user prompt 支持组合剧情大纲与风格要求，`generate` 方法新增 `outline` 参数
+  - 会话路由新增 `plot_outline` 字段的获取、创建与更新接口
+  - 前端新增"编辑剧情大纲"按钮、大纲编辑模态框（含文本域、`.txt` 导入、清空、字数统计、保存/取消）
+- **扩大剧情大纲截取上限**：将剧情大纲传入时的截断长度从 2000 字符提升至 8000 字符，覆盖大多数 5k-7k 字大纲
+
+### ⚙️ 核心功能
+
+- **会话级命令执行权限系统** (`nbot/services/tools.py`)：实现 YOLO 模式与"始终允许"两种自动授权策略
+  - 新增 `EXEC_BLOCKED_COMMANDS` 危险系统命令禁止列表，重构黑名单正则覆盖 Linux/macOS/Windows 更多危险操作
+  - 新增 `get_session_exec_permission()` / `set_session_exec_yolo()` / `grant_session_exec_command()` 会话权限管理接口
+  - WebSocket 新增 `/yolo` 命令解析（开启/关闭/状态查询），`confirm_exec` 事件支持 `once` / `always` / `reject` 三种权限级别，并增加会话不匹配校验防止跨会话授权
+  - 前端确认弹窗新增"本会话始终允许该命令"按钮
+- **命令确认流程重构** (`nbot/core/agent_service.py` / `ai_pipeline.py`)：将命令确认状态从异常抛出改为元数据存储，避免中断工具循环
+  - 待确认命令存储新增 `parent_message_id` / `progress_card_id` / `todo_card_id` 字段
+  - `WebProgressReporter` 支持传入已有进度卡片和待办卡片实例，避免重复创建
+  - 确认后继续对话时携带 `resume_progress_card_id` / `resume_todo_card_id` 元数据，恢复卡片状态
+- **删除收藏夹 API**：新增 `DELETE /api/sessions/<session_id>/message-favorites/<collection_id>` 端点，与 PUT 端点解耦，解决 PUT 端点因要求 `message_ids` 非空而无法用于纯删除场景的问题
+
+### 📖 文档
+
+- 新增 [OAuth 多服务商账号管理](./nbot/core/oauth.md) 文档
+- `choice_generator.md` 补充剧情大纲（`plot_outline`）参数说明
+
+---
+
 ## [3.1.3] - 2026-07-18
 
 ### 🌟 Agent 框架重构

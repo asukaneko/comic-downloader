@@ -127,6 +127,51 @@ Web 前端 (plotChoiceStyle)
   → 持久化层 plot_choice_style 字段
 ```
 
+## 剧情大纲（plot_outline，v3.1.4+）
+
+会话可携带一段"剧情大纲"，用于引导 AI 在生成选项时遵循既定剧情走向。大纲可以是整篇故事梗概，也可以是当前章节的剧情要点。
+
+### 用法
+
+```python
+choices = await generator.generate(
+    response_text=ai_reply,
+    turn_context={...},
+    session_context={...},
+    recent_history=[...],
+    session_id="sess_abc",
+    style="dramatic",
+    outline="第一章：在雨夜的咖啡馆相遇，主角意外得知对方是失踪多年的青梅竹马……",  # 新增
+)
+```
+
+### 参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `outline` | `str \| None` | 剧情大纲文本，传入后会被截断到 8000 字符并组合到 user prompt |
+
+### 截断策略
+
+为控制上下文窗口压力，大纲在传入时会截断到 **8000 字符**（覆盖大多数 5k-7k 字大纲）。截断逻辑在 `_build_user_prompt` 中完成，超出部分丢弃并保留前文。
+
+### Prompt 组合
+
+- `_build_system_prompt`：在大纲存在时追加"必须遵循剧情大纲走向"的约束
+- `_build_user_prompt`：将大纲原文与当前回合上下文组合发送
+
+### 会话字段传递路径
+
+```text
+Web 前端 (plotOutline)
+  → socket_events  → req.metadata.plot_outline
+  → sessions 路由  → 会话持久化字段 plot_outline
+  → ai_pipeline    → ctx.metadata.plot_outline
+  → PlotChoiceGenerator.generate(outline=...)
+```
+
+前端新增"编辑剧情大纲"按钮与模态框，支持文本域直接编辑、`.txt` 文件导入、清空、字数统计。保存后自动触发选项重新生成。
+
 ## AI 调用
 
 使用 `ai_client.chat_completion()` 发送请求，system prompt 包含完整的分支设计指令。token 用量通过 `token_stats` 模块记录（purpose: `PURPOSE_PLOT`）。

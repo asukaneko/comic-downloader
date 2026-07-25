@@ -130,6 +130,7 @@ export default defineConfig({
                     { text: 'workflow - 工作流', link: '/guide/nbot/core/workflow.md' },
                     { text: 'token_stats - Token用量统计', link: '/guide/nbot/core/token_stats.md' },
                     { text: 'failover - 故障转移', link: '/guide/nbot/core/failover.md' },
+                    { text: 'oauth - 多服务商账号管理', link: '/guide/nbot/core/oauth.md' },
                     { text: 'file_parser - 文件解析', link: '/guide/nbot/core/file_parser.md' },
                     { text: 'message_middleware - 消息中间件', link: '/guide/nbot/core/message_middleware.md' },
                     { text: 'message - 统一消息', link: '/guide/nbot/core/message.md' },
