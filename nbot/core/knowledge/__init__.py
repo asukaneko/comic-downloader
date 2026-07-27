@@ -32,15 +32,6 @@ except ImportError:
     CHROMA_AVAILABLE = False
     _log.warning("chromadb not installed, knowledge base will use simple fallback")
 
-# 尝试导入 httpx 用于 embedding API
-try:
-    import httpx
-    HTTPX_AVAILABLE = True
-except ImportError:
-    httpx = None
-    HTTPX_AVAILABLE = False
-
-
 @dataclass
 class Document:
     """文档"""
@@ -115,10 +106,17 @@ class TextProcessor:
 class EmbeddingService:
     """Embedding 服务"""
 
-    def __init__(self, api_key: str = "", base_url: str = "", model: str = "text-embedding-3-small"):
+    def __init__(
+        self,
+        api_key: str = "",
+        base_url: str = "",
+        model: str = "text-embedding-3-small",
+        proxy_url: str = "",
+    ):
         self.api_key = api_key
         self.base_url = (base_url or "").rstrip("/")
         self.model = model
+        self.proxy_url = proxy_url or ""
         self._cache: Dict[str, List[float]] = {}
 
     def _get_cache_key(self, text: str) -> str:
@@ -164,9 +162,6 @@ class EmbeddingService:
 
     def _call_embedding_api(self, texts: List[str]) -> List[List[float]]:
         """调用 OpenAI 兼容的 embedding API"""
-        if not HTTPX_AVAILABLE:
-            raise RuntimeError("httpx not available")
-
         # 构建 embedding 端点
         if "/v1" in self.base_url:
             url = self.base_url.replace("/chat/completions", "").rstrip("/")
@@ -186,10 +181,18 @@ class EmbeddingService:
             "encoding_format": "float"
         }
 
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(url, headers=headers, json=payload)
-            response.raise_for_status()
-            data = response.json()
+        import requests
+        from nbot.core.model_proxy import model_proxy_request_kwargs
+
+        response = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=30,
+            **model_proxy_request_kwargs(self.proxy_url),
+        )
+        response.raise_for_status()
+        data = response.json()
 
         embeddings = []
         for item in sorted(data.get("data", []), key=lambda x: x.get("index", 0)):
@@ -474,7 +477,13 @@ class KnowledgeManager:
         """生成ID"""
         return hashlib.md5(text.encode()).hexdigest()[:16]
 
-    def configure_embedding(self, api_key: str = None, base_url: str = None, model: str = None):
+    def configure_embedding(
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        model: str = None,
+        proxy_url: str = None,
+    ):
         """配置 embedding 服务
         
         如果没有提供参数，会自动从配置中加载
@@ -487,12 +496,18 @@ class KnowledgeManager:
                     api_key = api_key or embedding_config.get("api_key", "")
                     base_url = base_url or embedding_config.get("base_url", "")
                     model = model or embedding_config.get("model", "text-embedding-3-small")
+                    proxy_url = proxy_url or embedding_config.get("proxy_url", "")
                     _log.info(f"[Knowledge] Loaded embedding config from new architecture: model={model}")
             except Exception as e:
                 _log.warning(f"[Knowledge] Failed to load embedding config from new architecture: {e}")
         
         if model:
-            service = EmbeddingService(api_key=api_key, base_url=base_url, model=model)
+            service = EmbeddingService(
+                api_key=api_key,
+                base_url=base_url,
+                model=model,
+                proxy_url=proxy_url,
+            )
             self.store.set_embedding_service(service)
             _log.info(f"[Knowledge] Embedding service configured: model={model}")
         else:
@@ -788,7 +803,14 @@ def get_knowledge_manager() -> KnowledgeManager:
     return knowledge_manager
 
 
-def configure_knowledge_embedding(api_key: str, base_url: str, model: str):
+def configure_knowledge_embedding(
+    api_key: str, base_url: str, model: str, proxy_url: str = ""
+):
     """配置知识库的 embedding 服务（快捷方法）"""
     km = get_knowledge_manager()
-    km.configure_embedding(api_key=api_key, base_url=base_url, model=model)
+    km.configure_embedding(
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        proxy_url=proxy_url,
+    )

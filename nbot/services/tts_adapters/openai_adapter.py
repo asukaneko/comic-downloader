@@ -3,6 +3,7 @@ import logging
 
 import requests as http_requests
 
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.services.tts_adapters.base import TTSAdapter
 
 _log = logging.getLogger(__name__)
@@ -96,7 +97,14 @@ class OpenAITTSAdapter(TTSAdapter):
             headers.update(extra)
 
         _log.info("TTS synthesize: url=%s, model=%s, voice=%s", url, model, voice)
-        resp = http_requests.post(url, headers=headers, data=rendered_body.encode("utf-8"), timeout=60)
+        proxy_kwargs = model_proxy_request_kwargs(config.get("proxy_url", ""))
+        resp = http_requests.post(
+            url,
+            headers=headers,
+            data=rendered_body.encode("utf-8"),
+            timeout=60,
+            **proxy_kwargs,
+        )
 
         if resp.status_code != 200:
             raise RuntimeError(f"TTS API error: HTTP {resp.status_code} - {resp.text[:300]}")
@@ -109,7 +117,9 @@ class OpenAITTSAdapter(TTSAdapter):
                 resp_json = resp.json()
                 audio_url = resp_json.get("audio_url") or resp_json.get("url")
                 if audio_url:
-                    audio_resp = http_requests.get(audio_url, timeout=60)
+                    audio_resp = http_requests.get(
+                        audio_url, timeout=60, **proxy_kwargs
+                    )
                     _write_audio_response(audio_resp, output_path)
                 else:
                     raise RuntimeError(

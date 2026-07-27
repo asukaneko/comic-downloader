@@ -281,6 +281,7 @@ def init_default_data(server):
         "provider_type": "openai_compatible",
         "api_key": "",
         "base_url": "",
+        "proxy_url": "",
         "model": server.ai_model or "gpt-4",
         "temperature": 0.7,
         "max_tokens": 2000,

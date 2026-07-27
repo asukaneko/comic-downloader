@@ -8,6 +8,7 @@ import tempfile
 
 import requests as http_requests
 
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.services.stt_adapters.base import STTAdapter
 
 _log = logging.getLogger(__name__)
@@ -136,7 +137,11 @@ class XiaomiSTTAdapter(STTAdapter):
 
             _log.info("Xiaomi STT: url=%s, model=%s, lang=%s", url, model, lang)
             resp = http_requests.post(
-                url, headers=headers, json=body, timeout=60,
+                url,
+                headers=headers,
+                json=body,
+                timeout=60,
+                **model_proxy_request_kwargs(config.get("proxy_url", "")),
             )
 
             if resp.status_code != 200:

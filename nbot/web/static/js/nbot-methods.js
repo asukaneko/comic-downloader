@@ -7812,6 +7812,78 @@ def main(params):
                     this.resetApiKeyForm();
                 },
 
+                async openModelProxyManager() {
+                    await this.loadAIModels();
+                    const drafts = {};
+                    this.aiModels.forEach(model => {
+                        if ((model.proxy_url || '').trim()) {
+                            drafts[model.id] = model.proxy_url.trim();
+                        }
+                    });
+                    this.modelProxyDrafts = drafts;
+                    this.showModelProxyManager = true;
+                },
+
+                closeModelProxyManager() {
+                    this.showModelProxyManager = false;
+                    this.modelProxyDrafts = {};
+                },
+
+                hasModelProxy(modelId) {
+                    return Object.prototype.hasOwnProperty.call(
+                        this.modelProxyDrafts,
+                        modelId
+                    );
+                },
+
+                updateModelProxyDraft(model, value) {
+                    this.modelProxyDrafts[model.id] = value;
+                },
+
+                toggleModelProxy(model) {
+                    if (this.hasModelProxy(model.id)) {
+                        delete this.modelProxyDrafts[model.id];
+                    } else {
+                        this.modelProxyDrafts[model.id] = model.proxy_url || '';
+                    }
+                },
+
+                async saveModelProxySettings() {
+                    for (const model of this.aiModels) {
+                        if (
+                            this.hasModelProxy(model.id) &&
+                            !(this.modelProxyDrafts[model.id] || '').trim()
+                        ) {
+                            this.showToast(
+                                this.$t('ai_config.model_proxy_required').replace('{name}', model.name),
+                                'error'
+                            );
+                            return;
+                        }
+                    }
+
+                    this.isSavingModelProxy = true;
+                    try {
+                        const settings = this.aiModels.map(model => ({
+                            model_id: model.id,
+                            proxy_url: this.hasModelProxy(model.id)
+                                ? (this.modelProxyDrafts[model.id] || '').trim()
+                                : ''
+                        }));
+                        await api.put('/api/ai-models/proxy-settings', { settings });
+                        await this.loadAIModels();
+                        this.showToast(this.$t('ai_config.model_proxy_saved'), 'success');
+                        this.closeModelProxyManager();
+                    } catch (e) {
+                        this.showToast(
+                            (e.response?.data?.error || e.message || this.$t('app.save_failed')),
+                            'error'
+                        );
+                    } finally {
+                        this.isSavingModelProxy = false;
+                    }
+                },
+
                 resetApiKeyForm() {
                     this.apiKeyForm = {
                         id: null,
@@ -14016,6 +14088,7 @@ def main(params):
                             provider: 'openai',
                             provider_type: 'openai_compatible',
                             api_key: '',
+                            proxy_url: '',
                             selectedApiKeyId: '',
                             base_url: '',
                             append_base_url_path: true,
@@ -14226,6 +14299,7 @@ def main(params):
                         const res = await api.post('/api/ai-models/fetch-models', {
                             api_key: apiKey,
                             base_url: this.modelForm.base_url,
+                            proxy_url: this.modelForm.proxy_url || '',
                             provider_type: this.modelForm.provider_type,
                             append_base_url_path: this.modelForm.append_base_url_path
                         });

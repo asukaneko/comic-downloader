@@ -24,6 +24,7 @@ from nbot.core.ai_pipeline import (
     PipelineResult,
 )
 from nbot.core.background_tasks import submit_background_task
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.web.utils.config_loader import get_vision_model_config
 
 try:
@@ -1091,6 +1092,7 @@ def _call_web_ai(server, messages: list[dict], tools: list, stop_event=None) -> 
     provider_type = runtime_ai.get("provider_type") or "openai_compatible"
     api_key = runtime_ai.get("api_key") or ""
     append_base_url_path = runtime_ai.get("append_base_url_path", True)
+    proxy_url = runtime_ai.get("proxy_url", "")
 
     from nbot.core.protocols import get_protocol
     protocol = get_protocol(provider_type)
@@ -1109,7 +1111,13 @@ def _call_web_ai(server, messages: list[dict], tools: list, stop_event=None) -> 
         base_url=base_url,
         provider_type=provider_type,
     )
-    resp = requests.post(url, json=payload, headers=headers, timeout=120)
+    resp = requests.post(
+        url,
+        json=payload,
+        headers=headers,
+        timeout=120,
+        **model_proxy_request_kwargs(proxy_url),
+    )
     resp.raise_for_status()
     normalized = protocol.parse_response(
         response_json_utf8(resp),
@@ -1150,6 +1158,7 @@ def _stream_to_web(
     provider_type = runtime_ai.get("provider_type") or "openai_compatible"
     api_key = runtime_ai.get("api_key") or ""
     append_base_url_path = runtime_ai.get("append_base_url_path", True)
+    proxy_url = runtime_ai.get("proxy_url", "")
 
     from nbot.core.protocols import get_protocol
     protocol = get_protocol(provider_type)
@@ -1220,6 +1229,7 @@ def _stream_to_web(
                 resp = requests.post(
                     cfg_url, json=cfg_payload, headers=cfg_headers,
                     stream=True, timeout=120,
+                    **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
                 )
                 resp.raise_for_status()
                 failover.record_success(mid)
@@ -1259,13 +1269,27 @@ def _stream_to_web(
             sum(len(str(msg.get("content", ""))) for msg in messages if isinstance(msg, dict)),
             bool(tools),
         )
-        resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
+        resp = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            stream=True,
+            timeout=120,
+            **model_proxy_request_kwargs(proxy_url),
+        )
         try:
             resp.raise_for_status()
         except requests.HTTPError:
             if resp.status_code in (400, 422) and payload.get("stream_options"):
                 payload = _build_stream_payload(include_usage=False)
-                resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
+                resp = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    stream=True,
+                    timeout=120,
+                    **model_proxy_request_kwargs(proxy_url),
+                )
                 resp.raise_for_status()
             else:
                 raise
@@ -2299,6 +2323,7 @@ def get_ai_response_with_images(
         model = "zai-org/GLM-4.6V"
         provider_type = "openai_compatible"
         append_base_url_path = True
+        proxy_url = ""
         system_prompt = "请详细描述这张图片的内容。"
 
         if vision_config and vision_config.get("api_key"):
@@ -2308,6 +2333,7 @@ def get_ai_response_with_images(
             model = vision_config.get("model", "zai-org/GLM-4.6V")
             provider_type = vision_config.get("provider_type", "openai_compatible")
             append_base_url_path = vision_config.get("append_base_url_path", True)
+            proxy_url = vision_config.get("proxy_url", "")
             system_prompt = vision_config.get("system_prompt", "请详细描述这张图片的内容。")
         else:
             # 回退到旧的配置方式
@@ -2319,6 +2345,7 @@ def get_ai_response_with_images(
             model = getattr(server.ai_client, "pic_model", None) or "zai-org/GLM-4.6V"
             provider_type = getattr(server.ai_client, "provider_type", "openai_compatible")
             append_base_url_path = getattr(server.ai_client, "append_base_url_path", True)
+            proxy_url = getattr(server.ai_client, "proxy_url", "")
             system_prompt = "请详细描述这张图片的内容。"
 
             # 尝试从config.ini获取api_key
@@ -2382,7 +2409,13 @@ def get_ai_response_with_images(
             provider_type=provider_type,
         )
 
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=120,
+            **model_proxy_request_kwargs(proxy_url),
+        )
         response.raise_for_status()
         data = response_json_utf8(response)
         normalized = _img_protocol.parse_response(
@@ -2537,6 +2570,7 @@ server,
                         try:
                             _resp = requests.post(
                                 _url, json=_payload, headers=_headers, timeout=timeout_sec,
+                                **model_proxy_request_kwargs(config.get("proxy_url", "")),
                             )
                             if not _resp.ok:
                                 _log.error("[AI] API error %d: %s", _resp.status_code, _resp.text[:500])
@@ -2720,6 +2754,7 @@ server,
                     resp = requests.post(
                         cfg_url, json=cfg_payload, headers=cfg_headers,
                         timeout=cfg.get("failover_timeout", 0) or 120,
+                        **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
                     )
                     resp.raise_for_status()
                     data = response_json_utf8(resp)

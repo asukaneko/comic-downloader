@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 
 from nbot.character.models import CharacterProfile, CharacterState, RelationshipState
+from nbot.core.model_proxy import model_proxy_request_kwargs
 
 _log = logging.getLogger(__name__)
 
@@ -279,7 +280,13 @@ def _call_state_model(
     )
     headers = protocol.build_headers(api_key)
 
-    response = requests.post(url, json=payload, headers=headers, timeout=60)
+    response = requests.post(
+        url,
+        json=payload,
+        headers=headers,
+        timeout=60,
+        **model_proxy_request_kwargs(runtime_ai.get("proxy_url", "")),
+    )
     response.raise_for_status()
     normalized = protocol.parse_response(
         response_json_utf8(response),

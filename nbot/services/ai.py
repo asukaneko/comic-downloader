@@ -13,6 +13,7 @@ from nbot.core import (
     resolve_chat_completion_url,
     response_json_utf8,
 )
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.core.protocols import get_protocol
 from nbot.web.secure_store import read_secure_json, write_secure_json
 
@@ -126,6 +127,7 @@ def get_runtime_ai_config() -> dict:
         or provider_type
         or "openai_compatible",
         "append_base_url_path": shared.get("append_base_url_path", True),
+        "proxy_url": shared.get("proxy_url", ""),
         "stream": shared.get("stream", True),
         "supports_tools": shared.get("supports_tools", supports_tools),
         "supports_reasoning": shared.get("supports_reasoning", supports_reasoning),
@@ -161,6 +163,7 @@ def refresh_runtime_ai_config() -> dict:
         client.model = model
         client.provider_type = provider_type
         client.append_base_url_path = bool(effective.get("append_base_url_path", True))
+        client.proxy_url = effective.get("proxy_url", "")
         client.stream_enabled = bool(effective.get("stream", True))
         client.supports_tools = supports_tools
         client.supports_reasoning = supports_reasoning
@@ -194,6 +197,7 @@ def apply_model_config(config: dict) -> None:
         client.model = model
         client.provider_type = provider_type
         client.append_base_url_path = bool(config.get("append_base_url_path", True))
+        client.proxy_url = config.get("proxy_url", "")
         client.stream_enabled = bool(config.get("stream", True))
         client.supports_tools = supports_tools
         client.supports_reasoning = supports_reasoning
@@ -236,7 +240,8 @@ class AIClient:
                  stream_enabled: bool = True,
                  supports_tools: bool = True,
                  supports_reasoning: bool = True,
-                 supports_stream: bool = True):
+                 supports_stream: bool = True,
+                 proxy_url: str = ""):
         self.api_key = api_key
         self.base_url = base_url
         self.model = model
@@ -250,6 +255,7 @@ class AIClient:
         self.supports_tools = bool(supports_tools)
         self.supports_reasoning = bool(supports_reasoning)
         self.supports_stream = bool(supports_stream)
+        self.proxy_url = proxy_url or ""
         # OAuth 账号绑定（运行时由 _resolve_oauth_runtime 解析 fresh access_token）
         self.oauth_account_id: str = ""
 
@@ -350,14 +356,27 @@ class AIClient:
         )
 
         if stream:
-            resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=300)
+            resp = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                stream=True,
+                timeout=300,
+                **model_proxy_request_kwargs(self.proxy_url),
+            )
             resp.raise_for_status()
             return self._stream_response_generic(resp, protocol)
 
         # ---- 非流式调用：支持故障转移 ----
         # 有显式 model 参数时跳过 failover（调用方明确选择了模型）
         if model is not None:
-            resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            resp = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=120,
+                **model_proxy_request_kwargs(self.proxy_url),
+            )
             resp.raise_for_status()
             data = response_json_utf8(resp)
             return self._build_completion_response(
@@ -377,7 +396,13 @@ class AIClient:
             # 单模型或无配置：原逻辑 + 健康追踪
             _mid = model_configs[0].get("model_id", "") if model_configs else ""
             try:
-                resp = requests.post(url, json=payload, headers=headers, timeout=120)
+                resp = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=120,
+                    **model_proxy_request_kwargs(self.proxy_url),
+                )
                 resp.raise_for_status()
                 data = response_json_utf8(resp)
                 if _mid:
@@ -436,7 +461,13 @@ class AIClient:
             try:
                 # failover_timeout: 0 表示使用默认 120s
                 request_timeout = cfg.get("failover_timeout", 0) or 120
-                resp = requests.post(cfg_url, json=cfg_payload, headers=cfg_headers, timeout=request_timeout)
+                resp = requests.post(
+                    cfg_url,
+                    json=cfg_payload,
+                    headers=cfg_headers,
+                    timeout=request_timeout,
+                    **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
+                )
                 resp.raise_for_status()
                 data = response_json_utf8(resp)
                 failover.record_success(mid)
@@ -575,7 +606,11 @@ class AIClient:
                     )
                     request_timeout = cfg.get("failover_timeout", 0) or 60
                     response = requests.post(
-                        url, json=payload, headers=headers, timeout=request_timeout,
+                        url,
+                        json=payload,
+                        headers=headers,
+                        timeout=request_timeout,
+                        **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
                     )
                     response.raise_for_status()
                     resp_data = response_json_utf8(response)
@@ -745,7 +780,11 @@ class AIClient:
                         )
                         request_timeout = cfg.get("failover_timeout", 0) or 60
                         response = requests.post(
-                            url, json=payload, headers=headers, timeout=request_timeout,
+                            url,
+                            json=payload,
+                            headers=headers,
+                            timeout=request_timeout,
+                            **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
                         )
                         response.raise_for_status()
                         result = self.clean_response(
@@ -1051,7 +1090,13 @@ class AIClient:
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json"
                 }
-                response = requests.post(url, json=payload, headers=headers, timeout=120)
+                response = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=120,
+                    **model_proxy_request_kwargs(self.proxy_url),
+                )
                 response.raise_for_status()
                 result = self.clean_response(
                     response_json_utf8(response)["choices"][0]["message"]["content"]
@@ -1077,7 +1122,13 @@ class AIClient:
             "Content-Type": "application/json",
         }
         request_timeout = cfg.get("failover_timeout", 0) or 120
-        response = requests.post(url, json=payload, headers=headers, timeout=request_timeout)
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=request_timeout,
+            **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
+        )
         response.raise_for_status()
         resp_data = response_json_utf8(response)
         result = self.clean_response(
@@ -1173,7 +1224,13 @@ class AIClient:
         print(f"[视频识别] Gemini原生格式请求: {mname}, inline_data={bool(b64_data)}, "
               f"size={len(b64_data) if b64_data else 'URL'}")
 
-        response = requests.post(url, json=payload, headers=headers, timeout=request_timeout)
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=request_timeout,
+            **model_proxy_request_kwargs(cfg.get("proxy_url", "")),
+        )
         response.raise_for_status()
         data = response_json_utf8(response)
 

@@ -1392,56 +1392,20 @@ def generate_today_summary(user_id=None, group_id=None) -> str:
         if not today_messages:
             return "今天还没有和我聊天喵~"
         text = "\n".join(lines)
-        client = None
+        system_prompt = "你是一个聊天记录总结助手，只根据提供的内容生成简洁的中文摘要。"
+        user_prompt = (
+            "下面是用户和机器人的历史聊天记录，每条内容中可能包含形如(当前时间：YYYY-MM-DD HH:MM:SS)的时间信息。\n"
+            f"请只总结日期为 {today_str} 的对话内容，忽略其他日期的内容。\n"
+            "用中文输出一个大约200字的摘要，可以适当分点列出要点，不要重复原句：\n"
+            f"{text}"
+        )
         try:
-            from openai import OpenAI
-            client = OpenAI(
-                api_key=runtime_ai.get("api_key") or "",
-                base_url=runtime_ai.get("base_url") or "",
+            summary = ai_client.summarize_text(
+                system_prompt,
+                user_prompt,
+                model=runtime_ai.get("model") or ai_client.model,
             )
-        except ImportError:
-            pass
-
-        if client:
-            system_prompt = "你是一个聊天记录总结助手，只根据提供的内容生成简洁的中文摘要。"
-            user_prompt = (
-                "下面是用户和机器人的历史聊天记录，每条内容中可能包含形如(当前时间：YYYY-MM-DD HH:MM:SS)的时间信息。\n"
-                f"请只总结日期为 {today_str} 的对话内容，忽略其他日期的内容。\n"
-                "用中文输出一个大约200字的摘要，可以适当分点列出要点，不要重复原句：\n"
-                f"{text}"
-            )
-            try:
-                response = client.chat.completions.create(
-                    model=runtime_ai.get("model") or ai_client.model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    stream=False
-                )
-                summary = response.choices[0].message.content
-
-                # 记录 token 用量
-                try:
-                    from nbot.core.token_stats import PURPOSE_UTILITY, get_token_stats_manager
-                    usage = getattr(response, "usage", None)
-                    if usage:
-                        stats_mgr = get_token_stats_manager()
-                        stats_mgr.record_usage(
-                            prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-                            completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
-                            total_tokens=getattr(usage, "total_tokens", 0) or 0,
-                            model=runtime_ai.get("model") or ai_client.model or "",
-                            user_id=str(user_id) if user_id else "",
-                            channel_type="utility",
-                            source="utility",
-                            purpose=PURPOSE_UTILITY,
-                        )
-                except Exception:
-                    pass
-
-                return summary or "总结结果为空喵~"
-            except Exception:
-                return "总结时出错喵，请稍后再试~"
-        return "总结功能不可用喵~"
+            return summary or "总结结果为空喵~"
+        except Exception:
+            return "总结时出错喵，请稍后再试~"
     return "没有可总结的聊天记录喵~"

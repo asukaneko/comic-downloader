@@ -253,6 +253,7 @@ def get_model_config_by_purpose(purpose: str) -> dict:
                     model.get("provider_type", "openai_compatible")
                 ),
                 "base_url": model.get("base_url", ""),
+                "proxy_url": model.get("proxy_url", ""),
                 "model": model.get("model", ""),
                 "provider_type": model.get("provider_type", "openai_compatible"),
                 "provider": model.get("provider", "custom"),
@@ -337,6 +338,7 @@ def get_model_configs_by_purpose(purpose: str) -> list:
                 model.get("provider_type", "openai_compatible"),
             ),
             "base_url": model.get("base_url", ""),
+            "proxy_url": model.get("proxy_url", ""),
             "model": model.get("model", ""),
             "provider_type": model.get("provider_type", "openai_compatible"),
             "provider": model.get("provider", "custom"),

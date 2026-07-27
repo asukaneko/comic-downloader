@@ -24,7 +24,7 @@ configparser == 7.2.0
 mcp
 # 网络请求
 httpx>=0.25.0
-requests~=2.32.3
+requests[socks]~=2.32.3
 websocket-client>=1.8.0
 lark-oapi>=1.4.0
 # CLI 终端

@@ -4,6 +4,7 @@ import os
 
 import requests as http_requests
 
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.services.stt_adapters.base import STTAdapter
 
 _log = logging.getLogger(__name__)
@@ -61,7 +62,14 @@ class OpenAISTTAdapter(STTAdapter):
             files = {
                 "file": (os.path.basename(audio_file_path), audio_file, "audio/mpeg"),
             }
-            resp = http_requests.post(url, headers=headers, data=data, files=files, timeout=60)
+            resp = http_requests.post(
+                url,
+                headers=headers,
+                data=data,
+                files=files,
+                timeout=60,
+                **model_proxy_request_kwargs(config.get("proxy_url", "")),
+            )
 
         if resp.status_code != 200:
             raise RuntimeError(f"OpenAI STT error: HTTP {resp.status_code} - {resp.text[:300]}")

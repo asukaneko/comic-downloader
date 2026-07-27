@@ -18,6 +18,7 @@ def normalize_tts_config(model_config: dict) -> dict:
     return {
         "api_key": api_key,
         "base_url": model_config.get("base_url") or "https://api.openai.com/v1",
+        "proxy_url": model_config.get("proxy_url") or "",
         "tts_provider": model_config.get("tts_provider", ""),
         "provider_type": provider_type,
         "tts_url": model_config.get("tts_url") or "",
@@ -95,6 +96,7 @@ def normalize_stt_config(model_config: dict) -> dict:
     return {
         "api_key": api_key,
         "base_url": model_config.get("base_url") or "",
+        "proxy_url": model_config.get("proxy_url") or "",
         "provider_type": provider_type,
         "stt_provider": model_config.get("stt_provider", ""),
         "stt_url": model_config.get("stt_url") or "",

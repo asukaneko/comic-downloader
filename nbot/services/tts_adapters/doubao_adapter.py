@@ -6,6 +6,7 @@ import uuid
 
 import requests as http_requests
 
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.services.tts_adapters.base import TTSAdapter
 
 _log = logging.getLogger(__name__)
@@ -91,6 +92,7 @@ class DoubaoTTSAdapter(TTSAdapter):
             data=json.dumps(body).encode("utf-8"),
             timeout=60,
             stream=True,
+            **model_proxy_request_kwargs(config.get("proxy_url", "")),
         )
 
         if resp.status_code != 200:

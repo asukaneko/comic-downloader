@@ -2,6 +2,7 @@
 import logging
 import requests as http_requests
 
+from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.services.tts_adapters.base import TTSAdapter
 
 _log = logging.getLogger(__name__)
@@ -72,7 +73,10 @@ class XiaomiTTSAdapter(TTSAdapter):
 
         _log.info("Xiaomi TTS: url=%s, model=%s, voice=%s, has_ref_audio=%s, has_user=%s",
                   url, model, voice, bool(ref_audio), bool(user_instruction))
-        resp = http_requests.post(url, headers=headers, json=body, timeout=60)
+        proxy_kwargs = model_proxy_request_kwargs(config.get("proxy_url", ""))
+        resp = http_requests.post(
+            url, headers=headers, json=body, timeout=60, **proxy_kwargs
+        )
 
         if resp.status_code != 200:
             raise RuntimeError(f"Xiaomi TTS error: HTTP {resp.status_code} - {resp.text[:300]}")
@@ -92,7 +96,9 @@ class XiaomiTTSAdapter(TTSAdapter):
                         audio_url = audio_data.get("url")
                         audio_b64 = audio_data.get("data")
                         if audio_url:
-                            audio_resp = http_requests.get(audio_url, timeout=60)
+                            audio_resp = http_requests.get(
+                                audio_url, timeout=60, **proxy_kwargs
+                            )
                             with open(output_path, "wb") as f:
                                 f.write(audio_resp.content)
                         elif audio_b64:

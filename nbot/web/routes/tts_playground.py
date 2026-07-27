@@ -219,7 +219,18 @@ def register_tts_playground_routes(app, server):
                         "customName": custom_name,
                         "text": sample_text,
                     }
-                    resp = http_requests.post(url, headers=headers, files=files, data=data, timeout=60)
+                    from nbot.core.model_proxy import model_proxy_request_kwargs
+
+                    resp = http_requests.post(
+                        url,
+                        headers=headers,
+                        files=files,
+                        data=data,
+                        timeout=60,
+                        **model_proxy_request_kwargs(
+                            tts_config.get("proxy_url", "")
+                        ),
+                    )
 
                 if resp.status_code != 200:
                     return jsonify({

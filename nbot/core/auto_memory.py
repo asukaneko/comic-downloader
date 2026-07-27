@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 import requests
+from nbot.core.model_proxy import model_proxy_request_kwargs
 
 _log = logging.getLogger(__name__)
 
@@ -485,7 +486,13 @@ def _call_memory_model(turns: list[dict[str, str]],
     )
     headers = protocol.build_headers(api_key)
 
-    response = requests.post(url, json=payload, headers=headers, timeout=60)
+    response = requests.post(
+        url,
+        json=payload,
+        headers=headers,
+        timeout=60,
+        **model_proxy_request_kwargs(runtime_ai.get("proxy_url", "")),
+    )
     response.raise_for_status()
     resp_data = response_json_utf8(response)
     normalized = protocol.parse_response(

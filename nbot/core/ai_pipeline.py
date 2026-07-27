@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from nbot.core.background_tasks import submit_background_task
 from nbot.core.chat_models import ChatRequest, ChatResponse
+from nbot.core.model_proxy import model_proxy_request_kwargs
 
 _log = logging.getLogger(__name__)
 
@@ -476,6 +477,7 @@ class PipelineCallbacks(ABC):
             provider_type = runtime_ai.get("provider_type") or "openai_compatible"
             api_key = runtime_ai.get("api_key") or ""
             append_base_url_path = runtime_ai.get("append_base_url_path", True)
+            proxy_url = runtime_ai.get("proxy_url", "")
 
             protocol = get_protocol(provider_type)
             url = protocol.resolve_url(
@@ -494,7 +496,13 @@ class PipelineCallbacks(ABC):
                 base_url=base_url,
                 provider_type=provider_type,
             )
-            resp = requests.post(url, json=payload, headers=headers, timeout=120)
+            resp = requests.post(
+                url,
+                json=payload,
+                headers=headers,
+                timeout=120,
+                **model_proxy_request_kwargs(proxy_url),
+            )
             resp.raise_for_status()
             normalized = protocol.parse_response(
                 response_json_utf8(resp),
@@ -2298,7 +2306,11 @@ class AIPipeline:
                 _log.info("[FailoverDebug] model=%s msg_count=%d has_tools=%s payload_keys=%s",
                     model_name, len(messages), str(bool(tools)), str(list(payload.keys())))
                 resp = requests.post(
-                    url, json=payload, headers=headers, timeout=request_timeout
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=request_timeout,
+                    **model_proxy_request_kwargs(config.get("proxy_url", "")),
                 )
                 if resp.status_code != 200:
                     _log.info("[FailoverDebug] url=%s status=%d body=%s", url, resp.status_code, resp.text[:500])

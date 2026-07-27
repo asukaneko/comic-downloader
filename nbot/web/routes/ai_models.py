@@ -3,6 +3,10 @@ import uuid
 from datetime import datetime
 
 from flask import jsonify, request
+from nbot.core.model_proxy import (
+    model_proxy_request_kwargs,
+    normalize_model_proxy_url,
+)
 from nbot.web.utils.config_loader import resolve_runtime_api_key
 
 # 模型用途类型定义
@@ -88,6 +92,10 @@ def register_ai_model_routes(app, server):
     def create_ai_model():
         data = request.json or {}
         now = datetime.now().isoformat()
+        try:
+            proxy_url = normalize_model_proxy_url(data.get("proxy_url", ""))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
         # 服务端校验：参考音频 base64 大小上限（~10MB base64 ≈ 7.5MB 原始文件）
         ref_audio = data.get("tts_ref_audio", "")
@@ -114,6 +122,7 @@ def register_ai_model_routes(app, server):
             ),
             "api_key": data.get("api_key", ""),
             "base_url": data.get("base_url", ""),
+            "proxy_url": proxy_url,
             "append_base_url_path": data.get("append_base_url_path", True),
             "model": data.get("model", ""),
             "enabled": data.get("enabled", True),
@@ -207,6 +216,11 @@ def register_ai_model_routes(app, server):
             if data.get("api_key") and data["api_key"] != "********":
                 model["api_key"] = data["api_key"]
             model["base_url"] = data.get("base_url", model["base_url"])
+            if "proxy_url" in data:
+                try:
+                    model["proxy_url"] = normalize_model_proxy_url(data["proxy_url"])
+                except ValueError as exc:
+                    return jsonify({"error": str(exc)}), 400
             model["append_base_url_path"] = data.get(
                 "append_base_url_path",
                 model.get("append_base_url_path", True),
@@ -324,6 +338,49 @@ def register_ai_model_routes(app, server):
             "success": True,
             "protocols": list_protocols(),
         })
+
+    @app.route("/api/ai-models/proxy-settings", methods=["PUT"])
+    def update_model_proxy_settings():
+        """批量保存每个模型的专用代理链接。"""
+        data = request.json or {}
+        settings = data.get("settings")
+        if not isinstance(settings, list):
+            return jsonify({"error": "settings must be a list"}), 400
+
+        models_by_id = {model.get("id"): model for model in server.ai_models}
+        normalized_settings = []
+        for item in settings:
+            if not isinstance(item, dict):
+                return jsonify({"error": "invalid proxy setting"}), 400
+            model_id = item.get("model_id")
+            if model_id not in models_by_id:
+                return jsonify({"error": f"Model not found: {model_id}"}), 404
+            try:
+                proxy_url = normalize_model_proxy_url(item.get("proxy_url", ""))
+            except ValueError as exc:
+                model_name = models_by_id[model_id].get("name", model_id)
+                return jsonify({"error": f"{model_name}: {exc}"}), 400
+            normalized_settings.append((model_id, proxy_url))
+
+        now = datetime.now().isoformat()
+        for model_id, proxy_url in normalized_settings:
+            model = models_by_id[model_id]
+            model["proxy_url"] = proxy_url
+            model["updated_at"] = now
+
+        server._save_data("ai_models")
+
+        active_model_id = getattr(server, "active_model_id", None)
+        active_model = models_by_id.get(active_model_id)
+        if active_model is not None:
+            active_proxy_url = active_model.get("proxy_url", "")
+            if hasattr(server, "ai_config"):
+                server.ai_config["proxy_url"] = active_proxy_url
+            ai_client = getattr(server, "ai_client", None)
+            if ai_client is not None:
+                ai_client.proxy_url = active_proxy_url
+
+        return jsonify({"success": True, "updated": len(normalized_settings)})
 
     @app.route("/api/ai-models/by-purpose/<purpose>")
     def get_models_by_purpose(purpose):
@@ -545,6 +602,12 @@ def register_ai_model_routes(app, server):
         base_url = data.get("base_url", "")
         provider_type = data.get("provider_type", "openai_compatible")
         append_base_url_path = data.get("append_base_url_path", True)
+        proxy_url = data.get("proxy_url", "")
+
+        try:
+            proxy_kwargs = model_proxy_request_kwargs(proxy_url)
+        except ValueError as exc:
+            return jsonify({"success": False, "message": str(exc), "models": []}), 400
 
         if not base_url:
             return jsonify({"success": False, "message": "Base URL is required", "models": []})
@@ -613,7 +676,7 @@ def register_ai_model_routes(app, server):
                 }
 
             # 发送请求获取模型列表
-            resp = requests.get(url, headers=headers, timeout=15)
+            resp = requests.get(url, headers=headers, timeout=15, **proxy_kwargs)
 
             # 如果 401 错误，尝试不带 Bearer 前缀的认证方式
             if resp.status_code == 401 and provider_type not in ("gemini_native", "anthropic"):
@@ -621,7 +684,9 @@ def register_ai_model_routes(app, server):
                     "Authorization": api_key,
                     "Content-Type": "application/json"
                 }
-                resp_alt = requests.get(url, headers=headers_alt, timeout=15)
+                resp_alt = requests.get(
+                    url, headers=headers_alt, timeout=15, **proxy_kwargs
+                )
                 if resp_alt.status_code == 200:
                     resp = resp_alt
                     headers = headers_alt  # 更新 headers 用于调试显示
@@ -713,6 +778,7 @@ def register_ai_model_routes(app, server):
             model_name = model.get("model", "")
             purpose = model.get("purpose", "chat")
             oauth_account_id = model.get("oauth_account_id", "")
+            proxy_url = model.get("proxy_url", "")
 
             if not api_key:
                 return jsonify({"success": False, "message": "API Key is required"})
@@ -753,6 +819,7 @@ def register_ai_model_routes(app, server):
                         "tts_format": model.get("tts_format", "mp3"),
                         "tts_ref_audio": model.get("tts_ref_audio", ""),
                         "tts_user": model.get("tts_user", ""),
+                        "proxy_url": proxy_url,
                     }
 
                     import tempfile
@@ -825,7 +892,13 @@ def register_ai_model_routes(app, server):
                         "n": 1,
                         "size": "1024x1024"
                     }
-                    resp = requests.post(base_url, json=payload, headers=headers, timeout=30)
+                    resp = requests.post(
+                        base_url,
+                        json=payload,
+                        headers=headers,
+                        timeout=30,
+                        **model_proxy_request_kwargs(proxy_url),
+                    )
                     # 对于图片生成API，即使返回400（参数错误）也说明连接成功
                     elapsed_ms = round((time.time() - start_time) * 1000)
                     if resp.status_code in [200, 400, 401]:
@@ -858,7 +931,13 @@ def register_ai_model_routes(app, server):
                         base_url=base_url,
                         provider_type=provider_type,
                     )
-                    resp = requests.post(url, json=payload, headers=headers, timeout=30)
+                    resp = requests.post(
+                        url,
+                        json=payload,
+                        headers=headers,
+                        timeout=30,
+                        **model_proxy_request_kwargs(proxy_url),
+                    )
                     resp.raise_for_status()
                     elapsed_ms = round((time.time() - start_time) * 1000)
                     return jsonify({"success": True, "message": "Connection successful", "elapsed_ms": elapsed_ms})

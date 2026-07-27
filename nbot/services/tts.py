@@ -24,6 +24,7 @@ def _get_legacy_tts_config():
         return {
             "api_key": tts_config.get("api_key"),
             "base_url": tts_config.get("base_url") or "https://api.openai.com/v1",
+            "proxy_url": tts_config.get("proxy_url") or "",
             "tts_provider": tts_config.get("tts_provider", ""),
             "provider_type": tts_config.get("provider_type", "openai_compatible"),
             "tts_url": tts_config.get("tts_url") or "",
@@ -192,7 +193,15 @@ def upload_voice(file_path: str, name: str, text: str):
         "text": text
     }
 
-    response = requests.post(url, headers=headers, files=files, data=data)
+    from nbot.core.model_proxy import model_proxy_request_kwargs
+
+    response = requests.post(
+        url,
+        headers=headers,
+        files=files,
+        data=data,
+        **model_proxy_request_kwargs(tts_config.get("proxy_url", "")),
+    )
     print(response.status_code)
     print(response.json())
 

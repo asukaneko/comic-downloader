@@ -1191,6 +1191,7 @@ class WebChatServer:
                 supports_tools=resolved_supports_tools,
                 supports_reasoning=resolved_supports_reasoning,
                 supports_stream=resolved_supports_stream,
+                proxy_url=self.ai_config.get("proxy_url", ""),
             )
             return True
         except Exception as e:
@@ -1579,6 +1580,7 @@ class WebChatServer:
                     "provider_type": "openai_compatible",
                     "api_key": self.ai_api_key,
                     "base_url": self.ai_base_url,
+                    "proxy_url": "",
                     "model": self.ai_model,
                     "enabled": True,
                     "is_default": True,
@@ -1646,6 +1648,7 @@ class WebChatServer:
                         ),
                         "api_key": self.ai_api_key,
                         "base_url": self.ai_base_url,
+                        "proxy_url": model.get("proxy_url", ""),
                         "model": self.ai_model,
                         "temperature": model.get("temperature", 0.7),
                         "max_tokens": model.get("max_tokens", 2000),
@@ -1684,7 +1687,8 @@ class WebChatServer:
                         configure_knowledge_embedding(
                             api_key=self.ai_api_key,
                             base_url=self.ai_base_url,
-                            model=embedding_model
+                            model=embedding_model,
+                            proxy_url=model.get("proxy_url", ""),
                         )
                     except Exception as e:
                         _log.warning(f"Failed to configure knowledge embedding: {e}")
@@ -2751,7 +2755,15 @@ class WebChatServer:
                 base_url=self.ai_base_url,
                 provider_type=srv_pt,
             )
-            resp = _requests.post(srv_url, json=srv_payload, headers=srv_headers, timeout=30)
+            from nbot.core.model_proxy import model_proxy_request_kwargs
+
+            resp = _requests.post(
+                srv_url,
+                json=srv_payload,
+                headers=srv_headers,
+                timeout=30,
+                **model_proxy_request_kwargs(self.ai_config.get("proxy_url", "")),
+            )
             resp.raise_for_status()
             normalized = srv_protocol.parse_response(
                 response_json_utf8(resp),

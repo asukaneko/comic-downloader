@@ -23,6 +23,7 @@ import time
 import uuid
 
 import requests
+from nbot.core.model_proxy import model_proxy_request_kwargs
 
 _log = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ def _build_image_generation_config(model: dict) -> dict:
     return {
         "api_key": resolve_runtime_api_key(model.get("api_key", ""), provider_type),
         "base_url": model.get("base_url", ""),
+        "proxy_url": model.get("proxy_url", ""),
         "model": model.get("model", ""),
         "provider_type": provider_type,
         "provider": model.get("provider", "custom"),
@@ -216,6 +218,7 @@ def call_image_generation(
     full_url = config.get("base_url", "")
     model = config.get("model", "dall-e-3")
     provider_type = config.get("provider_type", "openai_compatible")
+    proxy_kwargs = model_proxy_request_kwargs(config.get("proxy_url", ""))
     image_size = size or config.get("size", "") or _DEFAULT_SIZE
 
     if not api_key or not full_url:
@@ -244,7 +247,11 @@ def call_image_generation(
                 "size": image_size,
             }
             response = requests.post(
-                full_url, headers=headers, json=payload, timeout=_API_TIMEOUT
+                full_url,
+                headers=headers,
+                json=payload,
+                timeout=_API_TIMEOUT,
+                **proxy_kwargs,
             )
             if response.status_code != 200:
                 _log.error("[ImageService] API 错误 %d: %s", response.status_code, response.text[:300])
@@ -264,7 +271,11 @@ def call_image_generation(
                 "batch_size": 1,
             }
             response = requests.post(
-                full_url, headers=headers, json=payload, timeout=_API_TIMEOUT
+                full_url,
+                headers=headers,
+                json=payload,
+                timeout=_API_TIMEOUT,
+                **proxy_kwargs,
             )
             if response.status_code != 200:
                 _log.error("[ImageService] API 错误 %d: %s", response.status_code, response.text[:300])
@@ -284,7 +295,11 @@ def call_image_generation(
             "size": image_size,
         }
         response = requests.post(
-            full_url, headers=headers, json=payload, timeout=_API_TIMEOUT
+            full_url,
+            headers=headers,
+            json=payload,
+            timeout=_API_TIMEOUT,
+            **proxy_kwargs,
         )
         if response.status_code != 200:
             _log.error("[ImageService] API 错误 %d: %s", response.status_code, response.text[:300])
