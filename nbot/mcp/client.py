@@ -30,12 +30,14 @@ class MCPRemoteClient:
         command: str = "",
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ):
         self._url = url
         self._transport = transport
         self._command = command
         self._args = args or []
         self._env = env
+        self._headers = dict(headers or {})
         self._session: Any = None
         self._read_stream: Any = None
         self._write_stream: Any = None
@@ -64,7 +66,7 @@ class MCPRemoteClient:
             from mcp.client.streamable_http import streamablehttp_client
 
             read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
-                streamablehttp_client(self._url)
+                streamablehttp_client(self._url, headers=self._headers or None)
             )
             _log.info("[MCP Client] 已连接 HTTP %s", self._url)
 

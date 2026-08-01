@@ -108,7 +108,7 @@ class MCPBridge:
         Args:
             server_id: 服务器 ID
             config: 连接配置，支持两种格式：
-                HTTP: {"transport": "streamable-http", "url": "http://..."}
+                HTTP: {"transport": "streamable-http", "url": "http://...", "headers": {...}}
                 Stdio: {"transport": "stdio", "command": "python", "args": ["..."], "env": {...}}
 
         Returns:
@@ -129,6 +129,7 @@ class MCPBridge:
             client = MCPRemoteClient(
                 transport="streamable-http",
                 url=config.get("url", ""),
+                headers=config.get("headers") if isinstance(config.get("headers"), dict) else None,
             )
 
         try:

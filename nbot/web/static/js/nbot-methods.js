@@ -3915,6 +3915,9 @@ def main(params):
                             if (srv.env) cfg.env = srv.env;
                         } else {
                             cfg.url = srv.url || '';
+                            if (srv.headers && Object.keys(srv.headers).length > 0) {
+                                cfg.headers = srv.headers;
+                            }
                         }
                         this.mcpServerForm = {
                             id: srv.id,
@@ -3961,6 +3964,9 @@ def main(params):
                         if (cfg.env) payload.env = cfg.env;
                     } else {
                         payload.url = cfg.url || '';
+                        if (cfg.headers && typeof cfg.headers === 'object' && Object.keys(cfg.headers).length > 0) {
+                            payload.headers = cfg.headers;
+                        }
                     }
                     this.isLoading = true;
                     try {

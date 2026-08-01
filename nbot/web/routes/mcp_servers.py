@@ -81,6 +81,22 @@ def _save_config(server, configs: list):
         json.dump(configs, f, ensure_ascii=False, indent=2)
 
 
+def _normalize_http_headers(value):
+    if value in (None, {}):
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("headers 必须是键值对象")
+
+    headers = {}
+    for name, header_value in value.items():
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("请求头名称不能为空")
+        if not isinstance(header_value, str):
+            raise ValueError(f"请求头 {name} 的值必须是字符串")
+        headers[name.strip()] = header_value
+    return headers
+
+
 def register_mcp_server_routes(app, server):
     @app.route("/api/mcp-servers")
     def get_mcp_servers():
@@ -134,6 +150,12 @@ def register_mcp_server_routes(app, server):
             entry["url"] = data.get("url", "")
             if not entry["url"]:
                 return jsonify({"error": "HTTP 模式需要 url 参数"}), 400
+            try:
+                headers = _normalize_http_headers(data.get("headers"))
+            except ValueError as exc:
+                return jsonify({"error": str(exc)}), 400
+            if headers:
+                entry["headers"] = headers
 
         configs = _load_config(server)
         configs.append(entry)
@@ -153,6 +175,15 @@ def register_mcp_server_routes(app, server):
                     cfg["command"] = data["command"]
                 if "args" in data:
                     cfg["args"] = data["args"]
+                if "headers" in data:
+                    try:
+                        headers = _normalize_http_headers(data.get("headers"))
+                    except ValueError as exc:
+                        return jsonify({"error": str(exc)}), 400
+                    if headers:
+                        cfg["headers"] = headers
+                    else:
+                        cfg.pop("headers", None)
                 cfg["description"] = data.get("description", cfg.get("description", ""))
                 cfg["enabled"] = data.get("enabled", cfg.get("enabled", True))
                 cfg["auto_connect"] = data.get("auto_connect", cfg.get("auto_connect", False))
