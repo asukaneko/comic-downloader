@@ -3341,6 +3341,25 @@
                                                 </button>
                                             </div>
                                         </div>
+                                        <div class="dropdown dropdown-menu-container">
+                                            <button class="btn btn-ghost btn-sm" @click="showTranslateDropdown = !showTranslateDropdown" :disabled="isTranslating || !personality.name">
+                                                <i class="fas fa-language" :class="{ 'fa-spin': isTranslating }"></i> {{ $t('personality.ai_translate') }} <i class="fas fa-chevron-down" style="margin-left:4px;font-size:10px;"></i>
+                                            </button>
+                                            <div v-if="showTranslateDropdown" class="dropdown-menu">
+                                                <button class="dropdown-item" @click="aiTranslatePersonality('zh')" :disabled="isTranslating">
+                                                    <i class="fas fa-language"></i> {{ $t('personality.translate_zh') }}
+                                                </button>
+                                                <button class="dropdown-item" @click="aiTranslatePersonality('en')" :disabled="isTranslating">
+                                                    <i class="fas fa-language"></i> {{ $t('personality.translate_en') }}
+                                                </button>
+                                                <button class="dropdown-item" @click="aiTranslatePersonality('ja')" :disabled="isTranslating">
+                                                    <i class="fas fa-language"></i> {{ $t('personality.translate_ja') }}
+                                                </button>
+                                                <button class="dropdown-item" @click="aiTranslatePersonality('ko')" :disabled="isTranslating">
+                                                    <i class="fas fa-language"></i> {{ $t('personality.translate_ko') }}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="card-body">
@@ -13162,6 +13181,8 @@
                     failedPortraitUrls: {},
                     showAvatarPicker: false, // 头像选择器
                     showExportImportDropdown: false, // 导出/导入下拉菜单
+                    showTranslateDropdown: false, // AI翻译下拉菜单
+                    isTranslating: false, // AI翻译中
                     moodOptions: [
                         { value: '开心', label: '开心', emoji: '😊' },
                         { value: '难过', label: '难过', emoji: '😢' },
@@ -14048,6 +14069,7 @@
                             { method: 'POST', path: '/api/personality/ai-generate', description: 'AI 生成角色卡', body: '{"description": "一个温柔的猫娘"}', response: '{"success": true, "personality": {...}}' },
                             { method: 'POST', path: '/api/personality/ai-generate-state', description: 'AI 生成初始状态值' },
                             { method: 'POST', path: '/api/personality/ai-generate-first-message', description: 'AI 生成开场白' },
+                            { method: 'POST', path: '/api/personality/ai-translate', description: 'AI 翻译角色卡', body: '{"character": {...}, "target_language": "en"}', response: '{"success": true, "character": {...}}' },
                             { method: 'POST', path: '/api/personality/portrait', description: '上传角色头像' },
                             { method: 'DELETE', path: '/api/personality/portrait', description: '删除角色头像' },
                             { method: 'POST', path: '/api/personality/generate-portrait', description: 'AI 生成角色头像' },

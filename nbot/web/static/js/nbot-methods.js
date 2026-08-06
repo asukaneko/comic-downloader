@@ -12426,6 +12426,42 @@ def main(params):
                         this.isGeneratingState = false;
                     }
                 },
+
+                // AI 翻译角色卡
+                async aiTranslatePersonality(targetLanguage) {
+                    if (!this.personality.name) {
+                        this.showToast('请先填写角色名称', 'error');
+                        return;
+                    }
+                    this.showTranslateDropdown = false;
+                    this.isTranslating = true;
+                    try {
+                        const res = await api.post('/api/personality/ai-translate', {
+                            character: this.personality,
+                            target_language: targetLanguage
+                        });
+                        if (res.data.success) {
+                            const translated = res.data.character;
+                            const keys = ['name', 'description', 'basicInfo', 'personality', 'scenario',
+                                'firstMessage', 'exampleDialogues', 'responseFormat', 'rules', 'tags',
+                                'systemPrompt'];
+                            keys.forEach(key => {
+                                if (translated[key] !== undefined) {
+                                    this.personality[key] = translated[key];
+                                }
+                            });
+                            this.personalityHasUnsavedChanges = true;
+                            this.showToast('AI 翻译完成，请点击"应用"保存', 'success');
+                        } else {
+                            this.showToast(res.data.error || '翻译失败', 'error');
+                        }
+                    } catch (e) {
+                        console.error('AI翻译角色卡失败:', e);
+                        this.showToast('翻译失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isTranslating = false;
+                    }
+                },
                 
 
                 selectCharacterCard(preset) {

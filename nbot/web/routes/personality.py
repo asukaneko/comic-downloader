@@ -742,6 +742,87 @@ def register_personality_routes(app, server):
             _log.error(f"AI 生成角色卡失败: {e}")
             return jsonify({"success": False, "error": f"生成失败: {str(e)}"}), 500
 
+    @app.route("/api/personality/ai-translate", methods=["POST"])
+    def ai_translate_personality():
+        """Translate the editable fields of a character card with the configured AI."""
+        data = request.json or {}
+        character = data.get("character")
+        target_language = str(data.get("target_language") or data.get("language") or "en").strip().lower()
+
+        if not isinstance(character, dict):
+            return jsonify({"success": False, "error": "角色卡数据无效"}), 400
+        if not character.get("name"):
+            return jsonify({"success": False, "error": "角色名称不能为空"}), 400
+        if not server.ai_client:
+            return jsonify({"success": False, "error": "AI 客户端未初始化"}), 503
+
+        language_name = {
+            "zh": "Chinese",
+            "en": "English",
+            "ja": "Japanese",
+            "ko": "Korean",
+        }.get(target_language, target_language)
+        translatable_fields = [
+            "name", "description", "basicInfo", "personality", "scenario",
+            "firstMessage", "exampleDialogues", "responseFormat", "rules", "tags",
+            "systemPrompt",
+        ]
+        system_prompt = f"""You are a professional character-card translator. Translate the values of the following JSON character card into {language_name}.
+Keep every JSON key, data type, array structure, empty field, and line-break structure unchanged. Only translate these fields: {', '.join(translatable_fields)}.
+Do not translate avatar/image paths, IDs, or numeric relationship state. Preserve {{{{user}}}}, {{{{char}}}}, <user>, <assistant>, Markdown, variables, and placeholders exactly.
+Return only one JSON object, with no Markdown fences or explanation."""
+        source = {
+            key: value for key, value in character.items()
+            if key not in {"id", "avatar", "portrait", "state"}
+        }
+
+        try:
+            response = server.ai_client.chat_completion(
+                model=server.ai_model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Translate this character card JSON:\n\n" + json.dumps(source, ensure_ascii=False)},
+                ],
+                stream=False,
+            )
+
+            try:
+                from nbot.core.token_stats import PURPOSE_WEB_FEATURE, get_token_stats_manager
+                usage = getattr(response, "usage", None)
+                if usage:
+                    get_token_stats_manager().record_usage(
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        total_tokens=getattr(usage, "total_tokens", 0) or 0,
+                        model=server.ai_model or "",
+                        channel_type="web",
+                        source="web",
+                        purpose=PURPOSE_WEB_FEATURE,
+                    )
+            except Exception:
+                pass
+
+            content = response.choices[0].message.content.strip()
+            json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+            if json_match:
+                content = json_match.group(1)
+            translated = json.loads(content)
+            if not isinstance(translated, dict):
+                raise ValueError("AI 返回的翻译结果不是 JSON 对象")
+
+            result = dict(character)
+            for field in translatable_fields:
+                if field in translated:
+                    result[field] = translated[field]
+            result["systemPrompt"] = compile_personality_prompt(result)
+            return jsonify({"success": True, "character": result})
+        except json.JSONDecodeError as e:
+            _log.error(f"AI 翻译角色卡 JSON 解析失败: {e}")
+            return jsonify({"success": False, "error": "AI 返回的翻译格式有误，请重试"}), 500
+        except Exception as e:
+            _log.error(f"AI 翻译角色卡失败: {e}")
+            return jsonify({"success": False, "error": f"翻译失败: {str(e)}"}), 500
+
     @app.route("/api/personality/ai-generate-state", methods=["POST"])
     def ai_generate_state():
         """AI 根据当前角色卡内容生成推荐的状态初始值"""
