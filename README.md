@@ -1,3 +1,5 @@
+
+
 # NekoBot
 
 ![cover](docs/cover.png)
@@ -236,14 +238,14 @@ python bot.py --no-web
 
 ```bash
 ruff check .
-python -m compileall -q bot.py nbot tools
+python -m compileall -q bot.py chat.py commands.py config.py heartbeat.py nbot tools
 python -m pytest -q
 ```
 
 CI 主要执行：
 
 1. `ruff check . --select E9,F63,F7,F82`
-2. `python -m compileall -q bot.py nbot tools`
+2. `python -m compileall -q bot.py chat.py commands.py config.py heartbeat.py nbot tools`
 3. `python -m pip install -r requirements.txt`
 4. `python -m pytest -q`
 
@@ -400,4 +402,3 @@ Claude Code 远程连接配置（`.mcp.json`）：
 ## License
 
 本项目基于 MIT License 发布，详见 [LICENSE](LICENSE)。
-
