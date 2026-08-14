@@ -37,3 +37,19 @@ class STTAdapter(ABC):
         except json.JSONDecodeError:
             _log.warning("Failed to parse custom STT headers: %s", headers_str)
             return {}
+
+    @staticmethod
+    def _guess_media_type(filename: str) -> str:
+        """根据文件扩展名推断音频 MIME 类型。"""
+        import os
+        ext = os.path.splitext(filename or "")[1].lower()
+        return {
+            ".mp3": "audio/mpeg",
+            ".wav": "audio/wav",
+            ".webm": "audio/webm",
+            ".ogg": "audio/ogg",
+            ".m4a": "audio/mp4",
+            ".aac": "audio/aac",
+            ".flac": "audio/flac",
+            ".pcm": "audio/pcm",
+        }.get(ext, "audio/mpeg")

@@ -13887,6 +13887,7 @@ def main(params):
                         dashscope: 'openai_compatible',
                         xiaomi: 'openai_compatible',
                         mimo: 'openai_compatible',
+                        doubao: 'openai_compatible',
                         anthropic: 'anthropic',
                         google: 'google'
                     };
@@ -14401,6 +14402,7 @@ def main(params):
                         dashscope: 'fas fa-wind',
                         xiaomi: 'fas fa-mobile-screen-button',
                         mimo: 'fas fa-mobile-screen-button',
+                        doubao: 'fas fa-egg',
                         custom: 'fas fa-cog'
                     };
                     return icons[provider] || 'fas fa-robot';
@@ -14423,6 +14425,7 @@ def main(params):
                         dashscope: '❖',
                         xiaomi: '◈',
                         mimo: '◈',
+                        doubao: '◈',
                         custom: '◌'
                     };
                     return glyphs[provider] || '◌';
@@ -14445,6 +14448,7 @@ def main(params):
                         dashscope: '通义千问',
                         xiaomi: '小米 Mimo',
                         mimo: '小米 Mimo',
+                        doubao: '豆包 Seed',
                         custom: '自定义'
                     };
                     return labels[provider] || provider;
@@ -14467,6 +14471,7 @@ def main(params):
                         dashscope: '/static/svg/qwen.svg',
                         xiaomi: '/static/svg/xiaomi.svg',
                         mimo: '/static/svg/xiaomi.svg',
+                        doubao: '/static/svg/openai.svg',
                         siliconflow: '/static/svg/openai.svg',
                         azure: '/static/svg/openai.svg',
                         custom: '/static/svg/custom.svg'

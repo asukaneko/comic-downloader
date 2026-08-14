@@ -23,6 +23,7 @@ import time
 import uuid
 
 import requests
+
 from nbot.core.model_proxy import model_proxy_request_kwargs
 
 _log = logging.getLogger(__name__)
@@ -151,6 +152,52 @@ def _resolve_size(size: str, provider_type: str = "", base_url: str = "") -> str
     return size
 
 
+def _image_provider(config: dict) -> str:
+    """解析图片生成 provider（优先 provider 字段，回退 provider_type）。"""
+    return (config.get("provider") or config.get("provider_type") or "").strip().lower()
+
+
+def _endpoint(base_url: str, suffix: str, default_url: str, append_base_url_path: bool = True) -> str:
+    """解析提供商端点地址（与 Android MultimodalProviderSupport.endpoint 对齐）。"""
+    base = (base_url or "").strip().rstrip("/")
+    if not base:
+        return default_url
+    if base.endswith(suffix):
+        return base
+    if not append_base_url_path:
+        return base
+    return f"{base}{suffix}"
+
+
+def _dashscope_endpoint(base_url: str, suffix: str, default_url: str, append_base_url_path: bool = True) -> str:
+    """解析 DashScope 端点地址，兼容 compatible-mode 前缀。"""
+    normalized = (base_url or "").strip().rstrip("/").replace("/compatible-mode/v1", "/api/v1")
+    return _endpoint(normalized, suffix, default_url, append_base_url_path)
+
+
+def _aspect_ratio(size: str) -> str:
+    """将尺寸字符串 (如 1024x1024) 归一化为最接近的宽高比。"""
+    try:
+        parts = size.lower().split("x", 1)
+        width = float(parts[0])
+        height = float(parts[1]) if len(parts) > 1 else 0.0
+        if width <= 0 or height <= 0:
+            return "1:1"
+        ratio = width / height
+        candidates = [
+            (1.0, "1:1"),
+            (4.0 / 3.0, "4:3"),
+            (3.0 / 4.0, "3:4"),
+            (16.0 / 9.0, "16:9"),
+            (9.0 / 16.0, "9:16"),
+            (3.0 / 2.0, "3:2"),
+            (2.0 / 3.0, "2:3"),
+        ]
+        return min(candidates, key=lambda item: abs(item[0] - ratio))[1]
+    except (ValueError, IndexError):
+        return "1:1"
+
+
 def _extract_image_url(result: dict, provider_type: str) -> str | None:
     """从图片生成 API 响应中提取图片 URL 或 base64。
 
@@ -221,8 +268,19 @@ def call_image_generation(
     proxy_kwargs = model_proxy_request_kwargs(config.get("proxy_url", ""))
     image_size = size or config.get("size", "") or _DEFAULT_SIZE
 
-    if not api_key or not full_url:
-        _log.warning("[ImageService] api_key 或 base_url 未配置")
+    # 原生提供商（Gemini/MiniMax/Qwen/豆包 Seed）在未填写 base_url 时使用默认端点
+    image_provider = _image_provider(config)
+    native_providers = (
+        "gemini", "google", "google_gemini",
+        "minimax",
+        "qwen", "dashscope", "tongyi",
+        "doubao", "seed", "seedream", "volcengine", "ark", "volces",
+    )
+    if not api_key:
+        _log.warning("[ImageService] api_key 未配置")
+        return None
+    if not full_url and image_provider not in native_providers:
+        _log.warning("[ImageService] base_url 未配置")
         return None
 
     if not prompt or not prompt.strip():
@@ -235,6 +293,16 @@ def call_image_generation(
         full_prompt = f"{full_prompt}. {' '.join(extra_keywords)}"
 
     try:
+        # 新增原生提供商：Gemini / MiniMax / Qwen / 豆包 Seed
+        if image_provider in ("gemini", "google", "google_gemini"):
+            return _call_gemini_image(config, full_prompt, proxy_kwargs)
+        if image_provider == "minimax":
+            return _call_minimax_image(config, full_prompt, image_size, proxy_kwargs)
+        if image_provider in ("qwen", "dashscope", "tongyi"):
+            return _call_qwen_image(config, full_prompt, image_size, proxy_kwargs)
+        if image_provider in ("doubao", "seed", "seedream", "volcengine", "ark", "volces"):
+            return _call_doubao_image(config, full_prompt, image_size, proxy_kwargs)
+
         if provider_type in ("openai_compatible", "openai") or "openai" in full_url.lower():
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -313,6 +381,192 @@ def call_image_generation(
     except Exception as exc:
         _log.error("[ImageService] 调用失败: %s", exc, exc_info=True)
         return None
+
+
+def _call_gemini_image(config: dict, prompt: str, proxy_kwargs: dict) -> str | None:
+    """Gemini 原生图片生成（generateContent + responseModalities: IMAGE）。"""
+    api_key = config.get("api_key", "")
+    model = config.get("model") or "gemini-3.1-flash-image"
+    url = _endpoint(
+        config.get("base_url", ""),
+        f"/models/{model}:generateContent",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        config.get("append_base_url_path", True),
+    )
+    body = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"responseModalities": ["IMAGE"]},
+    }
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(url, headers=headers, json=body, timeout=_API_TIMEOUT, **proxy_kwargs)
+    except requests.exceptions.Timeout:
+        _log.warning("[ImageService] Gemini 图片生成请求超时")
+        return None
+    if response.status_code != 200:
+        _log.error("[ImageService] Gemini 图片生成错误 %d: %s", response.status_code, response.text[:300])
+        return None
+    result = response.json()
+    for candidate in result.get("candidates") or []:
+        for part in ((candidate.get("content") or {}).get("parts")) or []:
+            inline = part.get("inlineData") or part.get("inline_data") or {}
+            data = inline.get("data") or ""
+            if data:
+                mime = inline.get("mimeType") or inline.get("mime_type") or "image/png"
+                return f"data:{mime};base64,{data}"
+    _log.error("[ImageService] Gemini 图片生成未返回图片数据: %s", response.text[:200])
+    return None
+
+
+def _call_minimax_image(config: dict, prompt: str, size: str, proxy_kwargs: dict) -> str | None:
+    """MiniMax 图片生成（/image_generation + image_base64 数组）。"""
+    api_key = config.get("api_key", "")
+    url = _endpoint(
+        config.get("base_url", ""),
+        "/image_generation",
+        "https://api.minimaxi.com/v1/image_generation",
+        config.get("append_base_url_path", True),
+    )
+    body = {
+        "model": config.get("model") or "image-01",
+        "prompt": prompt,
+        "aspect_ratio": _aspect_ratio(size),
+        "response_format": "base64",
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(url, headers=headers, json=body, timeout=_API_TIMEOUT, **proxy_kwargs)
+    except requests.exceptions.Timeout:
+        _log.warning("[ImageService] MiniMax 图片生成请求超时")
+        return None
+    if response.status_code != 200:
+        _log.error("[ImageService] MiniMax 图片生成错误 %d: %s", response.status_code, response.text[:300])
+        return None
+    result = response.json()
+    data = result.get("data") or {}
+    images = data.get("image_base64") or []
+    if images and isinstance(images[0], str) and images[0]:
+        return f"data:image/png;base64,{images[0]}"
+    image_urls = data.get("image_urls") or []
+    if image_urls and isinstance(image_urls[0], str) and image_urls[0]:
+        return image_urls[0]
+    _log.error("[ImageService] MiniMax 图片生成未返回图片数据: %s", response.text[:200])
+    return None
+
+
+def _call_qwen_image(config: dict, prompt: str, size: str, proxy_kwargs: dict) -> str | None:
+    """通义万相（Qwen）图片生成：异步提交任务 + 轮询结果。"""
+    api_key = config.get("api_key", "")
+    model = config.get("model", "")
+    submit_url = _dashscope_endpoint(
+        config.get("base_url", ""),
+        "/services/aigc/text2image/image-synthesis",
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis",
+        config.get("append_base_url_path", True),
+    )
+    body = {
+        "model": model,
+        "input": {"prompt": prompt},
+        "parameters": {
+            "size": size.replace("x", "*"),
+            "n": 1,
+            "watermark": False,
+        },
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "X-DashScope-Async": "enable",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(submit_url, headers=headers, json=body, timeout=60, **proxy_kwargs)
+    except requests.exceptions.Timeout:
+        _log.warning("[ImageService] Qwen 图片生成提交超时")
+        return None
+    if response.status_code != 200:
+        _log.error("[ImageService] Qwen 图片生成提交错误 %d: %s", response.status_code, response.text[:300])
+        return None
+
+    output = (response.json().get("output")) or {}
+    task_id = output.get("task_id")
+    if not task_id:
+        _log.error("[ImageService] Qwen 图片生成未返回 task_id: %s", response.text[:200])
+        return None
+
+    base = (config.get("base_url") or "").strip().rstrip("/").replace("/compatible-mode/v1", "/api/v1")
+    if not base:
+        base = "https://dashscope.aliyuncs.com/api/v1"
+    task_url = output.get("task_url") or f"{base}/tasks/{task_id}"
+    poll_headers = {"Authorization": f"Bearer {api_key}"}
+
+    for _ in range(90):
+        time.sleep(2)
+        try:
+            poll_resp = requests.get(task_url, headers=poll_headers, timeout=60, **proxy_kwargs)
+        except requests.exceptions.Timeout:
+            continue
+        if poll_resp.status_code != 200:
+            _log.warning("[ImageService] Qwen 图片任务查询错误 %d", poll_resp.status_code)
+            continue
+        poll_output = (poll_resp.json().get("output")) or {}
+        status = str(poll_output.get("task_status", "")).upper()
+        if status == "SUCCEEDED":
+            results = poll_output.get("results") or []
+            if results and isinstance(results[0], dict) and results[0].get("url"):
+                return results[0]["url"]
+            _log.error("[ImageService] Qwen 图片任务成功但无结果 URL: %s", poll_resp.text[:200])
+            return None
+        if status in ("FAILED", "CANCELED", "UNKNOWN"):
+            _log.error("[ImageService] Qwen 图片任务失败: %s", poll_output.get("message") or poll_resp.text[:200])
+            return None
+    _log.warning("[ImageService] Qwen 图片任务轮询超时")
+    return None
+
+
+def _call_doubao_image(config: dict, prompt: str, size: str, proxy_kwargs: dict) -> str | None:
+    """豆包 Seed 图片生成（火山 ark /images/generations）。"""
+    api_key = config.get("api_key", "")
+    url = _endpoint(
+        config.get("base_url", ""),
+        "/images/generations",
+        "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+        config.get("append_base_url_path", True),
+    )
+    size_upper = size.upper()
+    normalized_size = size_upper if size_upper in ("2K", "4K") else ("2K" if "x" in size else size)
+    body = {
+        "model": config.get("model", ""),
+        "prompt": prompt,
+        "size": normalized_size,
+        "sequential_image_generation": "disabled",
+        "stream": False,
+        "response_format": "url",
+        "watermark": False,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(url, headers=headers, json=body, timeout=_API_TIMEOUT, **proxy_kwargs)
+    except requests.exceptions.Timeout:
+        _log.warning("[ImageService] 豆包图片生成请求超时")
+        return None
+    if response.status_code != 200:
+        _log.error("[ImageService] 豆包图片生成错误 %d: %s", response.status_code, response.text[:300])
+        return None
+    result = response.json()
+    url_or_b64 = _extract_image_url(result, "doubao")
+    if url_or_b64:
+        return url_or_b64
+    _log.error("[ImageService] 豆包图片生成未返回图片数据: %s", response.text[:200])
+    return None
 
 
 def save_image_to_uploads(

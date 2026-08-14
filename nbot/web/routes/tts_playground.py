@@ -63,8 +63,12 @@ def register_tts_playground_routes(app, server):
     def tts_voices():
         """Return the list of available TTS voices based on provider."""
         try:
-            from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
             from nbot.services.tts_adapters.doubao_adapter import DOUBAO_VOICES
+            from nbot.services.tts_adapters.gemini_adapter import GEMINI_VOICES
+            from nbot.services.tts_adapters.glm_adapter import GLM_VOICES
+            from nbot.services.tts_adapters.minimax_adapter import MINIMAX_VOICES
+            from nbot.services.tts_adapters.qwen_adapter import QWEN_VOICES
+            from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
 
             request_model_id = request.args.get("model_id", "")
             tts_config = get_tts_config_from_server(server, request_model_id)
@@ -74,6 +78,14 @@ def register_tts_playground_routes(app, server):
                 voices = list(XIAOMI_VOICES)
             elif provider in ("doubao", "volcengine"):
                 voices = list(DOUBAO_VOICES)
+            elif provider in ("gemini", "google", "google_gemini"):
+                voices = list(GEMINI_VOICES)
+            elif provider in ("glm", "zhipu", "bigmodel"):
+                voices = list(GLM_VOICES)
+            elif provider == "minimax":
+                voices = list(MINIMAX_VOICES)
+            elif provider in ("qwen", "dashscope", "tongyi"):
+                voices = list(QWEN_VOICES)
             else:
                 voices = list(VOICE_CATALOG)
                 custom_voices = _get_custom_voices(server.data_dir)
@@ -98,8 +110,12 @@ def register_tts_playground_routes(app, server):
                 return jsonify({"error": "Text is required"}), 400
 
             from nbot.services.tts_adapters import get_adapter
-            from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
             from nbot.services.tts_adapters.doubao_adapter import DOUBAO_VOICES
+            from nbot.services.tts_adapters.gemini_adapter import GEMINI_VOICES
+            from nbot.services.tts_adapters.glm_adapter import GLM_VOICES
+            from nbot.services.tts_adapters.minimax_adapter import MINIMAX_VOICES
+            from nbot.services.tts_adapters.qwen_adapter import QWEN_VOICES
+            from nbot.services.tts_adapters.xiaomi_adapter import XIAOMI_VOICES
 
             tts_config = get_tts_config_from_server(server, request_model_id)
             if not tts_config.get("api_key"):
@@ -118,6 +134,22 @@ def register_tts_playground_routes(app, server):
                 doubao_voice_ids = frozenset(v["id"] for v in DOUBAO_VOICES)
                 if voice_to_use not in doubao_voice_ids:
                     voice_to_use = "zh_female_shuangkuaisisi_moon_bigtts"
+            elif provider in ("gemini", "google", "google_gemini"):
+                gemini_voice_ids = frozenset(v["id"] for v in GEMINI_VOICES)
+                if voice_to_use not in gemini_voice_ids:
+                    voice_to_use = "Kore"
+            elif provider in ("glm", "zhipu", "bigmodel"):
+                glm_voice_ids = frozenset(v["id"] for v in GLM_VOICES)
+                if voice_to_use not in glm_voice_ids:
+                    voice_to_use = "tongtong"
+            elif provider == "minimax":
+                minimax_voice_ids = frozenset(v["id"] for v in MINIMAX_VOICES)
+                if voice_to_use not in minimax_voice_ids:
+                    voice_to_use = "male-qn-qingse"
+            elif provider in ("qwen", "dashscope", "tongyi"):
+                qwen_voice_ids = frozenset(v["id"] for v in QWEN_VOICES)
+                if voice_to_use not in qwen_voice_ids:
+                    voice_to_use = "Cherry"
             else:
                 voice_to_use = voice_to_use.strip().lower() if voice_to_use else "alloy"
                 custom_voices = _get_custom_voices(server.data_dir)

@@ -42,6 +42,19 @@ class TTSAdapter(ABC):
             return {}
 
     @staticmethod
+    def _pcm_to_wav(pcm: bytes, sample_rate: int = 24000, channels: int = 1) -> bytes:
+        """将裸 PCM 封装为 WAV；已是 RIFF/WAV 则原样返回。"""
+        if pcm[:4] == b"RIFF":
+            return pcm
+        import struct
+        byte_rate = sample_rate * channels * 2
+        block_align = channels * 2
+        header = b"RIFF" + struct.pack("<I", 36 + len(pcm)) + b"WAVEfmt " + struct.pack(
+            "<IHHIIHH", 16, 1, channels, sample_rate, byte_rate, block_align, 16
+        ) + b"data" + struct.pack("<I", len(pcm))
+        return header + pcm
+
+    @staticmethod
     def _render_body(template: str, variables: dict) -> str:
         """渲染请求体模板，将 {{variable}} 替换为实际值"""
         import re

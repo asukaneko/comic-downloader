@@ -5888,6 +5888,7 @@
                                             <option value="grok">Grok (xAI)</option>
                                             <option value="qwen">通义千问 (Qwen)</option>
                                             <option value="xiaomi">小米 (Mimo)</option>
+                                            <option value="doubao">豆包 (Volcengine Seed)</option>
                                             <option value="azure">Azure OpenAI</option>
                                             <option value="siliconflow">SiliconFlow</option>
                                             <option value="custom">自定义</option>
@@ -6067,13 +6068,21 @@
                                             <label class="form-label">TTS 提供商</label>
                                             <select v-model="modelForm.tts_provider" class="form-select">
                                                 <option value="openai">OpenAI 兼容</option>
-                                                <option value="xiaomi">小米 MiMo</option>
+                                                <option value="gemini">Gemini 原生 TTS</option>
+                                                <option value="glm">智谱 GLM-TTS</option>
+                                                <option value="minimax">MiniMax TTS</option>
+                                                <option value="qwen">通义千问 TTS</option>
                                                 <option value="doubao">豆包（火山引擎）</option>
+                                                <option value="xiaomi">小米 MiMo</option>
                                             </select>
                                             <div class="form-hint">选择 TTS 服务提供商，适配器会自动映射 API 参数。
                                                 <template v-if="modelForm.tts_provider === 'openai'">Base URL 后自动补 <code>/v1/audio/speech</code>，需填写 <code>api_key</code></template>
-                                                <template v-else-if="modelForm.tts_provider === 'xiaomi'">请求地址为 Base URL + <code>/chat/completions</code>，需填写 <code>api_key</code></template>
+                                                <template v-else-if="modelForm.tts_provider === 'gemini'">请求地址为 <code>https://generativelanguage.googleapis.com/v1beta/models/&lt;模型&gt;:generateContent</code>，需填写 <code>api_key</code>（Google AI Studio 获取），模型为 <code>gemini-2.5-flash-preview-tts</code></template>
+                                                <template v-else-if="modelForm.tts_provider === 'glm'">请求地址为 Base URL + <code>/audio/speech</code>（默认 <code>https://open.bigmodel.cn/api/paas/v4</code>），需填写 <code>api_key</code>，模型为 <code>glm-tts</code></template>
+                                                <template v-else-if="modelForm.tts_provider === 'minimax'">请求地址为 Base URL + <code>/t2a_v2</code>（默认 <code>https://api.minimaxi.com/v1</code>），需填写 <code>api_key</code>，模型为 <code>speech-2.8-hd</code></template>
+                                                <template v-else-if="modelForm.tts_provider === 'qwen'">请求地址为 <code>https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation</code>，需填写 <code>api_key</code>，模型为 <code>qwen3-tts-flash</code></template>
                                                 <template v-else-if="modelForm.tts_provider === 'doubao'">请求地址为 <code>https://openspeech.bytedance.com/api/v3/tts/unidirectional</code>，需填写 <code>api_key</code>（火山引擎控制台获取），可选填 <code>tts_resource_id</code>（默认 <code>seed-tts-2.0</code>）</template>
+                                                <template v-else-if="modelForm.tts_provider === 'xiaomi'">请求地址为 Base URL + <code>/chat/completions</code>，需填写 <code>api_key</code></template>
                                             </div>
                                         </div>
                                         <div class="form-group" v-if="modelForm.tts_provider === 'doubao'">
@@ -6174,11 +6183,17 @@
                                             <select v-model="modelForm.stt_provider" class="form-select">
                                                 <option value="">跟随 provider_type</option>
                                                 <option value="openai">OpenAI 兼容</option>
+                                                <option value="gemini">Gemini 原生识别</option>
+                                                <option value="glm">智谱 GLM-ASR</option>
+                                                <option value="qwen">通义千问 ASR</option>
                                                 <option value="xiaomi">小米 MiMo</option>
                                                 <option value="local">本地 faster-whisper</option>
                                             </select>
                                             <div class="form-hint">选择 STT 服务提供商，适配器会自动映射 API 参数。
                                                 <template v-if="modelForm.stt_provider === 'openai' || (!modelForm.stt_provider && modelForm.provider_type === 'openai_compatible')">Base URL 后自动补 <code>/v1/audio/transcriptions</code>，需填写 <code>api_key</code></template>
+                                                <template v-else-if="modelForm.stt_provider === 'gemini'">请求地址为 <code>https://generativelanguage.googleapis.com/v1beta/models/&lt;模型&gt;:generateContent</code>，需填写 <code>api_key</code>，模型为 <code>gemini-2.5-flash</code></template>
+                                                <template v-else-if="modelForm.stt_provider === 'glm'">使用 OpenAI 兼容识别接口，需填写 <code>api_key</code></template>
+                                                <template v-else-if="modelForm.stt_provider === 'qwen'">请求地址为 DashScope 兼容模式 <code>/chat/completions</code>，需填写 <code>api_key</code>，模型为 <code>qwen3-asr-flash</code></template>
                                                 <template v-else-if="modelForm.stt_provider === 'xiaomi'">请求地址为 Base URL + <code>/chat/completions</code>，需填写 <code>api_key</code>，模型为 <code>mimo-v2.5-asr</code></template>
                                                 <template v-else-if="modelForm.stt_provider === 'local'">使用本地 faster-whisper 模型，无需 API Key</template>
                                             </div>
@@ -13446,7 +13461,8 @@
                         { name: 'MiniMax', icon: 'fas fa-infinity', provider: 'minimax', model: 'minimax-m2.7', base_url: 'https://api.minimax.chat/v1', max_context_length: 204800, max_tokens: 131072, input_price: 1.89, output_price: 8.14 },
                         { name: 'Grok', icon: 'fas fa-xmark', provider: 'grok', model: 'grok-4.20', base_url: 'https://api.x.ai/v1', max_context_length: 1000000, max_tokens: 131072, input_price: 8.47, output_price: 16.95 },
                         { name: 'Qwen', icon: 'fas fa-wind', provider: 'qwen', model: 'qwen3.7-max', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', max_context_length: 1000000, max_tokens: 65536, input_price: 8.47, output_price: 25.43 },
-                        { name: 'Mimo', icon: 'fas fa-mobile-screen-button', provider: 'xiaomi', model: 'mimo-v2.5', base_url: 'https://api.xiaomimimo.com/v1', max_context_length: 1048576, max_tokens: 131072, input_price: 2.95, output_price: 5.90 }
+                        { name: 'Mimo', icon: 'fas fa-mobile-screen-button', provider: 'xiaomi', model: 'mimo-v2.5', base_url: 'https://api.xiaomimimo.com/v1', max_context_length: 1048576, max_tokens: 131072, input_price: 2.95, output_price: 5.90 },
+                        { name: '豆包 Seed', icon: 'fas fa-egg', provider: 'doubao', model: 'doubao-seedream-4-0-250828', base_url: 'https://ark.cn-beijing.volces.com/api/v3', max_context_length: 128000, max_tokens: 8192, input_price: null, output_price: null }
                     ],
 
                     // 多模型配置管理
