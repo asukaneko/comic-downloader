@@ -238,6 +238,31 @@ def _data_url_to_tempfile(data_url: str) -> Optional[str]:
         return None
 
 
+def _read_media_bytes(url: str) -> bytes:
+    """读取媒体内容，支持 data URL、http(s) 与本地路径。"""
+    if url.startswith("data:"):
+        return base64.b64decode(url.split(",", 1)[1])
+    if url.startswith(("http://", "https://")):
+        res = requests.get(url, timeout=10)
+        res.raise_for_status()
+        return res.content
+    path = url[7:] if url.startswith("file://") else url
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
+def _ensure_remote_media_url(url: str) -> str:
+    """把本地路径转换为 data URL，保证视觉模型可访问。"""
+    if url.startswith(("http://", "https://", "data:")):
+        return url
+    try:
+        data = _read_media_bytes(url)
+        mime = mimetypes.guess_type(url)[0] or "application/octet-stream"
+        return f"data:{mime};base64," + base64.b64encode(data).decode("utf-8")
+    except Exception:
+        return url
+
+
 def _is_gemini_model(provider_type: str, model_name: str) -> bool:
     """判断模型是否为 Gemini 系列。
 
@@ -728,10 +753,7 @@ class AIClient:
 
     def gif_to_mp4_data_url(self, image_url: str, fps: int = 10) -> str:
         try:
-            res = requests.get(image_url, timeout=10)
-            if res.status_code != 200:
-                return ""
-            buf_in = io.BytesIO(res.content)
+            buf_in = io.BytesIO(_read_media_bytes(image_url))
             frames = imageio.mimread(buf_in, format="gif")
             if not frames:
                 return ""
@@ -747,14 +769,11 @@ class AIClient:
 
     def describe_gif(self, image_url: str, max_frames: int = 10) -> Optional[str]:
         try:
-            res = requests.get(image_url, timeout=10)
-            if res.status_code != 200:
-                return None
-            img = Image.open(io.BytesIO(res.content))
+            img = Image.open(io.BytesIO(_read_media_bytes(image_url)))
             total = getattr(img, "n_frames", 1)
             if total <= 1:
                 return self.describe_image(
-                    image_url,
+                    _ensure_remote_media_url(image_url),
                     "请描述这个图片的内容，仅作描述，不要分析内容",
                 )
 

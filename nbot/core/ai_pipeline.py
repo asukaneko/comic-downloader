@@ -732,7 +732,11 @@ class AIPipeline:
         def _describe_audio(url: str):
             return _ai_client.describe_audio(url) if hasattr(_ai_client, 'describe_audio') else None
 
+        def _describe_gif(url: str):
+            return _ai_client.describe_gif_as_video(url)
+
         MediaDescriber.register("image", _describe_image)
+        MediaDescriber.register("gif", _describe_gif)
         MediaDescriber.register("video", _describe_video)
         MediaDescriber.register("audio", _describe_audio)
         cls._middleware_initialized = True
