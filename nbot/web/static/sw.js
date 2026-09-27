@@ -1,5 +1,5 @@
 // NekoBot Service Worker
-const CACHE_NAME = 'nekobot-v20260927-achievements-ui';
+const CACHE_NAME = 'nekobot-v20260927-achievements-shell';
 const STATIC_ASSETS = [
     '/',
     '/static/css/app.css',

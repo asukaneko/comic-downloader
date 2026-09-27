@@ -33151,6 +33151,13 @@ body.has-bg-image .oauth-hero {
     display: flex;
     flex-direction: column;
     gap: 16px;
+    padding: 22px;
+    background: linear-gradient(160deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.68));
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 16px;
+    backdrop-filter: blur(24px) saturate(1.15);
+    -webkit-backdrop-filter: blur(24px) saturate(1.15);
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.18);
 }
 .acv-header {
     display: flex;
@@ -33158,13 +33165,8 @@ body.has-bg-image .oauth-hero {
     align-items: center;
     gap: 16px;
     flex-wrap: wrap;
-    padding: 18px 20px;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.62));
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    border-radius: 14px;
-    backdrop-filter: blur(20px) saturate(1.2);
-    -webkit-backdrop-filter: blur(20px) saturate(1.2);
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
 }
 .acv-title h2 {
     margin: 0 0 4px;
@@ -33187,11 +33189,9 @@ body.has-bg-image .oauth-hero {
     flex-direction: column;
     align-items: center;
     padding: 8px 16px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 10px;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
 }
 .acv-summary-num {
     font-size: 20px;
@@ -33204,12 +33204,10 @@ body.has-bg-image .oauth-hero {
 }
 .acv-progress-bar-wrap {
     height: 10px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(30, 41, 59, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 999px;
     overflow: hidden;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
 }
 .acv-progress-bar {
     height: 100%;
@@ -33226,13 +33224,11 @@ body.has-bg-image .oauth-hero {
     padding: 7px 14px;
     border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.6);
+    background: rgba(30, 41, 59, 0.55);
     color: var(--text-secondary, #94a3b8);
     cursor: pointer;
     font-size: 13px;
     transition: all 0.2s;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
 }
 .acv-tab:hover {
     color: var(--text-primary, #e2e8f0);
@@ -33258,23 +33254,21 @@ body.has-bg-image .oauth-hero {
     display: flex;
     gap: 12px;
     padding: 14px;
-    border: 1px solid rgba(148, 163, 184, 0.12);
+    border: 1px solid rgba(148, 163, 184, 0.14);
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.58));
-    backdrop-filter: blur(16px) saturate(1.1);
-    -webkit-backdrop-filter: blur(16px) saturate(1.1);
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.72), rgba(15, 23, 42, 0.58));
     opacity: 0.75;
     transition: all 0.25s;
 }
 .acv-card:hover {
-    border-color: rgba(148, 163, 184, 0.28);
+    border-color: rgba(148, 163, 184, 0.3);
 }
 .acv-card.unlocked {
     opacity: 1;
     border-color: rgba(245, 158, 11, 0.45);
     background:
         linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(239, 68, 68, 0.10)),
-        linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.58));
+        linear-gradient(135deg, rgba(30, 41, 59, 0.72), rgba(15, 23, 42, 0.58));
 }
 .acv-card-icon {
     width: 46px;
@@ -33315,7 +33309,7 @@ body.has-bg-image .oauth-hero {
 .acv-card-progress-track {
     flex: 1;
     height: 6px;
-    background: var(--bg-secondary, rgba(255,255,255,0.08));
+    background: rgba(148, 163, 184, 0.18);
     border-radius: 999px;
     overflow: hidden;
 }
@@ -33350,16 +33344,25 @@ body.has-bg-image .oauth-hero {
     text-align: center;
     color: var(--text-secondary, #94a3b8);
     padding: 40px 0;
-    background: rgba(15, 23, 42, 0.6);
+    background: rgba(30, 41, 59, 0.45);
     border: 1px dashed rgba(148, 163, 184, 0.25);
     border-radius: 12px;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
 }
 
-[data-theme="light"] .acv-header,
+@media (max-width: 640px) {
+    .acv-page {
+        padding: 14px;
+        gap: 12px;
+    }
+}
+
+[data-theme="light"] .acv-page {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(219, 228, 239, 0.7);
+    box-shadow: 0 10px 30px rgba(31, 41, 55, 0.08);
+}
 [data-theme="light"] .acv-card {
-    background: rgba(255, 255, 255, 0.88);
+    background: rgba(255, 255, 255, 0.9);
     border-color: rgba(219, 228, 239, 0.7);
     box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
 }
@@ -33373,7 +33376,7 @@ body.has-bg-image .oauth-hero {
 [data-theme="light"] .acv-tab,
 [data-theme="light"] .acv-progress-bar-wrap,
 [data-theme="light"] .acv-empty {
-    background: rgba(255, 255, 255, 0.88);
+    background: rgba(241, 245, 249, 0.9);
     border-color: rgba(219, 228, 239, 0.7);
 }
 
