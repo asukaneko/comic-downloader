@@ -400,9 +400,12 @@ class WebCallbacks(PipelineCallbacks):
 
     def load_messages(self, ctx: PipelineContext) -> list[dict]:
         import copy
+
+        from nbot.core.session_store import visible_messages
+
         session = self.session_store.get_session(self.session_id)
         if session:
-            return copy.deepcopy(session.get("messages", []))
+            return copy.deepcopy(visible_messages(session.get("messages", [])))
         return []
 
     def get_system_prompt(self, ctx: PipelineContext) -> str:

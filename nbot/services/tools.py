@@ -1349,7 +1349,9 @@ class ToolExecutor:
                 }
 
             # 获取消息
-            messages = session.get('messages', [])
+            from nbot.core.session_store import visible_messages
+
+            messages = visible_messages(session.get('messages', []))
             if not messages:
                 return {
                     "success": True,

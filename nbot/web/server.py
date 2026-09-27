@@ -20,6 +20,7 @@ from flask_socketio import SocketIO
 from werkzeug.exceptions import HTTPException
 
 from nbot.core.prompt_format import format_skills_prompt
+from nbot.core.session_store import visible_messages
 from nbot.web.ai_service import (
     get_ai_response,
     get_ai_response_with_images,
@@ -2321,7 +2322,7 @@ class WebChatServer:
 
         # 添加历史上下文（不再按条数限制，由 token 预算控制）
         session = self.session_store.get_session(session_id) or {}
-        history = session.get("messages", [])
+        history = visible_messages(session.get("messages", []))
         for msg in history:
             if msg.get("role") in ["user", "assistant"]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
@@ -3542,7 +3543,7 @@ class WebChatServer:
 
         heartbeat_messages = []
         current_session = self.session_store.get_session(target_session_id) or session
-        for msg in current_session.get("messages", [])[-12:]:
+        for msg in visible_messages(current_session.get("messages", []))[-12:]:
             role = msg.get("role")
             if role in ["system", "user", "assistant"]:
                 heartbeat_messages.append(
@@ -3730,7 +3731,7 @@ class WebChatServer:
     def _collect_heartbeat_context_messages(self, session: dict) -> str:
         """收集会话最近消息作为上下文（最多 6 条，限长）。"""
         try:
-            messages = session.get("messages") or []
+            messages = visible_messages(session.get("messages") or [])
             recent = []
             for msg in reversed(messages):
                 if len(recent) >= 6:
@@ -4251,7 +4252,7 @@ class WebChatServer:
         try:
             heartbeat_session = self.session_store.get_session(session_id) or session or {}
             heartbeat_messages = []
-            for msg in heartbeat_session.get("messages", [])[-12:]:
+            for msg in visible_messages(heartbeat_session.get("messages", []))[-12:]:
                 role = msg.get("role")
                 if role in ["system", "user", "assistant"]:
                     heartbeat_messages.append(

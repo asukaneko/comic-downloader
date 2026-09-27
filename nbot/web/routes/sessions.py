@@ -8,6 +8,7 @@ from flask import jsonify, request
 
 from nbot.core import WebSessionStore
 from nbot.core.prompt_format import format_skills_prompt
+from nbot.core.session_store import is_message_deleted, visible_messages
 from nbot.web.persistence import is_web_visible_session
 from nbot.web.sessions_db import get_session as get_session_from_db
 
@@ -755,7 +756,7 @@ def register_session_routes(app, server):
                     "read_only": bool(session.get("read_only")),
                     "archive_session_id": session.get("archive_session_id"),
                     "source_session_id": session.get("source_session_id"),
-                    "message_count": len(session.get("messages", [])),
+                    "message_count": len(visible_messages(session.get("messages", []))),
                     "system_prompt": session.get("system_prompt", ""),
                     "character_id": session.get("character_id", ""),
                     "sender_name": session.get("sender_name", ""),
@@ -999,18 +1000,24 @@ def register_session_routes(app, server):
         if not session:
             return jsonify({"error": "Session not found"}), 404
 
-        session["message_count"] = len(session.get("messages", []))
+        payload = dict(session)
+        visible = visible_messages(session.get("messages", []))
+        payload["messages"] = visible
+        payload["message_count"] = len(visible)
         session["proactive_chat"] = _normalize_proactive_chat_config(
             session.get("proactive_chat")
         )
+        payload["proactive_chat"] = session["proactive_chat"]
         session["tts_config"] = _normalize_tts_config(session.get("tts_config"))
+        payload["tts_config"] = session["tts_config"]
         if not isinstance(session.get("message_favorites"), list):
             session["message_favorites"] = []
         else:
             session["message_favorites"] = _normalize_message_favorite_collections(
                 session.get("message_favorites", [])
             )
-        return jsonify(session)
+        payload["message_favorites"] = session["message_favorites"]
+        return jsonify(payload)
 
     @app.route("/api/sessions/<session_id>/debug")
     def debug_session(session_id):
@@ -1774,11 +1781,17 @@ def register_session_routes(app, server):
             return jsonify({"success": False, "error": "Message not found"}), 404
 
         target = messages[message_index]
+        if is_message_deleted(target):
+            return jsonify({"success": False, "error": "Message not found"}), 404
         if target.get("role") != "assistant":
             return jsonify({"success": False, "error": "Only assistant messages can be regenerated"}), 400
 
         previous_user = next(
-            (msg for msg in reversed(messages[:message_index]) if msg.get("role") == "user"),
+            (
+                msg
+                for msg in reversed(messages[:message_index])
+                if msg.get("role") == "user" and not is_message_deleted(msg)
+            ),
             None,
         )
         if not previous_user or not previous_user.get("content"):
@@ -1847,7 +1860,7 @@ def register_session_routes(app, server):
         if not session:
             return jsonify({"error": "Session not found"}), 404
 
-        messages = session.get("messages", [])
+        messages = visible_messages(session.get("messages", []))
         display_messages = [m for m in messages if m.get("role") != "system"]
         return jsonify(display_messages)
 
@@ -2000,7 +2013,13 @@ def register_session_routes(app, server):
         if "insert_index" in data:
             messages = session.setdefault("messages", [])
             visible_count = len(
-                [msg for msg in messages if isinstance(msg, dict) and msg.get("role") != "system"]
+                [
+                    msg
+                    for msg in messages
+                    if isinstance(msg, dict)
+                    and msg.get("role") != "system"
+                    and not is_message_deleted(msg)
+                ]
             )
             try:
                 insert_index = int(data.get("insert_index"))
@@ -2011,7 +2030,11 @@ def register_session_routes(app, server):
             actual_index = len(messages)
             seen_visible = 0
             for idx, existing in enumerate(messages):
-                if not isinstance(existing, dict) or existing.get("role") == "system":
+                if (
+                    not isinstance(existing, dict)
+                    or existing.get("role") == "system"
+                    or is_message_deleted(existing)
+                ):
                     continue
                 if seen_visible == insert_index:
                     actual_index = idx
@@ -2040,7 +2063,7 @@ def register_session_routes(app, server):
                 target_idx = idx
                 break
 
-        if target_idx is None:
+        if target_idx is None or is_message_deleted(messages[target_idx]):
             return jsonify({"error": "Message not found"}), 404
 
         if "role" in data:
@@ -2090,9 +2113,20 @@ def register_session_routes(app, server):
         if messages[target_idx].get("role") == "system":
             return jsonify({"error": "System message cannot be deleted here"}), 400
 
-        removed = messages.pop(target_idx)
+        removed = messages[target_idx]
+        removed["deleted"] = True
+        removed["deleted_at"] = datetime.now().astimezone().isoformat()
+        removed.pop("thinking_cards", None)
+        removed.pop("todo_cards", None)
+        removed.pop("change_cards", None)
         session_store.set_session(session_id, session)
-        return jsonify({"success": True, "message": removed, "message_count": len(messages)})
+        return jsonify(
+            {
+                "success": True,
+                "message": removed,
+                "message_count": len(visible_messages(messages)),
+            }
+        )
 
     @app.route("/api/sessions/<session_id>/messages", methods=["DELETE"])
     def clear_messages(session_id):

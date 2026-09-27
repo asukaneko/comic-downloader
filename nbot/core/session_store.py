@@ -50,6 +50,29 @@ def build_chat_message(
     return message
 
 
+def is_message_deleted(message: Any) -> bool:
+    """判断消息是否被软删除（保留记录，但所有展示与模型上下文均忽略）。"""
+    return bool(isinstance(message, dict) and message.get("deleted"))
+
+
+def visible_messages(messages: Any) -> List[Dict[str, Any]]:
+    """过滤软删除消息，返回可展示/可送入模型的消息列表。"""
+    if not isinstance(messages, list):
+        return []
+    return [msg for msg in messages if isinstance(msg, dict) and not is_message_deleted(msg)]
+
+
+def deleted_message_ids(messages: Any) -> set:
+    """收集消息列表中的软删除消息 id，用于阻止异步回写复活。"""
+    if not isinstance(messages, list):
+        return set()
+    return {
+        str(msg.get("id"))
+        for msg in messages
+        if isinstance(msg, dict) and is_message_deleted(msg) and msg.get("id")
+    }
+
+
 class QQSessionStore:
     def __init__(
         self,
@@ -232,6 +255,9 @@ class WebSessionStore:
         if msg_id:
             for idx, existing in enumerate(messages):
                 if existing.get("id") == msg_id:
+                    if is_message_deleted(existing):
+                        # 已软删除的消息不允许被异步回写复活
+                        return messages
                     messages[idx] = message
                     if self.save_callback:
                         self.save_callback()
@@ -247,6 +273,18 @@ class WebSessionStore:
         session = self.get_session(session_id)
         if not session:
             return []
+        vanished_ids = deleted_message_ids(session.get("messages"))
+        if vanished_ids:
+            # 传入列表若来自软删除之前的快照，同 id 消息不得复活
+            messages = [
+                msg
+                for msg in messages
+                if not (
+                    isinstance(msg, dict)
+                    and str(msg.get("id") or "") in vanished_ids
+                    and not is_message_deleted(msg)
+                )
+            ]
         session["messages"] = self._filter_messages(session_id, messages, session)
         if self.save_callback:
             self.save_callback()
