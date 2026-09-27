@@ -33158,6 +33158,13 @@ body.has-bg-image .oauth-hero {
     align-items: center;
     gap: 16px;
     flex-wrap: wrap;
+    padding: 18px 20px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.78), rgba(15, 23, 42, 0.62));
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 14px;
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
 }
 .acv-title h2 {
     margin: 0 0 4px;
@@ -33180,9 +33187,11 @@ body.has-bg-image .oauth-hero {
     flex-direction: column;
     align-items: center;
     padding: 8px 16px;
-    background: var(--bg-card, rgba(255,255,255,0.05));
-    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.14);
     border-radius: 10px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 .acv-summary-num {
     font-size: 20px;
@@ -33194,10 +33203,13 @@ body.has-bg-image .oauth-hero {
     color: var(--text-secondary, #94a3b8);
 }
 .acv-progress-bar-wrap {
-    height: 8px;
-    background: var(--bg-secondary, rgba(255,255,255,0.06));
+    height: 10px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.14);
     border-radius: 999px;
     overflow: hidden;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 .acv-progress-bar {
     height: 100%;
@@ -33212,13 +33224,15 @@ body.has-bg-image .oauth-hero {
 }
 .acv-tab {
     padding: 7px 14px;
-    border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+    border: 1px solid rgba(148, 163, 184, 0.16);
     border-radius: 999px;
-    background: transparent;
+    background: rgba(15, 23, 42, 0.6);
     color: var(--text-secondary, #94a3b8);
     cursor: pointer;
     font-size: 13px;
     transition: all 0.2s;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 .acv-tab:hover {
     color: var(--text-primary, #e2e8f0);
@@ -33244,19 +33258,23 @@ body.has-bg-image .oauth-hero {
     display: flex;
     gap: 12px;
     padding: 14px;
-    border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+    border: 1px solid rgba(148, 163, 184, 0.12);
     border-radius: 12px;
-    background: var(--bg-card, rgba(255,255,255,0.04));
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.58));
+    backdrop-filter: blur(16px) saturate(1.1);
+    -webkit-backdrop-filter: blur(16px) saturate(1.1);
     opacity: 0.75;
     transition: all 0.25s;
 }
 .acv-card:hover {
-    border-color: var(--border-color-strong, rgba(255,255,255,0.2));
+    border-color: rgba(148, 163, 184, 0.28);
 }
 .acv-card.unlocked {
     opacity: 1;
     border-color: rgba(245, 158, 11, 0.45);
-    background: linear-gradient(135deg, rgba(245,158,11,0.10), rgba(239,68,68,0.06));
+    background:
+        linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(239, 68, 68, 0.10)),
+        linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(15, 23, 42, 0.58));
 }
 .acv-card-icon {
     width: 46px;
@@ -33332,6 +33350,31 @@ body.has-bg-image .oauth-hero {
     text-align: center;
     color: var(--text-secondary, #94a3b8);
     padding: 40px 0;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px dashed rgba(148, 163, 184, 0.25);
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+[data-theme="light"] .acv-header,
+[data-theme="light"] .acv-card {
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(219, 228, 239, 0.7);
+    box-shadow: 0 2px 12px rgba(31, 41, 55, 0.06);
+}
+[data-theme="light"] .acv-card.unlocked {
+    background:
+        linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.08)),
+        rgba(255, 255, 255, 0.9);
+    border-color: rgba(245, 158, 11, 0.45);
+}
+[data-theme="light"] .acv-summary-item,
+[data-theme="light"] .acv-tab,
+[data-theme="light"] .acv-progress-bar-wrap,
+[data-theme="light"] .acv-empty {
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(219, 228, 239, 0.7);
 }
 
 /* ============================================================
