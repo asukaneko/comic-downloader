@@ -5,6 +5,8 @@ import base64
 import json
 import io
 import logging
+import mimetypes
+import tempfile
 from typing import Any, Dict, Optional
 from PIL import Image
 import imageio.v2 as imageio
@@ -220,6 +222,20 @@ try:
         group_messages = json.load(f)
 except FileNotFoundError:
     os.makedirs("saved_message", exist_ok=True)
+
+
+def _data_url_to_tempfile(data_url: str) -> Optional[str]:
+    """将 data: URL 落盘为临时文件，供 STT 等本地处理使用。"""
+    try:
+        header, encoded = data_url.split(",", 1)
+        mime = header[5:].split(";", 1)[0].strip() or "audio/mpeg"
+        ext = mimetypes.guess_extension(mime) or ".mp3"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
+            tmp_file.write(base64.b64decode(encoded))
+            return tmp_file.name
+    except Exception as exc:
+        _log.warning("[Audio] failed to decode data URL: %s", exc)
+        return None
 
 
 def _is_gemini_model(provider_type: str, model_name: str) -> bool:
@@ -671,6 +687,44 @@ class AIClient:
 
         print("[图片识别] 无可用模型配置")
         return None
+
+    def describe_audio(self, audio_url: str) -> Optional[str]:
+        """语音识别：把音频附件转写为文字，供消息预处理注入上下文。"""
+        from nbot.services import stt as stt_service
+
+        if not audio_url:
+            return None
+
+        temp_path = None
+        try:
+            if audio_url.startswith("data:"):
+                temp_path = _data_url_to_tempfile(audio_url)
+                if not temp_path:
+                    return None
+                text = stt_service.transcribe(temp_path)
+            elif audio_url.startswith(("http://", "https://")):
+                text = stt_service.transcribe_from_url(audio_url)
+            else:
+                path = audio_url[7:] if audio_url.startswith("file://") else audio_url
+                if not os.path.exists(path):
+                    print(f"[语音识别] 音频文件不存在: {path}")
+                    return None
+                text = stt_service.transcribe(path)
+
+            if not text or not str(text).strip():
+                return None
+            result = str(text).strip()
+            print(f"[语音识别] 转写成功: {result[:100]}...")
+            return result
+        except Exception as exc:
+            print(f"[语音识别] 转写失败: {exc}")
+            return None
+        finally:
+            if temp_path:
+                try:
+                    os.unlink(temp_path)
+                except OSError:
+                    pass
 
     def gif_to_mp4_data_url(self, image_url: str, fps: int = 10) -> str:
         try:
