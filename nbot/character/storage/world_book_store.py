@@ -60,6 +60,7 @@ class WorldBookStore:
         self,
         name: str,
         description: str = "",
+        cover_url: str = "",
         character_ids: Optional[List[str]] = None,
     ) -> WorldBook:
         """创建世界书"""
@@ -68,6 +69,7 @@ class WorldBookStore:
             id=uuid.uuid4().hex[:12],
             name=name,
             description=description,
+            cover_url=cover_url,
             character_ids=character_ids or [],
             entries=[],
             enabled=True,
@@ -91,7 +93,7 @@ class WorldBookStore:
         if not data or not isinstance(data, dict):
             return None
 
-        for key in ("name", "description", "character_ids", "enabled"):
+        for key in ("name", "description", "cover_url", "character_ids", "enabled"):
             if key in kwargs:
                 data[key] = kwargs[key]
         data["updated_at"] = datetime.now().isoformat()

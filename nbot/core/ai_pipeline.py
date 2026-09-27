@@ -2254,6 +2254,7 @@ class AIPipeline:
         model_configs: list,
         purpose: str = "chat",
         tools: Optional[List[Dict[str, Any]]] = None,
+        session_id: str = "",
     ) -> Callable:
         """Wrap model call with automatic failover across model queue.
 
@@ -2263,6 +2264,7 @@ class AIPipeline:
         Args:
             model_configs: Ordered list of model config dicts (by priority).
             purpose: Model purpose for logging.
+            session_id: 会话 ID（用于智能路由 A/B 分流与决策日志）。
         """
         from nbot.core.failover import (
             classify_http_error,
@@ -2273,8 +2275,26 @@ class AIPipeline:
         from nbot.core.protocols import get_protocol
         from nbot.core.model_adapter import response_json_utf8
         import requests
+        import time as _time
 
         failover = get_failover_state()
+
+        # 智能路由：按成本/质量/速度/上下文打分重排模型队列
+        _router = None
+        _decision_id = None
+        _scored_candidates = []
+        try:
+            from nbot.core.smart_routing import get_smart_router
+            _router = get_smart_router()
+            _router.load_settings()
+            model_configs, _scored_candidates = _router.route_with_scores(
+                model_configs,
+                purpose=purpose,
+                session_id=session_id,
+                has_tools=bool(tools),
+            )
+        except Exception as exc:
+            _log.debug("[SmartRouting] route failed: %s", exc)
 
         def _build_call_for_config(config: dict):
             """Create a single-shot model_call for a specific config."""
@@ -2336,6 +2356,7 @@ class AIPipeline:
             last_error = None
             attempted = set()
             failover_events = []
+            nonlocal _decision_id
 
             for _ in range(len(model_configs)):
                 config = failover.select_model(
@@ -2348,10 +2369,28 @@ class AIPipeline:
                 model_name = config.get("model", "")
                 attempted.add(model_id)
 
+                # 首次选择时记录智能路由决策
+                if _router is not None and _decision_id is None:
+                    try:
+                        from nbot.core.smart_routing import ab_group_for
+                        _decision_id = _router.record_decision(
+                            session_id=session_id,
+                            purpose=purpose,
+                            candidates=_scored_candidates,
+                            selected_id=model_id,
+                            selected_name=model_name,
+                            reason="smart_route",
+                            ab_group=ab_group_for(session_id, (_router.settings_dict().get("ab_test") or {}).get("ratio", 50))
+                            if (_router.settings_dict().get("ab_test") or {}).get("enabled") else "",
+                        )
+                    except Exception as exc:
+                        _log.debug("[SmartRouting] record decision failed: %s", exc)
+
                 # Apply this config to global AIClient
                 apply_model_config(config)
 
                 try:
+                    started = _time.time()
                     call = _build_call_for_config(config)
                     result = call(messages, stop_event=stop_event)
                     failover.record_success(model_id)
@@ -2360,6 +2399,15 @@ class AIPipeline:
                     result["_model_name"] = model_name
                     if failover_events:
                         result["_failover_events"] = failover_events
+                    if _router is not None and _decision_id:
+                        try:
+                            _router.backfill_decision(
+                                _decision_id,
+                                success=True,
+                                duration_ms=round((_time.time() - started) * 1000, 2),
+                            )
+                        except Exception:
+                            pass
                     return result
                 except StopIteration:
                     raise
@@ -2381,6 +2429,11 @@ class AIPipeline:
                         "status_code": status,
                         "category": category,
                     })
+                    if _router is not None and _decision_id:
+                        try:
+                            _router.backfill_decision(_decision_id, success=False)
+                        except Exception:
+                            pass
                     _log.warning(
                         "[Failover] %s model=%s failed (%s %d), "
                         "trying next model",

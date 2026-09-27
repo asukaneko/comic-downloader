@@ -408,6 +408,17 @@ class TokenStatsManager:
 
             self._save()
 
+        # 成就系统：记录累计 token / 消费 / 对话消息
+        try:
+            from nbot.achievements.manager import get_achievement_manager
+            mgr = get_achievement_manager(self._data_dir)
+            mgr.record("tokens", total_tokens)
+            mgr.record("cost", cost)
+            if (purpose or PURPOSE_CHAT) == PURPOSE_CHAT:
+                mgr.record("messages", 1)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # 查询统计
     # ------------------------------------------------------------------

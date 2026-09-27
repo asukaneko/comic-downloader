@@ -4199,6 +4199,13 @@
                                         <i class="fas fa-folder-open"></i> 记忆文件
                                     </button>
                                 </div>
+                                <div class="rv-mode-switch" title="复盘引擎模式">
+                                    <span class="rv-mode-label"><i class="fas fa-brain"></i> 复盘引擎</span>
+                                    <div class="rv-mode-buttons">
+                                        <button class="rv-mode-btn" :class="{ active: reviewMode === 'rule' }" @click="setReviewMode('rule')">规则版</button>
+                                        <button class="rv-mode-btn" :class="{ active: reviewMode === 'llm' }" @click="setReviewMode('llm')">LLM 版</button>
+                                    </div>
+                                </div>
                                 <div class="rv-filters" v-if="reviewTab === 'events'">
                                     <select v-model="reviewEventDomain" class="rv-select" @change="loadReviewEvents()">
                                         <option value="">全部域</option>
@@ -7139,6 +7146,339 @@
                     </div>
 
                     <!-- Tokens -->
+                    <!-- 成就页面 -->
+                    <div v-if="currentPage === 'achievements'" class="fade-in acv-page">
+                        <div class="acv-header">
+                            <div class="acv-title">
+                                <h2><i class="fas fa-trophy" style="color: var(--accent-primary);"></i> 成就殿堂</h2>
+                                <p>记录你与 NekoBot 的共同旅程，达成目标即可解锁成就。</p>
+                            </div>
+                            <div class="acv-summary">
+                                <div class="acv-summary-item">
+                                    <span class="acv-summary-num">{{ achievementsSummary.unlocked }}</span>
+                                    <span class="acv-summary-label">已解锁</span>
+                                </div>
+                                <div class="acv-summary-item">
+                                    <span class="acv-summary-num">{{ achievementsSummary.total }}</span>
+                                    <span class="acv-summary-label">成就总数</span>
+                                </div>
+                                <div class="acv-summary-item">
+                                    <span class="acv-summary-num">{{ achievementsSummary.percent }}%</span>
+                                    <span class="acv-summary-label">完成度</span>
+                                </div>
+                                <button class="btn btn-secondary" @click="loadAchievements" :disabled="isLoading" title="刷新">
+                                    <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i> 刷新
+                                </button>
+                            </div>
+                        </div>
+                        <div class="acv-progress-bar-wrap">
+                            <div class="acv-progress-bar" :style="{ width: achievementsSummary.percent + '%' }"></div>
+                        </div>
+                        <div class="acv-tabs">
+                            <button v-for="cat in achievementsCategories" :key="cat.key"
+                                    class="acv-tab" :class="{ active: achievementsCategory === cat.key }"
+                                    @click="achievementsCategory = cat.key">
+                                {{ cat.label }}
+                                <span class="acv-tab-count">{{ achievementsByCategory[cat.key] ? achievementsByCategory[cat.key].unlocked : 0 }}/{{ achievementsByCategory[cat.key] ? achievementsByCategory[cat.key].total : 0 }}</span>
+                            </button>
+                        </div>
+                        <div class="acv-grid">
+                            <div v-for="item in filteredAchievements" :key="item.id"
+                                 class="acv-card" :class="{ unlocked: item.unlocked }">
+                                <div class="acv-card-icon" :class="{ unlocked: item.unlocked }">
+                                    <i :class="item.icon"></i>
+                                </div>
+                                <div class="acv-card-body">
+                                    <div class="acv-card-name">{{ item.name }}</div>
+                                    <div class="acv-card-desc">{{ item.description }}</div>
+                                    <div class="acv-card-progress">
+                                        <div class="acv-card-progress-track">
+                                            <div class="acv-card-progress-fill" :style="{ width: item.percent + '%' }"></div>
+                                        </div>
+                                        <span class="acv-card-progress-num">
+                                            <template v-if="item.target >= 1000000">{{ formatCompactNumber(item.progress) }} / {{ formatCompactNumber(item.target) }}</template>
+                                            <template v-else>{{ item.progress }} / {{ item.target }}{{ item.unit }}</template>
+                                        </span>
+                                    </div>
+                                    <div class="acv-card-footer">
+                                        <span class="acv-card-status" :class="{ unlocked: item.unlocked }">
+                                            <i :class="item.unlocked ? 'fas fa-check-circle' : 'fas fa-lock'"></i>
+                                            {{ item.unlocked ? '已解锁' : (item.percent >= 100 ? '达成' : '进行中') }}
+                                        </span>
+                                        <span v-if="item.unlocked_at" class="acv-card-date">{{ item.unlocked_at.slice(0, 16).replace('T', ' ') }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="filteredAchievements.length === 0" class="acv-empty">该分类下暂无成就</div>
+                        <div class="acv-actions">
+                            <button class="btn btn-danger btn-sm" @click="resetAchievements"
+                                    :disabled="isLoading" style="margin-top: 16px;">
+                                <i class="fas fa-undo-alt"></i> 重置所有成就
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 智能路由页面 -->
+                    <div v-if="currentPage === 'routing'" class="fade-in sr-page">
+                        <div class="usage-filters">
+                            <div class="filter-group">
+                                <label class="filter-label">智能模型路由</label>
+                                <div class="filter-buttons">
+                                    <button class="filter-btn" :class="{ active: routingSettings.enabled }" @click="toggleRoutingEnabled">
+                                        <i class="fas fa-power-off"></i> {{ routingSettings.enabled ? '已开启' : '已关闭' }}
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="filter-actions">
+                                <button class="token-refresh-btn" @click="loadAllRouting" :disabled="isLoading">
+                                    <i class="fas fa-sync-alt" :class="{ 'fa-spin': isLoading }"></i>
+                                    <span>刷新</span>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" @click="clearRoutingLogs" :disabled="isLoading">
+                                    <i class="fas fa-trash-alt"></i> 清空日志
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 预算概览 -->
+                        <div class="usage-overview">
+                            <div class="overview-card">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">
+                                    <i class="fas fa-wallet"></i>
+                                </div>
+                                <div class="overview-content">
+                                    <div class="overview-label">今日消费</div>
+                                    <div class="overview-value">¥{{ routingBudget.used || '0.00' }}</div>
+                                </div>
+                            </div>
+                            <div class="overview-card">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #3b82f6, #06b6d4);">
+                                    <i class="fas fa-coins"></i>
+                                </div>
+                                <div class="overview-content">
+                                    <div class="overview-label">日预算</div>
+                                    <div class="overview-value">¥{{ routingBudget.budget || '不限' }}</div>
+                                </div>
+                            </div>
+                            <div class="overview-card">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #10b981, #34d399);">
+                                    <i class="fas fa-percent"></i>
+                                </div>
+                                <div class="overview-content">
+                                    <div class="overview-label">预算使用率</div>
+                                    <div class="overview-value">{{ routingBudget.percent || 0 }}%</div>
+                                </div>
+                            </div>
+                            <div class="overview-card">
+                                <div class="overview-icon" style="background: linear-gradient(135deg, #8b5cf6, #a855f7);">
+                                    <i class="fas fa-route"></i>
+                                </div>
+                                <div class="overview-content">
+                                    <div class="overview-label">路由决策数</div>
+                                    <div class="overview-value">{{ routingAnalytics.total_decisions || 0 }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 预算进度条 -->
+                        <div class="acv-progress-bar-wrap" style="margin-bottom: 16px;">
+                            <div class="acv-progress-bar"
+                                 :style="{ width: (routingBudget.percent || 0) + '%', background: (routingBudget.percent || 0) >= (routingSettings.budget_warning_pct || 80) ? 'linear-gradient(90deg,#f59e0b,#ef4444)' : 'linear-gradient(90deg,#10b981,#34d399)' }"></div>
+                        </div>
+
+                        <!-- 设置 -->
+                        <div class="usage-charts">
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <div>
+                                        <div class="chart-title"><i class="fas fa-sliders-h"></i> 路由设置</div>
+                                        <div class="chart-subtitle">评分权重与日预算控制</div>
+                                    </div>
+                                </div>
+                                <div class="chart-body" style="padding-top: 8px;">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label">日预算（元，0 = 不限）</label>
+                                            <input v-model.number="routingSettings.daily_budget" type="number" min="0" step="0.5" class="form-input">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">预算告警阈值（%）</label>
+                                            <input v-model.number="routingSettings.budget_warning_pct" type="number" min="10" max="100" step="5" class="form-input">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">评分权重</label>
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label class="form-label" style="font-size: 12px;">成本</label>
+                                                <input v-model.number="routingSettings.weights.cost" type="range" min="0" max="1" step="0.05" class="form-range">
+                                                <span style="font-size: 12px; color: var(--text-secondary);">{{ routingSettings.weights.cost }}</span>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label" style="font-size: 12px;">质量</label>
+                                                <input v-model.number="routingSettings.weights.quality" type="range" min="0" max="1" step="0.05" class="form-range">
+                                                <span style="font-size: 12px; color: var(--text-secondary);">{{ routingSettings.weights.quality }}</span>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label" style="font-size: 12px;">速度</label>
+                                                <input v-model.number="routingSettings.weights.speed" type="range" min="0" max="1" step="0.05" class="form-range">
+                                                <span style="font-size: 12px; color: var(--text-secondary);">{{ routingSettings.weights.speed }}</span>
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label" style="font-size: 12px;">优先级</label>
+                                                <input v-model.number="routingSettings.weights.priority" type="range" min="0" max="1" step="0.05" class="form-range">
+                                                <span style="font-size: 12px; color: var(--text-secondary);">{{ routingSettings.weights.priority }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary" @click="saveRoutingSettings" :disabled="isLoading">
+                                        <i class="fas fa-save"></i> 保存设置
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- A/B 测试 -->
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <div>
+                                        <div class="chart-title"><i class="fas fa-flask"></i> A/B 测试</div>
+                                        <div class="chart-subtitle">按会话分流对比两个模型的表现</div>
+                                    </div>
+                                </div>
+                                <div class="chart-body" style="padding-top: 8px;">
+                                    <div class="form-group">
+                                        <div class="switch-field">
+                                            <div class="switch-copy">
+                                                <span class="switch-label">启用 A/B 测试</span>
+                                                <span class="switch-hint">按会话 ID 哈希确定性分流，路由日志记录分组。</span>
+                                            </div>
+                                            <label class="switch-control">
+                                                <input v-model="routingSettings.ab_test.enabled" type="checkbox">
+                                                <span class="switch-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">对照组模型（control）</label>
+                                        <select v-model="routingSettings.ab_test.control_model_id" class="form-select">
+                                            <option value="">自动选择</option>
+                                            <option v-for="m in routingChatModels" :key="m.id" :value="m.id">{{ m.name || m.model }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">实验组模型（experiment）</label>
+                                        <select v-model="routingSettings.ab_test.experiment_model_id" class="form-select">
+                                            <option value="">自动选择</option>
+                                            <option v-for="m in routingChatModels" :key="m.id" :value="m.id">{{ m.name || m.model }}</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">实验流量占比（%）</label>
+                                        <input v-model.number="routingSettings.ab_test.ratio" type="number" min="0" max="100" step="5" class="form-input">
+                                    </div>
+                                    <button class="btn btn-primary" @click="saveRoutingSettings" :disabled="isLoading">
+                                        <i class="fas fa-save"></i> 保存 A/B 设置
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 路由分析 -->
+                        <div class="usage-charts" style="margin-top: 16px;">
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <div>
+                                        <div class="chart-title"><i class="fas fa-chart-pie"></i> 模型表现分析</div>
+                                        <div class="chart-subtitle">基于路由决策日志的可解释统计</div>
+                                    </div>
+                                </div>
+                                <div class="chart-body">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>模型</th>
+                                                <th>决策次数</th>
+                                                <th>成功率</th>
+                                                <th>平均评分</th>
+                                                <th>选择率</th>
+                                                <th>平均成本(¥/1K)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="m in routingModelStats" :key="m.model_id">
+                                                <td>{{ m.model }}</td>
+                                                <td>{{ m.calls }}</td>
+                                                <td>
+                                                    <span class="badge" :class="m.success_rate >= 0.8 ? 'badge-success' : (m.success_rate >= 0.5 ? 'badge-warning' : 'badge-danger')">
+                                                        {{ Math.round(m.success_rate * 100) }}%
+                                                    </span>
+                                                </td>
+                                                <td>{{ m.avg_score }}</td>
+                                                <td>{{ Math.round(m.selection_rate * 100) }}%</td>
+                                                <td>{{ m.avg_cost_per_1k }}</td>
+                                            </tr>
+                                            <tr v-if="routingModelStats.length === 0">
+                                                <td colspan="6" class="text-center">暂无路由决策数据，开启智能路由后自动记录</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 决策日志 -->
+                        <div class="usage-charts" style="margin-top: 16px;">
+                            <div class="chart-card">
+                                <div class="chart-header">
+                                    <div>
+                                        <div class="chart-title"><i class="fas fa-history"></i> 决策历史</div>
+                                        <div class="chart-subtitle">最近的路由决策与结果回填</div>
+                                    </div>
+                                </div>
+                                <div class="chart-body">
+                                    <div style="max-height: 420px; overflow-y: auto;">
+                                        <table class="data-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>时间</th>
+                                                    <th>会话</th>
+                                                    <th>用途</th>
+                                                    <th>A/B 组</th>
+                                                    <th>选中模型</th>
+                                                    <th>评分</th>
+                                                    <th>结果</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr v-for="d in routingLogs" :key="d.id">
+                                                    <td>{{ (d.timestamp || '').slice(11, 19) }}</td>
+                                                    <td style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ d.session_id || '-' }}</td>
+                                                    <td>{{ d.purpose }}</td>
+                                                    <td>{{ d.ab_group || '-' }}</td>
+                                                    <td>{{ d.selected_name }}</td>
+                                                    <td>
+                                                        <span v-if="d.candidates && d.candidates.length">
+                                                            {{ d.candidates[0].score }}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <span v-if="d.result && d.result.success === true" class="badge badge-success">成功 {{ (d.result.duration_ms || 0) / 1000 }}s</span>
+                                                        <span v-else-if="d.result && d.result.success === false" class="badge badge-danger">失败</span>
+                                                        <span v-else class="badge badge-secondary">进行中</span>
+                                                    </td>
+                                                </tr>
+                                                <tr v-if="routingLogs.length === 0">
+                                                    <td colspan="7" class="text-center">暂无决策日志</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div v-if="currentPage === 'tokens'" class="fade-in">
                         <!-- 筛选器 -->
                         <div class="usage-filters">
@@ -12785,7 +13125,8 @@
                             { id: 'personality', labelKey: 'nav.personality', icon: 'fas fa-user-circle' },
                             { id: 'personality-journey', labelKey: 'nav.personality_journey', icon: 'fas fa-bullseye' },
                             { id: 'world-book', labelKey: 'nav.world_book', icon: 'fas fa-globe' },
-                            { id: 'hooks-nav', labelKey: 'nav.hooks', icon: 'fas fa-anchor' }
+                            { id: 'hooks-nav', labelKey: 'nav.hooks', icon: 'fas fa-anchor' },
+                            { id: 'achievements', labelKey: 'nav.achievements', icon: 'fas fa-trophy' }
                         ],
                         config: [
                             { id: 'task-center', labelKey: 'nav.task_center', icon: 'fas fa-calendar-check' },
@@ -12802,6 +13143,7 @@
                         ],
                         system: [
                             { id: 'ai-config', labelKey: 'nav.ai_config', icon: 'fas fa-robot' },
+                            { id: 'routing', labelKey: 'nav.routing', icon: 'fas fa-route' },
                             { id: 'oauth-accounts', labelKey: 'nav.oauth_accounts', icon: 'fas fa-shield-alt' },
                             { id: 'tokens', labelKey: 'nav.tokens', icon: 'fas fa-coins' },
                             { id: 'logs', labelKey: 'nav.logs', icon: 'fas fa-file-alt' },
@@ -13044,6 +13386,7 @@
                     hookTemplates: window.__nbotHookTemplates || [],
                     // 3.1 Review / 事件流面板
                     reviewTab: 'events',
+                    reviewMode: 'rule',
                     reviewEvents: [],
                     reviewLogs: [],
                     memoryFSFiles: [],
@@ -13691,6 +14034,37 @@
                         response_change: '-0%',
                         session_change: '+0'
                     },
+
+                    // 成就系统
+                    achievements: [],
+                    achievementsSummary: { unlocked: 0, total: 0, percent: 0 },
+                    achievementsCategory: 'conversation',
+                    achievementsCategories: [
+                        { key: 'conversation', label: '对话' },
+                        { key: 'session', label: '会话' },
+                        { key: 'token', label: 'Token' },
+                        { key: 'cost', label: '消费' },
+                        { key: 'character', label: '角色' },
+                        { key: 'worldbook', label: '世界书' },
+                        { key: 'memory', label: '记忆' },
+                        { key: 'plot', label: '剧情' },
+                        { key: 'extension', label: '拓展' },
+                        { key: 'system', label: '系统' }
+                    ],
+                    achievementsByCategory: {},
+
+                    // 智能路由
+                    routingSettings: {
+                        enabled: false,
+                        daily_budget: 0,
+                        budget_warning_pct: 80,
+                        weights: { cost: 0.35, quality: 0.30, speed: 0.15, priority: 0.20 },
+                        ab_test: { enabled: false, control_model_id: '', experiment_model_id: '', ratio: 50 }
+                    },
+                    routingBudget: {},
+                    routingAnalytics: { models: {}, total_decisions: 0 },
+                    routingLogs: [],
+                    routingChatModels: [],
                     tokenHistory: [],
                     tokenRecords: [],
                     tokenFilter: {
@@ -14234,6 +14608,16 @@
             },
             
             computed: {
+                // 成就：按分类过滤
+                filteredAchievements() {
+                    const list = this.achievements || [];
+                    return list.filter(a => a.category === this.achievementsCategory);
+                },
+                // 路由分析：模型聚合数组
+                routingModelStats() {
+                    const models = (this.routingAnalytics && this.routingAnalytics.models) || {};
+                    return Object.values(models);
+                },
                 // OAuth：各 provider 已登录账号数量，用于 provider 卡片上的已关联标记
                 oauthAccountCountByProvider() {
                     return (this.oauthAccounts || []).reduce((acc, account) => {

@@ -459,7 +459,14 @@ class WebCallbacks(PipelineCallbacks):
             # Multiple models: use failover wrapper
             from nbot.core.ai_pipeline import AIPipeline
             pipeline = AIPipeline()
-            return pipeline._wrap_with_failover(model_configs, purpose, tools=tools)
+            session_id = ""
+            try:
+                session_id = getattr(ctx, "chat_request", None).session_id if getattr(ctx, "chat_request", None) else ""
+            except Exception:
+                pass
+            return pipeline._wrap_with_failover(
+                model_configs, purpose, tools=tools, session_id=session_id
+            )
 
         # Single model: direct call
         return lambda messages, stop_event=None: _call_web_ai(

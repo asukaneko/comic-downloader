@@ -2,9 +2,11 @@ import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime
 
 from flask import jsonify, request, send_file
+from werkzeug.utils import secure_filename
 
 from nbot.character.storage.world_book_store import WorldBookStore
 
@@ -14,6 +16,12 @@ _log = logging.getLogger(__name__)
 def _get_store(server) -> WorldBookStore:
     base_dir = getattr(server, "base_dir", ".")
     return WorldBookStore(base_dir)
+
+
+def _allowed_image(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in {
+        "png", "jpg", "jpeg", "gif", "webp"
+    }
 
 
 def register_world_book_routes(app, server):
@@ -47,6 +55,7 @@ def register_world_book_routes(app, server):
             book = store.create(
                 name=name,
                 description=data.get("description", ""),
+                cover_url=data.get("cover_url", ""),
                 character_ids=data.get("character_ids", []),
             )
 
@@ -85,7 +94,7 @@ def register_world_book_routes(app, server):
             store = _get_store(server)
 
             kwargs = {}
-            for key in ("name", "description", "character_ids", "enabled"):
+            for key in ("name", "description", "cover_url", "character_ids", "enabled"):
                 if key in data:
                     kwargs[key] = data[key]
 
@@ -99,6 +108,30 @@ def register_world_book_routes(app, server):
             return jsonify({"success": True, "world_book": book.to_dict()})
         except Exception as e:
             _log.error("[WorldBook] update failed: %s", e)
+            return jsonify({"success": False, "error": str(e)}), 500
+
+    @app.route("/api/world-books/<book_id>/cover", methods=["POST"])
+    def upload_world_book_cover(book_id):
+        """上传世界书封面并把 URL 保存到世界书。"""
+        file = request.files.get("file")
+        if not file or not file.filename:
+            return jsonify({"success": False, "error": "No file provided"}), 400
+        if not _allowed_image(file.filename):
+            return jsonify({"success": False, "error": "Unsupported image format"}), 400
+        try:
+            store = _get_store(server)
+            if not store.get(book_id):
+                return jsonify({"success": False, "error": "World book not found"}), 404
+            ext = secure_filename(file.filename).rsplit(".", 1)[-1].lower()
+            upload_dir = os.path.join(server.static_folder, "uploads", "world-books")
+            os.makedirs(upload_dir, exist_ok=True)
+            filename = f"cover_{uuid.uuid4().hex[:16]}.{ext}"
+            file.save(os.path.join(upload_dir, filename))
+            url = f"/static/uploads/world-books/{filename}"
+            book = store.update(book_id, cover_url=url)
+            return jsonify({"success": True, "url": url, "world_book": book.to_dict() if book else None})
+        except Exception as e:
+            _log.error("[WorldBook] cover upload failed: %s", e)
             return jsonify({"success": False, "error": str(e)}), 500
 
     @app.route("/api/world-books/<book_id>", methods=["DELETE"])

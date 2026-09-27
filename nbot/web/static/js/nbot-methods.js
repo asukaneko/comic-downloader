@@ -2039,6 +2039,7 @@ const NbotMethods = {
                             await this.loadHookList();
                             this.reviewTab = this.reviewTab || 'events';
                             await this.loadReviewEvents();
+                            await this.loadReviewSettings();
                             break;
                         case 'message-filter':
                             await this.loadChannels();
@@ -2051,6 +2052,12 @@ const NbotMethods = {
                             break;
                         case 'login-tokens':
                             await this.loadLoginTokens();
+                            break;
+                        case 'achievements':
+                            await this.loadAchievements();
+                            break;
+                        case 'routing':
+                            await this.loadAllRouting();
                             break;
                     }
                 },
@@ -5161,6 +5168,162 @@ def main(params):
 
                 refreshTokenStats() {
                     this.loadTokenStats();
+                },
+
+                // ==================== 成就系统 ====================
+                async loadAchievements() {
+                    this.isLoading = true;
+                    try {
+                        const res = await api.get('/api/achievements');
+                        this.achievements = res.data.achievements || [];
+                        this.achievementsSummary = res.data.summary || { unlocked: 0, total: 0, percent: 0 };
+                        this.computeAchievementsByCategory();
+                    } catch (e) {
+                        this.showToast('加载成就失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                computeAchievementsByCategory() {
+                    const map = {};
+                    for (const cat of (this.achievementsCategories || [])) {
+                        const items = (this.achievements || []).filter(a => a.category === cat.key);
+                        map[cat.key] = {
+                            total: items.length,
+                            unlocked: items.filter(a => a.unlocked).length
+                        };
+                    }
+                    this.achievementsByCategory = map;
+                },
+
+                async resetAchievements() {
+                    if (!confirm('确定要重置所有成就进度吗？此操作不可恢复。')) return;
+                    this.isLoading = true;
+                    try {
+                        await api.post('/api/achievements/reset');
+                        this.showToast('成就已重置', 'success');
+                        await this.loadAchievements();
+                    } catch (e) {
+                        this.showToast('重置失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                formatCompactNumber(num) {
+                    const n = Number(num) || 0;
+                    if (n >= 100000000) return (n / 100000000).toFixed(1) + '亿';
+                    if (n >= 10000) return (n / 10000).toFixed(1) + '万';
+                    return n.toLocaleString('zh-CN');
+                },
+
+                // ==================== Review 复盘模式 ====================
+                async loadReviewSettings() {
+                    try {
+                        const res = await api.get('/api/review/settings');
+                        this.reviewMode = res.data.mode || 'rule';
+                    } catch (e) {
+                        console.error('Failed to load review settings:', e);
+                    }
+                },
+
+                async setReviewMode(mode) {
+                    this.reviewMode = mode;
+                    try {
+                        const res = await api.post('/api/review/settings', { mode });
+                        this.reviewMode = res.data.mode || mode;
+                        this.showToast(mode === 'llm' ? '已切换为 LLM 复盘（需要配置 chat 模型）' : '已切换为规则版复盘', 'success');
+                    } catch (e) {
+                        this.reviewMode = this.reviewMode === 'llm' ? 'rule' : 'llm';
+                        this.showToast('切换失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                // ==================== 智能路由 ====================
+                async loadAllRouting() {
+                    await Promise.all([
+                        this.loadRoutingSettings(),
+                        this.loadRoutingBudget(),
+                        this.loadRoutingAnalytics(),
+                        this.loadRoutingLogs(),
+                        this.loadRoutingChatModels()
+                    ]);
+                },
+
+                async loadRoutingSettings() {
+                    try {
+                        const res = await api.get('/api/smart-routing/settings');
+                        this.routingSettings = res.data.settings || this.routingSettings;
+                    } catch (e) {
+                        console.error('Failed to load routing settings:', e);
+                    }
+                },
+
+                async saveRoutingSettings() {
+                    this.isLoading = true;
+                    try {
+                        const res = await api.post('/api/smart-routing/settings', this.routingSettings);
+                        this.routingSettings = res.data.settings || this.routingSettings;
+                        this.showToast('智能路由设置已保存', 'success');
+                    } catch (e) {
+                        this.showToast('保存失败: ' + (e.response?.data?.error || e.message), 'error');
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                async toggleRoutingEnabled() {
+                    this.routingSettings.enabled = !this.routingSettings.enabled;
+                    await this.saveRoutingSettings();
+                },
+
+                async loadRoutingBudget() {
+                    try {
+                        const res = await api.get('/api/smart-routing/budget');
+                        this.routingBudget = res.data || {};
+                    } catch (e) {
+                        console.error('Failed to load routing budget:', e);
+                    }
+                },
+
+                async loadRoutingAnalytics() {
+                    try {
+                        const res = await api.get('/api/smart-routing/analytics');
+                        this.routingAnalytics = res.data || { models: {}, total_decisions: 0 };
+                    } catch (e) {
+                        console.error('Failed to load routing analytics:', e);
+                    }
+                },
+
+                async loadRoutingLogs() {
+                    try {
+                        const res = await api.get('/api/smart-routing/logs?limit=200');
+                        this.routingLogs = res.data.logs || [];
+                    } catch (e) {
+                        console.error('Failed to load routing logs:', e);
+                    }
+                },
+
+                async clearRoutingLogs() {
+                    if (!confirm('确定要清空所有路由决策日志吗？')) return;
+                    try {
+                        await api.post('/api/smart-routing/logs/clear');
+                        this.routingLogs = [];
+                        this.showToast('路由日志已清空', 'success');
+                    } catch (e) {
+                        this.showToast('清空失败: ' + (e.response?.data?.error || e.message), 'error');
+                    }
+                },
+
+                async loadRoutingChatModels() {
+                    try {
+                        const res = await api.get('/api/ai-models');
+                        const models = (res.data.models || []).filter(m => m.purpose === 'chat' && m.enabled !== false);
+                        this.routingChatModels = models;
+                    } catch (e) {
+                        console.error('Failed to load chat models for routing:', e);
+                    }
                 },
 
                 updateTokenTrendChart() {

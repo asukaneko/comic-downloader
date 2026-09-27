@@ -82,9 +82,11 @@ from nbot.web.routes import (
     register_workflow_routes,
     register_workspace_misc_routes,
     register_oauth_routes,
-    register_workspace_private_routes,
-    register_workspace_shared_routes,
-    register_world_book_routes,
+    register_workspace_private_routes,                                       
+    register_workspace_shared_routes,                                        
+    register_world_book_routes,                                              
+    register_achievement_routes,                                             
+    register_smart_routing_routes,                                           
 )
 from nbot.core.oauth import init_oauth_manager
 from nbot.web.secure_store import read_secure_json, write_secure_json
@@ -2985,6 +2987,8 @@ class WebChatServer:
         register_update_routes(self.app, self)
         register_login_token_routes(self.app, self)
         register_oauth_routes(self.app, self)
+        register_achievement_routes(self.app, self)
+        register_smart_routing_routes(self.app, self)
 
         # 初始化 Gateway 并注入 AgentService
         self._init_gateway()

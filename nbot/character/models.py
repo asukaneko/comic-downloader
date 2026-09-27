@@ -407,6 +407,7 @@ class WorldBook:
     id: str = ""
     name: str = ""
     description: str = ""
+    cover_url: str = ""
     character_ids: List[str] = field(default_factory=list)
     entries: List[WorldBookEntry] = field(default_factory=list)
     enabled: bool = True
@@ -418,6 +419,7 @@ class WorldBook:
             "id": self.id,
             "name": self.name,
             "description": self.description,
+            "cover_url": self.cover_url,
             "character_ids": self.character_ids,
             "entries": [e.to_dict() for e in self.entries],
             "enabled": self.enabled,
@@ -432,6 +434,7 @@ class WorldBook:
             id=data.get("id", ""),
             name=data.get("name", ""),
             description=data.get("description", ""),
+            cover_url=data.get("cover_url", data.get("coverUrl", "")),
             character_ids=data.get("character_ids", []),
             entries=entries,
             enabled=data.get("enabled", True),

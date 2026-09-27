@@ -100,6 +100,8 @@ const i18nMessages = {
     'nav.logs': '系统日志',
     'nav.debug': '调试台',
     'nav.login_tokens': '登录令牌',
+    'nav.achievements': '成就',
+    'nav.routing': '智能路由',
 
     // 登录令牌管理
     'login_tokens.title': '登录令牌管理',
@@ -1642,6 +1644,8 @@ const i18nMessages = {
     'nav.logs': 'System Logs',
     'nav.debug': 'Debug Console',
     'nav.login_tokens': 'Login Tokens',
+    'nav.achievements': 'Achievements',
+    'nav.routing': 'Smart Routing',
 
     // Login Token Management
     'login_tokens.title': 'Login Token Management',
