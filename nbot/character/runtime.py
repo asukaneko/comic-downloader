@@ -141,7 +141,13 @@ class CharacterRuntime:
         }, chat_request=chat_request)
 
         # 世界书关键词匹配（多源上下文召回）
-        world_book_entries = self._match_world_books(identity, chat_request, state=state, recent_messages=recent_messages)
+        world_book_entries = self._match_world_books(
+            identity,
+            chat_request,
+            state=state,
+            recent_messages=recent_messages,
+            relationship=relationship,
+        )
         self._emit_hook("character.after_world_book_match", identity, {
             "entry_count": len(world_book_entries) if world_book_entries else 0,
         }, chat_request=chat_request)
@@ -693,7 +699,14 @@ class CharacterRuntime:
         except Exception as exc:
             _log.debug("[CharacterRuntime] ensure current_activity failed: %s", exc)
 
-    def _match_world_books(self, identity, chat_request, state=None, recent_messages: list = None) -> list:
+    def _match_world_books(
+        self,
+        identity,
+        chat_request,
+        state=None,
+        recent_messages: list = None,
+        relationship=None,
+    ) -> list:
         """匹配世界书关键词（多源上下文召回）"""
         if not self._world_book_store:
             _log.debug("[WorldBook] store is None, skipping")
@@ -714,10 +727,18 @@ class CharacterRuntime:
                 bool(state.scene) if state else False,
             )
 
-            # 构建召回上下文
-            scene = {}
-            if state and hasattr(state, "scene"):
-                scene = state.scene or {}
+            # 构建召回上下文：场景 + 心情/精力 + 六维关系，供 state_triggers 使用
+            scene = dict(state.scene or {}) if state and hasattr(state, "scene") else {}
+            if state:
+                scene.setdefault("mood", state.mood)
+                scene.setdefault("mood_intensity", state.mood_intensity)
+                scene.setdefault("energy", state.energy)
+            if relationship is not None:
+                for field_name in (
+                    "affection", "trust", "familiarity",
+                    "dependency", "security", "jealousy",
+                ):
+                    scene.setdefault(field_name, getattr(relationship, field_name, 0))
 
             recall_context = WorldBookRecallContext(
                 latest_user_message=user_message,
@@ -730,6 +751,7 @@ class CharacterRuntime:
 
             # V2 多源召回
             results = match_entries_v2(recall_context, world_books, identity.character_id)
+            results = self._apply_world_book_injection_policy(identity, results)
             entries = [r.entry for r in results]
 
             _log.debug("[WorldBook] matched %d entries", len(entries))
@@ -737,6 +759,26 @@ class CharacterRuntime:
         except Exception as exc:
             _log.warning("[CharacterRuntime] world book match failed: %s", exc, exc_info=True)
             return []
+
+    def _apply_world_book_injection_policy(self, identity, results: list) -> list:
+        """执行世界书条目的冷却轮数与单会话注入次数限制。"""
+        if not results:
+            return results
+        try:
+            from nbot.character.world_book_state import get_world_book_state_store
+
+            scope_key = "{}:{}".format(
+                getattr(identity, "character_id", "") or "unknown",
+                getattr(identity, "scope_id", "")
+                or getattr(identity, "target_id", "")
+                or "default",
+            )
+            store = get_world_book_state_store()
+            turn = store.begin_turn(scope_key)
+            return store.filter_and_record(scope_key, results, turn)
+        except Exception as exc:
+            _log.debug("[WorldBook] injection policy skipped: %s", exc)
+            return results
 
     def _inject_memory_fs(self, stack, identity, chat_request) -> None:
         """将 MemoryFS 三层必读内容注入到 PromptStack（非阻塞）。

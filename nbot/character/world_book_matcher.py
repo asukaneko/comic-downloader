@@ -227,20 +227,94 @@ def _check_match_keywords(text: str, entry: WorldBookEntry) -> List[str]:
     return matched
 
 
+def _resolve_scene_field(scene: Dict[str, Any], field_name: str) -> Any:
+    """解析场景字段，支持点号路径（如 relationship.affection）。"""
+    if not isinstance(scene, dict):
+        return None
+    if field_name in scene:
+        return scene[field_name]
+    current: Any = scene
+    for part in str(field_name).split("."):
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
+def _match_trigger_value(actual: Any, expected: Any) -> bool:
+    """判断单个状态值与触发表达式是否匹配。
+
+    支持：精确值、'*' 通配、字符串取反 '!value'、
+    数值比较（>= <= == != > <）与区间（a..b）。
+    """
+    if expected == "*":
+        return actual not in (None, "", [], {})
+
+    if isinstance(actual, str):
+        text = str(expected)
+        if text.startswith("!") and len(text) > 1:
+            return actual != text[1:]
+        return actual == text
+
+    if isinstance(actual, bool):
+        return bool(expected) == actual if isinstance(expected, bool) else str(actual).lower() == str(expected).lower()
+
+    if isinstance(actual, (int, float)):
+        if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+            return float(actual) == float(expected)
+        text = str(expected).strip()
+        if ".." in text:
+            try:
+                low, high = text.split("..", 1)
+                return float(low) <= float(actual) <= float(high)
+            except ValueError:
+                return False
+        for op in (">=", "<=", "==", "!=", ">", "<"):
+            if text.startswith(op):
+                try:
+                    value = float(text[len(op):].strip())
+                except ValueError:
+                    return False
+                if op == ">=":
+                    return actual >= value
+                if op == "<=":
+                    return actual <= value
+                if op == "==":
+                    return actual == value
+                if op == "!=":
+                    return actual != value
+                if op == ">":
+                    return actual > value
+                return actual < value
+        try:
+            return float(actual) == float(text)
+        except ValueError:
+            return False
+
+    return False
+
+
 def _check_state_triggers(scene: Dict[str, Any], entry: WorldBookEntry) -> bool:
     """检查场景状态是否触发条目的 state_triggers"""
     if not entry.state_triggers or not scene:
         return False
     for field_name, trigger_values in entry.state_triggers.items():
-        scene_value = scene.get(field_name)
+        if not isinstance(trigger_values, list):
+            trigger_values = [trigger_values]
+        if not trigger_values:
+            continue
+        scene_value = _resolve_scene_field(scene, field_name)
         if scene_value is None:
             continue
-        if isinstance(scene_value, str):
-            if scene_value in trigger_values:
+        if isinstance(scene_value, list):
+            if any(
+                _match_trigger_value(item, expected)
+                for item in scene_value
+                for expected in trigger_values
+            ):
                 return True
-        elif isinstance(scene_value, list):
-            if any(v in trigger_values for v in scene_value):
-                return True
+        elif any(_match_trigger_value(scene_value, expected) for expected in trigger_values):
+            return True
     return False
 
 
@@ -390,9 +464,18 @@ def match_entries_v2(
         len(r.entry.content),
     ))
 
-    # 裁剪：max_entries
-    if len(results) > config.max_entries:
-        results = results[:config.max_entries]
+    # 裁剪：max_entries + 总字符预算（至少保留一条，单条超长由注入器截断）
+    trimmed: List[WorldBookMatchResult] = []
+    total_chars = 0
+    for result in results:
+        if len(trimmed) >= config.max_entries:
+            break
+        content_len = len(result.entry.content or "")
+        if trimmed and total_chars + content_len > config.max_total_chars:
+            continue
+        trimmed.append(result)
+        total_chars += content_len
+    results = trimmed
 
     if results:
         _log.debug(
