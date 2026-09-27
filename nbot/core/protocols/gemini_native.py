@@ -135,6 +135,9 @@ class GeminiNativeProtocol(ModelProtocol):
                         "stopSequences", "responseMimeType", "responseSchema"):
                 if key in extra_body:
                     gen_config[key] = extra_body[key]
+            # 停止字符串：Gemini 协议使用 generationConfig.stopSequences
+            if extra_body.get("stop"):
+                gen_config["stopSequences"] = extra_body["stop"]
         payload["generationConfig"] = gen_config
 
         if tools:

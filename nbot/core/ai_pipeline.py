@@ -24,6 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 from nbot.core.background_tasks import submit_background_task
 from nbot.core.chat_models import ChatRequest, ChatResponse
 from nbot.core.model_proxy import model_proxy_request_kwargs
+from nbot.core.sampling import stop_extra_body
 
 _log = logging.getLogger(__name__)
 
@@ -495,6 +496,7 @@ class PipelineCallbacks(ABC):
                 stream=False,
                 base_url=base_url,
                 provider_type=provider_type,
+                extra_body=stop_extra_body(runtime_ai) or None,
             )
             resp = requests.post(
                 url,
@@ -2300,6 +2302,7 @@ class AIPipeline:
                     stream=False,
                     base_url=base_url,
                     provider_type=provider_type,
+                    extra_body=stop_extra_body(config) or None,
                 )
                 # 使用模型配置的 failover_timeout，0 表示使用默认 120s
                 request_timeout = config.get("failover_timeout", 0) or 120

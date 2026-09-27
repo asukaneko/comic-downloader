@@ -15,6 +15,7 @@ from nbot.core import (
 )
 from nbot.core.model_proxy import model_proxy_request_kwargs
 from nbot.core.protocols import get_protocol
+from nbot.core.sampling import stop_extra_body
 from nbot.web.secure_store import read_secure_json, write_secure_json
 
 config_parser = configparser.ConfigParser()
@@ -133,6 +134,7 @@ def get_runtime_ai_config() -> dict:
         "supports_reasoning": shared.get("supports_reasoning", supports_reasoning),
         "supports_stream": shared.get("supports_stream", supports_stream),
         "purpose": shared.get("purpose", "chat"),
+        "stop": shared.get("stop", ""),
     }
     effective["api_key"] = resolve_runtime_api_key(
         shared.get("api_key") or api_key,
@@ -168,6 +170,7 @@ def refresh_runtime_ai_config() -> dict:
         client.supports_tools = supports_tools
         client.supports_reasoning = supports_reasoning
         client.supports_stream = supports_stream
+        client.stop = effective.get("stop", "")
 
     return effective
 
@@ -202,6 +205,7 @@ def apply_model_config(config: dict) -> None:
         client.supports_tools = supports_tools
         client.supports_reasoning = supports_reasoning
         client.supports_stream = supports_stream
+        client.stop = config.get("stop", "")
         # OAuth 账号绑定（chat_completion 时解析 fresh access_token）
         client.oauth_account_id = config.get("oauth_account_id", "")
 
@@ -353,6 +357,7 @@ class AIClient:
             stream=stream,
             base_url=self.base_url,
             provider_type=self.provider_type,
+            extra_body=stop_extra_body({"stop": getattr(self, "stop", "")}) or None,
         )
 
         if stream:
@@ -457,6 +462,7 @@ class AIClient:
                 stream=False,
                 base_url=cfg.get("base_url", ""),
                 provider_type=cfg_pt,
+                extra_body=stop_extra_body(cfg) or None,
             )
             try:
                 # failover_timeout: 0 表示使用默认 120s

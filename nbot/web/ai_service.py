@@ -25,6 +25,7 @@ from nbot.core.ai_pipeline import (
 )
 from nbot.core.background_tasks import submit_background_task
 from nbot.core.model_proxy import model_proxy_request_kwargs
+from nbot.core.sampling import stop_extra_body
 from nbot.web.utils.config_loader import get_vision_model_config
 
 try:
@@ -1113,6 +1114,7 @@ def _call_web_ai(server, messages: list[dict], tools: list, stop_event=None) -> 
         stream=False,
         base_url=base_url,
         provider_type=provider_type,
+        extra_body=stop_extra_body(runtime_ai) or None,
     )
     resp = requests.post(
         url,
@@ -1175,7 +1177,9 @@ def _stream_to_web(
     headers = protocol.build_headers(api_key, stream=True)
 
     def _build_stream_payload(include_usage: bool = True):
-        extra_body = {"stream_options": {"include_usage": True}} if include_usage else None
+        extra_body = dict(stop_extra_body(runtime_ai))
+        if include_usage:
+            extra_body["stream_options"] = {"include_usage": True}
         return protocol.build_payload(
             model, messages,
             tools=tools if tools else None,
@@ -1183,7 +1187,7 @@ def _stream_to_web(
             stream=True,
             base_url=base_url,
             provider_type=provider_type,
-            extra_body=extra_body,
+            extra_body=extra_body or None,
         )
 
     # ---- 故障转移：连接阶段（首个 chunk 前） ----
@@ -1214,6 +1218,8 @@ def _stream_to_web(
                 api_key=cfg.get("api_key", ""),
             )
             cfg_headers = cfg_protocol.build_headers(cfg.get("api_key", ""), stream=True)
+            cfg_extra_body = dict(stop_extra_body(cfg))
+            cfg_extra_body["stream_options"] = {"include_usage": True}
             cfg_payload = cfg_protocol.build_payload(
                 cfg.get("model", ""),
                 messages,
@@ -1222,7 +1228,7 @@ def _stream_to_web(
                 stream=True,
                 base_url=cfg.get("base_url", ""),
                 provider_type=cfg_pt,
-                extra_body={"stream_options": {"include_usage": True}},
+                extra_body=cfg_extra_body,
             )
             try:
                 _log.info(
@@ -2551,6 +2557,7 @@ server,
                 stream=False,
                 base_url=config.get("base_url", ""),
                 provider_type=_srv_pt,
+                extra_body=stop_extra_body(config) or None,
             )
 
             _payload_size = len(json.dumps(_payload, ensure_ascii=False))
@@ -2753,6 +2760,7 @@ server,
                         stream=False,
                         base_url=cfg.get("base_url", ""),
                         provider_type=cfg_pt,
+                        extra_body=stop_extra_body(cfg) or None,
                     )
                     resp = requests.post(
                         cfg_url, json=cfg_payload, headers=cfg_headers,

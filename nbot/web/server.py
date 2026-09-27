@@ -20,6 +20,7 @@ from flask_socketio import SocketIO
 from werkzeug.exceptions import HTTPException
 
 from nbot.core.prompt_format import format_skills_prompt
+from nbot.core.sampling import stop_extra_body
 from nbot.core.session_store import visible_messages
 from nbot.web.ai_service import (
     get_ai_response,
@@ -1654,6 +1655,7 @@ class WebChatServer:
                         "temperature": model.get("temperature", 0.7),
                         "max_tokens": model.get("max_tokens", 2000),
                         "top_p": model.get("top_p", 0.9),
+                        "stop": model.get("stop", ""),
                         "frequency_penalty": model.get("frequency_penalty", 0),
                         "presence_penalty": model.get("presence_penalty", 0),
                         "system_prompt": model.get("system_prompt", ""),
@@ -2755,6 +2757,7 @@ class WebChatServer:
                 stream=False,
                 base_url=self.ai_base_url,
                 provider_type=srv_pt,
+                extra_body=stop_extra_body(active_model or {}) or None,
             )
             from nbot.core.model_proxy import model_proxy_request_kwargs
 

@@ -95,7 +95,12 @@ class OpenAIChatProtocol(ModelProtocol):
             if tool_choice:
                 payload["tool_choice"] = tool_choice
         if extra_body:
-            payload.update(extra_body)
+            extra = dict(extra_body)
+            stop = extra.pop("stop", None)
+            payload.update(extra)
+            # 停止字符串：OpenAI 协议直接使用 stop
+            if stop:
+                payload["stop"] = stop
         return payload
 
     def parse_response(

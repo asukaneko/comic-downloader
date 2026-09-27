@@ -92,6 +92,9 @@ class AnthropicMessagesProtocol(ModelProtocol):
             for key in ("temperature", "top_p", "top_k"):
                 if key in extra_body:
                     payload[key] = extra_body[key]
+            # 停止字符串：Anthropic 协议使用 stop_sequences
+            if extra_body.get("stop"):
+                payload["stop_sequences"] = extra_body["stop"]
 
         return payload
 

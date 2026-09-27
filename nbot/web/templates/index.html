@@ -5990,6 +5990,12 @@
                                         <div class="form-hint">模型支持的最大上下文窗口大小，例如 GPT-5.5 为 1,050,000，Claude Opus 4.8 为 1,000,000，DeepSeek V4 Flash 为 1,000,000</div>
                                     </div>
 
+                                    <div class="form-group">
+                                        <label class="form-label">停止字符串</label>
+                                        <textarea v-model="modelForm.stop" class="form-textarea" rows="2" placeholder="每行一条，最多 4 条，例如：&#10;User:"></textarea>
+                                        <div class="form-hint">模型输出遇到这些字符串立即停止。按协议自动翻译为 OpenAI stop / Anthropic stop_sequences / Gemini stopSequences（Responses 协议不支持）。</div>
+                                    </div>
+
                                     <div class="form-group" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
                                         <label class="form-label" style="color: var(--primary-color); font-weight: 600;">💰 价格配置</label>
                                     </div>

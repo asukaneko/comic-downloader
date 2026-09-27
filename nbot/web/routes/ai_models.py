@@ -132,6 +132,7 @@ def register_ai_model_routes(app, server):
             "temperature": data.get("temperature", default_config.get("temperature", 0.7)),
             "max_tokens": data.get("max_tokens", default_config.get("max_tokens", 2000)),
             "top_p": data.get("top_p", default_config.get("top_p", 0.9)),
+            "stop": data.get("stop", default_config.get("stop", "")),
             "frequency_penalty": data.get("frequency_penalty", 0),
             "presence_penalty": data.get("presence_penalty", 0),
             "system_prompt": data.get("system_prompt", default_config.get("system_prompt", "")),
@@ -239,6 +240,7 @@ def register_ai_model_routes(app, server):
             model["temperature"] = data.get("temperature", model.get("temperature", 0.7))
             model["max_tokens"] = data.get("max_tokens", model.get("max_tokens", 2000))
             model["top_p"] = data.get("top_p", model.get("top_p", 0.9))
+            model["stop"] = data.get("stop", model.get("stop", ""))
             model["frequency_penalty"] = data.get(
                 "frequency_penalty", model.get("frequency_penalty", 0)
             )
