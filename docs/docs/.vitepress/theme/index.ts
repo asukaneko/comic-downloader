@@ -32,12 +32,18 @@ import 'nprogress-v2/dist/index.css' // 进度条样式
 import { NolebasePagePropertiesPlugin } from '@nolebase/vitepress-plugin-page-properties'
 import '@nolebase/vitepress-plugin-page-properties/client/style.css'
 import darkchangeLayout from './components/darkchangeLayout.vue'
+import Landing from './components/Landing.vue'
 
 let homePageStyle: HTMLStyleElement | undefined
 
 export default {
   extends: DefaultTheme,
   Layout: () => {
+    // 首页（frontmatter: layout: landing）渲染自定义落地页，其余页面保持默认主题布局
+    const { frontmatter } = useData()
+    if (frontmatter.value.layout === 'landing') {
+      return h(Landing)
+    }
     return h(DefaultTheme.Layout, null, {
       default: () => h(darkchangeLayout),
       // 为较宽的屏幕的导航栏添加阅读增强菜单

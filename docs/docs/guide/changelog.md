@@ -94,7 +94,7 @@
 ### 🐛 Bug 修复
 
 - **Token 排行榜会话活跃性判断**：导入 `load_sessions_from_db` 合并数据库会话，将 `web_session_ids` 扩展为 `known_session_ids`（内存 + DB），同时排除 `web` / `api` 渠道，并对渠道类型做 `.strip().lower()` 规范化
-- **VitePress Vue 插值误解析** (`docs/docs/guide/docker-deploy.md`)：将 `docker inspect --format` 的 `{{...}}` 写法替换为 `docker ps --filter`，避免 VitePress 将其当作 Vue 表达式解析
+- **VitePress Vue 插值误解析** (`docs/docs/guide/docker-deploy.md`)：将 `docker inspect --format` 的 <code v-pre>{{...}}</code> 写法替换为 `docker ps --filter`，避免 VitePress 将其当作 Vue 表达式解析
 
 ### 📖 文档
 

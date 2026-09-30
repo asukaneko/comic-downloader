@@ -48,7 +48,7 @@ class TTSAdapter(ABC):
 基类还提供两个静态工具方法：
 
 - `_parse_custom_headers(headers_str)` — 解析自定义 HTTP 请求头 JSON 字符串
-- `_render_body(template, variables)` — 渲染 `{{variable}}` 模板语法
+- `_render_body(template, variables)` — 渲染 <code v-pre>{{variable}}</code> 模板语法
 
 ### 注册表
 
